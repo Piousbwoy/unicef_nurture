@@ -1,0 +1,1 @@
+Flutter with Material3, Riverpod (`flutter_riverpod`) for dependency injection and reactive state, `go_router` for declarative routing with session-aware redirects, SQLite via Drift (DAOs like `HouseholdDao`, `PersonDao`, `AuditDao`), and a custom `SyncService` for offline-first data synchronization.

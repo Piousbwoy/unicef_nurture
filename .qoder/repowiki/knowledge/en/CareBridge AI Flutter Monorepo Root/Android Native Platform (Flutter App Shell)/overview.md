@@ -1,0 +1,1 @@
+Android native shell for the CareBridge AI Flutter app, providing the MainActivity entry point, Android manifest, and Gradle build configuration that embeds the Flutter engine.

@@ -1,0 +1,4 @@
+- Gradle build scripts use Kotlin DSL (`*.kts`) exclusively, with versioned plugin declarations centralized in `settings.gradle.kts` via the `plugins` block.
+- All Android artifacts are namespaced under `gh.carebridge.carebridge_ai` (package, namespace, and applicationId match).
+- Flutter integration is kept minimal: the only custom Kotlin code is a thin `MainActivity : FlutterActivity` subclass with no platform-specific logic.
+- Build output is consolidated into a sibling `build/` directory at the repository root rather than inside `android/build/`, via explicit `rootProject.layout.buildDirectory` overrides.

@@ -1,0 +1,1 @@
+Flutter SDK ^3.10.0 with Dart; state management via Riverpod, routing via go_router, offline storage via sqflite/sqflite_common_ffi, secure storage via flutter_secure_storage, and platform integration through the standard Flutter Android/iOS embedding.

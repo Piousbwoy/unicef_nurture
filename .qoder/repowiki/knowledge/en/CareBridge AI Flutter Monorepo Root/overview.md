@@ -1,0 +1,1 @@
+Top-level Flutter monorepo that wires the Android/iOS native shells, the shared Dart application layer, and the test suite into a single offline-first community health companion for Northern Ghana.

@@ -1,0 +1,1 @@
+The iOS native wrapper that embeds the Flutter engine, registers plugins, and provides the UIApplication/Scene lifecycle entry points for the Carebridge Ai app.

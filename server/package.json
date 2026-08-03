@@ -1,0 +1,19 @@
+{
+  "name": "carebridge-sync-server",
+  "version": "1.0.0",
+  "description": "District sync API for CareBridge AI. Receives offline-first records from field phones and persists them into MariaDB.",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "mysql2": "^3.11.0"
+  }
+}

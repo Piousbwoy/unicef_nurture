@@ -1,0 +1,1 @@
+Android application built with Gradle Kotlin DSL (`*.kts`), Android Gradle Plugin 9.0.1, Kotlin 2.3.20 targeting JVM 17, and Flutter's `dev.flutter.flutter-gradle-plugin` 1.0.0 which pulls in the Flutter SDK's embedded Gradle tooling.

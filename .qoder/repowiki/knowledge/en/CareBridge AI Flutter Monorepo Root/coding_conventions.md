@@ -1,0 +1,3 @@
+- Single-package layout: one `pubspec.yaml` at the root declares all shared Dart dependencies consumed by lib_application and tests.
+- Cross-platform code lives in `lib_application/`, while platform-specific entry points are isolated under `android_platform/` and `ios_platform/`.
+- All Dart code follows the lints defined in `analysis_options.yaml` via the `flutter_lints` dev dependency.

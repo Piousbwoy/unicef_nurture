@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: android_platform
+title: Android Native Platform (Flutter App Shell)
+scope:
+    - android/
+source_files: []
+depends_on: []
+related_to:
+    - path: lib_application

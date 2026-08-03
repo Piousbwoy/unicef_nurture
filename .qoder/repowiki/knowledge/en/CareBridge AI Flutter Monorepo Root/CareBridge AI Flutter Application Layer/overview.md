@@ -1,0 +1,1 @@
+Flutter application layer for CareBridge AI, an offline-first community health companion that provides role-based access control, Riverpod state management, go_router navigation, and a unified theme for frontline health workers and caregivers in Northern Ghana.

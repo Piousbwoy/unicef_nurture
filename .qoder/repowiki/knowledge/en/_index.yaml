@@ -1,0 +1,66 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: en-US
+branch: Q0DeR-MaG1C-BrAnCh-Fo2-NoN-GiT-Or-No-C0MmIt
+nodes_managed: true
+exported_at: "2026-08-01T23:26:02Z"
+modules:
+    "":
+        dir_name: CareBridge AI Flutter Monorepo Root
+        title: CareBridge AI Flutter Monorepo Root
+        scope:
+            - README.md
+            - .gitignore
+            - analysis_options.yaml
+            - pubspec.yaml
+            - pubspec.lock
+        source_files: []
+        children:
+            - android_platform
+            - ios_platform
+            - lib_application
+            - tests
+        depends_on: []
+        related_to: []
+    android_platform:
+        dir_name: Android Native Platform (Flutter App Shell)
+        title: Android Native Platform (Flutter App Shell)
+        scope:
+            - android/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: lib_application
+    ios_platform:
+        dir_name: iOS Native Runner & Flutter Embedding
+        title: iOS Native Runner & Flutter Embedding
+        scope:
+            - ios/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: lib_application
+    lib_application:
+        dir_name: CareBridge AI Flutter Application Layer
+        title: CareBridge AI Flutter Application Layer
+        scope:
+            - lib/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: android_platform
+            - path: ios_platform
+            - path: tests
+    tests:
+        dir_name: Flutter Unit & Integration Tests for CareBridge AI
+        title: Flutter Unit & Integration Tests for CareBridge AI
+        scope:
+            - test/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: lib_application

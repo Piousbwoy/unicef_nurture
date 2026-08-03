@@ -1,0 +1,1 @@
+Flutter test framework (`package:flutter_test/flutter_test.dart`) running against the `carebridge_ai` package; assertions use `expect` matchers such as `containsAll`, `isNot`, `inInclusiveRange`, and `anyOf`.

@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: lib_application
+title: CareBridge AI Flutter Application Layer
+scope:
+    - lib/
+source_files: []
+depends_on: []
+related_to:
+    - path: android_platform
+    - path: ios_platform
+    - path: tests

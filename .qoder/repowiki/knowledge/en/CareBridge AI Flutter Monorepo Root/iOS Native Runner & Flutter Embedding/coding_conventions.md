@@ -1,0 +1,4 @@
+- AppDelegate subclasses `FlutterAppDelegate` and implements `FlutterImplicitEngineDelegate` rather than manually bootstrapping the Flutter engine.
+- Plugin registration is delegated to the auto-generated `GeneratedPluginRegistrant.register(with:)` method instead of being written by hand.
+- Build configuration is split across `Debug.xcconfig` and `Release.xcconfig`, each simply including `Generated.xcconfig` to keep environment variables centralized.
+- Swift code accesses generated Objective-C headers through a single `Runner-Bridging-Header.h` file.

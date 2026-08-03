@@ -1,0 +1,9 @@
+The module follows a layered Clean Architecture pattern with five top-level packages under `lib/`:
+- `main.dart` is the single entry point that bootstraps `ProviderScope`, wires `AppRouter` from `core/router/app_router.dart`, and applies `AppTheme.light`.
+- `core/` holds cross-cutting concerns: `router/app_router.dart` defines all route constants, implements session-driven redirect logic based on `SessionState` (Loading/NeedsSetup/SignedOut/Active), and exposes `RequirePermission` widget wrapper for capability-based screen guards; `theme/app_theme.dart` centralizes the IMCI-aligned color system, spacing scale (`Gap`), and Material3 theme configuration.
+- `app/providers.dart` is the single wiring file that declares every Riverpod provider — bootstrap, repositories (`CareRepository`, `InsightRepository`), sync service, session state (`SessionNotifier`), and feature-scoped `FutureProvider.family` instances for households, persons, assessments, referrals, and insight queries. The comment enforces the rule that widgets never see DAOs directly.
+- `data/repositories/` contains `CareRepository` (the access-controlled gateway enforcing `Permission` checks via `_require` and household/person scoping) and `InsightRepository` (pure assembly over DAOs feeding domain engines).
+- `domain/enums.dart` defines all shared enums (`UserRole`, `Permission`, `ClientType`, `TriageLevel`, `NutritionStatus`, `ReferralStatus`, `SyncState`, etc.) that mirror local CHO vocabulary.
+- `presentation/` holds the UI screens referenced by the router.
+
+Dependency direction is strictly inward: presentation → app providers → data repositories → domain entities/enums. The repository layer is the single enforcement boundary for RBAC, with denials audited via `AuditDao`.

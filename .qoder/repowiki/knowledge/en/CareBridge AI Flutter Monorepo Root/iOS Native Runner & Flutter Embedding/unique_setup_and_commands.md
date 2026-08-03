@@ -1,0 +1,1 @@
+Build and run via Xcode workspace `ios/Runner.xcworkspace` or `flutter run -d ios`. The `Generated.xcconfig` (not present here) is produced by `flutter build` and must be included before building. Plugin registration is automatic — adding a Dart plugin and running `flutter pub get` regenerates `GeneratedPluginRegistrant.m`.

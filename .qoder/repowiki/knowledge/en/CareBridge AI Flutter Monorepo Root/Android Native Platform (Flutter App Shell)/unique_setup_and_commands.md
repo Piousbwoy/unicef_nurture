@@ -1,0 +1,1 @@
+Requires `local.properties` with `flutter.sdk` set by Flutter; the root `./gradlew` wrapper is used for all Gradle tasks. Release builds currently reuse the debug signing config (`signingConfigs.getByName("debug")`) until a real keystore is configured.

@@ -1,0 +1,1 @@
+Tests are run with the standard Flutter test runner (`flutter test test/...`). No special bootstrap scripts or environment variables are required beyond a working Flutter SDK that can resolve the `carebridge_ai` package.

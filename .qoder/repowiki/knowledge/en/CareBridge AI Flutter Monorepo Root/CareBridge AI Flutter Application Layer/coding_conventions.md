@@ -1,0 +1,6 @@
+- Every data access goes through a repository method that takes `AppUser` as the first argument and calls `_require(user, Permission.xxx, action)` before touching any DAO, ensuring role enforcement cannot be bypassed.
+- Riverpod providers are declared in a single `app/providers.dart` file using `Provider`, `NotifierProvider`, and `FutureProvider.family` patterns, with feature-scoped reads checking `currentUserProvider` and `bootstrapProvider.future` before executing.
+- Route guards use the capability-based `RequirePermission(permission, child)` widget wrapper rather than role checks, so adding new roles only requires updating the permission-to-role mapping in `domain/enums.dart`.
+- Domain enums carry human-readable labels and protocol-aligned semantics (e.g., `TriageLevel` maps to WHO IMCI colors, `CareBarrier` includes suggested actions), avoiding technical jargon visible to end users.
+- Access denials are thrown as `AccessDenied` exceptions (not null returns) and recorded through `AuditDao.denied`, treating permission failures as bugs or attacks rather than normal branches.
+- Screens are parameterized by family/household/person IDs and resolved through `FutureProvider.family` instances that re-fetch scoped data per identifier, keeping list/detail views consistent.

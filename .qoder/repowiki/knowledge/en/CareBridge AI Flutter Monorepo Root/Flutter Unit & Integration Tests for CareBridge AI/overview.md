@@ -1,0 +1,1 @@
+Flutter test suite asserting the safety-critical behaviour of clinical engines (ANC, barrier, nutrition, PNC, trajectory, vulnerability, young infant), RBAC permissions, and Northern Ghana reference data.

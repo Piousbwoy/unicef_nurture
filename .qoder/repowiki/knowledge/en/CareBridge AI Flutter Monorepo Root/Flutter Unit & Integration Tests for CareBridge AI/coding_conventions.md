@@ -1,0 +1,5 @@
+- Each test file declares a `library` directive and groups related assertions under a single `group('Name', ...)` block inside a `void main()` entry point.
+- Engine tests construct immutable input objects via `const` constructors (e.g. `PregnancyInput`, `VulnerabilityInput`) and assert on the returned result fields rather than mutating state.
+- Safety-critical cases are expressed as negative assertions — forbidden permissions or unsafe triage levels are explicitly listed and expected to be `isFalse` / `isNot(...)` to prevent accidental regression.
+- Assertions include a `reason:` argument explaining why the expectation matters, especially when iterating over collections of permissions, findings, or factors.
+- Sparse or unmeasured inputs are tested to ensure the system reports missing data and lowers confidence instead of returning a false sense of certainty.

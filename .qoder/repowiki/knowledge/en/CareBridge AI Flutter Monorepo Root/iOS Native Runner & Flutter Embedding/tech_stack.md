@@ -1,0 +1,1 @@
+Swift + UIKit with Flutter's implicit engine embedding (`FlutterAppDelegate`, `FlutterSceneDelegate`, `FlutterViewController`). Build configuration uses Xcode `.xcconfig` files and CocoaPods-style bridging header for Objective-C/Swift interop.

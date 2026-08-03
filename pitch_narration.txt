@@ -1,0 +1,21 @@
+In Northern Ghana, the distance between a sick child and care is rarely measured in kilometres. It's measured in money for a motorking, in a flooded road, in a grandmother's doubt. And when that child never shows up, the register simply says: did not attend — and stops there.
+
+CareBridge AI is built for that exact moment. It's an offline-first, AI-assisted health companion that puts a clinical decision-support tool in the hands of the community health worker — and a lifeline in the hands of a mother. No signal required.
+
+Two people share one app. The health worker signs in with a PIN and registers the zone they cover and the facility they refer to. A mother signs in with a family code that binds her to her own household — and nothing else. Her scope is fixed the day the account is created.
+
+Every morning, the app plans the worker's day. Not by memory, not by proximity — by risk. Unconfirmed urgent referrals first. Overdue newborn visits second. Then every household, ranked — and this is the part that decides whether a tool gets used — every position comes with its reason.
+
+At the compound, a visit is one encounter, not three. It begins with one question: what's getting in the way? Because a referral note is not care. If transport is the barrier, the worker solves it now — while the family is still in front of them — not two days after the referral fails.
+
+Then: who is here today? Everyone is ticked off — because the child who wasn't brought is the one who never gets measured. Absence is recorded, not skipped.
+
+Each person is assessed on the right protocol, chosen automatically from their age. A MUAC tape reading becomes a nutrition zone in real time. And every recommendation explains itself — the value, the cut-off it crossed, and the guideline it came from. A health worker who can see the arithmetic can defend the decision.
+
+The result is a plan, not a paragraph: a feeding plan built from local, seasonal foods, the vaccines that are due, and — when needed — a referral that names the right facility for the job. Assessment, referral and follow-up are saved together, in one tap, completely offline.
+
+When the phone finds signal, everything syncs — securely, and without duplicates — up to the district database. And "did not attend" finally becomes evidence: six families reporting a closed facility is no longer six excuses. It's one problem the district can actually fix.
+
+And back at home, a mother opens the app, answers a few danger-sign questions — yes, no, or not sure — and gets one of three clear answers: go now, see the nurse soon, or keep going. Guidance, never a diagnosis.
+
+CareBridge AI. Offline-first. Explainable. And built so that no child is lost between the referral and the treatment. Thank you.

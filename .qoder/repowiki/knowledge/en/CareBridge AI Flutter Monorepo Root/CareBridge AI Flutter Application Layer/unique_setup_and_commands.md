@@ -1,0 +1,1 @@
+The app initializes through `bootstrapProvider` which opens the database, seeds demo data idempotently via `DemoSeed.ensureSeeded()`, and starts `SyncService`. The splash screen polls `sessionProvider` until it leaves `SessionLoading` before reading `PreferencesStore.hasSeenOnboarding()` to decide between onboarding and sign-in flows.

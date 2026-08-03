@@ -1,0 +1,1 @@
+Standard Flutter workflow from the repo root: `flutter pub get` resolves the single-package dependency graph shared by lib_application, tests, and both platform shells; `flutter test` runs the unified test suite under the `tests/` directory.
