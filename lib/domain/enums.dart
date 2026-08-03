@@ -213,6 +213,18 @@ enum HomeCheckVerdict {
   final String label;
 }
 
+/// The family's read on their child's development, from the milestone check.
+/// Same rule as [HomeCheckVerdict]: this is the family's words, never a
+/// diagnosis — a flag means "show the health worker", nothing more.
+enum MilestoneVerdict {
+  onTrack('Growing as expected'),
+  watch('Keep playing — check again soon'),
+  flag('Show the health worker');
+
+  const MilestoneVerdict(this.label);
+  final String label;
+}
+
 /// Acute malnutrition bands by MUAC (mid-upper arm circumference), 6–59 months.
 /// Cut-offs are WHO/Ghana Health Service standard.
 enum NutritionStatus {

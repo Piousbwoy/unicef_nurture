@@ -602,6 +602,51 @@ class CareRepository {
     return HomeCheckDao.latestForPerson(personId);
   }
 
+  /// Saves one milestone check a caregiver ran at home.
+  ///
+  /// Same contract as [recordHomeCheck]: gated, scoped, and deliberately not
+  /// queued to the outbox. A family's report of what their child can do stays
+  /// on their device until they choose to show it.
+  Future<void> recordMilestoneCheck(
+    AppUser user,
+    MilestoneCheck check,
+  ) async {
+    await _require(
+      user,
+      Permission.runCaregiverTriage,
+      'record a milestone check',
+      entityTable: 'milestone_checks',
+      entityId: check.id,
+    );
+    await _requireHouseholdScope(
+      user,
+      check.householdId,
+      'record a milestone check for this household',
+    );
+    await MilestoneCheckDao.save(check);
+  }
+
+  /// The milestone checks a family has run, newest first. Both roles read:
+  /// the caregiver their history, the FHW what the family says the child can
+  /// do — flags first in their head, though the list itself stays chronological.
+  Future<List<MilestoneCheck>> milestoneChecks(
+    AppUser user,
+    String householdId,
+  ) async {
+    await _requireHouseholdScope(user, householdId, 'view milestone checks');
+    return MilestoneCheckDao.forHousehold(householdId);
+  }
+
+  /// The latest milestone check for one child — the "growing as expected"
+  /// line on the caregiver's family tiles.
+  Future<MilestoneCheck?> latestMilestoneCheck(
+    AppUser user,
+    String personId,
+  ) async {
+    await _requirePersonScope(user, personId, 'view a milestone check');
+    return MilestoneCheckDao.latestForPerson(personId);
+  }
+
   // ---------------------------------------------------------------------------
   // Scheduled contacts
   // ---------------------------------------------------------------------------

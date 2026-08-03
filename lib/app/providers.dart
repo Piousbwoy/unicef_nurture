@@ -339,6 +339,31 @@ final latestHomeCheckProvider =
       return ref.read(careRepositoryProvider).latestHomeCheck(user, personId);
     });
 
+/// The milestone checks this family ran at home, newest first — the nurturing
+/// care mirror of [householdHomeChecksProvider].
+final householdMilestoneChecksProvider =
+    FutureProvider.family<List<MilestoneCheck>, String>((
+      ref,
+      householdId,
+    ) async {
+      final user = ref.watch(currentUserProvider);
+      if (user == null) return const [];
+      return ref
+          .read(careRepositoryProvider)
+          .milestoneChecks(user, householdId);
+    });
+
+/// The most recent milestone check for one child — the "growing as expected"
+/// line on the caregiver's family tiles.
+final latestMilestoneCheckProvider =
+    FutureProvider.family<MilestoneCheck?, String>((ref, personId) async {
+      final user = ref.watch(currentUserProvider);
+      if (user == null) return null;
+      return ref
+          .read(careRepositoryProvider)
+          .latestMilestoneCheck(user, personId);
+    });
+
 /// Contacts scheduled for one household, due or overdue.
 final householdContactsProvider =
     FutureProvider.family<List<ScheduledContact>, String>((

@@ -779,3 +779,89 @@ class HomeCheck {
       .where((s) => s.isNotEmpty)
       .toList(growable: false);
 }
+
+/// One milestone check: the family's report of what their child can do, in
+/// their words, for the age band the child was in when they answered.
+///
+/// Same contract as [HomeCheck] — deliberately local-only, deliberately the
+/// family's words. A mother saying "not yet" to sitting at eight months is
+/// screening information, not a developmental diagnosis; the record keeps the
+/// two apart by storing exactly what she answered, and the health worker does
+/// the examining.
+class MilestoneCheck {
+  const MilestoneCheck({
+    required this.id,
+    required this.householdId,
+    required this.personId,
+    required this.ageMonths,
+    required this.bandLabel,
+    required this.verdict,
+    required this.canDo,
+    required this.notYet,
+    required this.flags,
+    required this.checkedBy,
+    required this.checkedAt,
+  });
+
+  final String id;
+  final String householdId;
+  final String personId;
+
+  /// The child's age in whole months at the time of the check — the band is
+  /// a function of age, so the record stores both, frozen as they were.
+  final int ageMonths;
+
+  /// The band label as shown to the family ("6 to 9 months"), kept in the
+  /// record so the FHW needs no engine to read history.
+  final String bandLabel;
+  final MilestoneVerdict verdict;
+
+  /// The milestone questions answered "yes", exactly as worded on screen.
+  final List<String> canDo;
+
+  /// The questions answered "not yet" — the ones the health worker reads
+  /// first, especially those also in [flags].
+  final List<String> notYet;
+
+  /// The subset of [notYet] the WHO CCD package treats as reason for the
+  /// health worker to look at the child.
+  final List<String> flags;
+  final String checkedBy;
+  final DateTime checkedAt;
+
+  Map<String, Object?> toMap() => {
+    'id': id,
+    'household_id': householdId,
+    'person_id': personId,
+    'age_months': ageMonths,
+    'band_label': bandLabel,
+    'verdict': verdict.name,
+    'can_do': canDo.join('|'),
+    'not_yet': notYet.join('|'),
+    'flags': flags.join('|'),
+    'checked_by': checkedBy,
+    'checked_at': checkedAt.toIso8601String(),
+  };
+
+  factory MilestoneCheck.fromMap(Map<String, Object?> m) => MilestoneCheck(
+    id: m['id'] as String,
+    householdId: m['household_id'] as String,
+    personId: m['person_id'] as String,
+    ageMonths: (m['age_months'] as num).toInt(),
+    bandLabel: m['band_label'] as String,
+    verdict: MilestoneVerdict.values.firstWhere(
+      (v) => v.name == m['verdict'],
+      orElse: () => MilestoneVerdict.watch,
+    ),
+    canDo: _splitList(m['can_do'] as String?),
+    notYet: _splitList(m['not_yet'] as String?),
+    flags: _splitList(m['flags'] as String?),
+    checkedBy: m['checked_by'] as String,
+    checkedAt: DateTime.parse(m['checked_at'] as String),
+  );
+
+  static List<String> _splitList(String? raw) => (raw ?? '')
+      .split('|')
+      .where((s) => s.isNotEmpty)
+      .toList(growable: false);
+}

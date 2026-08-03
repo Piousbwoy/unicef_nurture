@@ -889,3 +889,45 @@ abstract final class HomeCheckDao {
     return HomeCheck.fromMap(rows.first);
   }
 }
+
+/// The family's milestone checks — nurturing care's twin of [HomeCheckDao],
+/// and local-only for the identical reason: a mother's report of what her
+/// child can do becomes clinical evidence when she shows it to the health
+/// worker, never silently before.
+abstract final class MilestoneCheckDao {
+  static Future<void> save(MilestoneCheck check) async {
+    final db = await AppDatabase.instance.database;
+    await db.insert(
+      Tables.milestoneChecks,
+      check.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Newest first — the list both the caregiver and the FHW read.
+  static Future<List<MilestoneCheck>> forHousehold(String householdId) async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query(
+      Tables.milestoneChecks,
+      where: 'household_id = ?',
+      whereArgs: [householdId],
+      orderBy: 'checked_at DESC',
+    );
+    return rows.map(MilestoneCheck.fromMap).toList(growable: false);
+  }
+
+  /// The most recent milestone check for one child, or null. Drives the
+  /// "growing as expected" line on the caregiver's family tiles.
+  static Future<MilestoneCheck?> latestForPerson(String personId) async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query(
+      Tables.milestoneChecks,
+      where: 'person_id = ?',
+      whereArgs: [personId],
+      orderBy: 'checked_at DESC',
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return MilestoneCheck.fromMap(rows.first);
+  }
+}

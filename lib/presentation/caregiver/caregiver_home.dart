@@ -42,6 +42,7 @@ import '../../core/audio/voice_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/reference/northern_ghana.dart';
 import '../../data/repositories/care_repository.dart';
+import '../../domain/engines/nurturing_care_engine.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
 import '../../domain/enums.dart';
@@ -533,6 +534,8 @@ class _CheckInTab extends ConsumerWidget {
         ),
         const SizedBox(height: Gap.md),
         _RecentChecksCard(householdId: householdId),
+        const SizedBox(height: Gap.md),
+        _GrowPlayCard(householdId: householdId),
         const SizedBox(height: Gap.md),
         _AudioCard(householdId: householdId),
       ],
