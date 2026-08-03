@@ -2430,3 +2430,598 @@ String _ago(DateTime when) {
   };
 }
 
+// ------------------------------------------------------- Nurturing care
+
+/// Grow and play — the nurturing-care half of the caregiver app.
+///
+/// Growing is more than weight: the WHO/UNICEF Care for Child Development
+/// package says what a child should be doing at each age, and what play
+/// builds it. This card offers both, in the family's own words, using only
+/// what is already in the compound. It appears only when the household has
+/// a child inside the tracked window (birth to five years).
+class _GrowPlayCard extends ConsumerWidget {
+  const _GrowPlayCard({required this.householdId});
+
+  final String householdId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final members = ref.watch(householdMembersProvider(householdId));
+
+    return members.maybeWhen(
+      data: (people) {
+        final children = people
+            .where((p) => NurturingCareEngine.bandFor(p.ageInMonths) != null)
+            .toList(growable: false);
+        if (children.isEmpty) return const SizedBox.shrink();
+
+        return SectionCard(
+          title: 'Grow and play',
+          subtitle:
+              'Growing is more than weight. Answer a few questions about '
+              'what your child can do, and get a play idea for today — '
+              'free, with things you already have.',
+          icon: Icons.child_care_rounded,
+          child: Column(
+            children: [
+              for (final child in children) _GrowChildTile(child: child),
+            ],
+          ),
+        );
+      },
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _GrowChildTile extends StatelessWidget {
+  const _GrowChildTile({required this.child});
+
+  final Person child;
+
+  @override
+  Widget build(BuildContext context) {
+    final band = NurturingCareEngine.bandFor(child.ageInMonths)!;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: Gap.sm),
+      padding: const EdgeInsets.all(Gap.md),
+      decoration: BoxDecoration(
+        color: AppColors.canvas,
+        borderRadius: BorderRadius.circular(Gap.radiusSm),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  child.fullName,
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Text(
+                '${child.ageLabel} · ${band.label}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.inkMuted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Gap.xs),
+          Text(
+            'Play today: ${NurturingCareEngine.activityToday(band)}',
+            style: const TextStyle(
+              fontSize: 12.5,
+              color: AppColors.inkMuted,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: Gap.sm),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => _MilestoneScreen(
+                  householdId: child.householdId,
+                  personId: child.id,
+                ),
+              ),
+            ),
+            icon: const Icon(Icons.checklist_rounded, size: 18),
+            label: const Text('Check the milestones'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, Gap.tapTarget),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The milestone check — nurturing care's answer to the danger-sign check.
+///
+/// Same calm pattern: one child, a short list of questions phrased as "can
+/// they do this?", two answers ("yes" and "not yet" — never "wrong"), and a
+/// result that routes, not diagnoses. "Show the health worker" is the only
+/// red this screen produces, and it means exactly what it says.
+class _MilestoneScreen extends ConsumerStatefulWidget {
+  const _MilestoneScreen({required this.householdId, required this.personId});
+
+  final String householdId;
+  final String personId;
+
+  @override
+  ConsumerState<_MilestoneScreen> createState() => _MilestoneScreenState();
+}
+
+class _MilestoneScreenState extends ConsumerState<_MilestoneScreen> {
+  /// True per milestone the child can do; false means "not yet". Missing key
+  /// means unanswered — the save button stays closed until every question
+  /// has an answer, exactly like the danger-sign checklist.
+  final Map<String, bool> _answers = {};
+  bool _saved = false;
+  bool _showResult = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final personAsync = ref.watch(personProvider(widget.personId));
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Grow and play')),
+      body: personAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => ErrorView(error: e),
+        data: (person) {
+          if (person == null) {
+            return const EmptyState(
+              icon: Icons.child_care_rounded,
+              title: 'Child not found',
+              message: 'This child is no longer on this phone.',
+            );
+          }
+          final band = NurturingCareEngine.bandFor(person.ageInMonths);
+          if (band == null) {
+            return const EmptyState(
+              icon: Icons.cake_outlined,
+              title: 'We need the child\u2019s age',
+              message:
+                  'Milestone checks work from birth to five years. Ask the '
+                  'health worker to record the child\u2019s date of birth.',
+            );
+          }
+          return _showResult
+              ? _buildResult(person, band)
+              : _buildQuestions(person, band);
+        },
+      ),
+    );
+  }
+
+  Widget _buildQuestions(Person person, NcAgeBand band) {
+    final answered =
+        band.milestones.where((m) => _answers.containsKey(m.id)).length;
+    final allAnswered = answered == band.milestones.length;
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(Gap.lg),
+            children: [
+              Text(
+                'About ${person.fullName} (${band.label}). For each one, '
+                'answer what you see most days. "Not yet" is never wrong — '
+                'children grow at their own pace.',
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.inkMuted,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: Gap.md),
+              for (final m in band.milestones) _MilestoneQuestionTile(
+                milestone: m,
+                answer: _answers[m.id],
+                onChanged: (v) => setState(() => _answers[m.id] = v),
+              ),
+              const SizedBox(height: Gap.md),
+              const Text(
+                'This is your report, not a diagnosis. The health worker '
+                'examines; you tell them what you see.',
+                style: TextStyle(fontSize: 12, color: AppColors.inkFaint),
+              ),
+            ],
+          ),
+        ),
+        SafeArea(
+          minimum: const EdgeInsets.all(Gap.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$answered of ${band.milestones.length} answered',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: allAnswered
+                      ? AppColors.primary
+                      : AppColors.inkMuted,
+                ),
+              ),
+              const SizedBox(height: Gap.sm),
+              FilledButton(
+                onPressed: allAnswered
+                    ? () {
+                        setState(() => _showResult = true);
+                        _save(person, band);
+                      }
+                    : null,
+                child: const Text('Show me the result'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildResult(Person person, NcAgeBand band) {
+    final notYet = band.milestones
+        .where((m) => _answers[m.id] == false)
+        .toList(growable: false);
+    final flags = notYet.where((m) => m.isFlag).toList(growable: false);
+    final verdict = flags.isNotEmpty
+        ? MilestoneVerdict.flag
+        : notYet.length >= 2
+        ? MilestoneVerdict.watch
+        : MilestoneVerdict.onTrack;
+
+    return ListView(
+      padding: const EdgeInsets.all(Gap.lg),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(Gap.lg),
+          decoration: BoxDecoration(
+            color: verdict.colour.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(Gap.radius),
+            border: Border.all(color: verdict.colour.withValues(alpha: 0.5)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    switch (verdict) {
+                      MilestoneVerdict.onTrack => Icons.emoji_events_rounded,
+                      MilestoneVerdict.watch => Icons.visibility_rounded,
+                      MilestoneVerdict.flag => Icons.medical_information_rounded,
+                    },
+                    color: verdict.colour,
+                    size: 28,
+                  ),
+                  const SizedBox(width: Gap.sm),
+                  Expanded(
+                    child: Text(
+                      verdict.label,
+                      style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800,
+                        color: verdict.colour,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: Gap.sm),
+              Text(
+                switch (verdict) {
+                  MilestoneVerdict.onTrack =>
+                    '${person.fullName.split(' ').first} is doing what children '
+                        'this age usually do. Keep playing — play is how the '
+                        'brain grows.',
+                  MilestoneVerdict.watch =>
+                    'Some things are still coming. Play the ideas below every '
+                        'day and check again in a few weeks. Every child has '
+                        'their own pace.',
+                  MilestoneVerdict.flag =>
+                    'Show ${person.fullName.split(' ').first} to the health '
+                        'worker at the next contact. This is not a diagnosis '
+                        '— it means these are worth a proper look.',
+                },
+                style: const TextStyle(fontSize: 14, height: 1.45),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: Gap.md),
+
+        if (notYet.isNotEmpty)
+          SectionCard(
+            title: 'Still coming — not yet',
+            icon: Icons.hourglass_bottom_rounded,
+            accent: flags.isNotEmpty
+                ? AppColors.triageRed
+                : AppColors.triageAmber,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final m in notYet)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: Gap.xs),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.arrow_right_rounded,
+                          color: m.isFlag
+                              ? AppColors.triageRed
+                              : AppColors.triageAmber,
+                        ),
+                        Expanded(
+                          child: Text(
+                            m.question,
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: m.isFlag
+                                  ? FontWeight.w800
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        if (m.isFlag)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: Gap.sm,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.triageRedBg,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Text(
+                              'show health worker',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.triageRed,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                const Text(
+                  'Tell the health worker exactly this list when you arrive.',
+                  style: TextStyle(fontSize: 12.5, color: AppColors.inkMuted),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: Gap.md),
+
+        SectionCard(
+          title: 'Play idea for today',
+          icon: Icons.toys_rounded,
+          child: Text(
+            NurturingCareEngine.activityToday(band),
+            style: const TextStyle(fontSize: 14.5, height: 1.5),
+          ),
+        ),
+        const SizedBox(height: Gap.md),
+        SectionCard(
+          title: 'One thing to remember',
+          icon: Icons.favorite_outline_rounded,
+          child: Text(
+            band.tip,
+            style: const TextStyle(fontSize: 14.5, height: 1.5),
+          ),
+        ),
+        const SizedBox(height: Gap.xxl),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Back to my family'),
+        ),
+        const SizedBox(height: Gap.lg),
+      ],
+    );
+  }
+
+  /// Saved once per run, the moment the result is shown — same contract as
+  /// the danger-sign check: the family's words, on this phone, never as a
+  /// clinical record.
+  Future<void> _save(Person person, NcAgeBand band) async {
+    if (_saved) return;
+    _saved = true;
+
+    final user = ref.read(currentUserProvider);
+    if (user == null) return;
+
+    final canDo = [
+      for (final m in band.milestones)
+        if (_answers[m.id] == true) m.question,
+    ];
+    final notYet = [
+      for (final m in band.milestones)
+        if (_answers[m.id] == false) m.question,
+    ];
+    final flags = [
+      for (final m in band.milestones)
+        if (_answers[m.id] == false && m.isFlag) m.question,
+    ];
+    final verdict = flags.isNotEmpty
+        ? MilestoneVerdict.flag
+        : notYet.length >= 2
+        ? MilestoneVerdict.watch
+        : MilestoneVerdict.onTrack;
+
+    final check = MilestoneCheck(
+      id: _uuid.v4(),
+      householdId: widget.householdId,
+      personId: person.id,
+      ageMonths: person.ageInMonths ?? 0,
+      bandLabel: band.label,
+      verdict: verdict,
+      canDo: canDo,
+      notYet: notYet,
+      flags: flags,
+      checkedBy: user.id,
+      checkedAt: DateTime.now(),
+    );
+
+    try {
+      await ref.read(careRepositoryProvider).recordMilestoneCheck(user, check);
+      ref.invalidate(householdMilestoneChecksProvider(widget.householdId));
+      ref.invalidate(latestMilestoneCheckProvider(person.id));
+    } catch (_) {
+      // A failed save must never look like a saved check.
+      if (mounted) setState(() => _saved = false);
+    }
+  }
+}
+
+class _MilestoneQuestionTile extends StatelessWidget {
+  const _MilestoneQuestionTile({
+    required this.milestone,
+    required this.answer,
+    required this.onChanged,
+  });
+
+  final NcMilestone milestone;
+  final bool? answer;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: Gap.sm),
+      padding: const EdgeInsets.all(Gap.md),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(Gap.radiusSm),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: Gap.sm,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  milestone.domain.label,
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: Gap.sm),
+              Expanded(
+                child: Text(
+                  milestone.question,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Gap.sm),
+          Row(
+            children: [
+              Expanded(
+                child: _AnswerButton(
+                  label: 'Yes, can do',
+                  selected: answer == true,
+                  colour: AppColors.triageGreen,
+                  onTap: () => onChanged(true),
+                ),
+              ),
+              const SizedBox(width: Gap.sm),
+              Expanded(
+                child: _AnswerButton(
+                  label: 'Not yet',
+                  selected: answer == false,
+                  colour: AppColors.triageAmber,
+                  onTap: () => onChanged(false),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnswerButton extends StatelessWidget {
+  const _AnswerButton({
+    required this.label,
+    required this.selected,
+    required this.colour,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final Color colour;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? colour.withValues(alpha: 0.12) : AppColors.canvas,
+      borderRadius: BorderRadius.circular(Gap.radiusSm),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(Gap.radiusSm),
+        onTap: onTap,
+        child: Container(
+          height: Gap.tapTarget,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(Gap.radiusSm),
+            border: Border.all(
+              color: selected ? colour : AppColors.line,
+              width: selected ? 1.6 : 1,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w800,
+              color: selected ? colour : AppColors.inkMuted,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+extension on MilestoneVerdict {
+  Color get colour => switch (this) {
+    MilestoneVerdict.onTrack => AppColors.triageGreen,
+    MilestoneVerdict.watch => AppColors.triageAmber,
+    MilestoneVerdict.flag => AppColors.triageRed,
+  };
+}
+

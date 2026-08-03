@@ -18,6 +18,7 @@ import '../../data/local/outbox_dao.dart';
 import '../../data/local/preferences_store.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/enums.dart';
+import '../settings/data_inspector_screen.dart';
 import '../settings/sync_settings_screen.dart';
 import '../settings/voice_test_screen.dart';
 import '../shared/ui.dart';
@@ -346,6 +347,17 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                     'real Dagbani recording.',
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const VoiceTestScreen()),
+                ),
+              ),
+              _SettingsTile(
+                icon: Icons.storage_rounded,
+                title: 'On-device database',
+                subtitle: 'Browse the records stored on this phone — every '
+                    'table, how many rows it holds, and the newest entries.',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const DataInspectorScreen(),
+                  ),
                 ),
               ),
             ],

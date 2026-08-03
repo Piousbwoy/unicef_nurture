@@ -105,6 +105,9 @@ class _Body extends ConsumerWidget {
     final contacts = ref.watch(householdContactsProvider(household.id));
     final barriers = ref.watch(barrierHistoryProvider(household.id));
     final homeChecks = ref.watch(householdHomeChecksProvider(household.id));
+    final milestoneChecks = ref.watch(
+      householdMilestoneChecksProvider(household.id),
+    );
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -262,6 +265,54 @@ class _Body extends ConsumerWidget {
             orElse: () => const SizedBox.shrink(),
           ),
 
+          milestoneChecks.maybeWhen(
+            data: (list) {
+              // Development is read as "where is this child now", not as a
+              // diary: keep only the newest check per child, then surface the
+              // CCD flags before everything else.
+              final latestByChild = <String, MilestoneCheck>{};
+              for (final c in list) {
+                latestByChild.putIfAbsent(c.personId, () => c);
+              }
+              final recent = latestByChild.values
+                  .where(
+                    (c) =>
+                        DateTime.now().difference(c.checkedAt).inDays <= 30,
+                  )
+                  .toList(growable: false)
+                ..sort((a, b) {
+                  final flagA =
+                      a.verdict == MilestoneVerdict.flag ? 0 : 1;
+                  final flagB =
+                      b.verdict == MilestoneVerdict.flag ? 0 : 1;
+                  final byFlag = flagA.compareTo(flagB);
+                  if (byFlag != 0) return byFlag;
+                  return b.checkedAt.compareTo(a.checkedAt);
+                });
+              final show = recent.take(4).toList(growable: false);
+              if (show.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: Gap.lg),
+                child: SectionCard(
+                  title: 'What the family says the children can do',
+                  subtitle:
+                      'Milestone checks run on the family\u2019s own phone. '
+                      'Flags first — these are the WHO Care for Child '
+                      'Development signs the family answered "not yet" to. '
+                      'Examine these children before the rest.',
+                  icon: Icons.child_care_rounded,
+                  accent: AppColors.primary,
+                  child: Column(
+                    children: [
+                      for (final c in show) _MilestoneReportTile(check: c),
+                    ],
+                  ),
+                ),
+              );
+            },
+            orElse: () => const SizedBox.shrink(),
+          ),
+
           const SizedBox(height: Gap.xxl * 2),
         ],
       ),
@@ -349,6 +400,100 @@ class _FamilyReportTile extends ConsumerWidget {
                     style: const TextStyle(
                       fontSize: 12.5,
                       color: AppColors.inkFaint,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One milestone check as the family reported it. The family's words again —
+/// a flag is a reason to examine, never a developmental diagnosis.
+class _MilestoneReportTile extends ConsumerWidget {
+  const _MilestoneReportTile({required this.check});
+
+  final MilestoneCheck check;
+
+  Color get _colour => switch (check.verdict) {
+    MilestoneVerdict.flag => AppColors.triageRed,
+    MilestoneVerdict.watch => AppColors.triageAmber,
+    MilestoneVerdict.onTrack => AppColors.triageGreen,
+  };
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final person = ref.watch(personProvider(check.personId));
+    final days = DateTime.now().dateOnly.difference(
+      check.checkedAt.dateOnly,
+    ).inDays;
+    final when = switch (days) {
+      <= 0 => 'today',
+      1 => 'yesterday',
+      _ => '$days days ago',
+    };
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Gap.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 5),
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(
+              color: _colour,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: Gap.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${person.valueOrNull?.fullName ?? '…'} · $when',
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${check.bandLabel} · ${check.verdict.label}',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: check.verdict == MilestoneVerdict.onTrack
+                        ? AppColors.inkMuted
+                        : _colour,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (check.notYet.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Not yet: ${check.notYet.join('; ')}',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.inkMuted,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+                if (check.flags.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'CCD flags: ${check.flags.join('; ')}',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.triageRed,
+                      fontWeight: FontWeight.w600,
                       height: 1.35,
                     ),
                   ),

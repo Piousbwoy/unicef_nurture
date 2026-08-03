@@ -888,6 +888,26 @@ abstract final class HomeCheckDao {
     if (rows.isEmpty) return null;
     return HomeCheck.fromMap(rows.first);
   }
+
+  /// How many checks across every household landed on [verdict] within the
+  /// window. Powers the zone impact card — families finding danger early is
+  /// an outcome, not just a feature.
+  static Future<int> countWithVerdict(
+    HomeCheckVerdict verdict, {
+    int withinDays = 30,
+  }) async {
+    final db = await AppDatabase.instance.database;
+    final since = DateTime.now()
+        .subtract(Duration(days: withinDays))
+        .toIso8601String();
+    final rows = await db.query(
+      Tables.homeChecks,
+      columns: ['COUNT(*) AS n'],
+      where: 'verdict = ? AND checked_at >= ?',
+      whereArgs: [verdict.name, since],
+    );
+    return (rows.first['n'] as num).toInt();
+  }
 }
 
 /// The family's milestone checks — nurturing care's twin of [HomeCheckDao],
@@ -929,5 +949,21 @@ abstract final class MilestoneCheckDao {
     );
     if (rows.isEmpty) return null;
     return MilestoneCheck.fromMap(rows.first);
+  }
+
+  /// Distinct children whose families raised a CCD flag within the window.
+  /// A child counted once even if the family checked twice — the outcome is
+  /// the child surfaced, not the number of taps.
+  static Future<int> countFlaggedChildren({int withinDays = 30}) async {
+    final db = await AppDatabase.instance.database;
+    final since = DateTime.now()
+        .subtract(Duration(days: withinDays))
+        .toIso8601String();
+    final rows = await db.rawQuery(
+      'SELECT COUNT(DISTINCT person_id) AS n FROM '
+      '${Tables.milestoneChecks} WHERE verdict = ? AND checked_at >= ?',
+      [MilestoneVerdict.flag.name, since],
+    );
+    return (rows.first['n'] as num).toInt();
   }
 }

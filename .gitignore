@@ -48,3 +48,7 @@ app.*.map.json
 server/node_modules/
 # .env holds the DB password and sync bearer token — never commit it.
 server/.env
+
+# Persistent Chrome profile used by the web debug run (.vscode/launch.json).
+# Contains the app's browser-side database — never commit it.
+.chrome-profile/

@@ -30,6 +30,7 @@ import '../../presentation/auth/setup_screen.dart';
 import '../../presentation/auth/sign_in_screen.dart';
 import '../../presentation/caregiver/caregiver_home.dart';
 import '../../presentation/fhw/fhw_home.dart';
+import '../../presentation/settings/data_inspector_screen.dart';
 import '../../presentation/settings/voice_test_screen.dart';
 import '../../presentation/shared/app_image.dart';
 import '../../presentation/shared/ui.dart';
@@ -50,6 +51,9 @@ abstract final class Routes {
 
   /// Diagnostic for the CHO — what can this phone actually speak?
   static const voiceTest = '/voice-test';
+
+  /// The on-device SQLite database, made visible.
+  static const database = '/database';
 
   /// Where a role should land after signing in.
   static String homeFor(UserRole role) => role.isFhw ? fhwHome : family;
@@ -174,6 +178,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.voiceTest,
         pageBuilder: (_, _) => _fadePage(const VoiceTestScreen()),
+      ),
+      GoRoute(
+        path: Routes.database,
+        pageBuilder: (_, _) => _fadePage(const DataInspectorScreen()),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(

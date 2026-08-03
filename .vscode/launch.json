@@ -1,0 +1,38 @@
+{
+  // CareBridge launch configurations.
+  //
+  // "Chrome (data persists)" is the important one. Plain `flutter run -d chrome`
+  // launches Chrome with a THROWAWAY profile and a RANDOM port, so the app's
+  // browser storage — the SQLite database (IndexedDB) and the remembered session
+  // (localStorage) — is wiped on every restart and accounts "disappear".
+  //
+  // This configuration fixes both:
+  //   --web-port / --web-hostname  → the origin is always http://127.0.0.1:8766,
+  //                                  and browser storage is scoped per origin.
+  //   --web-browser-flag user-data-dir → Chrome reuses the same profile in
+  //                                  .chrome-profile/, so IndexedDB survives.
+  //
+  // Sign up once, and the same phone number + PIN keeps working across restarts.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "CareBridge — Chrome (data persists)",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "chrome",
+      "args": [
+        "--web-port=8766",
+        "--web-hostname=127.0.0.1",
+        "--web-browser-flag",
+        "--user-data-dir=${workspaceFolder}/.chrome-profile"
+      ]
+    },
+    {
+      "name": "CareBridge — web-server (bring your own browser)",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "web-server",
+      "args": ["--web-port=8766", "--web-hostname=127.0.0.1"]
+    }
+  ]
+}

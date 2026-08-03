@@ -421,3 +421,18 @@ final referralCompletionProvider =
       await ref.watch(bootstrapProvider.future);
       return ref.read(insightRepositoryProvider).referralCompletion();
     });
+
+/// The zone impact summary — what this phone has caught and closed. FHW-only;
+/// a caregiver watching it gets an access-denied error, which is the point.
+final impactSummaryProvider = FutureProvider<
+  ({int issued, int arrived, double rate, int urgentHomeChecks,
+    int flaggedChildren})
+>((ref) async {
+  await ref.watch(bootstrapProvider.future);
+  final user = ref.watch(currentUserProvider);
+  if (user == null) {
+    return (issued: 0, arrived: 0, rate: 0.0, urgentHomeChecks: 0,
+      flaggedChildren: 0);
+  }
+  return ref.read(careRepositoryProvider).impactSummary(user);
+});

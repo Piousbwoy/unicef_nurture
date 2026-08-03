@@ -37,10 +37,71 @@ class InsightsTab extends ConsumerWidget {
     final declining = ref.watch(decliningChildrenProvider);
     final barriers = ref.watch(barrierPatternsProvider);
     final completion = ref.watch(referralCompletionProvider);
+    final impact = ref.watch(impactSummaryProvider);
 
     return ListView(
       padding: const EdgeInsets.all(Gap.lg),
       children: [
+        // ------------------------------------------------------- Zone impact
+        SectionCard(
+          title: 'What this phone has protected',
+          subtitle:
+              'Outcomes, not activity. Loops closed and danger caught early '
+              '— the numbers a district team actually asks for.',
+          icon: Icons.shield_outlined,
+          child: impact.when(
+            loading: () => const SizedBox.shrink(),
+            error: (e, _) => const SizedBox.shrink(),
+            data: (s) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    StatTile(
+                      value: '${s.arrived}',
+                      label: 'Referrals arrived\n(90 days)',
+                      colour: s.arrived > 0
+                          ? AppColors.triageGreen
+                          : AppColors.inkMuted,
+                    ),
+                    const SizedBox(width: Gap.md),
+                    StatTile(
+                      value: '${s.urgentHomeChecks}',
+                      label: 'Urgent checks by\nfamilies (30 days)',
+                      colour: s.urgentHomeChecks > 0
+                          ? AppColors.triageRed
+                          : AppColors.inkMuted,
+                    ),
+                    const SizedBox(width: Gap.md),
+                    StatTile(
+                      value: '${s.flaggedChildren}',
+                      label: 'Children flagged\nby families (30 days)',
+                      colour: s.flaggedChildren > 0
+                          ? AppColors.triageAmber
+                          : AppColors.inkMuted,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: Gap.md),
+                const Text(
+                  'An urgent home check is a family that found danger '
+                  'before the danger found them. A flagged milestone is a '
+                  'child examined before falling behind. Each arrived '
+                  'referral is a loop closed. These are the records that '
+                  'turn into lives — and every one of them was made on '
+                  'this phone, offline.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.inkMuted,
+                    height: 1.45,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: Gap.lg),
+
         // -------------------------------------------------- Declining children
         SectionCard(
           title: 'Children losing ground',
