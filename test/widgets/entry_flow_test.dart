@@ -127,6 +127,78 @@ void main() {
   );
 
   testWidgets(
+    'caregiver: filling "Your details" and continuing renders the family '
+    'step without layout errors (regression: blank screen + hit-test on a '
+    'size-less render box)',
+    (tester) async {
+      tester.view.physicalSize = const Size(900, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      SharedPreferences.setMockInitialValues({'onboarding_seen': true});
+      await _pumpApp(tester, const SessionNeedsSetup());
+      await _leaveSplash(tester);
+
+      // Pick the caregiver role, route through sign-in, create an account.
+      await tester.tap(
+        find.text('Caregiver', findRichText: true).first,
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(SignInScreen), findsOneWidget);
+      await tester.tap(find.text('Create a new account'));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Your details'), findsOneWidget);
+
+      // Fill step 0: name, phone, PIN, confirm PIN.
+      await tester.enterText(
+        find.widgetWithText(TextField, 'e.g. Abdul-Rahman Suleimana'),
+        'Amina Iddrisu',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, '024 000 0000'),
+        '0244 111 222',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, '4 digits'),
+        '5729',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Repeat your PIN'),
+        '5729',
+      );
+
+      // Continue to the "Your family" step.
+      await tester.ensureVisible(find.text('Continue'));
+      await tester.tap(find.text('Continue'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // The family step must actually render — the reported freeze was a
+      // blank body on this step.
+      expect(find.text('Your family'), findsWidgets);
+      expect(find.text('FAMILY CODE'), findsOneWidget);
+      expect(find.text('Check'), findsOneWidget);
+
+      // Tapping Continue without a code shows the validation error, and
+      // the form must still be interactive afterwards.
+      await tester.ensureVisible(find.text('Continue'));
+      await tester.tap(find.text('Continue'));
+      await tester.pump();
+      expect(
+        find.text(
+          'Enter the family code the health worker gave you, then tap Check.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('FAMILY CODE'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'sign-in: "Create a new account" returns to the registration form, '
     'pre-applied with the role picked on the role choice',
     (tester) async {

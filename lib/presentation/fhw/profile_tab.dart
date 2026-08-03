@@ -672,6 +672,7 @@ String _permissionLabel(Permission p) => switch (p) {
   Permission.registerHousehold => 'Register households',
   Permission.viewAllHouseholds => 'See whole zone',
   Permission.viewOwnFamilyOnly => 'See own family only',
+  Permission.manageOwnFamily => 'Manage own family',
   Permission.recordClinicalVitals => 'Record measurements',
   Permission.runClinicalAssessment => 'Run assessments',
   Permission.runCaregiverTriage => 'Danger-sign check',

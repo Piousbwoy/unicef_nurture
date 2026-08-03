@@ -173,6 +173,55 @@ class CareRepository {
     );
   }
 
+  /// A caregiver starts their own household record.
+  ///
+  /// Real life does not wait for registration day: a family that downloads the
+  /// app before any health worker has reached their compound still deserves a
+  /// working account. The household they create is an ordinary record — same
+  /// table, same outbox, same sync — with the caregiver's own user id as
+  /// `createdBy`, so it joins the zone caseload the moment an FHW's phone
+  /// meets it.
+  ///
+  /// Guarded twice: the capability ([Permission.manageOwnFamily]) and the
+  /// role. An FHW never holds the capability, and a caregiver account is the
+  /// only thing that may use it. The household must also be the one the
+  /// account will be bound to — this method is called from registration, so
+  /// [AppUser.id] is known before the user row exists; everything else about
+  /// the check is identical to any other write.
+  Future<void> createOwnHousehold(AppUser user, Household household) async {
+    await _require(
+      user,
+      Permission.manageOwnFamily,
+      'create your own family record',
+      entityTable: 'households',
+      entityId: household.id,
+    );
+    if (!user.role.isCaregiver) {
+      throw const AccessDenied(
+        'create your own family record',
+        Permission.manageOwnFamily,
+        detail: 'Only caregiver accounts start a family this way.',
+      );
+    }
+    if (household.createdBy != user.id) {
+      throw const AccessDenied(
+        'create your own family record',
+        Permission.manageOwnFamily,
+        detail: 'A family record must be created under your own account.',
+      );
+    }
+    await HouseholdDao.upsert(household);
+    await AuditDao.record(
+      action: 'self_register_household',
+      outcome: 'allowed',
+      actorId: user.id,
+      actorRole: user.role.name,
+      entityTable: 'households',
+      entityId: household.id,
+      detail: household.name,
+    );
+  }
+
   /// Households this user may see.
   ///
   /// The two roles get genuinely different queries rather than the same query
@@ -232,6 +281,37 @@ class CareRepository {
   Future<void> savePerson(AppUser user, Person person) async {
     await _require(user, Permission.registerHousehold, 'add or edit a person');
     await PersonDao.upsert(person);
+  }
+
+  /// A caregiver adds someone they care for to their own family.
+  ///
+  /// The scope check is the whole point: [Permission.manageOwnFamily] alone
+  /// would let a caregiver write into any household id they typed, so the
+  /// person's household is resolved and matched against the account's binding
+  /// before anything is written. The attempt is audited either way.
+  Future<void> addFamilyMember(AppUser user, Person person) async {
+    await _require(
+      user,
+      Permission.manageOwnFamily,
+      'add a family member',
+      entityTable: 'persons',
+      entityId: person.id,
+    );
+    await _requireHouseholdScope(
+      user,
+      person.householdId,
+      'add a member to this family',
+    );
+    await PersonDao.upsert(person);
+    await AuditDao.record(
+      action: 'add_family_member',
+      outcome: 'allowed',
+      actorId: user.id,
+      actorRole: user.role.name,
+      entityTable: 'persons',
+      entityId: person.id,
+      detail: person.fullName,
+    );
   }
 
   Future<List<Person>> childrenOf(AppUser user, String motherId) async {

@@ -30,6 +30,7 @@ enum Permission {
   registerHousehold,
   viewAllHouseholds,
   viewOwnFamilyOnly,
+  manageOwnFamily,
   recordClinicalVitals,
   runClinicalAssessment,
   runCaregiverTriage,
@@ -59,6 +60,11 @@ enum Permission {
     viewOwnFamilyOnly,
     runCaregiverTriage,
     recordBarrier,
+    // A family can start its own record before a health worker ever reaches
+    // it: create the household and add the people they care for. Strictly
+    // self-service — the repository refuses any household other than the one
+    // the account is bound to, and no clinical field is writable with it.
+    manageOwnFamily,
   };
 
   static Set<Permission> forRole(UserRole role) =>

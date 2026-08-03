@@ -3,29 +3,35 @@
 /// The role boundary is enforced by what this screen *lacks*. There is no
 /// assessment form here, no measurements, no diagnosis — a caregiver gets
 /// danger-sign triage (a structured "go now / see the nurse / continue care"
-/// answer), their own family's schedule and referrals, a channel to report
-/// barriers, and voice guidance. Every clinical write still goes through
-/// [CareRepository], which would refuse a caregiver anyway; the screen simply
-/// never offers what would be refused.
+/// answer), nurturing-care guidance, their family's schedule and referrals,
+/// a channel to report barriers, and voice guidance. Every clinical write
+/// still goes through [CareRepository], which would refuse a caregiver
+/// anyway; the screen simply never offers what would be refused.
 ///
 /// Nothing the caregiver does here enters the clinical record as clinical
 /// data. The triage result is guidance, deliberately: the app must never turn
 /// a mother's checklist into a diagnosis.
 ///
-/// Four tabs in the order a caregiver's day actually runs:
+/// Five tabs, named for what a family does — never the health worker's
+/// labels (no Day plan, no Assess, no Referrals, no Me), because the two
+/// roles are different jobs, not one job in two sizes:
 ///
-/// **Home** — greeting, the family they care for, and the "check someone now"
-/// button. This is where they land when they open the app to ask "is everyone
-/// alright today?"
+/// **Family** — greeting, the people they care for, the family code, and the
+/// door to adding someone new. This is where they land when they open the app
+/// to ask "is everyone alright today?"
 ///
-/// **My family** — the detail: every member with their last-known triage, the
-/// visits coming up, the open referrals. Where to look when the health worker
-/// calls and asks "is the family OK?"
+/// **Check** — the danger-sign triage. Asks yes / no / not sure, gives one of
+/// three recommendations: go now, see the CHW soon, or continue care.
 ///
-/// **Check-in** — the danger-sign triage. Asks yes / no / not sure, gives one
-/// of three recommendations: go now, see the CHW soon, or continue care.
+/// **Grow & Play** — nurturing care: what the children can do at their age,
+/// and a play idea for today built from things already in the home.
 ///
-/// **Profile** — the language they hear advice in, the sign-out, the help line.
+/// **Care plan** — what the family owes the calendar: vaccine days derived
+/// from each child's age, appointments the clinic scheduled, open referrals,
+/// and the barrier channel.
+///
+/// **Help** — the emergency plan, the voice guide, the language they hear
+/// advice in, and the sign-out.
 library;
 
 import 'package:flutter/material.dart';
@@ -42,10 +48,12 @@ import '../../core/audio/voice_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/reference/northern_ghana.dart';
 import '../../data/repositories/care_repository.dart';
+import '../../domain/engines/immunisation_engine.dart';
 import '../../domain/engines/nurturing_care_engine.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
 import '../../domain/enums.dart';
+import '../../domain/family_code.dart';
 import '../settings/voice_test_screen.dart';
 import '../shared/app_image.dart';
 import '../shared/ui.dart';
@@ -143,6 +151,9 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
       );
     }
 
+    // The caregiver's shell shares nothing with the health worker's: no Day
+    // plan, no Assess, no Referrals tab, no Me — a family's app is a
+    // different product, so it gets different doors.
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -157,10 +168,14 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
       body: IndexedStack(
         index: _tab,
         children: [
-          _HomeTab(householdId: linked, onSwitch: (i) => setState(() => _tab = i)),
-          _MyFamilyTab(householdId: linked),
-          _CheckInTab(householdId: linked),
-          _ProfileTab(),
+          _FamilyTab(
+            householdId: linked,
+            onSwitch: (i) => setState(() => _tab = i),
+          ),
+          _CheckTab(householdId: linked),
+          _GrowPlayTab(householdId: linked),
+          _CarePlanTab(householdId: linked),
+          _HelpTab(householdId: linked),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -168,24 +183,29 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
         onTap: (i) => setState(() => _tab = i),
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home_rounded),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
             icon: Icon(Icons.family_restroom_outlined),
             activeIcon: Icon(Icons.family_restroom_rounded),
-            label: 'My Family',
+            label: 'Family',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.health_and_safety_outlined),
             activeIcon: Icon(Icons.health_and_safety_rounded),
-            label: 'Check-In',
+            label: 'Check',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline_rounded),
-            activeIcon: Icon(Icons.person_rounded),
-            label: 'Profile',
+            icon: Icon(Icons.toys_outlined),
+            activeIcon: Icon(Icons.toys_rounded),
+            label: 'Grow & Play',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.event_note_outlined),
+            activeIcon: Icon(Icons.event_note_rounded),
+            label: 'Care plan',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.support_agent_outlined),
+            activeIcon: Icon(Icons.support_agent_rounded),
+            label: 'Help',
           ),
         ],
       ),
@@ -195,8 +215,8 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
 
 // ------------------------------------------------------------------- Home tab
 
-class _HomeTab extends ConsumerWidget {
-  const _HomeTab({required this.householdId, required this.onSwitch});
+class _FamilyTab extends ConsumerWidget {
+  const _FamilyTab({required this.householdId, required this.onSwitch});
 
   final String householdId;
   final ValueChanged<int> onSwitch;
@@ -218,10 +238,12 @@ class _HomeTab extends ConsumerWidget {
         _CaregiverHero(greeting: '$part, $first'),
         const SizedBox(height: Gap.lg),
         _FamilySummary(householdId: householdId),
+        const SizedBox(height: Gap.md),
+        _FamilyCodeCard(householdId: householdId),
         const SizedBox(height: Gap.lg),
         // The one big action — master flow [13b] → [40-C]. A caregiver
         // opening the app to ask "is everyone alright?" goes straight into
-        // the check, and lands back on this Home tab when it is done.
+        // the check, and lands back on this Family tab when it is done.
         GradientButton(
           label: 'Check on someone now',
           icon: Icons.health_and_safety_rounded,
@@ -244,21 +266,7 @@ class _HomeTab extends ConsumerWidget {
           icon: const Icon(Icons.volume_up_rounded),
           label: const Text('Hear advice aloud'),
         ),
-        const SizedBox(height: Gap.xs),
-        // One-tap "test this phone's voice" link — the audit-the-capability
-        // gate before relying on the audio card in a real visit.
-        TextButton.icon(
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => const VoiceTestScreen(),
-            ),
-          ),
-          icon: const Icon(Icons.science_outlined, size: 16),
-          label: const Text(
-            'Test what this phone can speak',
-            style: TextStyle(fontSize: 12.5),
-          ),
-        ),
+        const SizedBox(height: Gap.xl),
       ],
     );
   }
@@ -355,20 +363,100 @@ class _FamilySummary extends ConsumerWidget {
             error: (e, _) => ErrorView(error: e),
             data: (list) {
               if (list.isEmpty) {
-                return const Text(
-                  'No family members are registered yet. The health worker '
-                  'will add everyone at the next clinic contact.',
-                  style: TextStyle(fontSize: 13, color: AppColors.inkMuted),
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'No one is on your family list yet. Add the people you '
+                      'care for and the app will start working for them.',
+                      style: TextStyle(fontSize: 13, color: AppColors.inkMuted),
+                    ),
+                    const SizedBox(height: Gap.md),
+                    _AddMemberButton(householdId: householdId),
+                  ],
                 );
               }
               return Column(
                 children: [
                   for (final p in list) _MemberTile(person: p),
+                  const SizedBox(height: Gap.xs),
+                  _AddMemberButton(householdId: householdId),
                 ],
               );
             },
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Opens the add-member sheet. Deliberately one small widget: it appears in
+/// the family card, and the same affordance must exist wherever the family
+/// list is empty.
+class _AddMemberButton extends StatelessWidget {
+  const _AddMemberButton({required this.householdId});
+
+  final String householdId;
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton.icon(
+    onPressed: () => _openAddMember(context, householdId),
+    icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+    label: const Text('Add a family member'),
+    style: OutlinedButton.styleFrom(
+      minimumSize: const Size(0, Gap.tapTarget),
+    ),
+  );
+}
+
+/// One entry point to the add-member sheet so both callers stay identical.
+void _openAddMember(BuildContext context, String householdId) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (_) => _AddMemberSheet(householdId: householdId),
+  );
+}
+
+/// The family's own code — the same six characters the FHW would read out.
+///
+/// Showing it to a caregiver who started their own family closes the loop:
+/// when the health worker finally meets them, the code lets the two records
+/// join instead of duplicating.
+class _FamilyCodeCard extends ConsumerWidget {
+  const _FamilyCodeCard({required this.householdId});
+  final String householdId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SectionCard(
+      title: 'Your family code',
+      subtitle:
+          'Show this code to your health worker when you meet. It links '
+          'this phone to your family’s record at the clinic.',
+      icon: Icons.qr_code_2_rounded,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: Gap.xl,
+            vertical: Gap.md,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.primaryLight,
+            borderRadius: BorderRadius.circular(Gap.radius),
+          ),
+          child: Text(
+            FamilyCode.pretty(householdId),
+            style: const TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 5,
+              color: AppColors.primary,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -474,36 +562,14 @@ class _MemberTile extends ConsumerWidget {
   }
 }
 
-// ------------------------------------------------------------- My Family tab
-
-class _MyFamilyTab extends ConsumerWidget {
-  const _MyFamilyTab({required this.householdId});
-  final String householdId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return ListView(
-      padding: const EdgeInsets.all(Gap.lg),
-      children: [
-        _ReferralsSection(),
-        const SizedBox(height: Gap.md),
-        _ContactsSection(householdId: householdId),
-        const SizedBox(height: Gap.md),
-        _BarrierCard(householdId: householdId),
-        const SizedBox(height: Gap.xl),
-      ],
-    );
-  }
-}
-
-// ------------------------------------------------------------- Check-In tab
+// ------------------------------------------------------------- Check tab
 
 /// The danger-sign check. This is the only "clinical" thing a caregiver can
 /// run, and it is deliberately not an assessment: it asks what anyone can
 /// observe — no counting breaths, no temperatures — and answers in one
 /// sentence a grandmother could repeat.
-class _CheckInTab extends ConsumerWidget {
-  const _CheckInTab({required this.householdId});
+class _CheckTab extends ConsumerWidget {
+  const _CheckTab({required this.householdId});
   final String householdId;
 
   @override
@@ -534,18 +600,261 @@ class _CheckInTab extends ConsumerWidget {
         ),
         const SizedBox(height: Gap.md),
         _RecentChecksCard(householdId: householdId),
-        const SizedBox(height: Gap.md),
-        _GrowPlayCard(householdId: householdId),
-        const SizedBox(height: Gap.md),
-        _AudioCard(householdId: householdId),
+        const SizedBox(height: Gap.xl),
       ],
     );
   }
 }
 
-// ---------------------------------------------------------------- Profile tab
+// ------------------------------------------------------------- Grow & Play
 
-class _ProfileTab extends ConsumerWidget {
+/// Nurturing care gets its own door, not a card squeezed into the check-in:
+/// growing is more than weight, and play is a medicine that costs nothing.
+/// Every child under five gets their age band, today's play idea, and a
+/// milestone check phrased as "can they do this?".
+class _GrowPlayTab extends ConsumerWidget {
+  const _GrowPlayTab({required this.householdId});
+  final String householdId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final members = ref.watch(householdMembersProvider(householdId));
+
+    return ListView(
+      padding: const EdgeInsets.all(Gap.lg),
+      children: [
+        SectionCard(
+          title: 'Grow and play',
+          subtitle:
+              'Growing is more than weight. Answer a few questions about '
+              'what your child can do, and get a play idea for today — '
+              'free, with things you already have.',
+          icon: Icons.toys_rounded,
+          child: members.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => ErrorView(error: e),
+            data: (people) {
+              final children = people
+                  .where(
+                    (p) => NurturingCareEngine.bandFor(p.ageInMonths) != null,
+                  )
+                  .toList(growable: false);
+              if (children.isEmpty) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'No children under five are on your family list yet. '
+                      'Add your little ones with their date of birth and '
+                      'this page will grow with them.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.inkMuted,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: Gap.md),
+                    _AddMemberButton(householdId: householdId),
+                  ],
+                );
+              }
+              return Column(
+                children: [
+                  for (final child in children) _GrowChildTile(child: child),
+                ],
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: Gap.xl),
+      ],
+    );
+  }
+}
+
+// ------------------------------------------------------------- Care plan tab
+
+/// What the family owes the calendar. The anchor is the vaccine schedule:
+/// the app derives, from each child's date of birth, what the Ghana national
+/// schedule expects at their age — framed honestly, because the paper card
+/// is the record of doses already received, and the app never pretends to
+/// know it. Around that: who to call, open referrals from the clinic, and
+/// the barrier channel.
+class _CarePlanTab extends ConsumerWidget {
+  const _CarePlanTab({required this.householdId});
+  final String householdId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ListView(
+      padding: const EdgeInsets.all(Gap.lg),
+      children: [
+        _VaccineScheduleCard(householdId: householdId),
+        const SizedBox(height: Gap.md),
+        _ContactsSection(householdId: householdId),
+        const SizedBox(height: Gap.md),
+        _ReferralsSection(),
+        const SizedBox(height: Gap.md),
+        _BarrierCard(householdId: householdId),
+        const SizedBox(height: Gap.xl),
+      ],
+    );
+  }
+}
+
+/// One card per child, derived from age alone. The wording is the whole
+/// honesty contract: "due by age" is what the schedule says; the child's
+/// vaccine card is what actually happened. Either way, the card tells a
+/// mother whether a trip to the clinic belongs in her week.
+class _VaccineScheduleCard extends ConsumerWidget {
+  const _VaccineScheduleCard({required this.householdId});
+  final String householdId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final members = ref.watch(householdMembersProvider(householdId));
+
+    return members.maybeWhen(
+      data: (people) {
+        final children = people
+            .where((p) => p.ageInDays != null && p.ageInDays! < 365 * 5)
+            .toList(growable: false);
+        if (children.isEmpty) return const SizedBox.shrink();
+
+        return SectionCard(
+          title: 'Vaccine days',
+          subtitle:
+              'From each child\u2019s age, the app works out what the Ghana '
+              'vaccine schedule expects. Open the child\u2019s vaccine card '
+              'to see what is already marked — then bring both to the '
+              'clinic.',
+          icon: Icons.vaccines_rounded,
+          child: Column(
+            children: [
+              for (final child in children) _VaccineChildTile(child: child),
+            ],
+          ),
+        );
+      },
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _VaccineChildTile extends StatelessWidget {
+  const _VaccineChildTile({required this.child});
+
+  final Person child;
+
+  @override
+  Widget build(BuildContext context) {
+    // No dose history on the caregiver's side, deliberately: the paper card
+    // holds it. So the plan runs with an empty set, and every line reads as
+    // "due by age", never as a false claim of what was missed.
+    final plan = ImmunisationEngine.plan(
+      ageInDays: child.ageInDays!,
+      givenLabels: const {},
+    );
+
+    final (colour, headline, line) = plan.overdue.isNotEmpty
+        ? (
+            AppColors.triageRed,
+            'Check the card — doses may be overdue',
+            '${plan.overdueLabels.join(', ')} fall due at ${child.ageLabel}. '
+                'If they are not on the card yet, go to the clinic this week.',
+          )
+        : plan.giveToday.isNotEmpty
+        ? (
+            AppColors.triageAmber,
+            'Due by age now',
+            '${plan.giveToday.map((d) => d.label).join(', ')} — if the card '
+                'does not have them yet, this is a good week for the clinic.',
+          )
+        : (
+            AppColors.triageGreen,
+            'Nothing falls due yet',
+            plan.nextDueLabel == null
+                ? 'The schedule is complete for ${child.fullName}\u2019s age.'
+                : 'Next by age: ${plan.nextDueLabel}. Keep the card safe.',
+          );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: Gap.sm),
+      padding: const EdgeInsets.all(Gap.md),
+      decoration: BoxDecoration(
+        color: AppColors.canvas,
+        borderRadius: BorderRadius.circular(Gap.radiusSm),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  child.fullName,
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Text(
+                child.ageLabel,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.inkMuted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Gap.xs),
+          Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: colour, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: Gap.xs),
+              Expanded(
+                child: Text(
+                  headline,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: colour,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Gap.xs),
+          Text(
+            line,
+            style: const TextStyle(
+              fontSize: 12.5,
+              color: AppColors.inkMuted,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------- Help tab
+
+/// Where a family goes when something is wrong — and before it is. The
+/// emergency plan first (it is the one card that must be readable at 2 a.m.),
+/// then the voice guide, the account, and the sign-out.
+class _HelpTab extends ConsumerWidget {
+  const _HelpTab({required this.householdId});
+  final String householdId;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
@@ -554,6 +863,28 @@ class _ProfileTab extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(Gap.lg),
       children: [
+        const _EmergencyPlanCard(),
+        const SizedBox(height: Gap.md),
+        _AudioCard(householdId: householdId),
+        const SizedBox(height: Gap.md),
+        SectionCard(
+          title: 'Voice',
+          subtitle:
+              'The app can read its guidance aloud. Test the voice here '
+              'before you need it.',
+          icon: Icons.settings_voice_rounded,
+          child: OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const VoiceTestScreen()),
+            ),
+            icon: const Icon(Icons.graphic_eq_rounded),
+            label: const Text('Test the voice'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, Gap.tapTarget),
+            ),
+          ),
+        ),
+        const SizedBox(height: Gap.md),
         SectionCard(
           title: 'Account',
           icon: Icons.badge_outlined,
@@ -605,7 +936,7 @@ class _ProfileTab extends ConsumerWidget {
         ),
         const SizedBox(height: Gap.md),
         SectionCard(
-          title: 'Help',
+          title: 'Need help?',
           subtitle:
               'This app is for one family. If you need help, ask the health '
               'worker at your CHPS compound, or call the district health line.',
@@ -630,6 +961,353 @@ class _ProfileTab extends ConsumerWidget {
         ),
         const SizedBox(height: Gap.xl),
       ],
+    );
+  }
+}
+
+/// The two o'clock in the morning card: when a child is sick at night, no
+/// one should have to think about what to do or what to carry. Three steps,
+/// one bag, no decisions left to make.
+class _EmergencyPlanCard extends StatelessWidget {
+  const _EmergencyPlanCard();
+
+  static const _steps = [
+    'Do not wait for morning. Danger signs move fast — leave as soon as '
+        'you can.',
+    'Go to your CHPS compound or health centre. If it is closed, go '
+        'straight to the district hospital.',
+    'Wake a neighbour or call a family member if you cannot travel alone. '
+        'Never wait alone for transport that may not come.',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SectionCard(
+      title: 'If it is an emergency',
+      icon: Icons.emergency_share_rounded,
+      accent: AppColors.triageRed,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < _steps.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Gap.sm),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 22,
+                    height: 22,
+                    alignment: Alignment.center,
+                    decoration: const BoxDecoration(
+                      color: AppColors.triageRed,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      '${i + 1}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: Gap.sm),
+                  Expanded(
+                    child: Text(
+                      _steps[i],
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.inkMuted,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(Gap.md),
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(Gap.radiusSm),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.work_history_rounded, color: AppColors.primary, size: 20),
+                SizedBox(width: Gap.sm),
+                Expanded(
+                  child: Text(
+                    'Carry this phone, the child\u2019s vaccine card and the '
+                    'NHIS card. The phone shows your family code and every '
+                    'check you ran at home.',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.primaryDark,
+                      height: 1.4,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------- Add member
+
+/// Adding someone to the family's own list.
+///
+/// The categories mirror who this app exists for: babies and young children
+/// — the date of birth powers every age-banded thing the app does (danger
+/// signs, vaccine days, milestones) — and the women of the family. The write
+/// goes through [CareRepository.addFamilyMember], which refuses anything
+/// outside this family's household and records the add in the audit log.
+class _AddMemberSheet extends ConsumerStatefulWidget {
+  const _AddMemberSheet({required this.householdId});
+
+  final String householdId;
+
+  @override
+  ConsumerState<_AddMemberSheet> createState() => _AddMemberSheetState();
+}
+
+class _AddMemberSheetState extends ConsumerState<_AddMemberSheet> {
+  static const _categories = [
+    'Baby or young child (0–5 years)',
+    'Mother or woman of the family',
+  ];
+
+  final _name = TextEditingController();
+  final _ageYears = TextEditingController();
+  int _category = 0;
+  DateTime? _dob;
+  Sex? _sex;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _ageYears.dispose();
+    super.dispose();
+  }
+
+  bool get _isChild => _category == 0;
+
+  String? _validate() {
+    if (_name.text.trim().length < 2) return 'Enter their name.';
+    if (_isChild && _dob == null) return 'Choose the date of birth.';
+    return null;
+  }
+
+  Future<void> _pickDob() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _dob ?? now.subtract(const Duration(days: 365)),
+      firstDate: now.subtract(const Duration(days: 365 * 5 + 30)),
+      lastDate: now,
+      helpText: 'When were they born?',
+    );
+    if (picked != null) setState(() => _dob = picked);
+  }
+
+  Future<void> _save() async {
+    final user = ref.read(currentUserProvider);
+    final problem = user == null ? 'You are not signed in.' : _validate();
+    if (problem != null) {
+      setState(() => _error = problem);
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+
+    final days = _dob == null
+        ? null
+        : DateTime.now().difference(_dob!).inDays;
+    final person = Person(
+      id: _uuid.v4(),
+      householdId: widget.householdId,
+      fullName: _name.text.trim(),
+      clientType: _isChild
+          ? ClientType.forChildAgeInDays(days!) ?? ClientType.childUnderFive
+          : ClientType.womanOfReproductiveAge,
+      sex: _isChild ? _sex : Sex.female,
+      dateOfBirth: _dob,
+      ageYearsApprox: _isChild ? null : int.tryParse(_ageYears.text.trim()),
+    );
+
+    try {
+      await ref.read(careRepositoryProvider).addFamilyMember(user!, person);
+      ref.invalidate(householdMembersProvider(widget.householdId));
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = e is AccessDenied ? e.message : 'Could not save: $e';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: Gap.lg,
+        right: Gap.lg,
+        bottom: MediaQuery.of(context).viewInsets.bottom + Gap.xl,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Add a family member', style: AppType.title),
+            const SizedBox(height: Gap.xs),
+            const Text(
+              'Everyone you add stays on this phone and joins your '
+              'family\u2019s record when the health worker meets you.',
+              style: TextStyle(
+                fontSize: 12.5,
+                color: AppColors.inkMuted,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: Gap.md),
+            for (var i = 0; i < _categories.length; i++)
+              InkWell(
+                onTap: () => setState(() => _category = i),
+                borderRadius: BorderRadius.circular(Gap.radiusSm),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: Gap.xs),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Gap.md,
+                    vertical: Gap.sm,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _category == i
+                        ? AppColors.primaryLight
+                        : Colors.white,
+                    border: Border.all(
+                      color: _category == i
+                          ? AppColors.primary
+                          : AppColors.line,
+                    ),
+                    borderRadius: BorderRadius.circular(Gap.radiusSm),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _category == i
+                            ? Icons.radio_button_checked_rounded
+                            : Icons.radio_button_unchecked_rounded,
+                        size: 20,
+                        color: _category == i
+                            ? AppColors.primary
+                            : AppColors.inkFaint,
+                      ),
+                      const SizedBox(width: Gap.sm),
+                      Expanded(
+                        child: Text(
+                          _categories[i],
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: Gap.sm),
+            TextField(
+              controller: _name,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(labelText: 'Name'),
+            ),
+            if (_isChild) ...[
+              const SizedBox(height: Gap.md),
+              OutlinedButton.icon(
+                onPressed: _pickDob,
+                icon: const Icon(Icons.cake_outlined, size: 18),
+                label: Text(
+                  _dob == null
+                      ? 'Choose the date of birth'
+                      : 'Born ${DateFormat('d MMMM yyyy').format(_dob!)}',
+                ),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, Gap.tapTarget),
+                ),
+              ),
+              const SizedBox(height: Gap.md),
+              Row(
+                children: [
+                  const Text(
+                    'Boy or girl?',
+                    style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(width: Gap.sm),
+                  for (final s in Sex.values)
+                    Padding(
+                      padding: const EdgeInsets.only(right: Gap.xs),
+                      child: ChoiceChip(
+                        label: Text(s.label),
+                        selected: _sex == s,
+                        onSelected: (_) => setState(() => _sex = s),
+                      ),
+                    ),
+                ],
+              ),
+            ] else ...[
+              const SizedBox(height: Gap.md),
+              TextField(
+                controller: _ageYears,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'About how old? (years, optional)',
+                ),
+              ),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: Gap.md),
+              Text(
+                _error!,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.triageRed,
+                ),
+              ),
+            ],
+            const SizedBox(height: Gap.lg),
+            FilledButton.icon(
+              onPressed: _busy ? null : _save,
+              icon: _busy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.check_rounded),
+              label: const Text('Save'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, Gap.tapTarget),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -851,13 +1529,24 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
   /// member wearing the same category illustration used across the app.
   Widget _buildPersonPicker(List<Person> list) {
     if (list.isEmpty) {
-      return const EmptyState(
-        icon: Icons.person_off_outlined,
-        title: 'No family members yet',
-        message:
-            'The health worker will register everyone at the next visit. If '
-            'someone is seriously ill now, go straight to the health '
-            'facility.',
+      return Padding(
+        padding: const EdgeInsets.all(Gap.lg),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Expanded(
+              child: EmptyState(
+                icon: Icons.person_off_outlined,
+                title: 'No family members yet',
+                message:
+                    'Add the people you care for and the check will be '
+                    'ready for them. If someone is seriously ill now, go '
+                    'straight to the health facility.',
+              ),
+            ),
+            _AddMemberButton(householdId: widget.householdId),
+          ],
+        ),
       );
     }
     return ListView(
@@ -2436,44 +3125,9 @@ String _ago(DateTime when) {
 ///
 /// Growing is more than weight: the WHO/UNICEF Care for Child Development
 /// package says what a child should be doing at each age, and what play
-/// builds it. This card offers both, in the family's own words, using only
-/// what is already in the compound. It appears only when the household has
-/// a child inside the tracked window (birth to five years).
-class _GrowPlayCard extends ConsumerWidget {
-  const _GrowPlayCard({required this.householdId});
-
-  final String householdId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final members = ref.watch(householdMembersProvider(householdId));
-
-    return members.maybeWhen(
-      data: (people) {
-        final children = people
-            .where((p) => NurturingCareEngine.bandFor(p.ageInMonths) != null)
-            .toList(growable: false);
-        if (children.isEmpty) return const SizedBox.shrink();
-
-        return SectionCard(
-          title: 'Grow and play',
-          subtitle:
-              'Growing is more than weight. Answer a few questions about '
-              'what your child can do, and get a play idea for today — '
-              'free, with things you already have.',
-          icon: Icons.child_care_rounded,
-          child: Column(
-            children: [
-              for (final child in children) _GrowChildTile(child: child),
-            ],
-          ),
-        );
-      },
-      orElse: () => const SizedBox.shrink(),
-    );
-  }
-}
-
+/// builds it. Each tile offers both, in the family's own words, using only
+/// what is already in the compound. The tab shows one tile per child inside
+/// the tracked window (birth to five years).
 class _GrowChildTile extends StatelessWidget {
   const _GrowChildTile({required this.child});
 

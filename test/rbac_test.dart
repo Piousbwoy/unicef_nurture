@@ -21,13 +21,14 @@ void main() {
   group('Caregiver permissions', () {
     final caregiver = _user(UserRole.caregiver);
 
-    test('are exactly the three family-scoped capabilities', () {
+    test('are exactly the family-scoped capabilities', () {
       expect(
         caregiver.permissions,
         {
           Permission.viewOwnFamilyOnly,
           Permission.runCaregiverTriage,
           Permission.recordBarrier,
+          Permission.manageOwnFamily,
         },
       );
     });
@@ -75,8 +76,9 @@ void main() {
       }
     });
 
-    test('do not hold the caregiver-only family scope flag', () {
+    test('do not hold the caregiver-only family scopes', () {
       expect(fhw.can(Permission.viewOwnFamilyOnly), isFalse);
+      expect(fhw.can(Permission.manageOwnFamily), isFalse);
     });
   });
 
