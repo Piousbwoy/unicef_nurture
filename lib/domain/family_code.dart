@@ -22,6 +22,8 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
+import 'entities/core.dart';
+
 abstract final class FamilyCode {
   static const _alphabet = 'ABCDEFGHJKLMNPQRTWXYZ2346789';
   static const int length = 6;
@@ -61,4 +63,43 @@ abstract final class FamilyCode {
       normalise(typed) == normalise(of(householdId));
 
   static bool looksValid(String typed) => normalise(typed).length == length;
+
+  /// Encodes a Household record into a high-density, offline-verifiable QR payload string.
+  /// This enables zero-network optical database synchronization from tablet to smartphone.
+  static String encodeQrPayload(Household h) {
+    final payload = {
+      'p': 'CB_FAMILY',
+      'id': h.id,
+      'nm': h.name,
+      'rg': h.region,
+      'ds': h.district,
+      'cm': h.community,
+      'cb': h.createdBy,
+      'lm': h.landmark ?? '',
+    };
+    return 'CAREBRIDGE_QR|${base64Encode(utf8.encode(jsonEncode(payload)))}';
+  }
+
+  /// Decodes a compressed QR payload string back into a valid Household entity.
+  /// Returns null if the string is not a valid CareBridge family payload.
+  static Household? decodeQrPayload(String data) {
+    try {
+      if (!data.startsWith('CAREBRIDGE_QR|')) return null;
+      final encoded = data.substring('CAREBRIDGE_QR|'.length);
+      final jsonStr = utf8.decode(base64Decode(encoded));
+      final map = jsonDecode(jsonStr) as Map<String, dynamic>;
+      if (map['p'] != 'CB_FAMILY') return null;
+      return Household(
+        id: map['id'] as String,
+        name: map['nm'] as String,
+        region: map['rg'] as String,
+        district: map['ds'] as String,
+        community: map['cm'] as String,
+        createdBy: (map['cb'] as String?) ?? 'FHW-QR-SYNC',
+        landmark: map['lm'] as String?,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
 }

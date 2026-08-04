@@ -327,96 +327,191 @@ class _SplashScreenState extends ConsumerState<_SplashScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: _advance,
-    child: Scaffold(
-      backgroundColor: AppColors.canvas,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const NeverScrollableScrollPhysics(),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: MediaQuery.of(context).size.height -
-                  MediaQuery.of(context).padding.top -
-                  MediaQuery.of(context).padding.bottom,
-            ),
-            child: Column(
-              children: [
-                const SizedBox(height: Gap.xl),
-                // Brand mark — the heart-and-cross logo, large and clear.
-                _SplashLogo(),
-                const SizedBox(height: Gap.lg),
-                // Hero image — a real CHW with a real mother and baby.
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: Gap.lg),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(28),
-                    child: AspectRatio(
-                      aspectRatio: 4 / 3.2,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Container(color: AppColors.surfaceTint),
-                          AppImage(src: AppImages.splashHero),
+  Widget build(BuildContext context) {
+    final screenH = MediaQuery.of(context).size.height;
+    final screenW = MediaQuery.of(context).size.width;
+    // Hero photo takes ~60% of screen height so the footer is always visible.
+    final heroH = screenH * 0.60;
+
+    return GestureDetector(
+      onTap: _advance,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: Stack(
+          children: [
+            // ── Full-bleed hero photo ──────────────────────────────────────
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: heroH,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  AppImage(src: AppImages.motherChild),
+                  // Subtle top gradient so the logo is readable over the photo.
+                  Container(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.center,
+                        colors: [
+                          Color(0xCCFFFFFF),
+                          Colors.transparent,
                         ],
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: Gap.lg),
-                // Three feature pills in a single rounded card.
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: Gap.lg),
-                  child: _FeatureRow(),
-                ),
-                const SizedBox(height: Gap.md),
-                // "Works Offline" reassurance pill.
-                const _OfflinePill(),
-                const SizedBox(height: Gap.lg),
-                // Loading bar + caption.
-                const _LoadingBar(),
-                const SizedBox(height: Gap.sm),
-                Text(
-                  'Empowering healthier communities',
-                  textAlign: TextAlign.center,
-                  style: AppType.caption.copyWith(
-                    color: AppColors.inkMuted,
-                    fontSize: 12.5,
-                  ),
-                ),
-                const SizedBox(height: Gap.lg),
-              ],
+                ],
+              ),
             ),
-          ),
+
+            // ── Wave clip that hides the photo bottom edge ─────────────────
+            Positioned(
+              top: heroH - 40,
+              left: 0,
+              right: 0,
+              child: ClipPath(
+                clipper: _WaveClipper(),
+                child: Container(
+                  height: 60,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+
+            // ── Logo + wordmark over the photo (top-centre) ───────────────
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 24,
+              left: 0,
+              right: 0,
+              child: _SplashLogo(),
+            ),
+
+            // ── Bottom sheet: feature icons + footer ──────────────────────
+            Positioned(
+              top: heroH + 8,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Column(
+                children: [
+                  // 4 feature icons
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: _FeatureRow(),
+                  ),
+                  const Spacer(),
+                  // Deep navy footer
+                  Container(
+                    width: screenW,
+                    color: const Color(0xFF0A2540),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 20,
+                      horizontal: 24,
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons.favorite_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                        const SizedBox(height: 8),
+                        RichText(
+                          textAlign: TextAlign.center,
+                          text: TextSpan(
+                            style: GoogleFonts.sora(
+                              fontSize: 15,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                              height: 1.5,
+                            ),
+                            children: const [
+                              TextSpan(text: 'Empowering '),
+                              TextSpan(
+                                text: 'every',
+                                style: TextStyle(
+                                  fontStyle: FontStyle.italic,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              TextSpan(text: ' mother.\nProtecting '),
+                              TextSpan(
+                                text: 'every',
+                                style: TextStyle(
+                                  fontStyle: FontStyle.italic,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              TextSpan(text: ' life.'),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const _LoadingBar(),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
-/// The brand mark at the top of the splash: a heart with a medical cross,
-/// drawn in the signature royal-blue gradient so it reads as premium product
-/// rather than a hobby illustration.
+/// Wave path clipper — creates the smooth curved transition between the
+/// full-bleed hero photo and the white feature-icon section below it.
+class _WaveClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    path.lineTo(0, 30);
+    path.quadraticBezierTo(size.width / 2, 0, size.width, 30);
+    path.lineTo(size.width, size.height);
+    path.lineTo(0, size.height);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(_WaveClipper old) => false;
+}
+
+/// The brand mark at the top of the splash, overlaid on the hero photo.
+/// Uses the real `logo.png` asset provided by the design team.
 class _SplashLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
+        // Real logo image with a circular white backing so it pops over photo.
         Container(
-          width: 108,
-          height: 108,
-          decoration: BoxDecoration(
-            gradient: AppColors.brandGradient,
-            shape: BoxShape.circle,
-            boxShadow: const [AppShadows.glow],
-          ),
-          child: const Icon(
-            Icons.favorite_rounded,
+          width: 100,
+          height: 100,
+          decoration: const BoxDecoration(
             color: Colors.white,
-            size: 56,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x22000000),
+                blurRadius: 24,
+                offset: Offset(0, 8),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.all(6),
+          child: ClipOval(
+            child: AppImage(
+              src: AppImages.logo,
+              fit: BoxFit.contain,
+            ),
           ),
         ),
-        const SizedBox(height: Gap.md),
+        const SizedBox(height: 12),
         RichText(
           textAlign: TextAlign.center,
           text: TextSpan(
@@ -424,31 +519,53 @@ class _SplashLogo extends StatelessWidget {
               TextSpan(
                 text: 'CareBridge',
                 style: GoogleFonts.sora(
-                  fontSize: 32,
+                  fontSize: 30,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: -0.6,
-                  color: AppColors.primaryDeep,
+                  letterSpacing: -0.5,
+                  color: const Color(0xFF0A2540),
                 ),
               ),
               TextSpan(
                 text: ' AI',
                 style: GoogleFonts.sora(
-                  fontSize: 32,
+                  fontSize: 30,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: -0.6,
-                  color: AppColors.primaryGlow,
+                  letterSpacing: -0.5,
+                  color: AppColors.primary,
                 ),
               ),
             ],
           ),
         ),
         const SizedBox(height: 4),
+        // — MATERNAL CARE — divider
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 32, height: 1.5, color: const Color(0xFF0A2540)),
+            const SizedBox(width: 8),
+            Text(
+              'MATERNAL CARE',
+              style: GoogleFonts.sora(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 2.5,
+                color: const Color(0xFF0A2540),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(width: 32, height: 1.5, color: const Color(0xFF0A2540)),
+          ],
+        ),
+        const SizedBox(height: 6),
         Text(
-          'AI-ASSISTED COMMUNITY HEALTHCARE',
-          style: AppType.eyebrow.copyWith(
-            letterSpacing: 2.0,
-            color: AppColors.primary,
-            fontSize: 10.5,
+          'Smart Support. Healthier Mothers. Brighter Futures.',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.sora(
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+            fontStyle: FontStyle.italic,
+            color: const Color(0xFF0A2540),
           ),
         ),
       ],
@@ -456,58 +573,41 @@ class _SplashLogo extends StatelessWidget {
   }
 }
 
-/// The three feature pills — Works Offline, AI Guidance, Community First.
+/// Four feature icons matching the design mockup:
+/// Works Offline · AI Guidance · Trusted Care · Community Focused
 class _FeatureRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Gap.md,
-        vertical: Gap.md,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(Gap.radius),
-        border: Border.all(color: AppColors.line, width: Gap.hairline),
-        boxShadow: const [AppShadows.card],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _FeaturePill(
-              icon: Icons.wifi_off_rounded,
-              title: 'Works Offline',
-              subtitle: 'Always available',
-            ),
-          ),
-          Container(
-            width: 1,
-            height: 36,
-            color: AppColors.line,
-            margin: const EdgeInsets.symmetric(horizontal: Gap.sm),
-          ),
-          Expanded(
-            child: _FeaturePill(
-              icon: Icons.psychology_outlined,
-              title: 'AI Guidance',
-              subtitle: 'Smarter decisions',
-            ),
-          ),
-          Container(
-            width: 1,
-            height: 36,
-            color: AppColors.line,
-            margin: const EdgeInsets.symmetric(horizontal: Gap.sm),
-          ),
-          Expanded(
-            child: _FeaturePill(
-              icon: Icons.groups_2_outlined,
-              title: 'Community First',
-              subtitle: 'Better together',
-            ),
-          ),
-        ],
-      ),
+    const pillColor = Color(0xFFE8F4FD);
+    const iconColor = Color(0xFF0A6B9C);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        _FeaturePill(
+          icon: Icons.wifi_off_rounded,
+          title: 'Works Offline',
+          pillColor: pillColor,
+          iconColor: iconColor,
+        ),
+        _FeaturePill(
+          icon: Icons.psychology_outlined,
+          title: 'AI Guidance',
+          pillColor: pillColor,
+          iconColor: iconColor,
+        ),
+        _FeaturePill(
+          icon: Icons.verified_user_outlined,
+          title: 'Trusted Care',
+          pillColor: pillColor,
+          iconColor: iconColor,
+        ),
+        _FeaturePill(
+          icon: Icons.groups_2_outlined,
+          title: 'Community\nFocused',
+          pillColor: pillColor,
+          iconColor: iconColor,
+        ),
+      ],
     );
   }
 }
@@ -516,44 +616,38 @@ class _FeaturePill extends StatelessWidget {
   const _FeaturePill({
     required this.icon,
     required this.title,
-    required this.subtitle,
+    required this.pillColor,
+    required this.iconColor,
   });
 
   final IconData icon;
   final String title;
-  final String subtitle;
+  final Color pillColor;
+  final Color iconColor;
 
   @override
   Widget build(BuildContext context) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 38,
-          height: 38,
+          width: 52,
+          height: 52,
           decoration: BoxDecoration(
-            color: AppColors.primaryLight,
+            color: pillColor,
             shape: BoxShape.circle,
           ),
-          child: Icon(icon, size: 19, color: AppColors.primary),
+          child: Icon(icon, size: 24, color: iconColor),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Text(
           title,
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 11.5,
-            fontWeight: FontWeight.w800,
-            color: AppColors.ink,
-          ),
-        ),
-        const SizedBox(height: 1),
-        Text(
-          subtitle,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 9.5,
-            color: AppColors.inkMuted,
-            fontWeight: FontWeight.w500,
+          style: GoogleFonts.sora(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF0A2540),
+            height: 1.3,
           ),
         ),
       ],

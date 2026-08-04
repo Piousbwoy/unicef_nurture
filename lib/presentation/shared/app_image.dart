@@ -28,7 +28,13 @@ abstract final class AppImages {
   static const String onboardingOffline = '${_base}onboarding_offline.png';
 
   // ── Heroes ─────────────────────────────────────────────────────────
-  /// Mother cradling baby — splash / brand mark.
+  /// CareBridge AI logo (mother-and-child heart mark) — splash brand mark.
+  static const String logo = '${_base}logo.png';
+
+  /// Mother and child hero photograph — splash full-bleed image.
+  static const String motherChild = '${_base}motherchild.png';
+
+  /// Mother cradling baby — splash / brand mark (legacy).
   static const String splashHero = '${_base}splash_hero.png';
 
   /// Health worker greeting a household — FHW dashboard header.

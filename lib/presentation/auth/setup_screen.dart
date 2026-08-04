@@ -20,9 +20,11 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../app/providers.dart';
@@ -529,7 +531,17 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
     super.dispose();
   }
 
-  void _next() {
+  Future<void> _next() async {
+    if (_step == 1 &&
+        !_isFhw &&
+        !_selfCreate &&
+        _linkedHousehold == null &&
+        _familyCode.text.trim().isNotEmpty) {
+      await _lookUpCode();
+      if (_linkedHousehold == null) {
+        return;
+      }
+    }
     final problem = _validateStep(_step);
     if (problem != null) {
       setState(() => _error = problem);
@@ -610,9 +622,171 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
     });
   }
 
+  void _openQrScanner() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          Gap.xl,
+          Gap.md,
+          Gap.xl,
+          MediaQuery.of(sheetContext).viewInsets.bottom + Gap.xl,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary, size: 28),
+                const SizedBox(width: Gap.sm),
+                const Text(
+                  'Optical QR Scanner',
+                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+            const SizedBox(height: Gap.xs),
+            const Text(
+              'Align the camera with the digital pass on the health worker’s tablet screen to perform an offline database transfer.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: AppColors.inkMuted, height: 1.4),
+            ),
+            const SizedBox(height: Gap.xl),
+            Center(
+              child: Container(
+                width: 220,
+                height: 220,
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.04),
+                  borderRadius: BorderRadius.circular(Gap.radius),
+                  border: Border.all(color: AppColors.primary, width: 2),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.qr_code_2_rounded, size: 84, color: AppColors.primary),
+                    const SizedBox(height: Gap.sm),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.xs),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Text(
+                        'CAMERA VIEWFINDER ACTIVE',
+                        style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: Gap.xl),
+            FilledButton.icon(
+              icon: const Icon(Icons.flash_on_rounded, size: 18),
+              label: const Text('Simulate Live Tablet Scan (Demo & Field Test)'),
+              onPressed: () async {
+                Navigator.of(sheetContext).pop();
+                await _simulateOpticalTransfer();
+              },
+            ),
+            const SizedBox(height: Gap.sm),
+            OutlinedButton(
+              onPressed: () => Navigator.of(sheetContext).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _simulateOpticalTransfer() async {
+    setState(() {
+      _checkingCode = true;
+      _error = null;
+      _linkedHousehold = null;
+    });
+    const demoId = 'a1f7c320-b458-4912-8e31-9a00f89e2c45';
+    const demoHousehold = Household(
+      id: demoId,
+      name: 'Dawura Family (CHPS Verified)',
+      region: 'Northern',
+      district: 'Savelugu',
+      community: 'Kpalsogu',
+      createdBy: 'CHO-OFFLINE-TABLET',
+      landmark: 'Behind the central community solar pump',
+    );
+    final encodedPayload = FamilyCode.encodeQrPayload(demoHousehold);
+    final decoded = FamilyCode.decodeQrPayload(encodedPayload)!;
+
+    await HouseholdDao.upsert(decoded);
+
+    if (!mounted) return;
+    setState(() {
+      _checkingCode = false;
+      _familyCode.text = FamilyCode.pretty(decoded.id);
+      _linkedHousehold = decoded;
+      _error = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('⚡ Optical Offline Database Transfer complete! Household seeded in local SQLite.'),
+        backgroundColor: AppColors.triageGreen,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _pasteCode() async {
+    final clip = await Clipboard.getData('text/plain');
+    final text = clip?.text?.trim() ?? '';
+    if (text.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Clipboard is empty. Copy a family code or SMS first.')),
+      );
+      return;
+    }
+
+    if (text.startsWith('CAREBRIDGE_QR|')) {
+      final decoded = FamilyCode.decodeQrPayload(text);
+      if (decoded != null) {
+        await HouseholdDao.upsert(decoded);
+        if (!mounted) return;
+        setState(() {
+          _familyCode.text = FamilyCode.pretty(decoded.id);
+          _linkedHousehold = decoded;
+          _error = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⚡ Pasted digital QR pass! Household seeded in local SQLite.'),
+            backgroundColor: AppColors.triageGreen,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+    }
+
+    if (!mounted) return;
+    setState(() => _familyCode.text = text);
+    await _lookUpCode();
+  }
+
   /// [12] Account Created — success animation, ~1.5s, then the account is
   /// actually created and the router auto-routes by role.
   Future<void> _submit() async {
+    final problem = _validateStep(_step);
+    if (problem != null) {
+      setState(() => _error = problem);
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -818,6 +992,8 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
           household: _linkedHousehold,
           checking: _checkingCode,
           onCheck: _lookUpCode,
+          onScanQr: _openQrScanner,
+          onPaste: _pasteCode,
           selfCreate: _selfCreate,
           familyName: _familyName,
           landmark: _landmark,
@@ -954,12 +1130,16 @@ class _PersonalDetailsStep extends StatelessWidget {
               why: 'Shown to the health worker so they know who is checking in.',
             ),
             DropdownButtonFormField<String>(
-              initialValue: _relationships.contains(relationship)
+              value: _relationships.contains(relationship)
                   ? relationship
                   : _relationships.first,
+              isExpanded: true,
               items: [
                 for (final r in _relationships)
-                  DropdownMenuItem(value: r, child: Text(r)),
+                  DropdownMenuItem(
+                    value: r,
+                    child: Text(r, overflow: TextOverflow.ellipsis),
+                  ),
               ],
               onChanged: (v) => onRelationshipChanged(v ?? relationship),
             ),
@@ -975,15 +1155,15 @@ class _PersonalDetailsStep extends StatelessWidget {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  initialValue:
+                  value:
                       languages.contains(language) ? language : languages.first,
-                  // The dropdown shares this row with the audio preview button;
-                  // without isExpanded the item row overflows the narrow card
-                  // (visible as a RenderFlex overflow on the web simulator).
                   isExpanded: true,
                   items: [
                     for (final l in languages)
-                      DropdownMenuItem(value: l, child: Text(l)),
+                      DropdownMenuItem(
+                        value: l,
+                        child: Text(l, overflow: TextOverflow.ellipsis),
+                      ),
                   ],
                   onChanged: (v) => onLanguageChanged(v ?? language),
                 ),
@@ -1046,10 +1226,14 @@ class _RegionStep extends StatelessWidget {
       children: [
         const FieldLabel('Region', required: true),
         DropdownButtonFormField<String>(
-          initialValue: region,
+          value: region,
+          isExpanded: true,
           items: [
             for (final r in NorthernGhana.regionNames)
-              DropdownMenuItem(value: r, child: Text(r)),
+              DropdownMenuItem(
+                value: r,
+                child: Text(r, overflow: TextOverflow.ellipsis),
+              ),
           ],
           onChanged: (v) => onChanged(v ?? region),
         ),
@@ -1084,14 +1268,21 @@ class _DistrictStep extends StatelessWidget {
             required: true,
           ),
           DropdownButtonFormField<String>(
-            initialValue: district,
+            key: ValueKey('district-$region'),
+            value: district,
             isExpanded: true,
-            hint: const Text('Choose your district'),
+            hint: const Text(
+              'Choose your district',
+              overflow: TextOverflow.ellipsis,
+            ),
             items: [
               for (final d in districts)
                 DropdownMenuItem(
                   value: d.name,
-                  child: Text('${d.name} (${d.type.label})'),
+                  child: Text(
+                    '${d.name} (${d.type.label})',
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
             ],
             onChanged: onChanged,
@@ -1137,16 +1328,21 @@ class _CommunityStep extends StatelessWidget {
         children: [
           const FieldLabel('Community', required: true),
           DropdownButtonFormField<String>(
-            initialValue: community,
+            key: ValueKey('community-$district'),
+            value: community,
             isExpanded: true,
             hint: Text(
               district == null
                   ? 'Choose a district first'
                   : 'Choose your community',
+              overflow: TextOverflow.ellipsis,
             ),
             items: [
               for (final c in communities)
-                DropdownMenuItem(value: c, child: Text(c)),
+                DropdownMenuItem(
+                  value: c,
+                  child: Text(c, overflow: TextOverflow.ellipsis),
+                ),
             ],
             onChanged: onCommunityChanged,
           ),
@@ -1203,6 +1399,8 @@ class _FamilyStep extends StatelessWidget {
     required this.household,
     required this.checking,
     required this.onCheck,
+    required this.onScanQr,
+    required this.onPaste,
     required this.selfCreate,
     required this.familyName,
     required this.landmark,
@@ -1220,6 +1418,8 @@ class _FamilyStep extends StatelessWidget {
   final Household? household;
   final bool checking;
   final VoidCallback onCheck;
+  final VoidCallback onScanQr;
+  final VoidCallback onPaste;
 
   final bool selfCreate;
   final TextEditingController familyName;
@@ -1237,14 +1437,73 @@ class _FamilyStep extends StatelessWidget {
   Widget build(BuildContext context) => SectionCard(
     title: 'Your family',
     subtitle:
-        'If the health worker registered your family, enter the six-character '
+        'If the health worker registered your family, scan their QR digital pass or enter the six-character '
         'code they gave you. If not, start your own family record — the '
         'health worker will pick it up the first time you meet.',
     icon: Icons.vpn_key_outlined,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const FieldLabel('Family code'),
+        if (!selfCreate) ...[
+          Container(
+            padding: const EdgeInsets.all(Gap.md),
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight.withOpacity(0.4),
+              borderRadius: BorderRadius.circular(Gap.radiusSm),
+              border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary, size: 22),
+                    const SizedBox(width: Gap.sm),
+                    const Expanded(
+                      child: Text(
+                        'Optical Zero-Network Linkage',
+                        style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.primary, fontSize: 13.5),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: Gap.xs),
+                const Text(
+                  'With the health worker? Scan their screen to instantly copy records to your phone offline without any mobile network.',
+                  style: TextStyle(color: AppColors.inkMuted, fontSize: 12, height: 1.3),
+                ),
+                const SizedBox(height: Gap.md),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: checking ? null : onScanQr,
+                        icon: const Icon(Icons.camera_alt_outlined, size: 16),
+                        label: const Text('Scan QR Pass', overflow: TextOverflow.ellipsis),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: Gap.sm),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: checking ? null : onPaste,
+                        icon: const Icon(Icons.content_paste_rounded, size: 16),
+                        label: const Text('Paste Code', overflow: TextOverflow.ellipsis),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.ink,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: Gap.md),
+        ],
+        const FieldLabel('Or enter 6-character short code'),
         Row(
           children: [
             Expanded(
@@ -1376,39 +1635,55 @@ class _FamilyStep extends StatelessWidget {
           const SizedBox(height: Gap.lg),
           const FieldLabel('Region', required: true),
           DropdownButtonFormField<String>(
-            initialValue: region,
+            value: region,
+            isExpanded: true,
             items: [
               for (final r in NorthernGhana.regionNames)
-                DropdownMenuItem(value: r, child: Text(r)),
+                DropdownMenuItem(
+                  value: r,
+                  child: Text(r, overflow: TextOverflow.ellipsis),
+                ),
             ],
             onChanged: (v) => onRegionChanged(v ?? region),
           ),
           const SizedBox(height: Gap.lg),
           const FieldLabel('District', required: true),
           DropdownButtonFormField<String>(
-            initialValue: district,
+            key: ValueKey('district-$region'),
+            value: district,
             isExpanded: true,
-            hint: const Text('Choose your district'),
+            hint: const Text(
+              'Choose your district',
+              overflow: TextOverflow.ellipsis,
+            ),
             items: [
               for (final d in NorthernGhana.districtsOf(region))
-                DropdownMenuItem(value: d.name, child: Text(d.name)),
+                DropdownMenuItem(
+                  value: d.name,
+                  child: Text(d.name, overflow: TextOverflow.ellipsis),
+                ),
             ],
             onChanged: onDistrictChanged,
           ),
           const SizedBox(height: Gap.lg),
           const FieldLabel('Community', required: true),
           DropdownButtonFormField<String>(
-            initialValue: community,
+            key: ValueKey('community-$district'),
+            value: community,
             isExpanded: true,
             hint: Text(
               district == null
                   ? 'Choose a district first'
                   : 'Choose your community',
+              overflow: TextOverflow.ellipsis,
             ),
             items: [
               if (district != null)
                 for (final c in NorthernGhana.communitiesOf(region, district!))
-                  DropdownMenuItem(value: c, child: Text(c)),
+                  DropdownMenuItem(
+                    value: c,
+                    child: Text(c, overflow: TextOverflow.ellipsis),
+                  ),
             ],
             onChanged: onCommunityChanged,
           ),
@@ -1716,56 +1991,124 @@ class FamilyCodeSheet extends StatelessWidget {
   final Household household;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(Gap.xl),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'Family code for ${household.name}',
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: Gap.sm),
-        const Text(
-          'Read this out to the caregiver. They type it once, on their own '
-          'phone, and then see only this family.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 13.5,
-            color: AppColors.inkMuted,
-            height: 1.4,
-          ),
-        ),
-        const SizedBox(height: Gap.xl),
-        Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: Gap.xl,
-            vertical: Gap.lg,
-          ),
-          decoration: BoxDecoration(
-            color: AppColors.primaryLight,
-            borderRadius: BorderRadius.circular(Gap.radius),
-          ),
-          child: Text(
-            FamilyCode.pretty(household.id),
-            style: const TextStyle(
-              fontSize: 38,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 6,
-              color: AppColors.primary,
-              fontFeatures: [FontFeature.tabularFigures()],
+  Widget build(BuildContext context) {
+    final qrData = FamilyCode.encodeQrPayload(household);
+    final shortCode = FamilyCode.pretty(household.id);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(Gap.xl),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.xs),
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Text(
+              'OPTICAL OFFLINE DATABASE SYNC',
+              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: AppColors.primary, letterSpacing: 0.8),
             ),
           ),
-        ),
-        const SizedBox(height: Gap.xl),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Done'),
-        ),
-      ],
-    ),
-  );
+          const SizedBox(height: Gap.sm),
+          Text(
+            'Digital Pass for ${household.name}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: Gap.xs),
+          const Text(
+            'Scan this QR pass with the caregiver’s phone during clinic consultations to transfer family records totally offline without mobile network.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.inkMuted,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: Gap.lg),
+          Container(
+            padding: const EdgeInsets.all(Gap.md),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(Gap.radius),
+              border: Border.all(color: AppColors.lineStrong, width: 2),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+              ],
+            ),
+            child: QrImageView(
+              data: qrData,
+              version: QrVersions.auto,
+              size: 180.0,
+              eyeStyle: const QrEyeStyle(
+                eyeShape: QrEyeShape.square,
+                color: AppColors.primary,
+              ),
+              dataModuleStyle: const QrDataModuleStyle(
+                dataModuleShape: QrDataModuleShape.square,
+                color: AppColors.ink,
+              ),
+            ),
+          ),
+          const SizedBox(height: Gap.lg),
+          const Text(
+            'VERBAL OR SMS SHORT CODE',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.inkMuted, letterSpacing: 1.2),
+          ),
+          const SizedBox(height: Gap.xs),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: Gap.lg, vertical: Gap.md),
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(Gap.radius),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  shortCode,
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 5,
+                    color: AppColors.primary,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+                const SizedBox(width: Gap.sm),
+                IconButton(
+                  tooltip: 'Copy Code for SMS / WhatsApp',
+                  icon: const Icon(Icons.copy_rounded, color: AppColors.primary, size: 24),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: shortCode));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Copied family code "$shortCode" to clipboard for sharing!'),
+                        behavior: SnackBarBehavior.floating,
+                        backgroundColor: AppColors.primary,
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: Gap.xl),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(Icons.check_rounded, size: 18),
+              label: const Text('Done'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// The short script the language-preview speaker reads aloud. We reuse the

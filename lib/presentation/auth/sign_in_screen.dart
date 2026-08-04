@@ -30,6 +30,7 @@ import '../../app/providers.dart';
 import '../../core/auth/session.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_theme.dart';
+import '../../domain/enums.dart';
 import '../shared/ui.dart';
 
 class SignInScreen extends ConsumerStatefulWidget {
@@ -102,7 +103,21 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     );
 
     if (!mounted) return;
-    if (!ok) {
+    if (ok) {
+      final pendingRole = ref.read(pendingRoleProvider);
+      final state = ref.read(sessionProvider);
+      if (state is SessionActive && pendingRole != null && state.user.role != pendingRole) {
+        await ref.read(sessionProvider.notifier).signOut();
+        if (!mounted) return;
+        setState(() {
+          _busy = false;
+          _error = pendingRole.isFhw
+              ? 'This phone number is registered as a Caregiver. To set up as a Frontline Health Worker, tap “Create a new account” below.'
+              : 'This phone number is registered as a Frontline Health Worker. To access Caregiver features, tap “Create a new account” below.';
+        });
+        return;
+      }
+    } else {
       final state = ref.read(sessionProvider);
       setState(() {
         _busy = false;
@@ -121,6 +136,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final pendingRole = ref.watch(pendingRoleProvider);
     return Scaffold(
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
@@ -148,7 +164,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const _Brand(),
+                  _Brand(role: pendingRole),
                   const SizedBox(height: Gap.xxl),
 
                   const FieldLabel('Phone number'),
@@ -254,7 +270,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
                   const SizedBox(height: Gap.xl),
                   GradientButton(
-                    label: _busy ? 'Signing in…' : 'Sign in',
+                    label: _busy ? 'Verifying local & cloud record…' : 'Sign in',
                     icon: Icons.login_rounded,
                     onPressed: _busy ? null : _submit,
                   ),
@@ -288,9 +304,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   }
 }
 
-/// The brand block: a quiet wordmark, not a logo tile.
+/// The brand block: dynamically displays the target portal role.
 class _Brand extends StatelessWidget {
-  const _Brand();
+  const _Brand({this.role});
+
+  final UserRole? role;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -303,17 +321,30 @@ class _Brand extends StatelessWidget {
           shape: BoxShape.circle,
           boxShadow: const [AppShadows.glow],
         ),
-        child: const Icon(
-          Icons.favorite_rounded,
+        child: Icon(
+          role == null
+              ? Icons.favorite_rounded
+              : (role!.isFhw
+                  ? Icons.medical_services_rounded
+                  : Icons.family_restroom_rounded),
           color: Colors.white,
           size: 42,
         ),
       ),
       const SizedBox(height: Gap.lg),
-      Text('CareBridge AI', style: AppType.display.copyWith(fontSize: 32)),
+      Text(
+        role == null
+            ? 'CareBridge AI'
+            : (role!.isFhw ? 'Health Worker Login' : 'Caregiver Login'),
+        style: AppType.display.copyWith(fontSize: role == null ? 32 : 28),
+      ),
       const SizedBox(height: Gap.sm),
       Text(
-        'AI-ASSISTED COMMUNITY HEALTHCARE',
+        role == null
+            ? 'AI-ASSISTED COMMUNITY HEALTHCARE'
+            : (role!.isFhw
+                ? 'FRONTLINE HEALTH WORKER PORTAL'
+                : 'FAMILY NURTURING & CARE PORTAL'),
         style: AppType.eyebrow.copyWith(
           letterSpacing: 2.0,
           color: AppColors.primary,
@@ -321,9 +352,36 @@ class _Brand extends StatelessWidget {
         ),
       ),
       const SizedBox(height: Gap.md),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.sm),
+        decoration: BoxDecoration(
+          color: AppColors.triageGreenBg,
+          borderRadius: BorderRadius.circular(Gap.radiusMd),
+          border: Border.all(color: AppColors.triageGreen.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_done_rounded, size: 16, color: AppColors.triageGreen),
+            const SizedBox(width: Gap.sm),
+            Flexible(
+              child: Text(
+                'Hybrid Sync: Offline daily access & instant cloud restoration on replacement devices.',
+                style: AppType.caption.copyWith(color: AppColors.ink, fontSize: 11.5),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: Gap.md),
       Text(
-        'Nurturing care for mothers and children,\n'
-        'with or without a network.',
+        role == null
+            ? 'Nurturing care for mothers and children,\n'
+              'powered by our MariaDB Main Server & SQLite.'
+            : (role!.isFhw
+                ? 'Sign in to access local records or recover your clinic caseload from the server.'
+                : 'Sign in with your family credentials to restore your records.'),
         textAlign: TextAlign.center,
         style: AppType.caption.copyWith(fontSize: 13.5, height: 1.55),
       ),

@@ -121,15 +121,17 @@ class AppDatabase {
   }
 
   Future<String> _resolvePath() async {
-    // Web: the "path" is just a database name. The web factory persists via
-    // IndexedDB under the hood, so there is no filesystem path to resolve.
+    // Web: the "path" is just a database name. The web factory (sqflite_common_ffi_web)
+    // backs the database with the browser's IndexedDB, so data persists across
+    // page reloads within the same browser origin. There is no flat file to open
+    // with an external tool — inspect it via Chrome DevTools →
+    // Application → IndexedDB.
     if (kIsWeb) return kDatabaseName;
-    // Tests and desktop runs use an in-process file so nothing touches the
-    // user's real data.
-    if (!Platform.isAndroid && !Platform.isIOS) {
-      final dir = Directory.systemTemp.createTempSync('carebridge');
-      return p.join(dir.path, kDatabaseName);
-    }
+    // All other platforms (Android, iOS, Windows, macOS, Linux) store the
+    // database in the application documents directory so data survives restarts.
+    // Previously desktop used Directory.systemTemp, which was a hackathon
+    // shortcut that made the database ephemeral on Windows/macOS/Linux. That
+    // has been removed: the app now behaves consistently across all platforms.
     final dir = await getApplicationDocumentsDirectory();
     return p.join(dir.path, kDatabaseName);
   }

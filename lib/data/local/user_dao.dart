@@ -37,6 +37,7 @@ import '../../domain/entities/core.dart';
 import '../../domain/enums.dart';
 import 'app_database.dart';
 import 'outbox_dao.dart';
+import '../sync/recovery_service.dart';
 
 /// PIN stretching. 20,000 iterations is a fraction of a second on a low-end
 /// Android phone and a very long time across 10,000 candidate PINs.
@@ -97,7 +98,7 @@ abstract final class Credentials {
 /// Why a sign-in failed, so the UI can say something true and useful rather
 /// than "invalid credentials".
 enum AuthFailure {
-  unknownPhone('No account on this phone uses that number.'),
+  unknownPhone('No account found locally or on the MariaDB Main Server. Tap Create Account below to set up your offline profile.'),
   wrongPin('That PIN is not correct.'),
   noPinSet('This account has no PIN yet. Set one to continue.'),
   lockedOut('Too many wrong attempts. Wait a moment and try again.');
@@ -135,21 +136,22 @@ abstract final class UserDao {
 
     await db.transaction((txn) async {
       final map = user.toMap();
-      await txn.insert(Tables.users, {
+      final fullPayload = {
         ...map,
         'pin_hash': hash,
         'pin_salt': salt,
         'linked_household_id': linkedHouseholdId,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      };
+      await txn.insert(Tables.users, fullPayload, conflictAlgorithm: ConflictAlgorithm.replace);
 
-      // The PIN hash is deliberately absent from the sync payload. Credentials
-      // are device-local; there is no reason for them to travel.
+      // In our Hybrid Architecture, credentials and links sync to the Main MariaDB Server
+      // so that users recovering accounts on a fresh device can restore their profile and caseload.
       await OutboxDao.enqueue(
         txn,
         table: Tables.users,
         entityId: user.id,
         operation: SyncOperation.insert,
-        payload: map,
+        payload: fullPayload,
         priority: SyncPriority.background,
       );
 
@@ -181,10 +183,34 @@ abstract final class UserDao {
     );
 
     if (rows.isEmpty) {
+      // Hybrid Architecture Fallback:
+      // If the account does not exist in local SQLite (e.g. fresh app install on a replacement device),
+      // reach out to the Main MariaDB Server via CloudRecoveryService to authenticate and pull records down!
+      final recovery = await CloudRecoveryService.restoreAccount(phone: phone, pin: pin);
+      if (recovery.isSuccess) {
+        await AuditDao.record(
+          actorId: recovery.user!.id,
+          actorRole: recovery.user!.role.name,
+          action: 'cloud_recovery_login',
+          outcome: 'allowed',
+          detail: 'Restored account and caseload from MariaDB Main Server',
+        );
+        return AuthResult.success(recovery.user!);
+      }
+
+      if (recovery.status == RecoveryStatus.wrongPin) {
+        await AuditDao.record(
+          action: 'cloud_recovery_login',
+          outcome: 'denied',
+          detail: 'Wrong PIN against cloud credentials',
+        );
+        return const AuthResult.failure(AuthFailure.wrongPin);
+      }
+
       await AuditDao.record(
         action: 'sign_in',
         outcome: 'denied',
-        detail: 'Unknown phone number',
+        detail: 'Unknown phone number locally and on server',
       );
       return const AuthResult.failure(AuthFailure.unknownPhone);
     }

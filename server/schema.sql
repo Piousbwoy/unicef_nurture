@@ -1,11 +1,12 @@
 -- ============================================================================
--- CareBridge AI — district sync schema (MariaDB)
+-- CareBridge AI — Main Server Schema (MariaDB)
 --
--- This is the CENTRAL aggregate that field phones eventually sync into. It
--- mirrors the on-device SQLite schema (lib/data/local/app_database.dart) so a
--- record looks identical on both sides.
+-- This is the CENTRAL MAIN SERVER repository that powers our Hybrid
+-- Architecture. It mirrors the on-device SQLite schema so that records look
+-- identical on both sides, enabling seamless synchronization and account
+-- restoration when a field user switches phones or recovers an empty device.
 --
--- TWO DELIBERATE DIFFERENCES from the device schema:
+-- KEY DESIGN DIFFERENCE from the device SQLite schema:
 --
 -- 1. NO FOREIGN KEY constraints. The phone's outbox sends records by
 --    *priority*, not by parent-child order: an urgent referral (priority 0)
@@ -14,12 +15,8 @@
 --    permanently abandon a valid record (the app treats 4xx as "never retry").
 --    Referential integrity is already enforced at the SOURCE — the phone's
 --    SQLite database runs with `PRAGMA foreign_keys = ON`. This database is an
---    eventually-consistent aggregate for reporting, so we keep the indexes
---    (fast queries) and drop the constraints (tolerant ingest).
---
--- 2. NO pin_hash / pin_salt columns. Device credentials never leave the phone
---    (the app strips them from the sync payload), so the server has nowhere to
---    put them and nothing to leak.
+--    eventually-consistent aggregate for reporting and recovery, so we keep
+--    the indexes (fast queries) and drop the constraints (tolerant ingest).
 --
 -- Dates are stored as the exact ISO-8601 TEXT the phone sends, so nothing is
 -- lost to timezone or format conversion. Booleans are 0/1 integers, exactly as
@@ -48,6 +45,8 @@ CREATE TABLE IF NOT EXISTS users (
   staff_id            VARCHAR(64)  NULL,
   preferred_language  VARCHAR(40)  NOT NULL DEFAULT 'English',
   linked_household_id VARCHAR(64)  NULL,
+  pin_hash            VARCHAR(128) NOT NULL,
+  pin_salt            VARCHAR(64)  NOT NULL,
   created_at          VARCHAR(40)  NOT NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uq_users_phone (phone),

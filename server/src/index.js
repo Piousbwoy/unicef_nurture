@@ -10,15 +10,16 @@ const config = require('./config');
 const { ping } = require('./db');
 const { requireToken } = require('./auth');
 const { handleSync } = require('./sync');
+const { handleProfileLookup, handleCaseloadRestore } = require('./recovery');
 
 const app = express();
 
 // Assessment payloads embed full care plans as JSON; give them room.
 app.use(express.json({ limit: '10mb' }));
 
-// Refuse anything but JSON on the write path.
+// Refuse anything but JSON on write requests (POST/PUT).
 app.use((req, res, next) => {
-  if (req.path.startsWith('/api/') && !req.is('application/json')) {
+  if (req.path.startsWith('/api/') && (req.method === 'POST' || req.method === 'PUT') && !req.is('application/json')) {
     return res.status(415).json({ ok: false, error: 'Content-Type must be application/json.' });
   }
   next();
@@ -41,6 +42,11 @@ app.get('/health', async (req, res) => {
 
 // The one write endpoint, behind the bearer token.
 app.post('/api/sync', requireToken, handleSync);
+
+// Account & caseload restoration endpoints for our Hybrid Architecture (behind bearer token).
+app.post('/api/restore/lookup', requireToken, handleProfileLookup);
+app.get('/api/restore/caseload', requireToken, handleCaseloadRestore);
+app.post('/api/restore/caseload', requireToken, handleCaseloadRestore);
 
 // Nothing else exists.
 app.use((req, res) => {

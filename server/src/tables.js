@@ -17,12 +17,12 @@
 const TABLES = {
   users: {
     pk: ['id'],
-    // NOTE: pin_hash / pin_salt are deliberately absent. Credentials never
-    // leave the device, so the server must never store them.
+    // In our Hybrid Architecture with MariaDB as the Main Server, we sync pin_hash
+    // and pin_salt so accounts can be cleanly restored when logging in on a fresh device.
     columns: [
       'id', 'full_name', 'phone', 'role', 'region', 'district', 'community',
       'chps_zone', 'facility_name', 'staff_id', 'preferred_language',
-      'linked_household_id', 'created_at',
+      'linked_household_id', 'pin_hash', 'pin_salt', 'created_at',
     ],
   },
   households: {
