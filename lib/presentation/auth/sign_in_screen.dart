@@ -356,7 +356,7 @@ class _Brand extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.sm),
         decoration: BoxDecoration(
           color: AppColors.triageGreenBg,
-          borderRadius: BorderRadius.circular(Gap.radiusMd),
+          borderRadius: BorderRadius.circular(Gap.radiusSm),
           border: Border.all(color: AppColors.triageGreen.withValues(alpha: 0.3)),
         ),
         child: Row(

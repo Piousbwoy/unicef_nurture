@@ -147,13 +147,14 @@ abstract final class CloudRecoveryService {
       }
 
       final user = AppUser.fromMap(userMap);
+      final linkedHhId = userMap['linked_household_id'] as String?;
       final db = await AppDatabase.instance.database;
 
       var restoredCount = 0;
 
       // Step 3: Fetch clinical caseload (households, persons, assessments)
       final reloadUri = Uri.parse(
-        '$baseUrl/api/restore/caseload?user_id=${user.id}&role=${user.role.name}&household_id=${user.linkedHouseholdId ?? ""}',
+        '$baseUrl/api/restore/caseload?user_id=${user.id}&role=${user.role.name}&household_id=${linkedHhId ?? ""}',
       );
       final cReq = await client.getUrl(reloadUri);
       if (token != null) {
@@ -236,7 +237,7 @@ abstract final class CloudRecoveryService {
       id: 'recovered-$phone-${now.millisecondsSinceEpoch}',
       fullName: isWorker ? 'Nurse Fatima (Cloud Restored)' : 'Aisha Ibrahim (Cloud Restored)',
       phone: phone,
-      role: isWorker ? UserRole.cho : UserRole.caregiver,
+      role: isWorker ? UserRole.frontlineHealthWorker : UserRole.caregiver,
       region: 'Northern',
       district: 'Savelugu Municipal',
       community: 'Diare CHPS',
@@ -244,12 +245,12 @@ abstract final class CloudRecoveryService {
       facilityName: 'Diare Health Centre',
       staffId: isWorker ? 'GHS-NOR-8821' : null,
       preferredLanguage: 'Dagbani',
-      linkedHouseholdId: isWorker ? null : 'recovery-hh-$phone',
       createdAt: now.subtract(const Duration(days: 90)),
     );
 
     final db = await AppDatabase.instance.database;
     var count = 1;
+    final hhId = 'recovery-hh-$phone';
 
     await db.transaction((txn) async {
       // 1. Restore User Row
@@ -259,12 +260,12 @@ abstract final class CloudRecoveryService {
           ...user.toMap(),
           'pin_hash': hash,
           'pin_salt': salt,
+          'linked_household_id': isWorker ? null : hhId,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 
       // 2. Seed restored sample household to showcase downstream recovery
-      final hhId = user.linkedHouseholdId ?? 'recovery-hh-$phone';
       await txn.insert(
         Tables.households,
         {
