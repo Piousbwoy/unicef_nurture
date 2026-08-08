@@ -45,11 +45,11 @@ class _FhwHomeState extends ConsumerState<FhwHome> {
   int _tab = 0;
 
   static const _titles = [
-    'Today',
-    'Your day plan',
-    'Assess',
-    'Referrals',
-    'My account',
+    'CHPS Compound Dashboard',
+    'AI Triage & Outreach',
+    'Clinical Intake & Register',
+    'Emergency & Referral Track',
+    'Facility & Sync Hub',
   ];
 
   @override
@@ -102,29 +102,29 @@ class _FhwHomeState extends ConsumerState<FhwHome> {
         onTap: (i) => setState(() => _tab = i),
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home_rounded),
-            label: 'Home',
+            icon: Icon(Icons.dashboard_outlined),
+            activeIcon: Icon(Icons.dashboard_rounded),
+            label: 'Dashboard',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.today_outlined),
-            activeIcon: Icon(Icons.today_rounded),
-            label: 'Day plan',
+            icon: Icon(Icons.psychology_outlined),
+            activeIcon: Icon(Icons.psychology_rounded),
+            label: 'AI Triage',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.fact_check_outlined),
-            activeIcon: Icon(Icons.fact_check_rounded),
-            label: 'Assess',
+            icon: Icon(Icons.medical_services_outlined),
+            activeIcon: Icon(Icons.medical_services_rounded),
+            label: 'Clinical Intake',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.local_hospital_outlined),
-            activeIcon: Icon(Icons.local_hospital_rounded),
-            label: 'Referrals',
+            icon: Icon(Icons.emergency_outlined),
+            activeIcon: Icon(Icons.emergency_rounded),
+            label: 'Referrals Track',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline_rounded),
-            activeIcon: Icon(Icons.person_rounded),
-            label: 'Me',
+            icon: Icon(Icons.health_and_safety_outlined),
+            activeIcon: Icon(Icons.health_and_safety_rounded),
+            label: 'Facility & Sync',
           ),
         ],
       ),

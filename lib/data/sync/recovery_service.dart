@@ -31,6 +31,22 @@ import '../../domain/enums.dart';
 import '../local/app_database.dart';
 import '../local/preferences_store.dart';
 import '../local/user_dao.dart';
+import 'server_auth_client.dart';
+
+/// When `true`, a transient network error during cloud recovery falls back to a
+/// realistic simulation of profile + caseload restoration. Used exclusively for
+/// Northern Region field demos, web pitches, and integration environments where
+/// a real district VM is not reachable. In production builds this MUST be
+/// `false` — a user on a replacement device who gets a network error must see
+/// the error, not be silently signed into a fabricated "restored" account whose
+/// records will never sync back to the real MariaDB.
+///
+/// Enable from the command line:
+/// `flutter run --dart-define=DEMO_MODE=true`
+const bool kDemoMode = bool.fromEnvironment(
+  'DEMO_MODE',
+  defaultValue: false,
+);
 
 enum RecoveryStatus {
   success,
@@ -68,18 +84,41 @@ abstract final class CloudRecoveryService {
     if (baseUrl != null && baseUrl.isNotEmpty) {
       try {
         final outcome = await _restoreFromLiveServer(cleanPhone, pin, baseUrl, token);
-        if (outcome.status != RecoveryStatus.networkError) {
-          return outcome;
+        // In PRODUCTION: every outcome (including networkError) is returned to the
+        // caller verbatim. The user must see the real failure reason on a blank
+        // replacement device; silently substituting fake records would produce
+        // phantom caseloads that never sync to MariaDB and are lost on the next
+        // sign-out.
+        if (!kDemoMode) return outcome;
+        // In DEMO MODE only: a transient networkError falls through to
+        // _simulateCloudRecovery so pitch environments without a district VM
+        // can still demonstrate the full recovery flow.
+        if (outcome.status != RecoveryStatus.networkError) return outcome;
+      } catch (e) {
+        if (!kDemoMode) {
+          return RecoveryResult(
+            status: RecoveryStatus.networkError,
+            message: 'Network error during cloud recovery: ${e.toString()}',
+          );
         }
-        // If network failed, fall through to demo recovery mode in field tests
-      } catch (_) {
-        // Fall back to simulation if server is unreachable during testing
+        // Demo mode: fall through to simulation below.
       }
     }
 
-    // Demo & Field Trial Simulation Mode:
-    // When no server is running or offline during a fresh installation demo,
-    // we simulate retrieving the historical profile from the Main MariaDB Server.
+    // Only reachable when either (a) no base URL is configured at all, or
+    // (b) DEMO_MODE=true and the live server call above returned networkError.
+    // In non-demo production with a configured URL, execution never reaches here.
+    if (baseUrl == null || baseUrl.isEmpty) {
+      // No server URL means a field demo / local-only evaluation. Simulation is
+      // acceptable because the operator opted in by not configuring a URL.
+    } else if (!kDemoMode) {
+      // Safety net: we should never arrive here in non-demo builds.
+      return const RecoveryResult(
+        status: RecoveryStatus.networkError,
+        message: 'Could not reach the Main Server. Please try again when signal is available.',
+      );
+    }
+
     return _simulateCloudRecovery(cleanPhone, pin);
   }
 
@@ -87,18 +126,64 @@ abstract final class CloudRecoveryService {
     String phone,
     String pin,
     String baseUrl,
-    String? token,
+    String? legacyTokenUnused,
   ) async {
+    // Silence lint; legacy static token was obsoleted by per-user JWT login above.
+    // ignore: no_leading_underscores_for_local_identifiers
+    legacyTokenUnused;
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
 
     try {
-      // Step 1: Query Main MariaDB Server for profile lookup
+      // NEW Step 1: Authenticate to server first. This proves PIN correctness and
+      // returns a per-user JWT used for all subsequent recovery endpoints.
+      // PIN verification uses a zero-knowledge challenge-response flow: the
+      // client first fetches a per-user server_salt, then locally computes a
+      // domain-separated 120k-iter HMAC Cloud Verifier from pin+phone+salt,
+      // and posts only the verifier_response (NEVER the raw PIN, on-device
+      // pin_hash, or pin_salt) to /api/auth/login. Server constant-time
+      // compares against the isolated user_verifiers table. Legacy accounts
+      // are silently migrated on first successful auth; pin_hash/pin_salt
+      // are NEVER sent back to the client in any response.
+      final login = await ServerAuthClient.signIn(phone: phone, pin: pin);
+      if (!login.isOk) {
+        final err = (login.error ?? '').toLowerCase();
+        if (err.contains('too many') || err.contains('locked')) {
+          return RecoveryResult(
+            status: RecoveryStatus.networkError,
+            message: login.error,
+          );
+        }
+        if (err.contains('credentials') || err.contains('wrong') || err.contains('invalid pin') || err.contains('pin incorrect')) {
+          return RecoveryResult(
+            status: RecoveryStatus.wrongPin,
+            message: login.error ?? 'That PIN does not match your server credentials.',
+          );
+        }
+        if (err.contains('network') || err.contains('timed out')) {
+          return RecoveryResult(
+            status: RecoveryStatus.networkError,
+            message: login.error,
+          );
+        }
+        // Anything else is probably "no profile" — treat as notFound so UI redirects
+        // to register rather than a wrong-pin loop.
+        return RecoveryResult(
+          status: RecoveryStatus.notFound,
+          message: login.error ?? 'No profile found for this phone on the server.',
+        );
+      }
+
+      final accessToken = login.tokens!.accessToken;
+      final fromLogin = login.user;
+
+      // Step 2: Now hit /restore/lookup with the JWT. The server completely
+      // ignores any phone in the POST body; it returns the scrubbed profile of
+      // whoever owns the JWT sub claim. pin_hash/pin_salt will NOT be in the
+      // response (they were stripped server-side).
       final lookupUri = Uri.parse('$baseUrl/api/restore/lookup');
       final req = await client.postUrl(lookupUri);
       req.headers.set('Content-Type', 'application/json; charset=utf-8');
-      if (token != null) {
-        req.headers.set('Authorization', 'Bearer $token');
-      }
+      req.headers.set('Authorization', 'Bearer $accessToken');
       final lookupBody = utf8.encode(jsonEncode({'phone': phone}));
       req.contentLength = lookupBody.length;
       req.add(lookupBody);
@@ -112,7 +197,6 @@ abstract final class CloudRecoveryService {
           message: 'No profile found on the Main Server for this phone number.',
         );
       }
-
       if (lookupResp.statusCode != 200) {
         return RecoveryResult(
           status: RecoveryStatus.networkError,
@@ -121,7 +205,7 @@ abstract final class CloudRecoveryService {
       }
 
       final lookupJson = jsonDecode(respText) as Map<String, dynamic>;
-      final userMap = lookupJson['user'] as Map<String, dynamic>?;
+      final userMap = (lookupJson['user'] ?? fromLogin) as Map<String, dynamic>?;
       if (userMap == null) {
         return const RecoveryResult(
           status: RecoveryStatus.notFound,
@@ -129,47 +213,34 @@ abstract final class CloudRecoveryService {
         );
       }
 
-      final salt = userMap['pin_salt'] as String?;
-      final expectedHash = userMap['pin_hash'] as String?;
-      if (salt == null || expectedHash == null) {
-        return const RecoveryResult(
-          status: RecoveryStatus.notFound,
-          message: 'Cloud profile lacks cryptographic credentials for verification.',
-        );
-      }
-
-      // Step 2: Verify candidate PIN locally against cloud salt/hash
-      if (!Credentials.verify(pin, salt, expectedHash)) {
-        return const RecoveryResult(
-          status: RecoveryStatus.wrongPin,
-          message: 'That PIN does not match your cloud-synchronized credentials.',
-        );
-      }
+      // Local PIN storage for offline-first sign-in after this recovery. We
+      // regenerate credentials locally (new salt, HMAC hash) rather than ever
+      // downloading them from the server. We know the PIN is correct because
+      // the server /api/auth/login endpoint returned a JWT above — that is the
+      // zero-knowledge proof of correctness.
+      final localSalt = Credentials.newSalt();
+      final localHash = Credentials.hashPin(pin, localSalt);
 
       final user = AppUser.fromMap(userMap);
-      final linkedHhId = userMap['linked_household_id'] as String?;
       final db = await AppDatabase.instance.database;
 
       var restoredCount = 0;
 
-      // Step 3: Fetch clinical caseload (households, persons, assessments)
-      final reloadUri = Uri.parse(
-        '$baseUrl/api/restore/caseload?user_id=${user.id}&role=${user.role.name}&household_id=${linkedHhId ?? ""}',
-      );
+      // Step 3: Fetch clinical caseload — server ignores querystring params; scope
+      // derived entirely from the JWT (region/district/community/created_by for
+      // FHWs, linked_household_id for caregivers). Response has scoped_to meta.
+      final reloadUri = Uri.parse('$baseUrl/api/restore/caseload');
       final cReq = await client.getUrl(reloadUri);
-      if (token != null) {
-        cReq.headers.set('Authorization', 'Bearer $token');
-      }
+      cReq.headers.set('Authorization', 'Bearer $accessToken');
       final cResp = await cReq.close().timeout(const Duration(seconds: 20));
 
       await db.transaction((txn) async {
-        // Save user profile and credentials to local SQLite
         await txn.insert(
           Tables.users,
           {
             ...user.toMap(),
-            'pin_hash': expectedHash,
-            'pin_salt': salt,
+            'pin_hash': localHash,
+            'pin_salt': localSalt,
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
         );

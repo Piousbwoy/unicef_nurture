@@ -44,6 +44,7 @@ class AssessmentDraft {
     required this.inputs,
     required this.result,
     this.growth,
+    this.snapshot,
   });
 
   /// Every answer, verbatim. Stored with the assessment so the record is
@@ -54,4 +55,9 @@ class AssessmentDraft {
 
   /// MUAC / weight / height taken during this assessment, if any.
   final GrowthMeasurement? growth;
+
+  /// Structured IMCI sick-child / young-infant snapshot of all 85+ fields,
+  /// aligned with the Ghana GHS IMCI Case Recording Form. Used by the
+  /// OfflineInferenceService and Plan A/B/C classifier.
+  final ChildAssessmentSnapshot? snapshot;
 }

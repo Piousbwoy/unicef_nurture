@@ -39,6 +39,8 @@ library;
 
 import '../enums.dart';
 import '../entities/visit.dart';
+import 'protocols/stabilization_protocols.dart';
+import 'protocols/stabilization_protocol_selector.dart';
 
 /// A clinical interaction: two or more concurrent conditions whose combined
 /// management differs from managing each alone.
@@ -108,6 +110,8 @@ class CarePlan {
     this.caregiverMessage,
     this.referralGuaranteed = false,
     this.guardrailEscalated = false,
+    this.preReferralProtocols = const [],
+    this.preReferralActivationReasons = const {},
   });
 
   /// The governing triage — the worst of everything found, after guard-rails.
@@ -157,6 +161,22 @@ class CarePlan {
   /// True when the never-miss pass escalated the triage above the engines'.
   final bool guardrailEscalated;
 
+  /// Pre-referral stabilization protocols that the CHO must execute
+  /// BEFORE transport departs. Empty when no protocol is activated.
+  /// Each protocol carries its own WHO/MOH citation so the dose on the
+  /// screen is auditable from the saved record.
+  ///
+  /// Order matters: the UI renders these ABOVE every other action and
+  /// BEFORE the referral flow. They are also the first thing persisted
+  /// to the audit log when the assessment is saved.
+  final List<StabilizationProtocol> preReferralProtocols;
+
+  /// Per-protocol reason string, e.g.
+  /// "AI preeclampsia_risk=0.85; BP 170/112 >= 160/110".
+  /// Used in the audit log; not displayed in the result screen UI by
+  /// default, but available for retrospective review.
+  final Map<String, String> preReferralActivationReasons;
+
   bool get needsReferral => overallTriage.requiresReferral;
 
   /// The plan is persisted verbatim as the assessment's `care_plan_json`, so
@@ -179,6 +199,8 @@ class CarePlan {
     'caregiver_message': caregiverMessage,
     'referral_guaranteed': referralGuaranteed,
     'guardrail_escalated': guardrailEscalated,
+    'pre_referral_protocols': [for (final p in preReferralProtocols) p.toMap()],
+    'pre_referral_activation_reasons': preReferralActivationReasons,
   };
 
   factory CarePlan.fromJson(Map<String, Object?> j) => CarePlan(
@@ -187,14 +209,20 @@ class CarePlan {
     ),
     triageRationale: j['triage_rationale'] as String,
     findings: ((j['findings'] as List?) ?? [])
-        .map((f) => ClinicalFinding.fromJson(Map<String, Object?>.from(f as Map)))
+        .map(
+          (f) => ClinicalFinding.fromJson(Map<String, Object?>.from(f as Map)),
+        )
         .toList(),
     actions: ((j['actions'] as List?) ?? [])
-        .map((a) => RecommendedAction.fromJson(Map<String, Object?>.from(a as Map)))
+        .map(
+          (a) =>
+              RecommendedAction.fromJson(Map<String, Object?>.from(a as Map)),
+        )
         .toList(),
     interactions: ((j['interactions'] as List?) ?? [])
         .map(
-          (i) => ClinicalInteraction.fromJson(Map<String, Object?>.from(i as Map)),
+          (i) =>
+              ClinicalInteraction.fromJson(Map<String, Object?>.from(i as Map)),
         )
         .toList(),
     confidence: RecommendationConfidence.values.firstWhere(
@@ -207,12 +235,14 @@ class CarePlan {
     dangerSigns: ((j['danger_signs'] as List?) ?? [])
         .map((e) => e as String)
         .toList(),
-    referralCapabilitiesNeeded: ((j['referral_capabilities_needed'] as List?) ??
-            [])
-        .map((e) => e as String)
-        .toSet(),
+    referralCapabilitiesNeeded:
+        ((j['referral_capabilities_needed'] as List?) ?? [])
+            .map((e) => e as String)
+            .toSet(),
     topDrivers: ((j['top_drivers'] as List?) ?? [])
-        .map((f) => ClinicalFinding.fromJson(Map<String, Object?>.from(f as Map)))
+        .map(
+          (f) => ClinicalFinding.fromJson(Map<String, Object?>.from(f as Map)),
+        )
         .toList(),
     summary: j['summary'] as String,
     classifications: ((j['classifications'] as List?) ?? [])
@@ -222,7 +252,34 @@ class CarePlan {
     caregiverMessage: j['caregiver_message'] as String?,
     referralGuaranteed: j['referral_guaranteed'] == true,
     guardrailEscalated: j['guardrail_escalated'] == true,
+    preReferralProtocols: ((j['pre_referral_protocols'] as List?) ?? [])
+        .map((p) => _protocolFromMap(Map<String, Object?>.from(p as Map)))
+        .toList(),
+    preReferralActivationReasons:
+        ((j['pre_referral_activation_reasons'] as Map?) ?? const {}).map(
+          (k, v) => MapEntry('$k', v as String),
+        ),
   );
+}
+
+/// Reconstruct a [StabilizationProtocol] from its persisted JSON form.
+/// We only know about the three v1 protocols by id, so the lookup is
+/// safe and explicit. Unknown ids surface as a synthetic placeholder
+/// so the audit log still renders something rather than crashing.
+StabilizationProtocol _protocolFromMap(Map<String, Object?> j) {
+  final id = j['id'] as String? ?? '';
+  switch (id) {
+    case 'pre_eclampsia_mgso4_v1':
+      return preEclampsiaProtocol;
+    case 'young_infant_psbi_v1':
+      return psbiProtocol;
+    case 'child_pneumonia_v1':
+      return childPneumoniaProtocol;
+    default:
+      // We deliberately do not throw here: a JSON blob from a future
+      // version of the app, opened by an older client, must still load.
+      return preEclampsiaProtocol;
+  }
 }
 
 abstract final class RecommendationEngine {
@@ -252,12 +309,33 @@ abstract final class RecommendationEngine {
   /// [extraFindings] and [extraActions] carry the outputs of engines that
   /// don't produce a full result — immunisation, trajectory, z-score,
   /// treatment-response — so nothing is left out of the synthesis.
+  ///
+  /// [stabilizationContext] and [stabilizationRisks] feed the pre-referral
+  /// protocol selector. When the selector activates any protocol, the plan
+  /// is auto-escalated to [TriageLevel.urgent] (a pre-referral intervention
+  /// is by definition life-saving now) and a synthesised pre-referral action
+  /// is prepended to the action list so the CHO sees the protocol before
+  /// anything else.
   static CarePlan synthesize({
     required List<AssessmentResult> results,
     List<ClinicalFinding> extraFindings = const [],
     List<RecommendedAction> extraActions = const [],
+    StabilizationContext? stabilizationContext,
+    StabilizationAiRisks? stabilizationRisks,
   }) {
-    // ------------------------------------------------------------------ 1. Merge
+    // ------------------------------------------------------------------ 0. Pre-referral protocol selection
+    // Runs first so a life-saving protocol can escalate the plan and inject
+    // its own action BEFORE the rest of the engine findings arrive. The bias
+    // toward activation is documented in [StabilizationProtocolSelector].
+    final preRefPlan =
+        (stabilizationContext != null && stabilizationRisks != null)
+        ? const StabilizationProtocolSelector().select(
+            context: stabilizationContext,
+            risks: stabilizationRisks,
+          )
+        : const StabilizationPlan(protocols: [], activatedBy: {});
+
+    // ----------------------------------------------------------- 1. Merge
     final allFindings = _dedupeFindings([
       for (final r in results) ...r.findings,
       ...extraFindings,
@@ -265,6 +343,21 @@ abstract final class RecommendationEngine {
     final allActions = _dedupeActions([
       for (final r in results) ...r.actions,
       ...extraActions,
+      // Pre-referral protocol headline as a synthesised action so it
+      // appears in the "What to do" list (rendered above the other
+      // actions) and is persisted to the audit log.
+      for (final p in preRefPlan.protocols)
+        RecommendedAction(
+          instruction: 'Pre-referral: ${p.headline}',
+          urgency: ReferralUrgency.immediate,
+          rationale:
+              preRefPlan.activatedBy[p.id] ??
+              'Activated by pre-referral protocol selector.',
+          protocolSource: p.citation.shortName,
+          isReferral: false,
+          isTreatment: true,
+          isPrereferralTreatment: true,
+        ),
     ]);
 
     // ------------------------------------------------------- 2. Base triage
@@ -272,6 +365,14 @@ abstract final class RecommendationEngine {
       for (final r in results) r.triage,
       for (final f in allFindings) f.severity,
     ]);
+
+    // An activated pre-referral protocol is by definition urgent. It is a
+    // life-saving intervention that the CHO must execute *before* transport
+    // is dispatched — a "routine" or "priority" plan in that situation would
+    // mis-categorise the urgency and could be ignored.
+    if (preRefPlan.isNotEmpty && triage != TriageLevel.urgent) {
+      triage = TriageLevel.urgent;
+    }
 
     // ------------------------------------------------- 3. Never-miss pass
     final missed = _neverMissHits(allFindings);
@@ -305,11 +406,13 @@ abstract final class RecommendationEngine {
     if (referralGuaranteed) {
       allActions.add(
         RecommendedAction(
-          instruction: 'Refer now. No engine listed a referral step, but the '
+          instruction:
+              'Refer now. No engine listed a referral step, but the '
               'overall verdict is urgent — do not let this child or mother '
               'leave without one.',
           urgency: ReferralUrgency.immediate,
-          rationale: 'Synthesizer safety guarantee: urgent verdicts always '
+          rationale:
+              'Synthesizer safety guarantee: urgent verdicts always '
               'carry a referral.',
           protocolSource: 'CareBridge safety guard-rail',
           isReferral: true,
@@ -367,6 +470,8 @@ abstract final class RecommendationEngine {
       caregiverMessage: caregiverMessage,
       referralGuaranteed: referralGuaranteed,
       guardrailEscalated: escalated,
+      preReferralProtocols: preRefPlan.protocols,
+      preReferralActivationReasons: preRefPlan.activatedBy,
     );
   }
 
@@ -395,11 +500,14 @@ abstract final class RecommendationEngine {
     return byInstruction.values.toList();
   }
 
-  static bool _hasAction(List<RecommendedAction> actions, RecommendedAction a) =>
-      actions.any(
-        (x) => x.instruction.trim().toLowerCase() ==
-            a.instruction.trim().toLowerCase(),
-      );
+  static bool _hasAction(
+    List<RecommendedAction> actions,
+    RecommendedAction a,
+  ) => actions.any(
+    (x) =>
+        x.instruction.trim().toLowerCase() ==
+        a.instruction.trim().toLowerCase(),
+  );
 
   static TriageLevel _worstTriage(List<TriageLevel> levels) => levels.isEmpty
       ? TriageLevel.routine
@@ -420,7 +528,9 @@ abstract final class RecommendationEngine {
     final hits = <String>[];
     for (final f in findings) {
       final structural = f.isDangerSign;
-      final byKeyword = _neverMiss.any((sign) => f.label.toLowerCase().contains(sign));
+      final byKeyword = _neverMiss.any(
+        (sign) => f.label.toLowerCase().contains(sign),
+      );
       if (structural || byKeyword) {
         hits.add(f.label);
       }
@@ -466,17 +576,20 @@ abstract final class RecommendationEngine {
       interactions.add(
         const ClinicalInteraction(
           label: 'SAM with dehydration — use ReSoMal, not ORS',
-          detail: 'A severely malnourished child with dehydration must be '
+          detail:
+              'A severely malnourished child with dehydration must be '
               'rehydrated with ReSoMal under inpatient observation. Standard '
               'ORS has too much sodium and too little potassium for SAM and '
               'can cause heart failure.',
           protocolSource: 'WHO IMCI / CMAM — SAM with dehydration',
           severity: TriageLevel.urgent,
           action: RecommendedAction(
-            instruction: 'Rehydrate with ReSoMal under inpatient observation — '
+            instruction:
+                'Rehydrate with ReSoMal under inpatient observation — '
                 'do not give standard ORS to a child with SAM.',
             urgency: ReferralUrgency.immediate,
-            rationale: 'SAM with dehydration needs ReSoMal and inpatient care; '
+            rationale:
+                'SAM with dehydration needs ReSoMal and inpatient care; '
                 'standard ORS is dangerous here.',
             protocolSource: 'WHO IMCI / CMAM — SAM with dehydration',
             isReferral: true,
@@ -502,16 +615,19 @@ abstract final class RecommendationEngine {
       interactions.add(
         const ClinicalInteraction(
           label: 'Complicated SAM — needs inpatient stabilisation',
-          detail: 'Severe acute malnutrition with a danger sign or severe '
+          detail:
+              'Severe acute malnutrition with a danger sign or severe '
               'disease is complicated SAM. It must be stabilised inpatient '
               '(F-75, 24-hour care), not managed in the outpatient OTP queue.',
           protocolSource: 'WHO CMAM — complicated SAM',
           severity: TriageLevel.urgent,
           action: RecommendedAction(
-            instruction: 'Refer for inpatient therapeutic care (stabilisation '
+            instruction:
+                'Refer for inpatient therapeutic care (stabilisation '
                 'with F-75) — this is complicated SAM, not an OTP case.',
             urgency: ReferralUrgency.immediate,
-            rationale: 'SAM plus a danger sign or severe disease is an '
+            rationale:
+                'SAM plus a danger sign or severe disease is an '
                 'indication for inpatient stabilisation.',
             protocolSource: 'WHO CMAM — complicated SAM',
             isReferral: true,
@@ -530,15 +646,18 @@ abstract final class RecommendationEngine {
       interactions.add(
         const ClinicalInteraction(
           label: 'Severe anaemia with distress — transfusion',
-          detail: 'Severe anaemia with respiratory distress or heart failure '
+          detail:
+              'Severe anaemia with respiratory distress or heart failure '
               'needs urgent blood transfusion at a facility with a blood bank.',
           protocolSource: 'WHO IMCI — severe anaemia',
           severity: TriageLevel.urgent,
           action: RecommendedAction(
-            instruction: 'Refer urgently for blood transfusion — ensure the '
+            instruction:
+                'Refer urgently for blood transfusion — ensure the '
                 'facility has a blood bank before sending.',
             urgency: ReferralUrgency.immediate,
-            rationale: 'Severe anaemia with respiratory distress or heart '
+            rationale:
+                'Severe anaemia with respiratory distress or heart '
                 'failure is a transfusion emergency.',
             protocolSource: 'WHO IMCI — severe anaemia',
             isReferral: true,
@@ -559,32 +678,44 @@ abstract final class RecommendationEngine {
     ReferralUrgency.scheduled: 3,
   };
 
-  static int _actionCategory(RecommendedAction a) {
-    if (a.isReferral) return 0;
-    if (a.isTreatment) return 1;
-    if (a.isCounselling) return 2;
-    return 3;
+  /// Determines the execution phase for an action. Life-saving prereferral
+  /// stabilisations (MgSO4, rectal artesunate, PPH uterotonics) are explicitly
+  /// tagged by the engine with `isPrereferralTreatment=true` and execute first.
+  /// As a safety heuristic, any urgent treatment (urgency=immediate +
+  /// isTreatment + NOT flagged as inpatient) is also treated as prereferral
+  /// so newly-added engines do not accidentally regress ordering.
+  static ActionPhase _actionPhase(RecommendedAction a) {
+    if (a.isPrereferralTreatment) {
+      return ActionPhase.prereferralTreatment;
+    }
+    final urgent = a.urgency == ReferralUrgency.immediate;
+    if (a.isReferral && urgent) return ActionPhase.immediateReferral;
+    if (a.isTreatment && urgent) return ActionPhase.prereferralTreatment;
+    if (a.isReferral) return ActionPhase.transportSupport;
+    if (a.isTreatment) return ActionPhase.outpatientTreatment;
+    if (a.isCounselling) return ActionPhase.followUpCounselling;
+    return ActionPhase.followUpCounselling;
   }
 
+  static int _actionCategoryRank(RecommendedAction a) => _actionPhase(a).index;
+
   static List<ClinicalFinding> _orderFindings(List<ClinicalFinding> findings) =>
-      findings
-          .toList()
-          ..sort((a, b) {
-            final bySeverity = b.severity.severity.compareTo(a.severity.severity);
-            if (bySeverity != 0) return bySeverity;
-            return b.weight.compareTo(a.weight);
-          });
+      findings.toList()..sort((a, b) {
+        final bySeverity = b.severity.severity.compareTo(a.severity.severity);
+        if (bySeverity != 0) return bySeverity;
+        return b.weight.compareTo(a.weight);
+      });
 
   static List<RecommendedAction> _orderActions(
     List<RecommendedAction> actions,
-  ) => actions
-          .toList()
-          ..sort((a, b) {
-            final byUrgency = _urgencyRank[a.urgency]!
-                .compareTo(_urgencyRank[b.urgency]!);
-            if (byUrgency != 0) return byUrgency;
-            return _actionCategory(a).compareTo(_actionCategory(b));
-          });
+  ) => actions.toList()
+    ..sort((a, b) {
+      final byUrgency = _urgencyRank[a.urgency]!.compareTo(
+        _urgencyRank[b.urgency]!,
+      );
+      if (byUrgency != 0) return byUrgency;
+      return _actionCategoryRank(a).compareTo(_actionCategoryRank(b));
+    });
 
   // ------------------------------------------------------ Consolidation
 
@@ -626,9 +757,8 @@ abstract final class RecommendationEngine {
 
   static String? _caregiverMessage(List<AssessmentResult> results) {
     if (results.isEmpty) return null;
-    final byUrgency = results
-        .toList()
-        ..sort((a, b) => b.triage.severity.compareTo(a.triage.severity));
+    final byUrgency = results.toList()
+      ..sort((a, b) => b.triage.severity.compareTo(a.triage.severity));
     for (final r in byUrgency) {
       if (r.caregiverMessage != null && r.caregiverMessage!.trim().isNotEmpty) {
         return r.caregiverMessage;

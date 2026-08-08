@@ -45,12 +45,87 @@ CREATE TABLE IF NOT EXISTS users (
   staff_id            VARCHAR(64)  NULL,
   preferred_language  VARCHAR(40)  NOT NULL DEFAULT 'English',
   linked_household_id VARCHAR(64)  NULL,
-  pin_hash            VARCHAR(128) NOT NULL,
-  pin_salt            VARCHAR(64)  NOT NULL,
+  -- NOTE: pin_hash and pin_salt are DEPRECATED and no longer synced from new
+  -- clients. They remain in the schema ONLY for the duration of the transition
+  -- from legacy-device recovery flows. They are NULL on every record written
+  -- by a post-v1.1 client. New authentication uses the isolated user_verifiers
+  -- table, which stores a DOMAIN-SEPARATED HMAC cloud verifier derived (but
+  -- NOT recoverable) from the on-device pin_hash. See tables.js whitelist
+  -- commentary for the Ghana Health Service compliance audit trail.
+  pin_hash            VARCHAR(128) NULL,
+  pin_salt            VARCHAR(64)  NULL,
   created_at          VARCHAR(40)  NOT NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uq_users_phone (phone),
   KEY idx_users_district (region, district, community)
+) ENGINE=InnoDB;
+
+-- ----------------------------------------------------------------------------
+-- Isolated cloud-authentication verifiers — physically and logically separate
+-- from the synced users/patients table per Ghana Health Service data-privacy
+-- compliance architecture.
+--
+-- Construction (client-generated, at REGISTRATION / PIN CHANGE only):
+--
+--   cloud_verifier = HMAC-SHA256-ITERATED(
+--       key   = "carebridge_cloud_auth_v1" || server_salt || phone,
+--       input = device_local_pin_hash)
+--
+--   server_salt = 24-byte cryptographically random value, distinct from the
+--                 device-local pin_salt (which never leaves the device).
+--
+-- Challenge-response recovery login (on a BLANK replacement device):
+--   1. Client GET /api/auth/challenge?phone=X
+--   2. Server returns { user_id, server_salt } — server_salt is non-secret.
+--   3. Client, on blank device, re-derives the identical cloud_verifier using
+--      Credentials.computeCloudVerifierFromPin(pin, phone, server_salt).
+--      This stretches the PIN under server_salt first (first_pass) then
+--      applies the identical domain-separated 120k HMAC iteration chain.
+--   4. Client POSTs the resulting cloud_verifier (NOT PIN, NOT local_hash).
+--   5. Server compares stored verifier constant-time; on match → issue JWT.
+--
+-- Security properties:
+--   * local pin_hash / pin_salt NEVER cross the network (tables.js whitelist
+--     strips them; AppUser.toMap never emits them).  → 100% compliance with
+--     the HOW_IT_WORKS.md data-privacy promise.
+--   * Reversing user_verifiers.verifier → 4-digit PIN costs 120k HMAC-SHA256
+--     per candidate, per user, per server_salt — infeasible even at scale.
+--   * Reversing user_verifiers.verifier → device_local_pin_hash costs 120k
+--     HMAC-SHA256 per attempt (reversing the derivation).
+--   * user_verifiers is the ONLY table that ever receives verifier bytes; the
+--     general-purpose users table remains free of any credential material
+--     that could be accidentally JOINed or SELECT * leaked.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_verifiers (
+  user_id      VARCHAR(64)  NOT NULL,
+  -- 24-byte cryptographically random salt, distinct from device-local pin_salt.
+  -- Returned by /api/auth/challenge (non-secret) during recovery login.
+  server_salt  VARCHAR(64)  NOT NULL,
+  -- Domain-separated HMAC cloud verifier (base64 of final 32-byte hash).
+  -- Never transmitted back to any client, ever. Compared constant-time.
+  verifier     VARCHAR(128) NOT NULL,
+  device_id    VARCHAR(64)  NULL,
+  created_at   VARCHAR(40)  NOT NULL,
+  updated_at   VARCHAR(40)  NOT NULL,
+  PRIMARY KEY (user_id),
+  CONSTRAINT fk_verifiers_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- ----------------------------------------------------------------------------
+-- Refresh token store. Long-lived refresh tokens are bound to a user+device
+-- and can be revoked explicitly (lost-device workflow) or expire naturally.
+-- Access tokens are stateless/signed (JWT, no DB lookup) for perf; refresh
+-- tokens are stored in DB and checked on every /api/auth/refresh call.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  token_hash   VARCHAR(64)  NOT NULL,
+  user_id      VARCHAR(64)  NOT NULL,
+  device_id    VARCHAR(64)  NULL,
+  issued_at    VARCHAR(40)  NOT NULL,
+  expires_at   VARCHAR(40)  NOT NULL,
+  revoked_at   VARCHAR(40)  NULL,
+  PRIMARY KEY (token_hash),
+  KEY idx_refresh_user (user_id)
 ) ENGINE=InnoDB;
 
 -- ----------------------------------------------------------------------------
@@ -103,67 +178,242 @@ CREATE TABLE IF NOT EXISTS persons (
 ) ENGINE=InnoDB;
 
 -- ----------------------------------------------------------------------------
--- Maternal record — mirrors Ghana's Maternal Health Record Book.
+-- Maternal record — mirrors Ghana's Maternal Health Record Book (JICA/GHS).
+-- Version 5 (August 2026): Rh, sickle genotype, HBsAg/syphilis/HIV dates,
+-- 4-strip urinalysis, 7 PE Liverpool flags, 8 PMHx, PNC involution/lochia/
+-- wound/breast, 10-item Edinburgh EPDS (WHO Kumasi 2020 validated).
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS maternal_records (
-  person_id              VARCHAR(64) NOT NULL,
-  gravida                INT         NULL,
-  parity                 INT         NULL,
-  previous_losses        INT         NULL,
-  previous_caesarean     INT         NULL,
-  last_menstrual_period  VARCHAR(40) NULL,
-  expected_delivery_date VARCHAR(40) NULL,
-  anc_contacts_completed INT         NOT NULL DEFAULT 0,
-  iptp_doses             INT         NOT NULL DEFAULT 0,
-  td_doses               INT         NOT NULL DEFAULT 0,
-  iron_folate_supplied   TINYINT(1)  NOT NULL DEFAULT 0,
-  llin_supplied          TINYINT(1)  NOT NULL DEFAULT 0,
-  haemoglobin            DOUBLE      NULL,
-  blood_group            VARCHAR(16) NULL,
-  sickling_status        VARCHAR(32) NULL,
-  hiv_tested             TINYINT(1)  NOT NULL DEFAULT 0,
-  delivery_date          VARCHAR(40) NULL,
-  delivery_place         VARCHAR(96) NULL,
-  delivery_mode          VARCHAR(64) NULL,
-  plurality              VARCHAR(32) NOT NULL DEFAULT 'singleton',
-  family_planning_method VARCHAR(96) NULL,
-  updated_at             VARCHAR(40) NOT NULL,
+  person_id                    VARCHAR(64) NOT NULL,
+  gravida                      INT         NULL,
+  parity                       INT         NULL,
+  previous_losses              INT         NULL,
+  previous_caesarean           INT         NULL,
+  last_menstrual_period        VARCHAR(40) NULL,
+  expected_delivery_date       VARCHAR(40) NULL,
+  anc_contacts_completed       INT         NOT NULL DEFAULT 0,
+  iptp_doses                   INT         NOT NULL DEFAULT 0,
+  td_doses                     INT         NOT NULL DEFAULT 0,
+  iron_folate_supplied         TINYINT(1)  NOT NULL DEFAULT 0,
+  llin_supplied                TINYINT(1)  NOT NULL DEFAULT 0,
+  haemoglobin                  DOUBLE      NULL,
+  blood_group                  VARCHAR(16) NULL,
+  rhesus_positive              TINYINT(1)  NULL,
+  sickling_status              VARCHAR(32) NULL,
+  sickle_genotype              VARCHAR(16) NULL,
+  hiv_tested                   TINYINT(1)  NOT NULL DEFAULT 0,
+  hiv_test_date                VARCHAR(40) NULL,
+  syphilis_tested              TINYINT(1)  NOT NULL DEFAULT 0,
+  syphilis_test_date           VARCHAR(40) NULL,
+  hbsag_tested                 TINYINT(1)  NOT NULL DEFAULT 0,
+  hbsag_test_date              VARCHAR(40) NULL,
+  delivery_date                VARCHAR(40) NULL,
+  delivery_place               VARCHAR(96) NULL,
+  delivery_mode                VARCHAR(64) NULL,
+  plurality                    VARCHAR(32) NOT NULL DEFAULT 'singleton',
+  family_planning_method       VARCHAR(96) NULL,
+  urine_protein                INT         NULL,
+  urine_glucose                INT         NULL,
+  urine_ketones                INT         NULL,
+  urine_blood                  INT         NULL,
+  oedema_hands_or_face         TINYINT(1)  NOT NULL DEFAULT 0,
+  epigastric_pain              TINYINT(1)  NOT NULL DEFAULT 0,
+  headache_severe              TINYINT(1)  NOT NULL DEFAULT 0,
+  blurred_vision               TINYINT(1)  NOT NULL DEFAULT 0,
+  brisk_reflexes               TINYINT(1)  NOT NULL DEFAULT 0,
+  oliguria                     TINYINT(1)  NOT NULL DEFAULT 0,
+  weight_gain_over_1kg_per_week TINYINT(1) NOT NULL DEFAULT 0,
+  prev_hypertension            TINYINT(1)  NOT NULL DEFAULT 0,
+  prev_diabetes                TINYINT(1)  NOT NULL DEFAULT 0,
+  prev_anaemia                 TINYINT(1)  NOT NULL DEFAULT 0,
+  prev_tb                      TINYINT(1)  NOT NULL DEFAULT 0,
+  prev_asthma                  TINYINT(1)  NOT NULL DEFAULT 0,
+  prev_heart_disease           TINYINT(1)  NOT NULL DEFAULT 0,
+  prev_kidney_disease          TINYINT(1)  NOT NULL DEFAULT 0,
+  prev_hepatitis               TINYINT(1)  NOT NULL DEFAULT 0,
+  involution_cm_below_umbilicus INT         NULL,
+  lochia_colour                VARCHAR(32) NULL,
+  lochia_odour                 VARCHAR(32) NULL,
+  lochia_amount                VARCHAR(32) NULL,
+  wound_redness                TINYINT(1)  NOT NULL DEFAULT 0,
+  wound_oedema                 TINYINT(1)  NOT NULL DEFAULT 0,
+  wound_discharge              TINYINT(1)  NOT NULL DEFAULT 0,
+  wound_approximated           TINYINT(1)  NULL,
+  episiotomy_or_laceration     TINYINT(1)  NOT NULL DEFAULT 0,
+  nipples_cracked              TINYINT(1)  NOT NULL DEFAULT 0,
+  nipples_inverted             TINYINT(1)  NOT NULL DEFAULT 0,
+  breast_mastitis_signs        TINYINT(1)  NOT NULL DEFAULT 0,
+  breast_attachment_ok         TINYINT(1)  NULL,
+  breast_let_down_ok           TINYINT(1)  NULL,
+  edinburgh_laugh              INT         NULL,
+  edinburgh_enjoy              INT         NULL,
+  edinburgh_blame              INT         NULL,
+  edinburgh_anxious            INT         NULL,
+  edinburgh_scared             INT         NULL,
+  edinburgh_overwhelm          INT         NULL,
+  edinburgh_sleep              INT         NULL,
+  edinburgh_sad                INT         NULL,
+  edinburgh_cry                INT         NULL,
+  edinburgh_self_harm          INT         NULL,
+  updated_at                   VARCHAR(40) NOT NULL,
   PRIMARY KEY (person_id)
 ) ENGINE=InnoDB;
 
 -- ----------------------------------------------------------------------------
--- Birth record — fixed at birth; drives the young-infant risk model.
+-- Birth record — fixed at birth; drives the young-infant 0–59d PSBI model.
+-- Version 5 (August 2026): 15 WHO PSBI danger signs, KMC tracking, newborn
+-- sickle + hearing screening (GHS 2024 national rollout), APGAR, length,
+-- vitals, Vitamin K dose 0.5/1 mg, BF day1 check.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS birth_records (
-  person_id                 VARCHAR(64) NOT NULL,
-  birth_weight_kg           DOUBLE      NULL,
-  gestation_weeks_at_birth  INT         NULL,
-  delivery_place            VARCHAR(96) NULL,
-  delivery_mode             VARCHAR(64) NULL,
-  plurality                 VARCHAR(32) NOT NULL DEFAULT 'singleton',
-  birth_order               INT         NOT NULL DEFAULT 1,
-  resuscitation_needed      TINYINT(1)  NULL,
-  cord_care_given           TINYINT(1)  NULL,
-  vitamin_k_given           TINYINT(1)  NULL,
-  breastfed_within_one_hour TINYINT(1)  NULL,
-  updated_at                VARCHAR(40) NOT NULL,
+  person_id                  VARCHAR(64) NOT NULL,
+  birth_weight_kg            DOUBLE      NULL,
+  birth_length_cm            DOUBLE      NULL,
+  gestation_weeks_at_birth   INT         NULL,
+  delivery_place             VARCHAR(96) NULL,
+  delivery_mode              VARCHAR(64) NULL,
+  plurality                  VARCHAR(32) NOT NULL DEFAULT 'singleton',
+  birth_order                INT         NOT NULL DEFAULT 1,
+  resuscitation_needed       TINYINT(1)  NULL,
+  apgar_1_minute             INT         NULL,
+  apgar_5_minute             INT         NULL,
+  cord_care_given            TINYINT(1)  NULL,
+  cord_chlorhexidine_applied TINYINT(1)  NULL,
+  vitamin_k_given            TINYINT(1)  NULL,
+  vitamin_k_dose_mg          DOUBLE      NOT NULL DEFAULT 1.0,
+  breastfed_within_one_hour  TINYINT(1)  NULL,
+  breastfeeding_ok_on_day1   TINYINT(1)  NULL,
+  temperature_celsius        DOUBLE      NULL,
+  respiratory_rate_per_min   INT         NULL,
+  heart_rate_per_min         INT         NULL,
+  oxygen_saturation_per_cent INT         NULL,
+  history_of_convulsions     TINYINT(1)  NOT NULL DEFAULT 0,
+  severe_chest_indrawing     TINYINT(1)  NOT NULL DEFAULT 0,
+  nasal_flaring              TINYINT(1)  NOT NULL DEFAULT 0,
+  grunting                   TINYINT(1)  NOT NULL DEFAULT 0,
+  bulging_fontanelle         TINYINT(1)  NOT NULL DEFAULT 0,
+  jaundice_before_24h        TINYINT(1)  NOT NULL DEFAULT 0,
+  jaundice_on_day3_or_later  VARCHAR(32) NULL,
+  feeding_difficulty         TINYINT(1)  NOT NULL DEFAULT 0,
+  abdominal_distension       TINYINT(1)  NOT NULL DEFAULT 0,
+  cord_redness_beyond_base   TINYINT(1)  NOT NULL DEFAULT 0,
+  cord_pus                   TINYINT(1)  NOT NULL DEFAULT 0,
+  cord_oedema_beyond_base    TINYINT(1)  NOT NULL DEFAULT 0,
+  skin_pustules              TINYINT(1)  NOT NULL DEFAULT 0,
+  lethargic_or_unconscious   TINYINT(1)  NOT NULL DEFAULT 0,
+  bleeding_from_any_site     TINYINT(1)  NOT NULL DEFAULT 0,
+  kmc_eligible               TINYINT(1)  NOT NULL DEFAULT 0,
+  kmc_initiated              TINYINT(1)  NULL,
+  kmc_site                   VARCHAR(64) NULL,
+  kmc_hours_per_day          DOUBLE      NULL,
+  sickle_screen_sample_collected TINYINT(1) NULL,
+  sickle_screen_sample_date  VARCHAR(40) NULL,
+  hearing_screen_done        TINYINT(1)  NULL,
+  hearing_screen_result      VARCHAR(32) NULL,
+  updated_at                 VARCHAR(40) NOT NULL,
   PRIMARY KEY (person_id)
 ) ENGINE=InnoDB;
 
 -- ----------------------------------------------------------------------------
 -- Growth measurements — append-only series for the trajectory engine.
+-- Version 5 (August 2026): muac_mm (source-of-truth, read directly from the
+-- GHS tape) + palmar_pallor_severity (IMCI malnutrition anaemia trigger).
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS growth_measurements (
   id                   VARCHAR(64) NOT NULL,
   person_id            VARCHAR(64) NOT NULL,
   taken_at             VARCHAR(40) NOT NULL,
+  muac_mm              INT         NULL,
   muac_cm              DOUBLE      NULL,
   weight_kg            DOUBLE      NULL,
   height_cm            DOUBLE      NULL,
   has_bilateral_oedema TINYINT(1)  NOT NULL DEFAULT 0,
+  palmar_pallor_severity VARCHAR(32) NULL,
   recorded_by          VARCHAR(64) NULL,
   PRIMARY KEY (id),
   KEY idx_growth_person_date (person_id, taken_at)
+) ENGINE=InnoDB;
+
+-- ----------------------------------------------------------------------------
+-- Child IMCI structured assessment snapshot.
+-- One row per sick-child encounter. Column order and section names match the
+-- Ghana GHS IMCI Sick-Child Case Recording Form (blue book, 2022 revision)
+-- EXACTLY — this is the adoption condition. 10 sections:
+--   1. general danger signs
+--   2. cough / RR / pneumonia
+--   3. diarrhoea / dehydration Plan A/B/C
+--   4. fever / measles / malaria RDT / dengue tourniquet
+--   5. ear / mastoiditis
+--   6. malnutrition / anaemia / HIV / RUTF
+--   7. IYCF feeding assessment (6–23 months)
+--   8. immunizations due/given today
+--   9. initial vs follow_up visit type flag
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS child_assessment_snapshots (
+  id                           VARCHAR(64) NOT NULL,
+  person_id                    VARCHAR(64) NOT NULL,
+  assessed_at                  VARCHAR(40) NOT NULL,
+  visit_type                   VARCHAR(32) NOT NULL DEFAULT 'initial',
+  age_days_completed           INT         NULL,
+  able_to_drink_or_breastfeed  TINYINT(1)  NULL,
+  vomits_everything            TINYINT(1)  NULL,
+  has_convulsions_this_visit   TINYINT(1)  NULL,
+  is_lethargic_or_unconscious  TINYINT(1)  NULL,
+  cough_present                TINYINT(1)  NOT NULL DEFAULT 0,
+  cough_duration_days          INT         NULL,
+  respiratory_rate_per_min     INT         NULL,
+  chest_indrawing              TINYINT(1)  NOT NULL DEFAULT 0,
+  stridor_calm                 TINYINT(1)  NOT NULL DEFAULT 0,
+  nasal_flaring                TINYINT(1)  NOT NULL DEFAULT 0,
+  oxygen_saturation_per_cent   INT         NULL,
+  diarrhoea_present            TINYINT(1)  NOT NULL DEFAULT 0,
+  diarrhoea_duration_days      INT         NULL,
+  blood_in_stool               TINYINT(1)  NOT NULL DEFAULT 0,
+  restless_or_irritable        TINYINT(1)  NULL,
+  sunken_eyes                  TINYINT(1)  NULL,
+  drinks_eagerly               TINYINT(1)  NULL,
+  skin_pinch_result            VARCHAR(32) NULL,
+  fever_reported               TINYINT(1)  NOT NULL DEFAULT 0,
+  fever_duration_days          INT         NULL,
+  temperature_celsius          DOUBLE      NULL,
+  stiff_neck                   TINYINT(1)  NOT NULL DEFAULT 0,
+  runny_nose                   TINYINT(1)  NOT NULL DEFAULT 0,
+  measles_rash_present         TINYINT(1)  NOT NULL DEFAULT 0,
+  measles_cough                TINYINT(1)  NOT NULL DEFAULT 0,
+  measles_coryza               TINYINT(1)  NOT NULL DEFAULT 0,
+  measles_conjunctivitis       TINYINT(1)  NOT NULL DEFAULT 0,
+  mouth_ulcers                 TINYINT(1)  NOT NULL DEFAULT 0,
+  eye_discharge                TINYINT(1)  NOT NULL DEFAULT 0,
+  corneal_clouding             TINYINT(1)  NOT NULL DEFAULT 0,
+  measles_within_past_3_months TINYINT(1)  NOT NULL DEFAULT 0,
+  malaria_rdt_done             TINYINT(1)  NOT NULL DEFAULT 0,
+  malaria_rdt_result           VARCHAR(32) NULL,
+  tourniquet_test_done         TINYINT(1)  NOT NULL DEFAULT 0,
+  tourniquet_test_positive     TINYINT(1)  NULL,
+  skin_petechiae               TINYINT(1)  NOT NULL DEFAULT 0,
+  capillary_refill_seconds     DOUBLE      NULL,
+  ear_problem_present          TINYINT(1)  NOT NULL DEFAULT 0,
+  ear_pain_duration_days       INT         NULL,
+  ear_pus_draining             TINYINT(1)  NOT NULL DEFAULT 0,
+  ear_pus_duration_days        INT         NULL,
+  tender_swelling_behind_ear   TINYINT(1)  NOT NULL DEFAULT 0,
+  weight_for_height_or_length_zscore DOUBLE NULL,
+  hiv_exposed_or_infected_status VARCHAR(64) NULL,
+  able_to_finish_rutf          TINYINT(1)  NULL,
+  breastfed_today              TINYINT(1)  NULL,
+  night_feeds_per_24h          INT         NULL,
+  complementary_foods_given_today TINYINT(1) NULL,
+  minimum_dietary_diversity    TINYINT(1)  NULL,
+  minimum_meal_frequency       TINYINT(1)  NULL,
+  minimum_acceptable_diet      TINYINT(1)  NULL,
+  immunizations_due_today      TEXT        NULL,
+  immunizations_given_today    TEXT        NULL,
+  assessed_by_user_id          VARCHAR(64) NULL,
+  recorded_by_user_id          VARCHAR(64) NULL,
+  updated_at                   VARCHAR(40) NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_child_assessment_snapshots_person (person_id, assessed_at),
+  KEY idx_child_assessment_snapshots_visit (visit_type, assessed_at)
 ) ENGINE=InnoDB;
 
 -- ----------------------------------------------------------------------------
@@ -289,18 +539,24 @@ CREATE TABLE IF NOT EXISTS scheduled_contacts (
 -- ----------------------------------------------------------------------------
 -- Sync log — a server-side audit trail of EVERY write the sync endpoint makes.
 -- It records *what* changed (table, id, operation, when) but never the payload
--- itself, so the audit trail carries no PHI. This is the control that makes
--- "who changed this child's record, and when" answerable at the district.
+-- itself, so the audit trail carries no PHI. user_id + facility_id + device_id
+-- come from the JWT claims attached by the auth middleware, never from client
+-- input, so attribution is forensically sound.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS sync_log (
   id             BIGINT      NOT NULL AUTO_INCREMENT,
+  user_id        VARCHAR(64) NULL,
+  facility_name  VARCHAR(160) NULL,
+  device_id      VARCHAR(64) NULL,
   entity_table   VARCHAR(64) NOT NULL,
   entity_id      VARCHAR(64) NOT NULL,
   operation      VARCHAR(16) NOT NULL,
   rows_affected  INT         NOT NULL DEFAULT 0,
   client_version VARCHAR(32) NULL,
+  auth_method    VARCHAR(16) NOT NULL DEFAULT 'jwt', -- 'jwt' | 'legacy_token'
   received_at    DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (id),
   KEY idx_sync_log_entity (entity_table, entity_id),
+  KEY idx_sync_log_user (user_id, received_at),
   KEY idx_sync_log_time (received_at)
 ) ENGINE=InnoDB;

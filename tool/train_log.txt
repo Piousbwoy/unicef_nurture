@@ -1,0 +1,126 @@
+2026-08-06 10:31:55.900504: I tensorflow/core/util/port.cc:113] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING:tensorflow:From C:\Users\AbdulAda\AppData\Local\Programs\Python\Python311\Lib\site-packages\keras\src\losses.py:2976: The name tf.losses.sparse_softmax_cross_entropy is deprecated. Please use tf.compat.v1.losses.sparse_softmax_cross_entropy instead.
+
+WARNING:tensorflow:From C:\Users\AbdulAda\AppData\Local\Programs\Python\Python311\Lib\site-packages\keras\src\backend.py:1398: The name tf.executing_eagerly_outside_functions is deprecated. Please use tf.compat.v1.executing_eagerly_outside_functions instead.
+
+2026-08-06 10:32:09.040844: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: SSE SSE2 SSE3 SSE4.1 SSE4.2 AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+WARNING:tensorflow:From C:\Users\AbdulAda\AppData\Local\Programs\Python\Python311\Lib\site-packages\keras\src\optimizers\__init__.py:309: The name tf.train.Optimizer is deprecated. Please use tf.compat.v1.train.Optimizer instead.
+
+WARNING:tensorflow:From C:\Users\AbdulAda\AppData\Local\Programs\Python\Python311\Lib\site-packages\keras\src\utils\tf_utils.py:492: The name tf.ragged.RaggedTensorValue is deprecated. Please use tf.compat.v1.ragged.RaggedTensorValue instead.
+
+WARNING:tensorflow:From C:\Users\AbdulAda\AppData\Local\Programs\Python\Python311\Lib\site-packages\keras\src\engine\base_layer_utils.py:384: The name tf.executing_eagerly_outside_functions is deprecated. Please use tf.compat.v1.executing_eagerly_outside_functions instead.
+
+C:\Users\AbdulAda\AppData\Local\Programs\Python\Python311\Lib\site-packages\tensorflow\lite\python\convert.py:953: UserWarning: Statistics for quantized inputs were expected, but not specified; continuing anyway.
+  warnings.warn(
+2026-08-06 10:32:13.133705: W tensorflow/compiler/mlir/lite/python/tf_tfl_flatbuffer_helpers.cc:378] Ignored output_format.
+2026-08-06 10:32:13.133732: W tensorflow/compiler/mlir/lite/python/tf_tfl_flatbuffer_helpers.cc:381] Ignored drop_control_dependency.
+2026-08-06 10:32:13.135027: I tensorflow/cc/saved_model/reader.cc:83] Reading SavedModel from: C:\Users\AbdulAda\AppData\Local\Temp\tmpnuynz6fg
+2026-08-06 10:32:13.137398: I tensorflow/cc/saved_model/reader.cc:51] Reading meta graph with tags { serve }
+2026-08-06 10:32:13.137428: I tensorflow/cc/saved_model/reader.cc:146] Reading SavedModel debug info (if present) from: C:\Users\AbdulAda\AppData\Local\Temp\tmpnuynz6fg
+2026-08-06 10:32:13.142304: I tensorflow/compiler/mlir/mlir_graph_optimization_pass.cc:388] MLIR V1 optimization pass is not enabled
+2026-08-06 10:32:13.143696: I tensorflow/cc/saved_model/loader.cc:233] Restoring SavedModel bundle.
+2026-08-06 10:32:13.208413: I tensorflow/cc/saved_model/loader.cc:217] Running initialization op on SavedModel bundle at path: C:\Users\AbdulAda\AppData\Local\Temp\tmpnuynz6fg
+2026-08-06 10:32:13.223586: I tensorflow/cc/saved_model/loader.cc:316] SavedModel load for tags { serve }; Status: success: OK. Took 88555 microseconds.
+2026-08-06 10:32:13.242568: I tensorflow/compiler/mlir/tensorflow/utils/dump_mlir_util.cc:269] disabling MLIR crash reproducer, set env var `MLIR_CRASH_REPRODUCER_DIRECTORY` to enable.
+Summary on the non-converted ops:
+---------------------------------
+ * Accepted dialects: tfl, builtin, func
+ * Non-Converted Ops: 6, Total Ops 13, % non-converted = 46.15 %
+ * 6 ARITH ops
+
+- arith.constant:    6 occurrences  (f32: 6)
+
+
+
+  (f32: 3)
+  (f32: 1)
+fully_quantize: 0, inference_type: 6, input_inference_type: INT8, output_inference_type: FLOAT32
+C:\Users\AbdulAda\AppData\Local\Programs\Python\Python311\Lib\site-packages\tensorflow\lite\python\convert.py:953: UserWarning: Statistics for quantized inputs were expected, but not specified; continuing anyway.
+  warnings.warn(
+2026-08-06 10:32:20.625277: W tensorflow/compiler/mlir/lite/python/tf_tfl_flatbuffer_helpers.cc:378] Ignored output_format.
+2026-08-06 10:32:20.625302: W tensorflow/compiler/mlir/lite/python/tf_tfl_flatbuffer_helpers.cc:381] Ignored drop_control_dependency.
+2026-08-06 10:32:20.626349: I tensorflow/cc/saved_model/reader.cc:83] Reading SavedModel from: C:\Users\AbdulAda\AppData\Local\Temp\tmpfp6y5pkp
+2026-08-06 10:32:20.628963: I tensorflow/cc/saved_model/reader.cc:51] Reading meta graph with tags { serve }
+2026-08-06 10:32:20.629016: I tensorflow/cc/saved_model/reader.cc:146] Reading SavedModel debug info (if present) from: C:\Users\AbdulAda\AppData\Local\Temp\tmpfp6y5pkp
+2026-08-06 10:32:20.633871: I tensorflow/cc/saved_model/loader.cc:233] Restoring SavedModel bundle.
+2026-08-06 10:32:20.698360: I tensorflow/cc/saved_model/loader.cc:217] Running initialization op on SavedModel bundle at path: C:\Users\AbdulAda\AppData\Local\Temp\tmpfp6y5pkp
+2026-08-06 10:32:20.714918: I tensorflow/cc/saved_model/loader.cc:316] SavedModel load for tags { serve }; Status: success: OK. Took 88565 microseconds.
+Summary on the non-converted ops:
+---------------------------------
+ * Accepted dialects: tfl, builtin, func
+ * Non-Converted Ops: 6, Total Ops 13, % non-converted = 46.15 %
+ * 6 ARITH ops
+
+- arith.constant:    6 occurrences  (f32: 6)
+
+
+
+  (f32: 3)
+  (f32: 1)
+fully_quantize: 0, inference_type: 6, input_inference_type: INT8, output_inference_type: FLOAT32
+C:\Users\AbdulAda\AppData\Local\Programs\Python\Python311\Lib\site-packages\tensorflow\lite\python\convert.py:953: UserWarning: Statistics for quantized inputs were expected, but not specified; continuing anyway.
+  warnings.warn(
+2026-08-06 10:32:28.285219: W tensorflow/compiler/mlir/lite/python/tf_tfl_flatbuffer_helpers.cc:378] Ignored output_format.
+2026-08-06 10:32:28.285296: W tensorflow/compiler/mlir/lite/python/tf_tfl_flatbuffer_helpers.cc:381] Ignored drop_control_dependency.
+2026-08-06 10:32:28.287343: I tensorflow/cc/saved_model/reader.cc:83] Reading SavedModel from: C:\Users\AbdulAda\AppData\Local\Temp\tmpk_7b_rgh
+2026-08-06 10:32:28.290574: I tensorflow/cc/saved_model/reader.cc:51] Reading meta graph with tags { serve }
+2026-08-06 10:32:28.290605: I tensorflow/cc/saved_model/reader.cc:146] Reading SavedModel debug info (if present) from: C:\Users\AbdulAda\AppData\Local\Temp\tmpk_7b_rgh
+2026-08-06 10:32:28.295570: I tensorflow/cc/saved_model/loader.cc:233] Restoring SavedModel bundle.
+2026-08-06 10:32:28.360098: I tensorflow/cc/saved_model/loader.cc:217] Running initialization op on SavedModel bundle at path: C:\Users\AbdulAda\AppData\Local\Temp\tmpk_7b_rgh
+2026-08-06 10:32:28.375771: I tensorflow/cc/saved_model/loader.cc:316] SavedModel load for tags { serve }; Status: success: OK. Took 88428 microseconds.
+Summary on the non-converted ops:
+---------------------------------
+ * Accepted dialects: tfl, builtin, func
+ * Non-Converted Ops: 6, Total Ops 13, % non-converted = 46.15 %
+ * 6 ARITH ops
+
+- arith.constant:    6 occurrences  (f32: 6)
+
+
+
+  (f32: 3)
+  (f32: 1)
+fully_quantize: 0, inference_type: 6, input_inference_type: INT8, output_inference_type: FLOAT32
+C:\Users\AbdulAda\AppData\Local\Programs\Python\Python311\Lib\site-packages\tensorflow\lite\python\convert.py:953: UserWarning: Statistics for quantized inputs were expected, but not specified; continuing anyway.
+  warnings.warn(
+2026-08-06 10:32:36.530568: W tensorflow/compiler/mlir/lite/python/tf_tfl_flatbuffer_helpers.cc:378] Ignored output_format.
+2026-08-06 10:32:36.530592: W tensorflow/compiler/mlir/lite/python/tf_tfl_flatbuffer_helpers.cc:381] Ignored drop_control_dependency.
+2026-08-06 10:32:36.532028: I tensorflow/cc/saved_model/reader.cc:83] Reading SavedModel from: C:\Users\AbdulAda\AppData\Local\Temp\tmpd2o_ay_i
+2026-08-06 10:32:36.534971: I tensorflow/cc/saved_model/reader.cc:51] Reading meta graph with tags { serve }
+2026-08-06 10:32:36.535001: I tensorflow/cc/saved_model/reader.cc:146] Reading SavedModel debug info (if present) from: C:\Users\AbdulAda\AppData\Local\Temp\tmpd2o_ay_i
+2026-08-06 10:32:36.539707: I tensorflow/cc/saved_model/loader.cc:233] Restoring SavedModel bundle.
+2026-08-06 10:32:36.602220: I tensorflow/cc/saved_model/loader.cc:217] Running initialization op on SavedModel bundle at path: C:\Users\AbdulAda\AppData\Local\Temp\tmpd2o_ay_i
+2026-08-06 10:32:36.617072: I tensorflow/cc/saved_model/loader.cc:316] SavedModel load for tags { serve }; Status: success: OK. Took 85040 microseconds.
+Summary on the non-converted ops:
+---------------------------------
+ * Accepted dialects: tfl, builtin, func
+ * Non-Converted Ops: 6, Total Ops 13, % non-converted = 46.15 %
+ * 6 ARITH ops
+
+- arith.constant:    6 occurrences  (f32: 6)
+
+
+
+  (f32: 3)
+  (f32: 1)
+fully_quantize: 0, inference_type: 6, input_inference_type: INT8, output_inference_type: FLOAT32
+
+[1/2] Downloading public datasets...
+  [maternal_health_risk_uci] cached: 30287 bytes
+  [pima_indians_diabetes] cached: 23278 bytes
+  [haberman_survival] cached: 3103 bytes
+
+[2/2] Training models...
+  preeclampsia_risk: USING REAL UCI Maternal Health Risk (1006 rows)
+  preeclampsia_risk.tflite  (3872 bytes, AUC=0.9666, sens=0.9074, spec=0.9257)
+  SHA-256: bec91691fe59ba1445197c308df29f455a0a2f225d608d0ef053bbd229d3a175
+  neonatal_sepsis.tflite  (3952 bytes, AUC=0.7789, sens=0.7661, spec=0.6473)
+  SHA-256: 1fc0d2f0a9f8a994dceb144e95582748860aac30ad7ed77bd44be884f80ee10c
+  child_pneumonia.tflite  (3632 bytes, AUC=0.7532, sens=0.9256, spec=0.4499)
+  SHA-256: 4ff269d018cf63cc5b2da024ad11de3c6dda9b69a0ea4db71ad23add9c576909
+  lbw_sga.tflite  (3664 bytes, AUC=0.5873, sens=0.4102, spec=0.7319)
+  SHA-256: 4c37bd121d1ab1f7e27c0645541b78f5836f3155e06f413d8dec5fc629878295
+
+[OK] Real TFLite model pack written to assets/models/
+Run: flutter run    (then open My Work -> Offline AI Model Pack)

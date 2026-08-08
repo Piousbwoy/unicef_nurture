@@ -70,10 +70,26 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
   final _fhr = TextEditingController();
   final _temp = TextEditingController();
   final _pulse = TextEditingController();
-  int? _proteinuria;
+  final _involutionCm = TextEditingController();
+  int? _urineProtein;
+  // ignore: unnecessary_getters_setters - kept as alias for backwards compatibility
+  int? get _proteinuria => _urineProtein;
+  set _proteinuria(int? v) => _urineProtein = v;
+  int? _urineGlucose;
+  int? _urineKetones;
+  int? _urineBlood;
+
+  // ------------------------------------------------------------ Blood + Lab
+  String? _bloodGroup;
+  bool? _rhesusPositive;
+  String? _sickleGenotype;
 
   // ------------------------------------------------------------ Danger signs
   final Set<String> _signs = {};
+  final Set<String> _peFlags = {};
+  final Set<String> _pmhx = {};
+  final Set<String> _woundFlags = {};
+  final Set<String> _breastFlags = {};
 
   // ------------------------------------------------------------------ History
   bool _prevStillbirth = false;
@@ -97,6 +113,7 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
   bool? _sad;
   bool? _noInterest;
   bool _selfHarm = false;
+  final List<int?> _epds = List<int?>.filled(10, null);
   bool? _bfEstablished;
   bool? _bfOneHour;
   bool _otherFoods = false;
@@ -105,6 +122,12 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
   bool? _vitA;
   int? _pncContacts;
   bool _hadPph = false;
+  String? _lochiaColour;
+  String? _lochiaOdour;
+  String? _lochiaAmount;
+  bool? _woundApproximated;
+  bool? _attachmentOk;
+  bool? _letDownOk;
 
   @override
   void initState() {
@@ -152,6 +175,7 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
     _fhr,
     _temp,
     _pulse,
+    _involutionCm,
     _complaint,
   ];
 
@@ -177,6 +201,89 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
     }
     return null;
   }
+
+  static const List<List<String>> _epdsCaptions = [
+    [
+      'As much as I always could',
+      'Not quite so much now',
+      'Definitely less than I used to',
+      'Hardly at all',
+    ],
+    [
+      'As much as I ever did',
+      'Rather less than I used to',
+      'Definitely less than I used to',
+      'Hardly any',
+    ],
+    [
+      'No, never',
+      'Hardly ever',
+      'Yes, sometimes',
+      'Yes, most of the time',
+    ],
+    [
+      'No, not at all',
+      'Sometimes',
+      'Yes, very often',
+      'Yes, very much indeed',
+    ],
+    [
+      'No, not at all',
+      'Sometimes',
+      'Often',
+      'Very often',
+    ],
+    [
+      'No, I coped all right',
+      'Rarely',
+      'Yes, sometimes',
+      'Most of the time',
+    ],
+    [
+      'No, not at all',
+      'Not very often',
+      'Yes, quite often',
+      'Yes, most of the time',
+    ],
+    [
+      'No, not at all',
+      'Seldom',
+      'Yes, quite a lot',
+      'Yes, very often',
+    ],
+    [
+      'No, never',
+      'Only occasionally',
+      'Quite often',
+      'Most of the time',
+    ],
+    [
+      'Never',
+      'Hardly ever',
+      'Sometimes',
+      'Quite often',
+    ],
+  ];
+
+  static const List<String> _epdsQuestions = [
+    'Q1. I have been able to laugh and see the funny side of things',
+    'Q2. I have looked forward with enjoyment to things',
+    'Q3. I have blamed myself unnecessarily when things went wrong',
+    'Q4. I have been anxious or worried for no good reason',
+    'Q5. I have felt scared or panicky for no very good reason',
+    'Q6. Things have been getting on top of me',
+    'Q7. I have been so unhappy that I have had difficulty sleeping',
+    'Q8. I have felt sad or miserable',
+    'Q9. I have been so unhappy that I have been crying',
+    'Q10. The thought of harming myself has occurred to me',
+  ];
+
+  int? get _epdsScore {
+    if (_epds.any((v) => v == null)) return null;
+    return _epds.fold<int>(0, (a, b) => a + (b ?? 0));
+  }
+
+  String _epdsCaption(int q, int v) => _epdsCaptions[q][v];
 
   @override
   Widget build(BuildContext context) {
@@ -520,6 +627,177 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
           ],
         ),
       ),
+      const SizedBox(height: Gap.lg),
+
+      SectionCard(
+        title: 'Blood group and genotype',
+        icon: Icons.bloodtype_outlined,
+        child: Column(
+          children: [
+            ChoiceChipsField<String>(
+              label: 'Blood group',
+              options: const ['A', 'B', 'AB', 'O'],
+              labelOf: (v) => v,
+              value: _bloodGroup,
+              onChanged: (v) => setState(() => _bloodGroup = v),
+            ),
+            YesNoField(
+              value: _rhesusPositive,
+              yesLabel: 'Rh positive',
+              noLabel: 'Rh negative',
+              onChanged: (v) => setState(() => _rhesusPositive = v),
+            ),
+            const SizedBox(height: Gap.md),
+            ChoiceChipsField<String>(
+              label: 'Sickle-cell genotype',
+              options: const ['AA', 'AS', 'SS', 'SC', 'unknown'],
+              labelOf: (v) => v,
+              value: _sickleGenotype,
+              onChanged: (v) => setState(() => _sickleGenotype = v),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: Gap.lg),
+
+      SectionCard(
+        title: 'Urine test strips (4 parameters)',
+        child: Column(
+          children: [
+            ChoiceChipsField<int>(
+              label: 'Protein',
+              why: 'With high BP this separates gestational hypertension '
+                  'from pre-eclampsia.',
+              options: const [0, 1, 2, 3, 4],
+              labelOf: (v) => v == 0 ? 'Nil' : '+$v',
+              value: _proteinuria,
+              onChanged: (v) => setState(() => _proteinuria = v),
+            ),
+            ChoiceChipsField<int>(
+              label: 'Glucose',
+              options: const [0, 1, 2, 3, 4],
+              labelOf: (v) => v == 0 ? 'Nil' : '+$v',
+              value: _urineGlucose,
+              onChanged: (v) => setState(() => _urineGlucose = v),
+            ),
+            ChoiceChipsField<int>(
+              label: 'Ketones',
+              options: const [0, 1, 2, 3, 4],
+              labelOf: (v) => v == 0 ? 'Nil' : '+$v',
+              value: _urineKetones,
+              onChanged: (v) => setState(() => _urineKetones = v),
+            ),
+            ChoiceChipsField<int>(
+              label: 'Blood',
+              options: const [0, 1, 2, 3, 4],
+              labelOf: (v) => v == 0 ? 'Nil' : '+$v',
+              value: _urineBlood,
+              onChanged: (v) => setState(() => _urineBlood = v),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: Gap.lg),
+
+      SectionCard(
+        title: 'Pre-eclampsia symptoms',
+        accent: AppColors.triageRed,
+        child: SignChecklist(
+          signs: const [
+            ('oedema_hands_or_face', 'Swelling of hands or face'),
+            ('epigastric_pain', 'Epigastric / upper right abdominal pain'),
+            ('headache_severe', 'Severe persistent headache'),
+            ('blurred_vision', 'Blurred vision / flashing lights'),
+            ('brisk_reflexes', 'Brisk reflexes or clonus'),
+            ('oliguria', 'Passing very little urine'),
+            ('weight_gain_over_1kg_per_week', 'Weight gain >1 kg in one week'),
+          ],
+          selected: _peFlags,
+          onToggle: (k, on) =>
+              setState(() => on ? _peFlags.add(k) : _peFlags.remove(k)),
+        ),
+      ),
+      const SizedBox(height: Gap.lg),
+
+      SectionCard(
+        title: 'Past medical / surgical history',
+        child: Column(
+          children: [
+            DangerSign(
+              label: 'Previous hypertension',
+              danger: false,
+              allowUnknown: false,
+              value: _pmhx.contains('prev_hypertension'),
+              onChanged: (v) => setState(() => v == true
+                  ? _pmhx.add('prev_hypertension')
+                  : _pmhx.remove('prev_hypertension')),
+            ),
+            DangerSign(
+              label: 'Previous diabetes',
+              danger: false,
+              allowUnknown: false,
+              value: _pmhx.contains('prev_diabetes'),
+              onChanged: (v) => setState(() => v == true
+                  ? _pmhx.add('prev_diabetes')
+                  : _pmhx.remove('prev_diabetes')),
+            ),
+            DangerSign(
+              label: 'Previous anaemia',
+              danger: false,
+              allowUnknown: false,
+              value: _pmhx.contains('prev_anaemia'),
+              onChanged: (v) => setState(() => v == true
+                  ? _pmhx.add('prev_anaemia')
+                  : _pmhx.remove('prev_anaemia')),
+            ),
+            DangerSign(
+              label: 'Previous tuberculosis (TB)',
+              danger: false,
+              allowUnknown: false,
+              value: _pmhx.contains('prev_tb'),
+              onChanged: (v) => setState(() => v == true
+                  ? _pmhx.add('prev_tb')
+                  : _pmhx.remove('prev_tb')),
+            ),
+            DangerSign(
+              label: 'Asthma',
+              danger: false,
+              allowUnknown: false,
+              value: _pmhx.contains('prev_asthma'),
+              onChanged: (v) => setState(() => v == true
+                  ? _pmhx.add('prev_asthma')
+                  : _pmhx.remove('prev_asthma')),
+            ),
+            DangerSign(
+              label: 'Heart disease',
+              danger: false,
+              allowUnknown: false,
+              value: _pmhx.contains('prev_heart_disease'),
+              onChanged: (v) => setState(() => v == true
+                  ? _pmhx.add('prev_heart_disease')
+                  : _pmhx.remove('prev_heart_disease')),
+            ),
+            DangerSign(
+              label: 'Kidney disease',
+              danger: false,
+              allowUnknown: false,
+              value: _pmhx.contains('prev_kidney_disease'),
+              onChanged: (v) => setState(() => v == true
+                  ? _pmhx.add('prev_kidney_disease')
+                  : _pmhx.remove('prev_kidney_disease')),
+            ),
+            DangerSign(
+              label: 'Hepatitis',
+              danger: false,
+              allowUnknown: false,
+              value: _pmhx.contains('prev_hepatitis'),
+              onChanged: (v) => setState(() => v == true
+                  ? _pmhx.add('prev_hepatitis')
+                  : _pmhx.remove('prev_hepatitis')),
+            ),
+          ],
+        ),
+      ),
     ];
   }
 
@@ -699,30 +977,277 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
       SectionCard(
         title: 'How is she feeling?',
         subtitle:
-            'Postnatal depression is routinely missed and quietly undermines '
-            'every feeding decision she makes. Ask gently, in her language.',
+            'Edinburgh Postnatal Depression Scale (EPDS) · 10 items · '
+            'Ask gently, in her language.',
         icon: Icons.psychology_outlined,
+        accent: (_epds[9] ?? 0) >= 1 ? AppColors.triageRed : null,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (int q = 0; q < 10; q++) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: Gap.sm),
+                child: Text(
+                  _epdsQuestions[q],
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: q == 9 && (_epds[9] ?? 0) >= 1
+                        ? AppColors.triageRed
+                        : AppColors.ink,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+              SliderTheme(
+                data: SliderThemeData(
+                  activeTrackColor: q == 9 && (_epds[9] ?? 0) >= 1
+                      ? AppColors.triageRed
+                      : AppColors.primary,
+                  thumbColor: q == 9 && (_epds[9] ?? 0) >= 1
+                      ? AppColors.triageRed
+                      : AppColors.primary,
+                  valueIndicatorColor: AppColors.primary,
+                ),
+                child: Slider(
+                  value: (_epds[q] ?? 0).toDouble(),
+                  min: 0,
+                  max: 3,
+                  divisions: 3,
+                  label: _epds[q] == null ? '—' : '${_epds[q]}',
+                  onChanged: (d) {
+                    setState(() {
+                      _epds[q] = d.round();
+                      if (q == 9) {
+                        _selfHarm = _epds[9]! >= 1;
+                      }
+                    });
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: Gap.md, left: Gap.sm, right: Gap.sm),
+                child: Text(
+                  _epds[q] == null ? 'Not answered' : _epdsCaption(q, _epds[q]!),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.inkMuted,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: Gap.sm),
+            Builder(
+              builder: (context) {
+                final score = _epdsScore;
+                final Color badgeColor;
+                final String label;
+                final String risk;
+                if (score == null) {
+                  badgeColor = AppColors.inkFaint;
+                  label = '—';
+                  risk = 'Answer all 10 items';
+                } else if (score >= 20 || (_epds[9] ?? 0) >= 1) {
+                  badgeColor = AppColors.triageRed;
+                  label = '$score / 30';
+                  risk = (_epds[9] ?? 0) >= 1
+                      ? 'SEVERE · self-harm ideation · immediate referral'
+                      : 'SEVERE · immediate referral';
+                } else if (score >= 13) {
+                  badgeColor = AppColors.triageAmber;
+                  label = '$score / 30';
+                  risk = 'Probable depression · consider referral';
+                } else {
+                  badgeColor = AppColors.triageGreen;
+                  label = '$score / 30';
+                  risk = 'Low';
+                }
+                return Container(
+                  padding: const EdgeInsets.all(Gap.md),
+                  decoration: BoxDecoration(
+                    color: badgeColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(Gap.radiusSm),
+                    border: Border.all(color: badgeColor, width: Gap.hairline),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: Gap.md,
+                          vertical: Gap.sm,
+                        ),
+                        decoration: BoxDecoration(
+                          color: badgeColor,
+                          borderRadius: BorderRadius.circular(Gap.radiusSm),
+                        ),
+                        child: Text(
+                          label,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: Gap.md),
+                      Expanded(
+                        child: Text(
+                          risk,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: badgeColor,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: Gap.lg),
+
+      SectionCard(
+        title: 'Uterus, lochia and perineum',
+        icon: Icons.medication_outlined,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            MeasureField(
+              label: 'Uterus (involution cm below umbilicus)',
+              controller: _involutionCm,
+              unit: 'cm',
+              cutoff: 'Day1: ~1 cm, Day10: above pubic symphysis',
+            ),
+            ChoiceChipsField<String>(
+              label: 'Lochia colour',
+              options: const ['rubra', 'serosa', 'alba'],
+              labelOf: (v) => switch (v) {
+                'rubra' => 'Red/dark red (1–3d)',
+                'serosa' => 'Pink/brown (4–10d)',
+                'alba' => 'Yellow/white (11d+)',
+                _ => v,
+              },
+              value: _lochiaColour,
+              onChanged: (v) => setState(() => _lochiaColour = v),
+            ),
+            ChoiceChipsField<String>(
+              label: 'Lochia odour',
+              options: const ['normal', 'offensive'],
+              labelOf: (v) => switch (v) {
+                'normal' => 'Normal',
+                'offensive' => 'Offensive/foul',
+                _ => v,
+              },
+              value: _lochiaOdour,
+              dangerIf: (v) => v == 'offensive',
+              onChanged: (v) => setState(() => _lochiaOdour = v),
+            ),
+            ChoiceChipsField<String>(
+              label: 'Lochia amount',
+              options: const ['scant', 'moderate', 'heavy'],
+              labelOf: (v) => switch (v) {
+                'scant' => 'Scant',
+                'moderate' => 'Moderate',
+                'heavy' => 'Heavy',
+                _ => v,
+              },
+              value: _lochiaAmount,
+              dangerIf: (v) => v == 'heavy',
+              onChanged: (v) => setState(() => _lochiaAmount = v),
+            ),
+            DangerSign(
+              label: 'Episiotomy or laceration present',
+              danger: false,
+              allowUnknown: false,
+              value: _woundFlags.contains('episiotomy_or_laceration'),
+              onChanged: (v) => setState(() => v == true
+                  ? _woundFlags.add('episiotomy_or_laceration')
+                  : _woundFlags.remove('episiotomy_or_laceration')),
+            ),
+            DangerSign(
+              label: 'Wound redness',
+              value: _woundFlags.contains('wound_redness'),
+              allowUnknown: true,
+              onChanged: (v) => setState(() => v == true
+                  ? _woundFlags.add('wound_redness')
+                  : _woundFlags.remove('wound_redness')),
+            ),
+            DangerSign(
+              label: 'Wound oedema / swelling',
+              value: _woundFlags.contains('wound_oedema'),
+              allowUnknown: true,
+              onChanged: (v) => setState(() => v == true
+                  ? _woundFlags.add('wound_oedema')
+                  : _woundFlags.remove('wound_oedema')),
+            ),
+            DangerSign(
+              label: 'Wound discharge / pus',
+              value: _woundFlags.contains('wound_discharge'),
+              allowUnknown: true,
+              onChanged: (v) => setState(() => v == true
+                  ? _woundFlags.add('wound_discharge')
+                  : _woundFlags.remove('wound_discharge')),
+            ),
+            DangerSign(
+              label: 'Wound edges well approximated (closed)',
+              danger: false,
+              allowUnknown: true,
+              value: _woundApproximated,
+              onChanged: (v) => setState(() => _woundApproximated = v),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: Gap.lg),
+
+      SectionCard(
+        title: 'Breast and attachment',
         child: Column(
           children: [
             DangerSign(
-              label: 'Sad or tearful most days',
-              danger: false,
-              value: _sad,
+              label: 'Nipples cracked',
+              value: _breastFlags.contains('nipples_cracked'),
               allowUnknown: true,
-              onChanged: (v) => setState(() => _sad = v),
+              onChanged: (v) => setState(() => v == true
+                  ? _breastFlags.add('nipples_cracked')
+                  : _breastFlags.remove('nipples_cracked')),
             ),
             DangerSign(
-              label: 'Lost interest in the baby',
+              label: 'Nipples inverted',
               danger: false,
-              value: _noInterest,
               allowUnknown: true,
-              onChanged: (v) => setState(() => _noInterest = v),
+              value: _breastFlags.contains('nipples_inverted'),
+              onChanged: (v) => setState(() => v == true
+                  ? _breastFlags.add('nipples_inverted')
+                  : _breastFlags.remove('nipples_inverted')),
             ),
             DangerSign(
-              label: 'Thoughts of harming herself',
-              why: 'A yes is an urgent referral, whatever else is normal.',
-              value: _selfHarm,
-              onChanged: (v) => setState(() => _selfHarm = v ?? false),
+              label: 'Breast mastitis signs (red/hot/tender lump)',
+              value: _breastFlags.contains('breast_mastitis_signs'),
+              allowUnknown: true,
+              onChanged: (v) => setState(() => v == true
+                  ? _breastFlags.add('breast_mastitis_signs')
+                  : _breastFlags.remove('breast_mastitis_signs')),
+            ),
+            DangerSign(
+              label: 'Attachment to breast is OK',
+              danger: false,
+              allowUnknown: true,
+              value: _attachmentOk,
+              onChanged: (v) => setState(() => _attachmentOk = v),
+            ),
+            DangerSign(
+              label: 'Let-down / milk ejection is OK',
+              danger: false,
+              allowUnknown: true,
+              value: _letDownOk,
+              onChanged: (v) => setState(() => _letDownOk = v),
             ),
           ],
         ),
@@ -1046,7 +1571,7 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
         : _complaint.text.trim(),
     feelingSadMostDays: _sad,
     lostInterestInBaby: _noInterest,
-    thoughtsOfSelfHarm: _selfHarm,
+    thoughtsOfSelfHarm: _selfHarm || (_epds[9] ?? 0) >= 1,
     breastfeedingEstablished: _babyAlive ? _bfEstablished : null,
     breastfedWithinOneHourOfBirth: _babyAlive ? _bfOneHour : null,
     givingOtherFoodsOrWater: _babyAlive ? _otherFoods : false,
@@ -1098,7 +1623,15 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
     'fundal_height_cm': parseInt(_fundal),
     'foetal_heart_rate': parseInt(_fhr),
     'proteinuria': _proteinuria,
+    'urine_glucose': _urineGlucose,
+    'urine_ketones': _urineKetones,
+    'urine_blood': _urineBlood,
+    'blood_group': _bloodGroup,
+    'rhesus_positive': _rhesusPositive,
+    'sickle_genotype': _sickleGenotype,
     'danger_signs': _signs.toList()..sort(),
+    'pre_eclampsia_flags': _peFlags.toList()..sort(),
+    'past_medical_history': _pmhx.toList()..sort(),
     'previous_stillbirth': _prevStillbirth,
     'previous_pph': _prevPph,
     'skilled_support_at_home': _skilledSupport,
@@ -1125,11 +1658,31 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
     'haemoglobin': parseDouble(_hb),
     'muac_cm': parseDouble(_muac),
     'pulse': parseInt(_pulse),
+    'involution_cm_below_umbilicus': parseInt(_involutionCm),
+    'lochia_colour': _lochiaColour,
+    'lochia_odour': _lochiaOdour,
+    'lochia_amount': _lochiaAmount,
+    'wound_flags': _woundFlags.toList()..sort(),
+    'wound_approximated': _woundApproximated,
+    'breast_flags': _breastFlags.toList()..sort(),
+    'breast_attachment_ok': _attachmentOk,
+    'breast_let_down_ok': _letDownOk,
     'danger_signs': _signs.toList()..sort(),
     'had_pph_this_delivery': _hadPph,
     'sad_most_days': _sad,
     'lost_interest_in_baby': _noInterest,
     'thoughts_of_self_harm': _selfHarm,
+    'epds_q1_laugh': _epds[0],
+    'epds_q2_enjoy': _epds[1],
+    'epds_q3_blame': _epds[2],
+    'epds_q4_anxious': _epds[3],
+    'epds_q5_scared': _epds[4],
+    'epds_q6_overwhelm': _epds[5],
+    'epds_q7_sleep': _epds[6],
+    'epds_q8_sad': _epds[7],
+    'epds_q9_cry': _epds[8],
+    'epds_q10_self_harm': _epds[9],
+    'epds_total': _epdsScore,
     'breastfeeding_established': _bfEstablished,
     'breastfed_within_one_hour': _bfOneHour,
     'other_foods_or_water': _otherFoods,

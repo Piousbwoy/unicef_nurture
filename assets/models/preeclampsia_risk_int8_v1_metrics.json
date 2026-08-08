@@ -1,0 +1,359 @@
+{
+  "model_name": "preeclampsia_risk",
+  "model_version": "v1.0-ghana-baseline-public-data-and-ghana-priors",
+  "version_ladder": {
+    "this": "v1.0-ghana-baseline",
+    "next": "v2.0-kintampo-cohort",
+    "v3_prospective": "v3.0-prospective-pilot"
+  },
+  "training_dataset": "[M1] Adokiya 2022 (Hb); [M7] Charadan 2025 (PIH); [M8] Bugri 2023 (HTN); [M9] Boafo 2025 (PE meta)",
+  "ghana_calibration": {
+    "priors_used": [
+      "[M1]",
+      "[M4]",
+      "[M7]",
+      "[M8]",
+      "[M9]"
+    ],
+    "external_validation": {
+      "dataset": "UCI Machine Learning Repository: Maternal Health Risk Data Set (Ahmed M. UCI ML Repository, 2018). Public, no PHI. 1,013 rows. 6 features: Age, SystolicBP, DiastolicBP, BS, BodyTemp, HeartRate. Target: low/mid/high risk. Note: Bangladesh-origin, used as held-out external validation set, NOT for training.",
+      "n": 1006,
+      "holdout_auc": 0.7365,
+      "sensitivity": 0.5279,
+      "specificity": 0.9607,
+      "youden_j": 0.4885,
+      "best_threshold": 0.18,
+      "calibrated_brier": 0.1846
+    }
+  },
+  "clinical_note": "v1.0 Ghana baseline. Simulator cohort seeded from 5 peer-reviewed Ghanaian clinical studies (DOIs in `priors_used`); UCI Maternal Health Risk used as held-out external validation set. Calibration via Platt scaling on the internal 20% hold-out; 95% CI derived from per-bin Platt-residual std; drift detection via per-feature z-score against the training distribution.",
+  "validation": {
+    "internal": {
+      "holdout_auc": 1.0,
+      "sensitivity": 1.0,
+      "specificity": 0.9994,
+      "youden_j": 0.9994,
+      "best_threshold": 0.5,
+      "n_train": 8000,
+      "n_test": 2000,
+      "calibration": {
+        "method": "platt_scaling",
+        "A": 3.173835,
+        "B": -0.467574,
+        "brier_score": 0.1357,
+        "ci_table": [
+          {
+            "bin_lo": 0.0,
+            "bin_hi": 0.1,
+            "bin_mid": 0.05,
+            "residual_std": null,
+            "n": 0
+          },
+          {
+            "bin_lo": 0.1,
+            "bin_hi": 0.2,
+            "bin_mid": 0.15,
+            "residual_std": null,
+            "n": 0
+          },
+          {
+            "bin_lo": 0.2,
+            "bin_hi": 0.3,
+            "bin_mid": 0.25,
+            "residual_std": null,
+            "n": 0
+          },
+          {
+            "bin_lo": 0.3,
+            "bin_hi": 0.4,
+            "bin_mid": 0.35,
+            "residual_std": 0.0033,
+            "n": 1365
+          },
+          {
+            "bin_lo": 0.4,
+            "bin_hi": 0.5,
+            "bin_mid": 0.45,
+            "residual_std": 0.0216,
+            "n": 258
+          },
+          {
+            "bin_lo": 0.5,
+            "bin_hi": 0.6,
+            "bin_mid": 0.55,
+            "residual_std": 0.0286,
+            "n": 26
+          },
+          {
+            "bin_lo": 0.6,
+            "bin_hi": 0.7,
+            "bin_mid": 0.65,
+            "residual_std": 0.0258,
+            "n": 15
+          },
+          {
+            "bin_lo": 0.7,
+            "bin_hi": 0.8,
+            "bin_mid": 0.75,
+            "residual_std": 0.4485,
+            "n": 8
+          },
+          {
+            "bin_lo": 0.8,
+            "bin_hi": 0.9,
+            "bin_mid": 0.85,
+            "residual_std": 0.163,
+            "n": 36
+          },
+          {
+            "bin_lo": 0.9,
+            "bin_hi": 1.0,
+            "bin_mid": 0.95,
+            "residual_std": 0.009,
+            "n": 292
+          }
+        ]
+      }
+    },
+    "external": {
+      "dataset": "UCI Machine Learning Repository: Maternal Health Risk Data Set (Ahmed M. UCI ML Repository, 2018). Public, no PHI. 1,013 rows. 6 features: Age, SystolicBP, DiastolicBP, BS, BodyTemp, HeartRate. Target: low/mid/high risk. Note: Bangladesh-origin, used as held-out external validation set, NOT for training.",
+      "n": 1006,
+      "holdout_auc": 0.7365,
+      "sensitivity": 0.5279,
+      "specificity": 0.9607,
+      "youden_j": 0.4885,
+      "best_threshold": 0.18,
+      "calibrated_brier": 0.1846
+    }
+  },
+  "drift_baseline": {
+    "z_threshold": 3.5,
+    "min_z_threshold": 2.5,
+    "features": [
+      {
+        "feature": "maternal_age",
+        "mean": 0.3643,
+        "std": 0.1649,
+        "p_lo": 0.0,
+        "p_hi": 0.8023
+      },
+      {
+        "feature": "gravida",
+        "mean": 0.2118,
+        "std": 0.12,
+        "p_lo": 0.0,
+        "p_hi": 0.5337
+      },
+      {
+        "feature": "parity",
+        "mean": 0.1627,
+        "std": 0.1285,
+        "p_lo": 0.0,
+        "p_hi": 0.5204
+      },
+      {
+        "feature": "systolic_bp",
+        "mean": 0.3677,
+        "std": 0.1865,
+        "p_lo": 0.0597,
+        "p_hi": 1.0
+      },
+      {
+        "feature": "diastolic_bp",
+        "mean": 0.3076,
+        "std": 0.169,
+        "p_lo": 0.0055,
+        "p_hi": 0.8764
+      },
+      {
+        "feature": "haemoglobin",
+        "mean": 0.4293,
+        "std": 0.1092,
+        "p_lo": 0.1493,
+        "p_hi": 0.7088
+      },
+      {
+        "feature": "urine_protein",
+        "mean": 0.1451,
+        "std": 0.2558,
+        "p_lo": 0.0,
+        "p_hi": 1.0
+      },
+      {
+        "feature": "maternal_muac_mm",
+        "mean": 0.5008,
+        "std": 0.1988,
+        "p_lo": 0.0,
+        "p_hi": 1.0
+      },
+      {
+        "feature": "maternal_bmi",
+        "mean": 0.2997,
+        "std": 0.1302,
+        "p_lo": 0.0,
+        "p_hi": 0.6416
+      },
+      {
+        "feature": "oedema_hands_or_face",
+        "mean": 0.0919,
+        "std": 0.2888,
+        "p_lo": 0.0,
+        "p_hi": 1.0
+      },
+      {
+        "feature": "epigastric_pain",
+        "mean": 0.0905,
+        "std": 0.2869,
+        "p_lo": 0.0,
+        "p_hi": 1.0
+      },
+      {
+        "feature": "headache_severe",
+        "mean": 0.0889,
+        "std": 0.2846,
+        "p_lo": 0.0,
+        "p_hi": 1.0
+      },
+      {
+        "feature": "blurred_vision",
+        "mean": 0.0932,
+        "std": 0.2908,
+        "p_lo": 0.0,
+        "p_hi": 1.0
+      },
+      {
+        "feature": "brisk_reflexes",
+        "mean": 0.0901,
+        "std": 0.2864,
+        "p_lo": 0.0,
+        "p_hi": 1.0
+      },
+      {
+        "feature": "oliguria",
+        "mean": 0.0915,
+        "std": 0.2883,
+        "p_lo": 0.0,
+        "p_hi": 1.0
+      },
+      {
+        "feature": "weight_gain_over_1kg_per_week",
+        "mean": 0.0896,
+        "std": 0.2856,
+        "p_lo": 0.0,
+        "p_hi": 1.0
+      },
+      {
+        "feature": "previous_losses",
+        "mean": 0.0116,
+        "std": 0.0362,
+        "p_lo": 0.0,
+        "p_hi": 0.125
+      },
+      {
+        "feature": "prev_caesarean",
+        "mean": 0.0866,
+        "std": 0.2813,
+        "p_lo": 0.0,
+        "p_hi": 1.0
+      }
+    ]
+  },
+  "input_feature_order": [
+    "maternal_age",
+    "gravida",
+    "parity",
+    "systolic_bp",
+    "diastolic_bp",
+    "haemoglobin",
+    "urine_protein",
+    "maternal_muac_mm",
+    "maternal_bmi",
+    "oedema_hands_or_face",
+    "epigastric_pain",
+    "headache_severe",
+    "blurred_vision",
+    "brisk_reflexes",
+    "oliguria",
+    "weight_gain_over_1kg_per_week",
+    "previous_losses",
+    "prev_caesarean"
+  ],
+  "input_quantization": {
+    "scale": 0.0078125,
+    "zero_point": -128
+  },
+  "tflite_sha256": "324a379050f0cfb0740bd1c2ab99d35c57665e0edf5f1a9eb504f57e96d08a5f",
+  "trained_on": "2026-08-06",
+  "provenance": {
+    "[M1]": {
+      "short": "Adokiya 2022, Women & Health",
+      "citation": "Adokiya MN, Abodoon GN, Boah M. Prevalence and determinants of anaemia during third trimester of pregnancy: a retrospective cohort study of women in the northern region of Ghana. Women & Health. 2022;62(2):168-179.",
+      "doi_or_url": "doi:10.1080/03630242.2022.2030450",
+      "n": 359,
+      "setting": "Tatale-Sanguli + Zabzugu, Northern Region"
+    },
+    "[M4]": {
+      "short": "Adjei-Gyamfi 2023, medRxiv",
+      "citation": "Adjei-Gyamfi S, Zakaria MS, Asirifi A, et al. Maternal anaemia and polycythaemia during pregnancy and risk of inappropriate birthweight for-gestational-age babies in northern belt of Ghana. medRxiv. 2023.",
+      "doi_or_url": "doi:10.1101/2023.11.19.23298744",
+      "n": 422,
+      "setting": "5 primary/public health facilities, Northern Region"
+    },
+    "[M8]": {
+      "short": "Bugri 2023, IJERPH",
+      "citation": "Bugri AA, Gumanga SK, Yamoah P, et al. Prevalence of Hypertensive Disorders, Antihypertensive Therapy and Pregnancy Outcomes among Pregnant Women at Tamale Teaching Hospital, Ghana. Int J Environ Res Public Health. 2023;20(12):6153.",
+      "doi_or_url": "doi:10.3390/ijerph20126153",
+      "n": 843,
+      "setting": "TTH, 2018-2019"
+    },
+    "[M7]": {
+      "short": "Charadan 2025, OALib",
+      "citation": "Charadan AMS, Boamah KO, Hernandez S. Prevalence, Risk Factors, and Outcomes of Pregnancy-Induced Hypertension at Tamale Teaching Hospital, Northern Region. Open Access Library Journal. 2025;12(6):1-21.",
+      "doi_or_url": "doi:10.4236/oalib.1113362",
+      "n": 115,
+      "setting": "TTH"
+    },
+    "[M9]": {
+      "short": "Boafo 2025, HSR meta-analysis",
+      "citation": "Boafo EA, Amponsah RD, Atiase Y, et al. Pre-Eclampsia Among Pregnant Women in Ghana: A Systematic Review & Meta-Analysis. Health Science Reports. 2025;9(7):e72622.",
+      "doi_or_url": "doi:10.1002/hsr2.72622",
+      "n": null,
+      "setting": "Meta-analysis, 14 studies 2015-2025"
+    },
+    "[M3]": {
+      "short": "Adjei-Gyamfi 2023, J Health Popul Nutr",
+      "citation": "Adjei-Gyamfi S, Musah B, Asirifi A, et al. Maternal risk factors for low birthweight and macrosomia: a cross-sectional study in Northern Region, Ghana. J Health Popul Nutr. 2023;42(1):87.",
+      "doi_or_url": "doi:10.1186/s41043-023-00443-0",
+      "n": 356,
+      "setting": "Savelugu municipality, 2022"
+    },
+    "[M6]": {
+      "short": "Abubakari 2023, PAMJ",
+      "citation": "Abubakari A, Asumah MN, Abdulai NZ. Effect of maternal dietary habits and gestational weight gain on birth weight in the Tamale Metropolis. Pan Afr Med J. 2023;44:19.",
+      "doi_or_url": "doi:10.11604/pamj.2023.44.19.38036",
+      "n": 316,
+      "setting": "Tamale Metropolis"
+    },
+    "[M5]": {
+      "short": "Fosu 2013, GSS MICS",
+      "citation": "Fosu MO, Munyakazi L, Nsowah-Nuamah NNN. Low Birth Weight and Associated Maternal Factors in Ghana. IISTE JBAM. 2013;3(7).",
+      "doi_or_url": "https://www.iiste.org/Journals/index.php/JBAH/article/view/6341",
+      "n": 10963,
+      "setting": "Ghana MICS 2011, national + regional"
+    },
+    "[M11]+[M14]": {
+      "short": "Opiyo 2011 + WHO IMCI 2014",
+      "citation": "Opiyo N, English M. What clinical signs best identify severe illness in young infants aged 0-59 days? Arch Dis Child. 2011;96(11):1052. + WHO IMCI Chart Booklet 2014.",
+      "doi_or_url": "doi:10.1136/adc.2010.186049",
+      "n": null,
+      "setting": "Systematic review of 0-59d predictors + WHO IMCI"
+    },
+    "[M10]": {
+      "short": "Baiden 2011, PLoS ONE",
+      "citation": "Baiden F, Owusu-Agyei S, Bawah J, et al. An Evaluation of the Clinical Assessments of Under-Five Febrile Children Presenting to Primary Health Facilities in Rural Ghana. PLoS ONE. 2011;6(12):e28944.",
+      "doi_or_url": "doi:10.1371/journal.pone.0028944",
+      "n": 1983,
+      "setting": "Kintampo, 10 health centres + 5 district hospitals"
+    }
+  }
+}

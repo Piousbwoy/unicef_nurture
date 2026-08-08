@@ -6,7 +6,9 @@
   "type": "commonjs",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "test": "node test/verify.js",
+    "verify": "node test/verify.js"
   },
   "engines": {
     "node": ">=18"
@@ -14,6 +16,7 @@
   "dependencies": {
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.11.0"
   }
 }

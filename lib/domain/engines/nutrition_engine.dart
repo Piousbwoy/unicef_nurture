@@ -21,6 +21,7 @@ library;
 import '../../data/reference/local_foods.dart';
 import '../enums.dart';
 import '../entities/visit.dart';
+import 'nutrition/therapeutic_supplements.dart';
 
 /// One concrete, costed, seasonal food suggestion with the words to say.
 class FoodSuggestion {
@@ -68,6 +69,7 @@ class NutritionPlan {
     this.diversityGapsFilled = const {},
     this.therapeuticFoodRequired = false,
     this.reviewInDays,
+    this.therapeuticPlan,
   });
 
   final NutritionStatus status;
@@ -95,6 +97,12 @@ class NutritionPlan {
 
   final int? reviewInDays;
 
+  /// Pillar 2: targeted therapeutic supplements (MMS, IFA, RUTF, KMC).
+  /// Empty for normal nutrition status, populated for anaemia in
+  /// pregnancy, LBW, or SAM. Each supplement carries its own WHO/GHS
+  /// citation for the audit log.
+  final TherapeuticPlan? therapeuticPlan;
+
   Map<String, Object?> toJson() => {
     'status': status.name,
     'pathway': pathway.name,
@@ -106,6 +114,25 @@ class NutritionPlan {
     'diversity_gaps_filled': diversityGapsFilled,
     'therapeutic_food_required': therapeuticFoodRequired,
     'review_in_days': reviewInDays,
+    if (therapeuticPlan != null)
+      'therapeutic_plan': {
+        'counselling_headline': therapeuticPlan!.counsellingHeadline,
+        'supplements': [
+          for (final s in therapeuticPlan!.supplements)
+            {
+              'id': s.id,
+              'label': s.label,
+              'dose': s.dose,
+              'schedule': s.schedule,
+              'duration': s.duration,
+              'counselling_note': s.counsellingNote,
+              'contraindications': s.contraindications,
+              'local_sources': s.localSources,
+              'citation': s.citation.toMap(),
+            },
+        ],
+        'activated_by': therapeuticPlan!.activatedBy,
+      },
   };
 }
 
@@ -113,9 +140,27 @@ class NutritionPlan {
 /// food list.
 enum NutritionSubject { child, pregnantWoman, breastfeedingWoman }
 
+/// Sentinel used by [NutritionEngine.plan] when a named food in the
+/// regional stack is not present in the local-food list. Empty name
+/// causes the [LocalFoods.recommend] loop to skip it.
+const _emptyLocalFood = LocalFood(
+  name: '',
+  group: FoodGroup.grainsRootsTubers,
+  nutrients: [],
+  monthsAvailable: [],
+  cost: CostTier.veryLow,
+  householdMeasure: '',
+  minAgeMonths: 0,
+);
+
 abstract final class NutritionEngine {
   /// Builds a plan. [month] is 1–12 so the caller can pass a fixed month in
   /// tests and demos rather than depending on the clock.
+  ///
+  /// [therapeuticContext] feeds the Pillar 2 supplement selector. When
+  /// provided, the plan includes MMS, IFA, KMC and RUTF recommendations
+  /// alongside the local-food list. Each supplement carries its own
+  /// WHO/GHS citation for the audit log.
   static NutritionPlan plan({
     required NutritionSubject subject,
     required NutritionStatus status,
@@ -128,6 +173,7 @@ abstract final class NutritionEngine {
     bool? appetiteTestPassed,
     bool? hasAnyDangerSign,
     bool isAnaemic = false,
+    TherapeuticContext? therapeuticContext,
   }) {
     final season = NorthernGhanaSeason.counsellingNote(month);
     final pathway = _pathway(
@@ -137,6 +183,16 @@ abstract final class NutritionEngine {
       hasBilateralOedema: hasBilateralOedema,
       appetiteTestPassed: appetiteTestPassed,
       hasAnyDangerSign: hasAnyDangerSign,
+    );
+
+    // -------------------------------------------------------------------
+    // Pillar 2: targeted therapeutic supplements. Computed once, used in
+    // both the SAM and the non-SAM branches. The selector picks MMS for
+    // any pregnant woman, IFA for non-pregnant anaemic women, KMC for
+    // LBW infants, and RUTF for SAM children in the OTP age window.
+    // -------------------------------------------------------------------
+    final therapeuticPlan = TherapeuticSupplementSelector.select(
+      context: therapeuticContext ?? const TherapeuticContext(),
     );
 
     // -------------------------------------------------------------------
@@ -157,6 +213,7 @@ abstract final class NutritionEngine {
                   'on its own.',
         seasonNote: season,
         therapeuticFoodRequired: true,
+        therapeuticPlan: therapeuticPlan,
         reviewInDays: inpatient ? 1 : 7,
         suggestions: const [],
         feedingRules: [
@@ -242,6 +299,40 @@ abstract final class NutritionEngine {
     if (isAnaemic ||
         subject == NutritionSubject.pregnantWoman ||
         subject == NutritionSubject.breastfeedingWoman) {
+      // Pillar 2: explicit Northern Ghana iron / protein stack. The
+      // regional therapeutic foods — Bambara beans, Dawadawa, Moringa
+      // (Zogale), and groundnut-fortified millet porridge — are
+      // prioritised in this exact order because the literature on
+      // Northern Ghanaian maternal anaemia (Adokiya 2022, n=420) and
+      // IYCF (Saaka 2015) shows these four are the available, affordable,
+      // culturally-resonant carriers of iron and protein.
+      const northernGhanaStack = [
+        'Moringa leaves',
+        'Dawadawa (locust bean)',
+        'Bambara beans',
+        'Groundnut paste',
+        'Millet',
+      ];
+      final namedFoods = <LocalFood>[];
+      for (final name in northernGhanaStack) {
+        final f = LocalFoods.all.firstWhere(
+          (x) => x.name == name,
+          orElse: () => _emptyLocalFood,
+        );
+        if (f.name.isNotEmpty && f.suitableFor(effectiveAge)) {
+          namedFoods.add(f);
+        }
+      }
+      take(
+        namedFoods,
+        'Regional iron stack. Maternal anaemia reaches 44% in parts of this '
+        'region (Adokiya 2022), and iron tablets alone rarely close the gap. '
+        'Moringa (Zogale) leaves and Dawadawa (Kpalgu) are the two highest-'
+        'iron foods available year-round; Bambara beans (Suma) are the '
+        'regional protein; groundnut-fortified millet porridge is the '
+        'regional complementary food.',
+      );
+      // Then the seasonal iron + vitamin-C fallbacks.
       take(
         LocalFoods.recommend(
           month: month,
@@ -250,8 +341,8 @@ abstract final class NutritionEngine {
           maxCost: maxCost,
           limit: 4,
         ),
-        'Iron-rich. Maternal anaemia reaches 44% in parts of this region, and '
-        'iron tablets alone rarely close the gap.',
+        'Other iron-rich foods in season. Moringa, Dawadawa and Bambara are '
+        'above for a reason — these are the regional anchors.',
       );
       take(
         LocalFoods.recommend(
@@ -262,7 +353,8 @@ abstract final class NutritionEngine {
           limit: 2,
         ),
         'Eaten with the iron food, this roughly doubles how much iron the body '
-        'takes up.',
+        'takes up. Baobab fruit (toose) and Dawadawa soup are the regional '
+        'examples.',
       );
     }
 
@@ -291,8 +383,9 @@ abstract final class NutritionEngine {
         maxCost: maxCost,
       );
       for (final entry in gaps.entries) {
-        gapsFilled[entry.key.label] =
-            entry.value.map((f) => f.name).toList(growable: false);
+        gapsFilled[entry.key.label] = entry.value
+            .map((f) => f.name)
+            .toList(growable: false);
         take(
           entry.value.take(1).toList(),
           'Fills the missing "${entry.key.label}" group — the child ate '
@@ -317,6 +410,7 @@ abstract final class NutritionEngine {
       ),
       mealsPerDayTarget: _mealTarget(subject, ageMonths, stillBreastfeeding),
       diversityGapsFilled: gapsFilled,
+      therapeuticPlan: therapeuticPlan,
       reviewInDays: switch (status) {
         NutritionStatus.severeAcute => 7,
         NutritionStatus.moderateAcute => 14,
@@ -347,7 +441,8 @@ abstract final class NutritionEngine {
       return NutritionPathway.supplementaryFeeding;
     }
 
-    final complicated = hasBilateralOedema ||
+    final complicated =
+        hasBilateralOedema ||
         appetiteTestPassed == false ||
         hasAnyDangerSign == true ||
         ageMonths < 6;
@@ -367,19 +462,21 @@ abstract final class NutritionEngine {
       NutritionStatus.severeAcute =>
         'Severe undernutrition. Supplementary feeding plus intensive '
             'counselling, and a facility review.',
-      NutritionStatus.moderateAcute => subject == NutritionSubject.child
-          ? 'This child is becoming too thin. Acting now, with food the family '
-                'already has, is what stops this becoming severe.'
-          : 'She is undernourished while ${subject == NutritionSubject.pregnantWoman ? 'pregnant' : 'breastfeeding'}. '
-                'She needs one extra meal a day, not just advice to "eat well".',
+      NutritionStatus.moderateAcute =>
+        subject == NutritionSubject.child
+            ? 'This child is becoming too thin. Acting now, with food the family '
+                  'already has, is what stops this becoming severe.'
+            : 'She is undernourished while ${subject == NutritionSubject.pregnantWoman ? 'pregnant' : 'breastfeeding'}. '
+                  'She needs one extra meal a day, not just advice to "eat well".',
       NutritionStatus.atRisk =>
         'Not malnourished yet, but heading the wrong way. Two changes made now '
             'are worth ten made in three months.',
-      NutritionStatus.normal => lean
-          ? 'Nutrition is adequate. The lean season is when this slips, so agree '
-                'now on what the family will do if food runs short.'
-          : 'Nutrition is adequate. Name what the family is doing well, so they '
-                'keep doing it.',
+      NutritionStatus.normal =>
+        lean
+            ? 'Nutrition is adequate. The lean season is when this slips, so agree '
+                  'now on what the family will do if food runs short.'
+            : 'Nutrition is adequate. Name what the family is doing well, so they '
+                  'keep doing it.',
     };
   }
 
@@ -465,22 +562,22 @@ abstract final class NutritionEngine {
     if (NorthernGhanaSeason.isLean(month)) {
       rules.add(
         'This is the lean season, when granaries are lowest and children lose '
-            'weight. Prioritise the free gathered foods — moringa, baobab leaf, '
-            'ayoyo, kapok leaf — and check this child again in two weeks rather '
-            'than one month.',
+        'weight. Prioritise the free gathered foods — moringa, baobab leaf, '
+        'ayoyo, kapok leaf — and check this child again in two weeks rather '
+        'than one month.',
       );
     } else if (NorthernGhanaSeason.isHarvest(month)) {
       rules.add(
         'It is harvest time. This is the month to build reserves and to dry and '
-            'store leaves and vegetables for the lean months, when there will be '
-            'none.',
+        'store leaves and vegetables for the lean months, when there will be '
+        'none.',
       );
     }
 
     if (status == NutritionStatus.moderateAcute) {
       rules.add(
         'Agree on two changes, not ten. Write them down, and check those two at '
-            'the next visit rather than starting again.',
+        'the next visit rather than starting again.',
       );
     }
 
@@ -489,9 +586,11 @@ abstract final class NutritionEngine {
 
   /// Convenience for the assessment screens: attaches the plan's headline and
   /// first suggestions as recommended actions so nutrition never gets lost at
-  /// the bottom of a clinical list.
+  /// the bottom of a clinical list. Pillar 2 therapeutic supplements are
+  /// surfaced as their own actions (MMS, IFA, RUTF, KMC) so the audit log
+  /// records each prescription individually.
   static List<RecommendedAction> asActions(NutritionPlan plan) {
-    return [
+    final actions = <RecommendedAction>[
       RecommendedAction(
         instruction: plan.headline,
         urgency: plan.therapeuticFoodRequired
@@ -515,5 +614,29 @@ abstract final class NutritionEngine {
           isCounselling: true,
         ),
     ];
+
+    // Pillar 2 supplements as individual recommended actions.
+    final tp = plan.therapeuticPlan;
+    if (tp != null) {
+      for (final s in tp.supplements) {
+        actions.add(
+          RecommendedAction(
+            instruction: '${s.label}: ${s.dose}',
+            urgency: switch (s.id) {
+              'sam_rutf_who2023_v1' => ReferralUrgency.immediate,
+              'kmc_lbw_who2015_v1' => ReferralUrgency.immediate,
+              'anc_mms_who2020_v1' => ReferralUrgency.scheduled,
+              _ => ReferralUrgency.scheduled,
+            },
+            rationale: s.counsellingNote,
+            protocolSource: s.citation.shortName,
+            isTreatment: true,
+            isCounselling: true,
+          ),
+        );
+      }
+    }
+
+    return actions;
   }
 }

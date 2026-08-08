@@ -82,11 +82,9 @@ class ReferralsTab extends ConsumerWidget {
                 children: [
                   if (urgent.isNotEmpty) ...[
                     SectionCard(
-                      title: 'Trace these first',
+                      title: 'Emergency Referral Tracing (Priority 1)',
                       subtitle:
-                          'Urgent referrals that have not been confirmed as '
-                          'arrived. Each one is a family that was told to go '
-                          'and, as far as this phone knows, did not.',
+                          'Immediate and same-day emergency referrals pending facility arrival confirmation. Critical to preventing maternal and neonatal transport delays.',
                       icon: Icons.crisis_alert_rounded,
                       accent: AppColors.triageRed,
                       child: Column(
@@ -99,10 +97,9 @@ class ReferralsTab extends ConsumerWidget {
                   ],
                   if (routine.isNotEmpty) ...[
                     SectionCard(
-                      title: 'Open, not urgent',
+                      title: 'Routine Clinical Referrals',
                       subtitle:
-                          'Referrals with longer horizons. Confirm arrival '
-                          'when the family next comes to the clinic.',
+                          'Standard clinical referrals scheduled for specialized diagnostic follow-up or scheduled facility consultative visits.',
                       icon: Icons.local_hospital_outlined,
                       child: Column(
                         children: [

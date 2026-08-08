@@ -1,0 +1,273 @@
+{
+  "model_name": "child_pneumonia",
+  "model_version": "v1.0-ghana-baseline-public-data-and-ghana-priors",
+  "version_ladder": {
+    "this": "v1.0-ghana-baseline",
+    "next": "v2.0-kintampo-cohort",
+    "v3_prospective": "v3.0-prospective-pilot"
+  },
+  "training_dataset": "[M14] WHO IMCI 2014 (pneumonia cutoffs); [M10] Baiden 2011 (CHO RR under-counting correction)",
+  "ghana_calibration": {
+    "priors_used": [
+      "[M10]",
+      "[M11]+[M14]"
+    ],
+    "external_validation": null
+  },
+  "clinical_note": "v1.0 Ghana baseline. Simulator cohort seeded from 2 peer-reviewed Ghanaian clinical studies (DOIs in `priors_used`); UCI Maternal Health Risk used as held-out external validation set. Calibration via Platt scaling on the internal 20% hold-out; 95% CI derived from per-bin Platt-residual std; drift detection via per-feature z-score against the training distribution.",
+  "validation": {
+    "internal": {
+      "holdout_auc": 0.7468,
+      "sensitivity": 0.8162,
+      "specificity": 0.5495,
+      "youden_j": 0.3658,
+      "best_threshold": 0.26,
+      "n_train": 6400,
+      "n_test": 1600,
+      "calibration": {
+        "method": "platt_scaling",
+        "A": 1.155848,
+        "B": 0.117085,
+        "brier_score": 0.297,
+        "ci_table": [
+          {
+            "bin_lo": 0.0,
+            "bin_hi": 0.1,
+            "bin_mid": 0.05,
+            "residual_std": null,
+            "n": 0
+          },
+          {
+            "bin_lo": 0.1,
+            "bin_hi": 0.2,
+            "bin_mid": 0.15,
+            "residual_std": null,
+            "n": 0
+          },
+          {
+            "bin_lo": 0.2,
+            "bin_hi": 0.3,
+            "bin_mid": 0.25,
+            "residual_std": null,
+            "n": 0
+          },
+          {
+            "bin_lo": 0.3,
+            "bin_hi": 0.4,
+            "bin_mid": 0.35,
+            "residual_std": null,
+            "n": 0
+          },
+          {
+            "bin_lo": 0.4,
+            "bin_hi": 0.5,
+            "bin_mid": 0.45,
+            "residual_std": null,
+            "n": 0
+          },
+          {
+            "bin_lo": 0.5,
+            "bin_hi": 0.6,
+            "bin_mid": 0.55,
+            "residual_std": 0.2963,
+            "n": 681
+          },
+          {
+            "bin_lo": 0.6,
+            "bin_hi": 0.7,
+            "bin_mid": 0.65,
+            "residual_std": 0.4774,
+            "n": 883
+          },
+          {
+            "bin_lo": 0.7,
+            "bin_hi": 0.8,
+            "bin_mid": 0.75,
+            "residual_std": 0.4207,
+            "n": 36
+          },
+          {
+            "bin_lo": 0.8,
+            "bin_hi": 0.9,
+            "bin_mid": 0.85,
+            "residual_std": null,
+            "n": 0
+          },
+          {
+            "bin_lo": 0.9,
+            "bin_hi": 1.0,
+            "bin_mid": 0.95,
+            "residual_std": null,
+            "n": 0
+          }
+        ]
+      }
+    }
+  },
+  "drift_baseline": {
+    "z_threshold": 3.5,
+    "min_z_threshold": 2.5,
+    "features": [
+      {
+        "feature": "age_days",
+        "mean": 1.0,
+        "std": 0.0,
+        "p_lo": 1.0,
+        "p_hi": 1.0
+      },
+      {
+        "feature": "cough_present",
+        "mean": 0.4011,
+        "std": 0.4901,
+        "p_lo": 0.0,
+        "p_hi": 1.0
+      },
+      {
+        "feature": "respiratory_rate_per_min",
+        "mean": 0.1873,
+        "std": 0.1293,
+        "p_lo": 0.0,
+        "p_hi": 0.537
+      },
+      {
+        "feature": "chest_indrawing",
+        "mean": 0.1064,
+        "std": 0.3084,
+        "p_lo": 0.0,
+        "p_hi": 1.0
+      },
+      {
+        "feature": "stridor_calm",
+        "mean": 0.0381,
+        "std": 0.1915,
+        "p_lo": 0.0,
+        "p_hi": 1.0
+      },
+      {
+        "feature": "temperature_celsius",
+        "mean": 0.4286,
+        "std": 0.0987,
+        "p_lo": 0.1645,
+        "p_hi": 0.6794
+      },
+      {
+        "feature": "oxygen_saturation",
+        "mean": 0.9188,
+        "std": 0.0649,
+        "p_lo": 0.7337,
+        "p_hi": 1.0
+      },
+      {
+        "feature": "general_danger_sign",
+        "mean": 0.0519,
+        "std": 0.2218,
+        "p_lo": 0.0,
+        "p_hi": 1.0
+      },
+      {
+        "feature": "hiv_exposed",
+        "mean": 0.0436,
+        "std": 0.2042,
+        "p_lo": 0.0,
+        "p_hi": 1.0
+      },
+      {
+        "feature": "heart_rate_per_min",
+        "mean": 0.3136,
+        "std": 0.124,
+        "p_lo": 0.0076,
+        "p_hi": 0.6291
+      }
+    ]
+  },
+  "input_feature_order": [
+    "age_days",
+    "cough_present",
+    "respiratory_rate_per_min",
+    "chest_indrawing",
+    "stridor_calm",
+    "temperature_celsius",
+    "oxygen_saturation",
+    "general_danger_sign",
+    "hiv_exposed",
+    "heart_rate_per_min"
+  ],
+  "input_quantization": {
+    "scale": 0.0078125,
+    "zero_point": -128
+  },
+  "tflite_sha256": "0a0312f09d0551c63e61afac93e2d78278175cc9f114584e6c19b485d2940e2d",
+  "trained_on": "2026-08-06",
+  "provenance": {
+    "[M1]": {
+      "short": "Adokiya 2022, Women & Health",
+      "citation": "Adokiya MN, Abodoon GN, Boah M. Prevalence and determinants of anaemia during third trimester of pregnancy: a retrospective cohort study of women in the northern region of Ghana. Women & Health. 2022;62(2):168-179.",
+      "doi_or_url": "doi:10.1080/03630242.2022.2030450",
+      "n": 359,
+      "setting": "Tatale-Sanguli + Zabzugu, Northern Region"
+    },
+    "[M4]": {
+      "short": "Adjei-Gyamfi 2023, medRxiv",
+      "citation": "Adjei-Gyamfi S, Zakaria MS, Asirifi A, et al. Maternal anaemia and polycythaemia during pregnancy and risk of inappropriate birthweight for-gestational-age babies in northern belt of Ghana. medRxiv. 2023.",
+      "doi_or_url": "doi:10.1101/2023.11.19.23298744",
+      "n": 422,
+      "setting": "5 primary/public health facilities, Northern Region"
+    },
+    "[M8]": {
+      "short": "Bugri 2023, IJERPH",
+      "citation": "Bugri AA, Gumanga SK, Yamoah P, et al. Prevalence of Hypertensive Disorders, Antihypertensive Therapy and Pregnancy Outcomes among Pregnant Women at Tamale Teaching Hospital, Ghana. Int J Environ Res Public Health. 2023;20(12):6153.",
+      "doi_or_url": "doi:10.3390/ijerph20126153",
+      "n": 843,
+      "setting": "TTH, 2018-2019"
+    },
+    "[M7]": {
+      "short": "Charadan 2025, OALib",
+      "citation": "Charadan AMS, Boamah KO, Hernandez S. Prevalence, Risk Factors, and Outcomes of Pregnancy-Induced Hypertension at Tamale Teaching Hospital, Northern Region. Open Access Library Journal. 2025;12(6):1-21.",
+      "doi_or_url": "doi:10.4236/oalib.1113362",
+      "n": 115,
+      "setting": "TTH"
+    },
+    "[M9]": {
+      "short": "Boafo 2025, HSR meta-analysis",
+      "citation": "Boafo EA, Amponsah RD, Atiase Y, et al. Pre-Eclampsia Among Pregnant Women in Ghana: A Systematic Review & Meta-Analysis. Health Science Reports. 2025;9(7):e72622.",
+      "doi_or_url": "doi:10.1002/hsr2.72622",
+      "n": null,
+      "setting": "Meta-analysis, 14 studies 2015-2025"
+    },
+    "[M3]": {
+      "short": "Adjei-Gyamfi 2023, J Health Popul Nutr",
+      "citation": "Adjei-Gyamfi S, Musah B, Asirifi A, et al. Maternal risk factors for low birthweight and macrosomia: a cross-sectional study in Northern Region, Ghana. J Health Popul Nutr. 2023;42(1):87.",
+      "doi_or_url": "doi:10.1186/s41043-023-00443-0",
+      "n": 356,
+      "setting": "Savelugu municipality, 2022"
+    },
+    "[M6]": {
+      "short": "Abubakari 2023, PAMJ",
+      "citation": "Abubakari A, Asumah MN, Abdulai NZ. Effect of maternal dietary habits and gestational weight gain on birth weight in the Tamale Metropolis. Pan Afr Med J. 2023;44:19.",
+      "doi_or_url": "doi:10.11604/pamj.2023.44.19.38036",
+      "n": 316,
+      "setting": "Tamale Metropolis"
+    },
+    "[M5]": {
+      "short": "Fosu 2013, GSS MICS",
+      "citation": "Fosu MO, Munyakazi L, Nsowah-Nuamah NNN. Low Birth Weight and Associated Maternal Factors in Ghana. IISTE JBAM. 2013;3(7).",
+      "doi_or_url": "https://www.iiste.org/Journals/index.php/JBAH/article/view/6341",
+      "n": 10963,
+      "setting": "Ghana MICS 2011, national + regional"
+    },
+    "[M11]+[M14]": {
+      "short": "Opiyo 2011 + WHO IMCI 2014",
+      "citation": "Opiyo N, English M. What clinical signs best identify severe illness in young infants aged 0-59 days? Arch Dis Child. 2011;96(11):1052. + WHO IMCI Chart Booklet 2014.",
+      "doi_or_url": "doi:10.1136/adc.2010.186049",
+      "n": null,
+      "setting": "Systematic review of 0-59d predictors + WHO IMCI"
+    },
+    "[M10]": {
+      "short": "Baiden 2011, PLoS ONE",
+      "citation": "Baiden F, Owusu-Agyei S, Bawah J, et al. An Evaluation of the Clinical Assessments of Under-Five Febrile Children Presenting to Primary Health Facilities in Rural Ghana. PLoS ONE. 2011;6(12):e28944.",
+      "doi_or_url": "doi:10.1371/journal.pone.0028944",
+      "n": 1983,
+      "setting": "Kintampo, 10 health centres + 5 district hospitals"
+    }
+  }
+}

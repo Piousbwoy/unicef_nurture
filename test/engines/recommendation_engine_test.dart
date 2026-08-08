@@ -130,7 +130,10 @@ void main() {
       expect(plan.findings.last.label, 'Runny nose');
     });
 
-    test('actions are ordered by urgency, referrals first within a band', () {
+    test('actions are ordered by urgency, prereferral treatments FIRST within a band', () {
+      // ActionPhase clinical ordering ensures life-saving prereferral
+      // stabilisations (MgSO4, rectal artesunate, antibiotics) execute
+      // BEFORE the CHO sits down to write a referral note or arrange transport.
       final plan = RecommendationEngine.synthesize(results: [
         _result(actions: [
           _action('Counsel on feeding', ReferralUrgency.scheduled, counselling: true),
@@ -140,8 +143,11 @@ void main() {
         ]),
       ]);
 
-      expect(plan.actions[0].instruction, 'Refer now');
-      expect(plan.actions[1].instruction, 'Give pre-referral antibiotic');
+      // Within the immediate-urgency band: prereferralTreatment (phase 0)
+      // sorts BEFORE immediateReferral (phase 1).
+      expect(plan.actions[0].instruction, 'Give pre-referral antibiotic');
+      expect(plan.actions[1].instruction, 'Refer now');
+      // Less urgent bands follow; counselling is last.
       expect(plan.actions.last.instruction, 'Counsel on feeding');
     });
   });
@@ -239,6 +245,9 @@ void main() {
 
     test('an urgent verdict always carries a referral action', () {
       // Urgent triage but the engine forgot to add any referral step.
+      // The guard-rail injects one, and — per ActionPhase ordering — the
+      // prereferral oxygen treatment still executes BEFORE the referral
+      // note is written (clinical correctness: stabilise first, document second).
       final plan = RecommendationEngine.synthesize(results: [
         _result(
           triage: TriageLevel.urgent,
@@ -249,7 +258,17 @@ void main() {
 
       expect(plan.referralGuaranteed, isTrue);
       expect(plan.actions.any((a) => a.isReferral), isTrue);
-      expect(plan.actions.first.isReferral, isTrue);
+      // Prereferral treatment (O2) sorts FIRST — before the injected referral.
+      expect(plan.actions[0].instruction, 'Give oxygen');
+      expect(plan.actions[0].isTreatment, isTrue);
+      // The injected referral is immediate urgency and present.
+      final injected = plan.actions.firstWhere((a) => a.isReferral);
+      expect(injected.urgency, ReferralUrgency.immediate);
+      expect(injected.instruction, contains('Refer now'));
+      // And verify ordering: prereferral treatment index < referral index.
+      final treatmentIdx = plan.actions.indexWhere((a) => a.instruction == 'Give oxygen');
+      final referralIdx = plan.actions.indexWhere((a) => a.isReferral);
+      expect(treatmentIdx, lessThan(referralIdx));
     });
 
     test('no referral is injected when one already exists', () {

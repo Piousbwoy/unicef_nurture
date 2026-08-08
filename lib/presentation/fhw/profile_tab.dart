@@ -11,16 +11,16 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../app/providers.dart';
+import '../../core/ml/offline_inference_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/local/outbox_dao.dart';
 import '../../data/local/preferences_store.dart';
 import '../../domain/entities/core.dart';
-import '../../domain/enums.dart';
-import '../settings/data_inspector_screen.dart';
+import '../assessment/form_kit.dart';
 import '../settings/sync_settings_screen.dart';
-import '../settings/voice_test_screen.dart';
 import '../shared/ui.dart';
 
 class ProfileTab extends ConsumerStatefulWidget {
@@ -116,8 +116,6 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
       ),
     );
     if (sure == true && mounted) {
-      // Drop the onboarding-seen flag so the next launch walks through the
-      // introduction slides again, the way a fresh device would.
       await PreferencesStore.reset();
       ref.read(sessionProvider.notifier).markNeedsSetup();
     }
@@ -135,19 +133,13 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
     return ListView(
       padding: const EdgeInsets.all(Gap.lg),
       children: [
-        // ------------------------------------------------------------ Account
         _ProfileHeader(user: user),
         const SizedBox(height: Gap.md),
 
-        // ----------------------------------------- Connection & sync centre
-        // The live heart of the tab: is the phone online right now, is anything
-        // waiting, and the two actions — send now, and point the phone at a real
-        // district server.
         SectionCard(
-          title: 'Connection & sync',
+          title: 'District Database & Offline Sync',
           subtitle:
-              'Everything you save is kept on this phone first and uploads by '
-              'itself when there is network. You never lose work.',
+              'Records captured offline persist locally on SQLite and automatically synchronize when network connectivity with the district health server is re-established.',
           icon: Icons.cloud_sync_outlined,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -205,7 +197,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                         Expanded(
                           child: StatTile(
                             value: '${summary.pending}',
-                            label: 'Waiting to send',
+                            label: 'Pending Sync Queue',
                             colour: AppColors.offline,
                           ),
                         ),
@@ -213,7 +205,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                         Expanded(
                           child: StatTile(
                             value: '${summary.criticalPending}',
-                            label: 'Urgent, still here',
+                            label: 'Urgent Priority',
                             colour: summary.criticalPending > 0
                                 ? AppColors.triageRed
                                 : AppColors.triageGreen,
@@ -223,7 +215,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                         Expanded(
                           child: StatTile(
                             value: '${summary.failing}',
-                            label: 'Need attention',
+                            label: 'Sync Retries / Errors',
                             colour: summary.failing > 0
                                 ? AppColors.triageAmber
                                 : AppColors.triageGreen,
@@ -250,8 +242,8 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                               color: Colors.white,
                             ),
                           )
-                        : const Icon(Icons.send_rounded),
-                    label: Text(_draining ? 'Sending…' : 'Send everything now'),
+                        : const Icon(Icons.sync_rounded),
+                    label: Text(_draining ? 'Synchronizing District Server...' : 'Sync Records to District Database'),
                   ),
                   OutlinedButton.icon(
                     onPressed: () => Navigator.of(context).push(
@@ -259,16 +251,15 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                         builder: (_) => const SyncSettingsScreen(),
                       ),
                     ),
-                    icon: const Icon(Icons.tune_rounded),
-                    label: const Text('Sync settings'),
+                    icon: const Icon(Icons.dns_rounded),
+                    label: const Text('District Server Config'),
                   ),
                 ],
               ),
               if (_stuck.isNotEmpty) ...[
                 const SizedBox(height: Gap.md),
                 const Text(
-                  'Could not be sent after several tries. A supervisor may '
-                  'need to look at these.',
+                  'Unresolved records requiring district supervisor diagnostic review:',
                   style: TextStyle(
                     fontSize: 12.5,
                     color: AppColors.triageAmber,
@@ -324,79 +315,101 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
         ),
         const SizedBox(height: Gap.md),
 
-        // ----------------------------------------------------------- Settings
         SectionCard(
-          title: 'Settings',
-          icon: Icons.settings_outlined,
+          title: 'Clinical Localization & Voice',
+          icon: Icons.translate_rounded,
           padding: const EdgeInsets.symmetric(vertical: Gap.sm),
           child: Column(
             children: [
               _SettingsTile(
-                icon: Icons.dns_outlined,
-                title: 'Sync server',
-                subtitle: 'Point this phone at the district server, or check '
-                    'the connection.',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const SyncSettingsScreen()),
-                ),
-              ),
-              _SettingsTile(
-                icon: Icons.record_voice_over_rounded,
-                title: 'Voice & language',
-                subtitle: 'Test what this phone can speak, and how to add a '
-                    'real Dagbani recording.',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const VoiceTestScreen()),
-                ),
-              ),
-              _SettingsTile(
-                icon: Icons.storage_rounded,
-                title: 'On-device database',
-                subtitle: 'Browse the records stored on this phone — every '
-                    'table, how many rows it holds, and the newest entries.',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const DataInspectorScreen(),
-                  ),
-                ),
+                icon: Icons.language_rounded,
+                title: 'Regional Languages & Audio Guidance',
+                subtitle: 'Configured for Northern Region deployments. Switch display and voice prompt read-aloud preferences (English, Twi, Dagbani, Hausa).',
+                onTap: () async {
+                  await showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    showDragHandle: true,
+                    builder: (_) => _LanguageAndVoiceSheet(user: user),
+                  );
+                },
               ),
             ],
           ),
         ),
         const SizedBox(height: Gap.md),
 
-        // -------------------------------------------------------- Permissions
         SectionCard(
-          title: 'What this account can do',
-          subtitle:
-              'Permissions are checked every time an action is taken, not '
-              'just when a screen opens.',
-          icon: Icons.verified_user_outlined,
-          child: Wrap(
-            spacing: Gap.sm,
-            runSpacing: Gap.sm,
+          title: 'Offline AI Model Pack',
+          icon: Icons.psychology_rounded,
+          padding: const EdgeInsets.symmetric(vertical: Gap.sm),
+          child: Column(
             children: [
-              for (final p in Permission.values)
-                _PermissionChip(
-                  label: _permissionLabel(p),
-                  granted: user.can(p),
-                ),
+              _SettingsTile(
+                icon: Icons.verified_outlined,
+                title: 'Model integrity & versions',
+                subtitle: 'Verify which TFLite models are installed and whether their SHA-256 matches the shipped metrics pack.',
+                onTap: () async {
+                  await showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    showDragHandle: true,
+                    builder: (_) => const _ModelPackSheet(),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: Gap.md),
+
+        SectionCard(
+          title: 'Device Governance & RBAC Security',
+          icon: Icons.security_rounded,
+          padding: const EdgeInsets.symmetric(vertical: Gap.sm),
+          child: Column(
+            children: [
+              _SettingsTile(
+                icon: Icons.lock_outline_rounded,
+                title: 'RBAC PIN Security Guard Active',
+                subtitle: 'Authentication credential resets are governed by the District Health Office supervisor to ensure clinical data compliance and audit trail validity.',
+                onTap: null,
+              ),
+              _SettingsTile(
+                icon: Icons.tablet_mac_rounded,
+                title: 'CHPS Assigned Terminal',
+                subtitle: 'Registered ${user.createdAt != null ? DateFormat('d MMM yyyy').format(user.createdAt!) : 'Active Terminal'} · Offline encryption & audit log enabled',
+                onTap: null,
+              ),
             ],
           ),
         ),
         const SizedBox(height: Gap.lg),
 
-        // ------------------------------------------------------------- Exits
-        FilledButton.icon(
-          onPressed: _signOut,
-          icon: const Icon(Icons.logout_rounded),
-          label: const Text('Sign out'),
-        ),
-        const SizedBox(height: Gap.sm),
-        OutlinedButton.icon(
-          onPressed: _resetDevice,
-          icon: const Icon(Icons.restart_alt_rounded),
-          label: const Text('Reset this device'),
+        Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: FilledButton.icon(
+                onPressed: _signOut,
+                icon: const Icon(Icons.lock_rounded),
+                label: const Text('Lock Session (Sign Out)'),
+              ),
+            ),
+            const SizedBox(width: Gap.sm),
+            Expanded(
+              flex: 2,
+              child: OutlinedButton.icon(
+                onPressed: _resetDevice,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.inkMuted,
+                  side: const BorderSide(color: AppColors.line, width: 1.2),
+                ),
+                icon: const Icon(Icons.restart_alt_rounded),
+                label: const Text('Device Reset'),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: Gap.xl),
       ],
@@ -404,9 +417,6 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
   }
 }
 
-/// The premium identity card at the top of the tab — the worker's name, role
-/// and zone on the signature brand gradient, so "who am I signed in as" is
-/// answered at a glance before anything else.
 class _ProfileHeader extends StatelessWidget {
   const _ProfileHeader({required this.user});
 
@@ -495,10 +505,6 @@ class _ProfileHeader extends StatelessWidget {
   }
 }
 
-/// The always-visible, real-time online/offline banner. This is the honest
-/// answer to "is my work getting through?" — green when the phone has a data
-/// connection, purple when it does not, with a plain-language line about what
-/// that means for the records already saved.
 class _ConnectivityHero extends StatelessWidget {
   const _ConnectivityHero({required this.isOnline});
 
@@ -556,7 +562,6 @@ class _ConnectivityHero extends StatelessWidget {
   }
 }
 
-/// A tappable settings row with a leading icon and a chevron.
 class _SettingsTile extends StatelessWidget {
   const _SettingsTile({
     required this.icon,
@@ -568,7 +573,7 @@ class _SettingsTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -615,11 +620,12 @@ class _SettingsTile extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                size: 18,
-                color: AppColors.inkFaint,
-              ),
+              if (onTap != null)
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: AppColors.inkFaint,
+                ),
             ],
           ),
         ),
@@ -628,59 +634,524 @@ class _SettingsTile extends StatelessWidget {
   }
 }
 
-class _PermissionChip extends StatelessWidget {
-  const _PermissionChip({required this.label, required this.granted});
+class _LanguageAndVoiceSheet extends ConsumerStatefulWidget {
+  const _LanguageAndVoiceSheet({required this.user});
 
-  final String label;
-  final bool granted;
+  final AppUser user;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.xs),
-    decoration: BoxDecoration(
-      color: granted ? AppColors.triageGreenBg : AppColors.canvas,
-      borderRadius: BorderRadius.circular(999),
-      border: Border.all(
-        color: granted
-            ? AppColors.triageGreen.withValues(alpha: 0.4)
-            : AppColors.line,
-      ),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          granted ? Icons.check_rounded : Icons.close_rounded,
-          size: 14,
-          color: granted ? AppColors.triageGreen : AppColors.inkFaint,
-        ),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: granted ? AppColors.ink : AppColors.inkFaint,
-          ),
-        ),
-      ],
-    ),
-  );
+  ConsumerState<_LanguageAndVoiceSheet> createState() =>
+      _LanguageAndVoiceSheetState();
 }
 
-String _permissionLabel(Permission p) => switch (p) {
-  Permission.registerHousehold => 'Register households',
-  Permission.viewAllHouseholds => 'See whole zone',
-  Permission.viewOwnFamilyOnly => 'See own family only',
-  Permission.manageOwnFamily => 'Manage own family',
-  Permission.recordClinicalVitals => 'Record measurements',
-  Permission.runClinicalAssessment => 'Run assessments',
-  Permission.runCaregiverTriage => 'Danger-sign check',
-  Permission.issueReferral => 'Issue referrals',
-  Permission.confirmReferralArrival => 'Confirm arrivals',
-  Permission.overrideAiRecommendation => 'Override recommendations',
-  Permission.viewCommunityInsights => 'See zone insights',
-  Permission.recordBarrier => 'Report barriers',
-  Permission.planVisitRoute => 'Plan the day',
-  Permission.exportRecords => 'Export records',
-};
+class _LanguageAndVoiceSheetState
+    extends ConsumerState<_LanguageAndVoiceSheet> {
+  late String? _selected;
+
+  static const _languageCodes = ['en', 'tw', 'dag', 'ha'];
+  static const _languageLabels = {
+    'en': 'English',
+    'tw': 'Twi',
+    'dag': 'Dagbani',
+    'ha': 'Hausa',
+  };
+
+  String _codeFromPreferred(String pref) {
+    switch (pref.toLowerCase()) {
+      case 'english':
+        return 'en';
+      case 'twi':
+        return 'tw';
+      case 'dagbani':
+        return 'dag';
+      case 'hausa':
+        return 'ha';
+      default:
+        return 'en';
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = _codeFromPreferred(widget.user.preferredLanguage);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: Gap.lg,
+        right: Gap.lg,
+        top: Gap.sm,
+        bottom: MediaQuery.of(context).viewInsets.bottom + Gap.lg,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Clinical Language & Voice', style: AppType.title),
+          const SizedBox(height: Gap.xs),
+          Text(
+            'Select language preferences for clinical assessments, counseling, and automated voice guidance across Northern Region health zones.',
+            style: AppType.caption.copyWith(color: AppColors.inkMuted),
+          ),
+          const SizedBox(height: Gap.md),
+          ChoiceChipsField<String?>(
+            label: 'Display language',
+            options: _languageCodes,
+            labelOf: (code) => _languageLabels[code ?? 'en'] ?? 'English',
+            value: _selected,
+            onChanged: (val) async {
+              setState(() => _selected = val);
+              final navigator = Navigator.of(context);
+              if (val != null) {
+                try {
+                  await PreferencesStore.setPreferredLanguage(val);
+                } catch (_) {}
+              }
+              if (mounted) navigator.pop();
+            },
+          ),
+          const Divider(),
+          const SizedBox(height: Gap.sm),
+          Text(
+            'Voice Guidance Profiles:',
+            style: AppType.eyebrow,
+          ),
+          const SizedBox(height: Gap.sm),
+          _VoiceRow(
+            langName: 'English',
+            pillStatus: 'Active Voice Engine',
+            pillBg: AppColors.triageGreenBg,
+            pillFg: AppColors.triageGreen,
+          ),
+          _VoiceRow(
+            langName: 'Twi',
+            pillStatus: 'Scheduled Field Enhancement',
+            pillBg: AppColors.primaryLight,
+            pillFg: AppColors.primary,
+          ),
+          _VoiceRow(
+            langName: 'Dagbani',
+            pillStatus: 'Scheduled Field Enhancement',
+            pillBg: AppColors.primaryLight,
+            pillFg: AppColors.primary,
+          ),
+          _VoiceRow(
+            langName: 'Hausa',
+            pillStatus: 'Scheduled Field Enhancement',
+            pillBg: AppColors.primaryLight,
+            pillFg: AppColors.primary,
+          ),
+          const SizedBox(height: Gap.md),
+          Center(
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.close),
+              label: const Text('Close'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VoiceRow extends StatelessWidget {
+  const _VoiceRow({
+    required this.langName,
+    required this.pillStatus,
+    required this.pillBg,
+    required this.pillFg,
+  });
+
+  final String langName;
+  final String pillStatus;
+  final Color pillBg;
+  final Color pillFg;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: CircleAvatar(
+        radius: 16,
+        backgroundColor: AppColors.surface,
+        child: Icon(Icons.record_voice_over, size: 14, color: AppColors.primary),
+      ),
+      title: Text(
+        langName,
+        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+      ),
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: Gap.sm, vertical: Gap.xs),
+        decoration: BoxDecoration(
+          color: pillBg,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          pillStatus,
+          style: TextStyle(
+            color: pillFg,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ModelPackSheet extends ConsumerWidget {
+  const _ModelPackSheet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final future = OfflineInferenceService.instance.modelStatuses();
+    return Padding(
+      padding: EdgeInsets.only(
+        left: Gap.lg,
+        right: Gap.lg,
+        top: Gap.sm,
+        bottom: MediaQuery.of(context).viewInsets.bottom + Gap.lg,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Offline AI Model Pack', style: AppType.title),
+          const SizedBox(height: Gap.xs),
+          Text(
+            'Models run fully offline on the tablet. When a model is not installed or not verified, the app uses the deterministic clinical calculator fallback.',
+            style: AppType.caption.copyWith(color: AppColors.inkMuted),
+          ),
+          const SizedBox(height: Gap.md),
+          FutureBuilder<List<OfflineModelStatus>>(
+            future: future,
+            builder: (context, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snap.hasError || !snap.hasData) {
+                return const Text(
+                  'Could not read model pack status on this device.',
+                  style: TextStyle(color: AppColors.triageAmber),
+                );
+              }
+              final list = snap.data!;
+              return Column(
+                children: [
+                  for (final s in list) _ModelStatusTile(status: s),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: Gap.md),
+          Center(
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.close),
+              label: const Text('Close'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModelStatusTile extends StatelessWidget {
+  const _ModelStatusTile({required this.status});
+
+  final OfflineModelStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final installed = status.isModelPresent;
+    final usable = status.isModelUsable;
+    final verified = status.integrityVerified;
+    final mismatch = status.expectedSha256 != null &&
+        status.actualSha256 != null &&
+        status.expectedSha256 != status.actualSha256;
+    final colour = !installed
+        ? AppColors.inkMuted
+        : usable && verified
+        ? AppColors.triageGreen
+        : AppColors.triageAmber;
+    final bg = !installed
+        ? AppColors.canvas
+        : usable && verified
+        ? AppColors.triageGreenBg
+        : AppColors.triageAmberBg;
+    final pill = !installed
+        ? 'Not installed'
+        : !usable && mismatch
+        ? 'Blocked'
+        : usable && verified
+        ? 'Verified'
+        : mismatch
+        ? 'Mismatch'
+        : 'Unverified';
+    return Container(
+      margin: const EdgeInsets.only(bottom: Gap.sm),
+      padding: const EdgeInsets.all(Gap.md),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(Gap.radiusSm),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: colour.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(Gap.radiusSm),
+                ),
+                child: Icon(
+                  verified ? Icons.verified_rounded : Icons.psychology_rounded,
+                  size: 18,
+                  color: colour,
+                ),
+              ),
+              const SizedBox(width: Gap.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      status.name,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      status.modelVersion ?? '—',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.inkMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: Gap.sm,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: colour.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  pill,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    color: colour,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (status.trainingDataset != null) ...[
+            const SizedBox(height: Gap.sm),
+            _ModelPackRow(
+              icon: Icons.dataset_outlined,
+              label: 'Training data',
+              value: status.trainingDataset!,
+              valueColor: AppColors.ink,
+            ),
+          ],
+          if (status.ghanaPriors.isNotEmpty) ...[
+            const SizedBox(height: Gap.xs),
+            _ModelPackRow(
+              icon: Icons.menu_book_outlined,
+              label: 'Ghana priors',
+              value: status.ghanaPriors.join(' · '),
+              valueColor: AppColors.ink,
+            ),
+          ],
+          if (status.internalValidation.isNotEmpty)
+            _ModelPackMetrics(
+              block: status.internalValidation,
+              blockLabel: 'Internal hold-out (20%)',
+              brierScore: status.brierScore,
+            ),
+          if (status.externalValidation.isNotEmpty)
+            _ModelPackMetrics(
+              block: status.externalValidation,
+              blockLabel: 'External validation (UCI Bangladesh)',
+            ),
+          if (status.versionLadder.isNotEmpty) ...[
+            const SizedBox(height: Gap.xs),
+            _ModelPackRow(
+              icon: Icons.history_rounded,
+              label: 'Version ladder',
+              value: status.versionLadder.entries
+                  .map((e) => '${e.key}: ${e.value}')
+                  .join(' · '),
+              valueColor: AppColors.inkMuted,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ModelPackRow extends StatelessWidget {
+  const _ModelPackRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.valueColor,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 14, color: AppColors.inkMuted),
+          const SizedBox(width: Gap.xs),
+          Text(
+            '$label: ',
+            style: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.inkMuted,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 11.5,
+                color: valueColor,
+                height: 1.3,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModelPackMetrics extends StatelessWidget {
+  const _ModelPackMetrics({
+    required this.block,
+    required this.blockLabel,
+    this.brierScore,
+  });
+
+  final Map<String, Object?> block;
+  final String blockLabel;
+  final double? brierScore;
+
+  @override
+  Widget build(BuildContext context) {
+    double? d(String k) {
+      final v = block[k];
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v);
+      return null;
+    }
+
+    final auc = d('holdout_auc');
+    final sens = d('sensitivity');
+    final spec = d('specificity');
+    final thr = d('best_threshold');
+    final n = block['n'] ?? block['n_test'];
+    final tiles = <Widget>[];
+    void add(String label, double? v) {
+      if (v == null) return;
+      tiles.add(
+        _MiniStat(
+          label: label,
+          value: v.toStringAsFixed(v < 1 && v > 0 ? 3 : 1),
+        ),
+      );
+    }
+    add('AUC', auc);
+    add('Sens', sens);
+    add('Spec', spec);
+    if (thr != null) add('Thr', thr);
+    if (n != null) add('n', n is num ? n.toDouble() : null);
+    if (brierScore != null) add('Brier', brierScore);
+
+    if (tiles.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            blockLabel,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: AppColors.inkMuted,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Wrap(spacing: 6, runSpacing: 6, children: tiles),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniStat extends StatelessWidget {
+  const _MiniStat({required this.label, required this.value});
+  final String label;
+  final String value;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.line),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$label ',
+            style: const TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+              color: AppColors.inkMuted,
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+              color: AppColors.ink,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

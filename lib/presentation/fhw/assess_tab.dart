@@ -77,7 +77,7 @@ class _AssessTabState extends ConsumerState<AssessTab> {
         Padding(
           padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.md, Gap.lg, Gap.sm),
           child: GradientButton(
-            label: 'Start Assessment',
+            label: 'Begin Clinical Assessment (IMCI / ANC / PNC)',
             icon: Icons.play_circle_outline_rounded,
             onPressed: _startAssessment,
           ),
@@ -93,7 +93,7 @@ class _AssessTabState extends ConsumerState<AssessTab> {
             decoration: InputDecoration(
               isDense: true,
               prefixIcon: const Icon(Icons.search_rounded),
-              hintText: 'Search by name, head, community or landmark',
+              hintText: 'Search patient, household head, compound, or landmark',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(Gap.radius),
               ),

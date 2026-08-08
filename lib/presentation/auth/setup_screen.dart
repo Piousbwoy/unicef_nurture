@@ -28,6 +28,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../app/providers.dart';
+import '../../core/auth/session.dart';
 import '../../core/i18n/dagbani_strings.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_theme.dart';
@@ -850,12 +851,24 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
             .read(careRepositoryProvider)
             .createOwnHousehold(user, ownHousehold);
       }
-      await ref.read(sessionProvider.notifier).register(
+      final success = await ref.read(sessionProvider.notifier).register(
         user: user,
         pin: _pin.text,
         linkedHouseholdId: household?.id ?? ownHousehold?.id,
       );
-      // Success navigates via the router redirect.
+      if (!mounted) return;
+      if (!success) {
+        final session = ref.read(sessionProvider);
+        final errorMsg = session is SessionSignedOut ? session.message : null;
+        setState(() {
+          _busy = false;
+          _error = errorMsg ?? 'Could not complete registration. Please try again.';
+          _step = _privacyStep;
+        });
+        return;
+      }
+      // Explicitly navigate to home screen upon successful registration
+      context.go(Routes.homeFor(user.role));
     } catch (e) {
       if (!mounted) return;
       setState(() {

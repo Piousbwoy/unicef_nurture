@@ -19,11 +19,29 @@
 /// worse outcome than a guessed PIN.
 library;
 
+import 'dart:async';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../../data/local/app_database.dart';
 import '../../data/local/user_dao.dart';
+import '../../data/sync/http_transport.dart';
+import '../../data/sync/server_auth_client.dart';
+import '../../data/sync/sync_service.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/enums.dart';
+
+/// Builds a transient [SyncService] with the currently configured transport.
+///
+/// Used by on-demand operations (registration-time drain, post-sign-in drain)
+/// that happen outside the long-lived Riverpod-owned [SyncService] and cannot
+/// depend on widget context. The returned service is intentionally short-lived
+/// and is not started as a timer — callers use [SyncService.runOnce] or
+/// [SyncService.drain] synchronously and then discard.
+Future<SyncService> buildEphemeralSyncService() async {
+  final transport = await HttpSyncTransport.fromPreferences();
+  return SyncService(transport: transport ?? const LoopbackTransport());
+}
 
 /// The states the app's shell switches on.
 sealed class SessionState {
@@ -158,6 +176,21 @@ class SessionController {
       actorRole: user.role.name,
     );
 
+    // Best-effort server authentication — the local DB is the source of truth, so a
+    // failing network doesn't gate sign-in; we just try to issue a warning in the sync
+    // log if we couldn't grab a JWT for the sync-log attribution downstream.
+    await ServerAuthClient.signIn(phone: user.phone, pin: pin).then((r) {
+      if (!r.isOk) {
+        AuditDao.record(
+          action: 'server sign in',
+          outcome: 'denied',
+          actorId: user.id,
+          actorRole: user.role.name,
+          detail: r.error,
+        );
+      }
+    }).catchError((_) {/* ignore */});
+
     return SessionActive(user, linkedHouseholdId: await _linkedFor(user));
   }
 
@@ -166,6 +199,18 @@ class SessionController {
   /// One step on purpose. Making a CHO register, then find the sign-in screen,
   /// then retype the PIN they invented four seconds ago is friction with no
   /// security value.
+  ///
+  /// **GHS/Northern Region offline-first architecture rule — registration is offline-friendly.**
+  /// When a user registers:
+  /// 1. Local credentials and profile are persisted securely in SQLite.
+  /// 2. Identity and cloud verifier rows are enqueued into the outbox with [SyncPriority.critical].
+  /// 3. We attempt a fast, best-effort online synchronization (up to 5 seconds) to issue a JWT and
+  ///    push the identity rows immediately to MariaDB if connectivity and sync URL exist.
+  /// 4. Regardless of whether the online sync succeeds instantly or is postponed due to off-grid
+  ///    CHPS deployment, we grant the active session ([SessionActive]). The outbox rows remain
+  ///    safely queued in SQLite and will reliably push to MariaDB once connectivity is restored.
+  static const Duration registrationTimeout = Duration(seconds: 5);
+
   Future<SessionState> registerAndSignIn({
     required AppUser user,
     required String pin,
@@ -176,6 +221,23 @@ class SessionController {
       pin: pin,
       linkedHouseholdId: linkedHouseholdId,
     );
+
+    // ─── Step A: Best-effort online JWT issue & outbox drain ─────────────
+    // Try to issue a JWT and immediately drain critical identity rows to MariaDB.
+    // In an offline-first architecture for remote CHPS compounds, network failures
+    // or unconfigured sync URLs must NEVER prevent local account creation.
+    try {
+      final auth = await ServerAuthClient.signIn(phone: saved.phone, pin: pin)
+          .timeout(registrationTimeout);
+      if (auth.isOk) {
+        final svc = await buildEphemeralSyncService();
+        await svc.drain(maxBatches: 3).timeout(registrationTimeout);
+      }
+    } catch (_) {
+      // Offline, unconfigured URL, or timeout — continue to grant session locally.
+    }
+
+    // ─── Step B: Grant session ───────────────────────────────────────────
     await _write(_kUserIdKey, saved.id);
     await _write(_kLastPhoneKey, saved.phone);
 
@@ -184,7 +246,7 @@ class SessionController {
       outcome: 'allowed',
       actorId: saved.id,
       actorRole: saved.role.name,
-      detail: saved.role.label,
+      detail: '${saved.role.label} — local account registered; cloud verifier queued in outbox.',
     );
 
     return SessionActive(saved, linkedHouseholdId: await _linkedFor(saved));
@@ -199,6 +261,8 @@ class SessionController {
         actorRole: current.role.name,
       );
     }
+    // Revoke any active server-side refresh token (best effort — network may be off).
+    await ServerAuthClient.signOut().catchError((_) {/* ignore */});
     await _delete(_kUserIdKey);
     _failedAttempts = 0;
     _lockedUntil = null;

@@ -156,6 +156,38 @@ class ClinicalFinding {
   );
 }
 
+/// The execution phase of a recommended action, used to guarantee life-saving
+/// prereferral stabilisations are given *before* the CHO writes the referral
+/// note and leaves the compound.
+///
+/// Lower-numbered phases execute first.
+enum ActionPhase {
+  /// Treatment that must be given on the spot BEFORE any referral travel —
+  /// MgSO4 loading dose for eclampsia, rectal artesunate for severe malaria,
+  /// oxytocin + uterine massage for PPH.
+  prereferralTreatment,
+
+  /// Writing the referral note, phoning the receiving facility, organising
+  /// transport. Only after prereferral stabilisation is complete.
+  immediateReferral,
+
+  /// Transport support: arranging a motorking, maternity waiting home,
+  /// companion. Concurrent with or immediately after the referral paperwork.
+  transportSupport,
+
+  /// Treatments administered at a referral facility (inpatient therapeutic
+  /// feeds, IV antibiotics, blood transfusion). Listed for documentation and
+  /// continuity, not executed by the CHO on scene.
+  inpatientTreatment,
+
+  /// Outpatient treatments dispensed or administered at the CHPS compound or
+  /// taken at home — amoxicillin, ORS, RUTF, routine iron-folate.
+  outpatientTreatment,
+
+  /// Scheduled follow-up contact planning, counselling, home safety, play.
+  followUpCounselling,
+}
+
 /// An action the CHO or caregiver should take, ordered by urgency.
 class RecommendedAction {
   const RecommendedAction({
@@ -166,6 +198,7 @@ class RecommendedAction {
     this.isReferral = false,
     this.isTreatment = false,
     this.isCounselling = false,
+    this.isPrereferralTreatment = false,
   });
 
   final String instruction;
@@ -176,6 +209,11 @@ class RecommendedAction {
   final bool isTreatment;
   final bool isCounselling;
 
+  /// If true, this treatment MUST be given before any referral transport
+  /// starts. Examples: MgSO4 loading dose (eclampsia), rectal artesunate
+  /// (severe malaria), oxytocin (PPH).
+  final bool isPrereferralTreatment;
+
   Map<String, Object?> toJson() => {
     'instruction': instruction,
     'urgency': urgency.name,
@@ -184,6 +222,7 @@ class RecommendedAction {
     'is_referral': isReferral,
     'is_treatment': isTreatment,
     'is_counselling': isCounselling,
+    'is_prereferral_treatment': isPrereferralTreatment,
   };
 
   factory RecommendedAction.fromJson(Map<String, Object?> j) => RecommendedAction(
@@ -194,6 +233,7 @@ class RecommendedAction {
     isReferral: j['is_referral'] == true,
     isTreatment: j['is_treatment'] == true,
     isCounselling: j['is_counselling'] == true,
+    isPrereferralTreatment: j['is_prereferral_treatment'] == true,
   );
 }
 

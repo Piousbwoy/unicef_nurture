@@ -22,6 +22,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../app/providers.dart';
+import '../../core/ml/offline_inference_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/reference/facilities.dart';
 import '../../data/reference/local_foods.dart';
@@ -29,7 +30,11 @@ import '../../data/repositories/care_repository.dart';
 import '../../domain/engines/growth_zscore_engine.dart';
 import '../../domain/engines/immunisation_engine.dart';
 import '../../domain/engines/measurement_safety_engine.dart';
+import '../../domain/engines/nurturing_care_engine.dart';
 import '../../domain/engines/nutrition_engine.dart';
+import '../../domain/engines/nutrition/therapeutic_supplements.dart';
+import '../../domain/engines/protocols/stabilization_protocol_selector.dart';
+import '../../domain/engines/protocols/stabilization_protocols.dart';
 import '../../domain/engines/recommendation_engine.dart';
 import '../../domain/engines/treatment_response_engine.dart';
 import '../../domain/entities/core.dart';
@@ -94,6 +99,9 @@ class _AssessmentResultScreenState
   /// signal for the model.
   TriageLevel? _override;
   final _overrideReason = TextEditingController();
+  late Future<Map<String, OfflineRiskPrediction>> _mlPredictions;
+  Map<String, OfflineRiskPrediction>? _mlPredictionsValue;
+  bool _referTouched = false;
 
   @override
   void dispose() {
@@ -116,6 +124,22 @@ class _AssessmentResultScreenState
         : ReferralUrgency.scheduled;
     _followDays = plan.followUpInDays ?? 7;
     _facility = _adequateFacilities().firstOrNull;
+    final service = OfflineInferenceService.instance;
+    final bag = _buildFeatureBag();
+    _mlPredictions = service.runAllPredictions(bag);
+    _mlPredictions.then((p) {
+      if (!mounted) return;
+      setState(() {
+        _mlPredictionsValue = p;
+        if (!_referTouched) {
+          final updated = _carePlan;
+          if (updated.needsReferral) {
+            _refer = true;
+            _urgency = ReferralUrgency.immediate;
+          }
+        }
+      });
+    });
   }
 
   // ------------------------------------------------------------ Derived data
@@ -129,6 +153,94 @@ class _AssessmentResultScreenState
       region: input.household.region,
       district: input.household.district,
       required: needed,
+    );
+  }
+
+  OfflineFeatureBag _buildFeatureBag() {
+    final inputs = draft.inputs;
+    final maternal = input.maternal;
+    final birth = input.birth;
+    final isMaternal =
+        result.clientType == ClientType.pregnantWoman ||
+        inputs.containsKey('gestational_weeks');
+    final int? ageDays =
+        inputs['age_in_days'] as int? ?? input.person.ageInDays;
+    final int? ageMonths =
+        inputs['age_in_months'] as int? ?? input.person.ageInMonths;
+    final computedAgeDays =
+        ageDays ?? (ageMonths == null ? null : (ageMonths * 30.4375).round());
+    final dangerSigns = inputs['danger_signs'] as List?;
+    bool? hasSign(String name) =>
+        dangerSigns == null ? null : dangerSigns.contains(name) == true;
+    final muacCmRaw = inputs['muac_cm'];
+    final int? muacMmFromCm = muacCmRaw is num
+        ? (muacCmRaw * 10).round()
+        : null;
+    final int? muacMmDirect = inputs['muac_mm'] as int?;
+    final int? anyMuacMm = muacMmDirect ?? muacMmFromCm;
+    final temp = inputs['temperature_celsius'] as num?;
+    return OfflineFeatureBag(
+      ageDays: computedAgeDays,
+      gestationalWeeksAtBirth: birth?.gestationWeeksAtBirth,
+      heartRatePerMin: (inputs['pulse'] as num?)?.toInt(),
+      respiratoryRatePerMin: (inputs['respiratory_rate'] as num?)?.toInt(),
+      temperatureCelsius: temp?.toDouble(),
+      oxygenSaturationPerCent: (inputs['oxygen_saturation'] as num?)?.toInt(),
+      systolicBloodPressureMmhg: (inputs['systolic'] as num?)?.toInt(),
+      diastolicBloodPressureMmhg: (inputs['diastolic'] as num?)?.toInt(),
+      maternalMuacMm: isMaternal ? anyMuacMm : null,
+      haemoglobinGDl: (inputs['haemoglobin'] as num?)?.toDouble(),
+      urineProtein0To4:
+          (inputs['proteinuria'] as int?) ?? (inputs['urine_protein'] as int?),
+      urineKetones0To3: inputs['urine_ketones'] as int?,
+      urineBlood0To3: inputs['urine_blood'] as int?,
+      urineGlucose0To4: inputs['urine_glucose'] as int?,
+      previousPregnancyLosses: maternal?.previousLosses,
+      prevCaesareanSection: maternal?.previousCaesarean,
+      maternalAgeYears: input.person.ageInYears,
+      gravida: maternal?.gravida ?? (inputs['gravida'] as int?),
+      parity: maternal?.parity,
+      oedemaHandsOrFace: maternal?.oedemaHandsOrFace,
+      epigastricPain: maternal?.epigastricPain,
+      headacheSevere: maternal?.headacheSevere,
+      blurredVision: maternal?.blurredVision,
+      briskReflexes: maternal?.briskReflexes,
+      oliguria: maternal?.oliguria,
+      weightGainOver1kgPerWeek: maternal?.weightGainOver1kgPerWeek,
+      birthWeightKg:
+          (inputs['birth_weight_kg'] as num?)?.toDouble() ??
+          birth?.birthWeightKg,
+      birthLengthCm: birth?.birthLengthCm,
+      apgar5Minute: birth?.apgar5Minute,
+      historyOfConvulsions:
+          birth?.historyOfConvulsions ?? hasSign('convulsions'),
+      severeChestIndrawing: birth?.severeChestIndrawing ?? hasSign('indrawing'),
+      nasalFlaring: birth?.nasalFlaring ?? hasSign('nasalFlaring'),
+      grunting: birth?.grunting ?? hasSign('grunting'),
+      bulgingFontanelle:
+          birth?.bulgingFontanelle ?? hasSign('bulgingFontanelle'),
+      jaundiceBefore24h: birth?.jaundiceBefore24h,
+      feedingDifficulty:
+          birth?.feedingDifficulty ?? hasSign('feedingDifficulty'),
+      abdominalDistension:
+          birth?.abdominalDistension ?? hasSign('abdominalDistension'),
+      cordRednessBeyondBase: birth?.cordRednessBeyondBase,
+      cordPus: birth?.cordPus,
+      skinPustules: birth?.skinPustules ?? hasSign('skinPustules'),
+      lethargicOrUnconscious:
+          birth?.lethargicOrUnconscious ?? hasSign('lethargic'),
+      bleedingFromAnySite: birth?.bleedingFromAnySite ?? hasSign('bleeding'),
+      coughPresent: hasSign('cough'),
+      chestIndrawing: hasSign('indrawing'),
+      stridorCalm: hasSign('stridor'),
+      generalDangerSign:
+          hasSign('unconscious') ??
+          hasSign('lethargic') ??
+          hasSign('cannotDrink') ??
+          hasSign('vomitsEverything'),
+      multipleBirth: birth == null
+          ? null
+          : birth.plurality != BirthPlurality.singleton,
     );
   }
 
@@ -155,16 +267,45 @@ class _AssessmentResultScreenState
     };
 
     final hb = draft.inputs['haemoglobin'];
-    final anaemic = (hb is num && hb < 11) ||
+    final hbDouble = hb is num ? hb.toDouble() : null;
+    final anaemic =
+        (hb is num && hb < 11) ||
         draft.inputs['danger_signs'] is List &&
             ((draft.inputs['danger_signs'] as List).contains('pallorSevere') ||
                 (draft.inputs['danger_signs'] as List).contains('pallorSome'));
+
+    // Pillar 2: build the therapeutic context from the inputs + AI risk
+    // (lbw_sga) so the supplement selector can pick MMS, IFA, RUTF, KMC.
+    final birth = input.birth;
+    final isPostpartum = result.clientType == ClientType.postpartumWoman;
+    final gestationalWeeks = (draft.inputs['gestational_weeks'] as num?)
+        ?.toInt();
+    final ageDays =
+        input.person.ageInDays ?? (draft.inputs['age_in_days'] as int? ?? 0);
+    final birthWeightKg =
+        (draft.inputs['birth_weight_kg'] as num?)?.toDouble() ??
+        birth?.birthWeightKg;
+    final lbwSgaRisk = _mlPredictionsValue?['lbw_sga']?.riskProbability;
+    final therapeuticContext = TherapeuticContext(
+      gestationalWeeks: gestationalWeeks,
+      haemoglobinGDl: hbDouble,
+      isPostpartum: isPostpartum,
+      birthWeightKg:
+          birthWeightKg ??
+          (lbwSgaRisk != null && lbwSgaRisk >= 0.5 ? 2.3 : null),
+      ageDays: ageDays,
+      nutritionStatus: status.name,
+      appetiteTestPassed: draft.inputs['appetite_test'] as bool?,
+      hasBilateralOedema: draft.inputs['has_oedema'] == true,
+      hasAnyDangerSign: result.dangerSignsPresent.isNotEmpty,
+    );
 
     return NutritionEngine.plan(
       subject: subject,
       status: status,
       month: DateTime.now().month,
-      ageMonths: input.person.ageInMonths ??
+      ageMonths:
+          input.person.ageInMonths ??
           (draft.inputs['age_in_months'] as int? ?? 0),
       stillBreastfeeding: draft.inputs['still_breastfeeding'] as bool?,
       groupsEatenYesterday: groups,
@@ -173,17 +314,48 @@ class _AssessmentResultScreenState
       appetiteTestPassed: draft.inputs['appetite_test'] as bool?,
       hasAnyDangerSign: result.dangerSignsPresent.isNotEmpty,
       isAnaemic: anaemic,
+      therapeuticContext: therapeuticContext,
     );
   }
 
   ImmunisationPlan? _immunisationPlan() {
     final given = draft.inputs['vaccines_given'];
     if (given is! List) return null;
-    final ageDays = input.person.ageInDays ??
+    final ageDays =
+        input.person.ageInDays ??
         ((draft.inputs['age_in_months'] as int? ?? 0) * 30.4375).round();
     return ImmunisationEngine.plan(
       ageInDays: ageDays,
       givenLabels: {for (final l in given) l as String},
+    );
+  }
+
+  /// Pillar 3: build the UNICEF Nurturing Care Framework assessment from
+  /// the visit context + immunisation + nutrition plans. Returns a
+  /// per-pillar action list that the result screen renders as one
+  /// cohesive "Nurturing Care" card.
+  NurturingCareAssessment _nurturingCareAssessment(
+    ImmunisationPlan? imm,
+    NutritionPlan? nutrition,
+  ) {
+    final ageMonths =
+        input.person.ageInMonths ??
+        (draft.inputs['age_in_months'] as int? ?? 0);
+    final isYoungInfant = result.clientType == ClientType.newborn;
+    final stillBreastfeeding =
+        draft.inputs['still_breastfeeding'] as bool? ??
+        (isYoungInfant || (ageMonths < 24));
+    final vitaminADue = draft.inputs['vitamin_a_due'] as bool? ?? false;
+    return NurturingCareEngine.assess(
+      context: NurturingCareContext(
+        clientType: result.clientType,
+        ageMonths: ageMonths,
+        stillBreastfeeding: stillBreastfeeding,
+        vitaminADue: vitaminADue,
+        immunisationItems: imm?.items ?? const [],
+        therapeuticSupplements:
+            nutrition?.therapeuticPlan?.supplements ?? const [],
+      ),
     );
   }
 
@@ -247,11 +419,165 @@ class _AssessmentResultScreenState
     // value, not that the value was trusted.
     extraFindings.addAll(_measurementSafetyFindings());
 
+    final ml = _mlPredictionsValue;
+    if (ml != null) {
+      final parts = _mlAsAssessmentParts(ml);
+      extraFindings.addAll(parts.$1);
+      extraActions.addAll(parts.$2);
+    }
+
     return RecommendationEngine.synthesize(
       results: [result],
       extraFindings: extraFindings,
       extraActions: extraActions,
+      stabilizationContext: _buildStabilizationContext(),
+      stabilizationRisks: StabilizationAiRisks.fromPredictions(
+        _mlPredictionsValue,
+      ),
     );
+  }
+
+  /// Build the [StabilizationContext] used by the pre-referral protocol
+  /// selector. The context is intentionally narrow — only the inputs the
+  /// WHO/GHS triggers actually need (BP, danger signs, age, temperature)
+  /// — so the selector is testable in isolation and the data flow stays
+  /// audit-defensible.
+  StabilizationContext _buildStabilizationContext() {
+    final inputs = draft.inputs;
+    final birth = input.birth;
+    final int? ageDays =
+        inputs['age_in_days'] as int? ?? input.person.ageInDays;
+    final int? gestationalWeeks = (inputs['gestational_weeks'] as num?)
+        ?.toInt();
+    final dangerSigns = inputs['danger_signs'] as List?;
+    bool hasSign(String name) =>
+        dangerSigns is List && dangerSigns.contains(name) == true;
+    return StabilizationContext(
+      patientAgeDays: ageDays,
+      gestationalWeeks: gestationalWeeks,
+      systolicBp: (inputs['systolic'] as num?)?.toInt(),
+      diastolicBp: (inputs['diastolic'] as num?)?.toInt(),
+      urineProtein0To4:
+          (inputs['proteinuria'] as int?) ?? (inputs['urine_protein'] as int?),
+      hasEclampsiaConvulsions: hasSign('convulsions'),
+      temperatureCelsius: (inputs['temperature_celsius'] as num?)?.toDouble(),
+      oxygenSaturation: (inputs['oxygen_saturation'] as num?)?.toInt(),
+      respiratoryRate: (inputs['respiratory_rate'] as num?)?.toInt(),
+      unableToFeed: hasSign('cannotDrink'),
+      convulsions:
+          hasSign('convulsions') || (birth?.historyOfConvulsions ?? false),
+      severeChestIndrawing:
+          hasSign('indrawing') || (birth?.severeChestIndrawing ?? false),
+      bulgingFontanelle:
+          hasSign('bulgingFontanelle') || (birth?.bulgingFontanelle ?? false),
+      lethargicOrUnconscious:
+          hasSign('lethargic') || (birth?.lethargicOrUnconscious ?? false),
+      historyOfConvulsions: birth?.historyOfConvulsions ?? false,
+      cordPus: birth?.cordPus ?? false,
+      feedingDifficulty:
+          hasSign('feedingDifficulty') || (birth?.feedingDifficulty ?? false),
+      skinPustules: hasSign('skinPustules') || (birth?.skinPustules ?? false),
+      coughPresent: hasSign('cough'),
+      generalDangerSign:
+          hasSign('unconscious') ||
+          hasSign('lethargic') ||
+          hasSign('cannotDrink') ||
+          hasSign('vomitsEverything'),
+    );
+  }
+
+  (List<ClinicalFinding>, List<RecommendedAction>) _mlAsAssessmentParts(
+    Map<String, OfflineRiskPrediction> ml,
+  ) {
+    final findings = <ClinicalFinding>[];
+    final actions = <RecommendedAction>[];
+
+    void addRisk({
+      required String key,
+      required String label,
+      required String protocolSource,
+      required TriageLevel severity,
+      required ReferralUrgency? referralUrgency,
+      required String referralInstruction,
+    }) {
+      final p = ml[key];
+      if (p == null) return;
+      if (p.classification != 'high' && p.riskProbability < 0.7) return;
+      final via = p.usingModel ? 'TFLite' : 'offline calculator';
+      findings.add(
+        ClinicalFinding(
+          label: label,
+          detail:
+              'Risk ${(p.riskProbability * 100).toStringAsFixed(0)}% ($via).',
+          severity: severity,
+          protocolSource: protocolSource,
+          measuredValue: '${(p.riskProbability * 100).toStringAsFixed(1)}%',
+          threshold: 'High risk',
+        ),
+      );
+      if (referralUrgency != null) {
+        actions.add(
+          RecommendedAction(
+            instruction: referralInstruction,
+            urgency: referralUrgency,
+            rationale:
+                'High-risk signal (${(p.riskProbability * 100).toStringAsFixed(0)}%). '
+                '${p.featuresUsed.length} features used.',
+            protocolSource: protocolSource,
+            isReferral: true,
+          ),
+        );
+      }
+    }
+
+    final ageDays =
+        input.person.ageInDays ??
+        ((draft.inputs['age_in_months'] as int? ?? 0) * 30.4375).round();
+
+    if (ageDays <= 59) {
+      addRisk(
+        key: 'neonatal_sepsis',
+        label: 'High risk of neonatal sepsis',
+        protocolSource: 'WHO IMCI Young Infant 0–59 days (PSBI)',
+        severity: TriageLevel.urgent,
+        referralUrgency: ReferralUrgency.immediate,
+        referralInstruction:
+            'Refer urgently for possible severe bacterial infection (PSBI).',
+      );
+    } else {
+      addRisk(
+        key: 'child_pneumonia',
+        label: 'High risk of pneumonia',
+        protocolSource: 'WHO IMCI Sick Child 2–59 months (Pneumonia)',
+        severity: TriageLevel.priority,
+        referralUrgency: ReferralUrgency.sameDay,
+        referralInstruction:
+            'Refer today for assessment and treatment of pneumonia if worsening or not improving.',
+      );
+    }
+
+    if (result.clientType == ClientType.pregnantWoman ||
+        draft.inputs.containsKey('gestational_weeks')) {
+      addRisk(
+        key: 'preeclampsia_risk',
+        label: 'High risk of pre-eclampsia',
+        protocolSource:
+            'WHO ANC 2016 / Ghana ANC guidance (Hypertensive disorders)',
+        severity: TriageLevel.priority,
+        referralUrgency: ReferralUrgency.sameDay,
+        referralInstruction: 'Refer today for evaluation of pre-eclampsia.',
+      );
+      addRisk(
+        key: 'lbw_sga',
+        label: 'High risk of low birth weight',
+        protocolSource: 'Ghana ANC guidance (risk screening)',
+        severity: TriageLevel.watch,
+        referralUrgency: null,
+        referralInstruction: '',
+      );
+    }
+
+    return (findings, actions);
   }
 
   /// Runs the plausibility screen over everything this visit recorded, reading
@@ -282,10 +608,9 @@ class _AssessmentResultScreenState
 
   /// The classification to show and persist: the synthesized plan's merged
   /// classifications when present, falling back to the raw engine's wording.
-  String _classificationOf(CarePlan plan) =>
-      plan.classifications.isNotEmpty
-          ? plan.classifications.join(' + ')
-          : result.classification;
+  String _classificationOf(CarePlan plan) => plan.classifications.isNotEmpty
+      ? plan.classifications.join(' + ')
+      : result.classification;
 
   /// The triage that actually governs care — the CHO's override when they
   /// overruled, otherwise the engine's synthesized verdict. Mirrors
@@ -318,11 +643,17 @@ class _AssessmentResultScreenState
     if (overriding && _overrideReason.text.trim().length < 10) {
       setState(() {
         _saving = false;
-        _error = 'Give a clinical reason for overruling the engine — a few '
+        _error =
+            'Give a clinical reason for overruling the engine — a few '
             'words. It is kept with the record.';
       });
       return;
     }
+
+    final mlPredictions = await _mlPredictions;
+    final inputsWithMl = Map<String, Object?>.from(
+      draft.inputs,
+    )..['ml_predictions'] = mlPredictions.map((k, v) => MapEntry(k, v.toMap()));
 
     final assessment = Assessment(
       id: assessmentId,
@@ -331,7 +662,7 @@ class _AssessmentResultScreenState
       clientType: result.clientType,
       performedBy: user.id,
       performedAt: now,
-      inputs: draft.inputs,
+      inputs: inputsWithMl,
       result: result,
       carePlanJson: jsonEncode(plan.toJson()),
       overriddenTriage: _override,
@@ -387,22 +718,23 @@ class _AssessmentResultScreenState
     ];
 
     try {
-      await ref.read(careRepositoryProvider).saveAssessment(
-        user,
-        assessment,
-        referral: referral,
-        followUps: followUps,
-      );
+      await ref
+          .read(careRepositoryProvider)
+          .saveAssessment(
+            user,
+            assessment,
+            referral: referral,
+            followUps: followUps,
+          );
 
       // The growth measurement joins the child's series so the trajectory
       // engine sees this point. It is saved separately because it is a
       // different permission — vitals, not assessment.
       if (draft.growth != null) {
         try {
-          await ref.read(careRepositoryProvider).recordGrowth(
-            user,
-            draft.growth!,
-          );
+          await ref
+              .read(careRepositoryProvider)
+              .recordGrowth(user, draft.growth!);
         } on AccessDenied {
           // The assessment is already saved; do not lose it over the growth
           // point. The CHO simply does not hold the vitals permission.
@@ -447,6 +779,7 @@ class _AssessmentResultScreenState
     final c = triageColours(effective);
     final nutrition = _nutritionPlan();
     final immunisation = _immunisationPlan();
+    final nurturingCare = _nurturingCareAssessment(immunisation, nutrition);
 
     return Scaffold(
       appBar: AppBar(
@@ -476,6 +809,15 @@ class _AssessmentResultScreenState
       body: ListView(
         padding: const EdgeInsets.all(Gap.lg),
         children: [
+          // --------------------------------------- PRE-REFERRAL STABILIZATION
+          // Rendered ABOVE the verdict banner. These are life-saving
+          // interventions that must happen *before* transport is dispatched.
+          // If we showed them below the triage / "What to do" sections, the
+          // CHO might never scroll far enough during the second-delay window.
+          if (plan.preReferralProtocols.isNotEmpty) ...[
+            _PreReferralSection(plan: plan),
+            const SizedBox(height: Gap.lg),
+          ],
           // ------------------------------------------------- Verdict banner
           Container(
             padding: const EdgeInsets.all(Gap.lg),
@@ -506,10 +848,7 @@ class _AssessmentResultScreenState
                 TriageBadge(effective),
                 if (_override != null) ...[
                   const SizedBox(height: Gap.sm),
-                  _OverrideNote(
-                    engine: plan.overallTriage,
-                    chosen: effective,
-                  ),
+                  _OverrideNote(engine: plan.overallTriage, chosen: effective),
                 ],
                 const SizedBox(height: Gap.md),
                 Row(
@@ -581,14 +920,16 @@ class _AssessmentResultScreenState
                 if (plan.guardrailEscalated) ...[
                   const SizedBox(height: Gap.md),
                   const _SafetyNetNote(
-                    text: 'Safety net: a danger sign was detected, so this '
+                    text:
+                        'Safety net: a danger sign was detected, so this '
                         'plan was raised to urgent automatically.',
                   ),
                 ],
                 if (plan.referralGuaranteed) ...[
                   const SizedBox(height: Gap.md),
                   const _SafetyNetNote(
-                    text: 'Safety net: an urgent verdict always carries a '
+                    text:
+                        'Safety net: an urgent verdict always carries a '
                         'referral — one was added because none was listed.',
                   ),
                 ],
@@ -622,6 +963,251 @@ class _AssessmentResultScreenState
             ),
             const SizedBox(height: Gap.lg),
           ],
+
+          // --------------------------------------------- Offline AI predictions
+          SectionCard(
+            title: 'Offline AI risk predictions',
+            icon: Icons.psychology_rounded,
+            subtitle:
+                'On-device TFLite INT8 models. If the .tflite weights have not yet shipped, these use calibrated deterministic fallback predictors with the exact same output shape. No internet, no PHI leaves the tablet.',
+            child: FutureBuilder<Map<String, OfflineRiskPrediction>>(
+              future: _mlPredictions,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(Gap.lg),
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return Padding(
+                    padding: const EdgeInsets.all(Gap.md),
+                    child: Text(
+                      'Could not run predictions: ${snapshot.error}',
+                      style: const TextStyle(color: AppColors.triageRed),
+                    ),
+                  );
+                }
+                final predictions = snapshot.data ?? const {};
+                final entries = predictions.entries.toList()
+                  ..sort(
+                    (a, b) => a.value.modelName.compareTo(b.value.modelName),
+                  );
+                if (entries.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.all(Gap.md),
+                    child: Text('No models available on this device.'),
+                  );
+                }
+                return Column(
+                  children: entries.map((e) {
+                    final p = e.value;
+                    final Color badgeBg, badgeFg;
+                    switch (p.classification) {
+                      case 'high':
+                        badgeBg = AppColors.triageRedBg;
+                        badgeFg = AppColors.triageRed;
+                      case 'moderate':
+                        badgeBg = AppColors.triageAmberBg;
+                        badgeFg = AppColors.triageAmber;
+                      case 'low':
+                      default:
+                        badgeBg = AppColors.triageGreenBg;
+                        badgeFg = AppColors.triageGreen;
+                    }
+                    return InkWell(
+                      onTap: () {
+                        showDialog<void>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: Text('${p.modelName} details'),
+                            content: SingleChildScrollView(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  ListTile(
+                                    dense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                    title: const Text('Model'),
+                                    subtitle: Text(
+                                      '${p.modelName} v${p.modelVersion ?? "?"}\n'
+                                      '${p.usingModel ? "TFLite model" : "Rule-based fallback"} · '
+                                      '${p.inferenceMs ?? 0} ms',
+                                    ),
+                                  ),
+                                  const SizedBox(height: Gap.md),
+                                  const Text(
+                                    'Features used',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: Gap.sm),
+                                  if (p.featuresUsed.isEmpty)
+                                    const Text(
+                                      'None',
+                                      style: TextStyle(
+                                        color: AppColors.inkFaint,
+                                      ),
+                                    )
+                                  else
+                                    ...p.featuresUsed.map(
+                                      (f) => Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: Gap.xs,
+                                        ),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            const Icon(
+                                              Icons.check_circle,
+                                              size: 14,
+                                              color: AppColors.triageGreen,
+                                            ),
+                                            const SizedBox(width: Gap.sm),
+                                            Expanded(child: Text(f)),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  const SizedBox(height: Gap.md),
+                                  const Text(
+                                    'Features missing',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: Gap.sm),
+                                  if (p.featuresMissing.isEmpty)
+                                    const Text(
+                                      'None – complete!',
+                                      style: TextStyle(
+                                        color: AppColors.triageGreen,
+                                      ),
+                                    )
+                                  else
+                                    ...p.featuresMissing.map(
+                                      (f) => Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: Gap.xs,
+                                        ),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            const Icon(
+                                              Icons
+                                                  .radio_button_unchecked_outlined,
+                                              size: 14,
+                                              color: AppColors.inkFaint,
+                                            ),
+                                            const SizedBox(width: Gap.sm),
+                                            Expanded(child: Text(f)),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx),
+                                child: const Text('Close'),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: Gap.sm),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: badgeBg,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: badgeFg.withAlpha(90),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Icon(
+                                Icons.analytics_outlined,
+                                color: badgeFg,
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: Gap.md),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${p.modelName} ${p.usingModel ? "✓" : "(fallback)"}',
+                                    style: const TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w800,
+                                      height: 1.3,
+                                    ),
+                                  ),
+                                  const SizedBox(height: Gap.xs),
+                                  Text(
+                                    'Risk ${(p.riskProbability * 100).toStringAsFixed(1)}% · '
+                                    '${p.featuresUsed.length} of '
+                                    '${p.featuresUsed.length + p.featuresMissing.length} features used · '
+                                    '${p.inferenceMs ?? 0} ms · '
+                                    'model v${p.modelVersion ?? "?"}',
+                                    style: const TextStyle(
+                                      fontSize: 11.5,
+                                      color: AppColors.inkMuted,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: Gap.sm),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: Gap.sm,
+                                vertical: Gap.xs,
+                              ),
+                              decoration: BoxDecoration(
+                                color: badgeBg,
+                                borderRadius: BorderRadius.circular(
+                                  Gap.radiusSm,
+                                ),
+                                border: Border.all(
+                                  color: badgeFg.withValues(alpha: 0.4),
+                                ),
+                              ),
+                              child: Text(
+                                p.classification,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: badgeFg,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: Gap.lg),
 
           // ------------------------------------------------------- Findings
           if (plan.findings.isNotEmpty) ...[
@@ -681,9 +1267,7 @@ class _AssessmentResultScreenState
               icon: Icons.checklist_rounded,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final a in plan.actions) _ActionTile(a),
-                ],
+                children: [for (final a in plan.actions) _ActionTile(a)],
               ),
             ),
             const SizedBox(height: Gap.lg),
@@ -691,9 +1275,13 @@ class _AssessmentResultScreenState
 
           // ------------------------------------------------------ Nutrition
           if (nutrition != null) ...[
-            _NutritionSection(plan: nutrition, cost: _cost, onCost: (tier) {
-              setState(() => _cost = tier);
-            }),
+            _NutritionSection(
+              plan: nutrition,
+              cost: _cost,
+              onCost: (tier) {
+                setState(() => _cost = tier);
+              },
+            ),
             const SizedBox(height: Gap.lg),
           ],
 
@@ -706,6 +1294,20 @@ class _AssessmentResultScreenState
             const SizedBox(height: Gap.lg),
           ],
 
+          // -------------------------------- UNICEF Nurturing Care (PILLAR 3)
+          // The five-pillar framework in one cohesive card. Pillar 3 of the
+          // engine revamp: every visit produces an action list organised
+          // by Good Health / Adequate Nutrition / Responsive Caregiving /
+          // Early Learning / Security and Safety, each with a citation.
+          if (nurturingCare.isNotEmpty &&
+              (result.clientType == ClientType.newborn ||
+                  result.clientType == ClientType.childUnderFive ||
+                  result.clientType == ClientType.pregnantWoman ||
+                  result.clientType == ClientType.postpartumWoman)) ...[
+            _NurturingCareSection(assessment: nurturingCare),
+            const SizedBox(height: Gap.lg),
+          ],
+
           // -------------------------------------------------- Immunisation
           if (immunisation != null) ...[
             _ImmunisationSection(plan: immunisation),
@@ -715,7 +1317,10 @@ class _AssessmentResultScreenState
           // ------------------------------------------------------- Referral
           _ReferralSection(
             refer: _refer,
-            onRefer: (v) => setState(() => _refer = v),
+            onRefer: (v) => setState(() {
+              _referTouched = true;
+              _refer = v;
+            }),
             facilities: _adequateFacilities(),
             facility: _facility,
             onFacility: (f) => setState(() => _facility = f),
@@ -936,7 +1541,8 @@ class _OverrideSection extends StatelessWidget {
       children: [
         ChoiceChipsField<TriageLevel>(
           label: 'Overrule the verdict?',
-          why: 'Engine\u2019s verdict: ${engineTriage.label}. Tap a level to '
+          why:
+              'Engine\u2019s verdict: ${engineTriage.label}. Tap a level to '
               'overrule; tap it again to keep the engine\u2019s.',
           options: TriageLevel.values,
           labelOf: (t) => t.label,
@@ -950,7 +1556,8 @@ class _OverrideSection extends StatelessWidget {
             maxLines: 3,
             decoration: InputDecoration(
               isDense: true,
-              hintText: 'e.g. Child looks more unwell than the score suggests '
+              hintText:
+                  'e.g. Child looks more unwell than the score suggests '
                   '\u2014 referring on clinical grounds.',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(Gap.radiusSm),
@@ -984,10 +1591,7 @@ class _OverrideNote extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Gap.md,
-        vertical: Gap.sm,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.sm),
       decoration: BoxDecoration(
         color: AppColors.triageAmberBg,
         borderRadius: BorderRadius.circular(Gap.radiusSm),
@@ -1079,7 +1683,8 @@ class _NutritionSection extends StatelessWidget {
         const SizedBox(height: Gap.md),
         ChoiceChipsField<CostTier>(
           label: 'What can this household afford this month?',
-          why: 'A recommendation the family cannot buy is not a recommendation.',
+          why:
+              'A recommendation the family cannot buy is not a recommendation.',
           options: const [
             CostTier.freeOrGathered,
             CostTier.veryLow,
@@ -1481,9 +2086,7 @@ class _ReferralSection extends StatelessWidget {
         ? 'The receiving facility must be able to do what this case needs.'
         : 'The protocol does not require a referral. Turn this on if clinical '
               'judgement says otherwise.',
-    icon: refer
-        ? Icons.local_hospital_outlined
-        : Icons.local_hospital_outlined,
+    icon: refer ? Icons.local_hospital_outlined : Icons.local_hospital_outlined,
     accent: refer ? AppColors.triageRed : null,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1587,4 +2190,646 @@ class _FacilityTile extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// Pre-referral emergency stabilisation section. Rendered ABOVE the
+/// verdict banner because the steps must be executed *before* transport
+/// is dispatched — the second-delay window is the entire reason this
+/// module exists.
+///
+/// Each protocol carries its own WHO / MOH citation. The citation is
+/// shown on the card so a CHO who is unfamiliar with the dose can verify
+/// it against the published guidance before administering.
+class _PreReferralSection extends StatelessWidget {
+  const _PreReferralSection({required this.plan});
+
+  final CarePlan plan;
+
+  @override
+  Widget build(BuildContext context) {
+    // Red background with a "DO NOW" pill — the only section of the app
+    // that overrides the theme to grab attention. A CHO skimming for what
+    // to do first must see this before anything else.
+    final protocols = plan.preReferralProtocols;
+    return Container(
+      padding: const EdgeInsets.all(Gap.lg),
+      decoration: BoxDecoration(
+        color: AppColors.triageRed,
+        borderRadius: BorderRadius.circular(Gap.radius),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.triageRed.withValues(alpha: 0.25),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: Gap.sm,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(Gap.radiusSm),
+                ),
+                child: const Text(
+                  'DO NOW — BEFORE TRANSPORT',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.triageRed,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              const Icon(
+                Icons.medical_services_outlined,
+                color: Colors.white,
+                size: 22,
+              ),
+            ],
+          ),
+          const SizedBox(height: Gap.md),
+          const Text(
+            'Pre-referral stabilisation',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              height: 1.2,
+            ),
+          ),
+          const SizedBox(height: Gap.xs),
+          Text(
+            '${protocols.length} WHO / GHS protocol'
+            '${protocols.length == 1 ? '' : 's'} activated. '
+            'Initiate before transport is dispatched.',
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.white,
+              height: 1.4,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: Gap.md),
+          for (final p in protocols) ...[
+            _ProtocolCard(
+              protocol: p,
+              reason:
+                  plan.preReferralActivationReasons[p.id] ?? 'See audit log.',
+            ),
+            const SizedBox(height: Gap.md),
+          ],
+          // Decision-support framing — required for clinical-decision
+          // software and a deliberate trust signal: the app does not
+          // pretend to be the clinician.
+          Container(
+            padding: const EdgeInsets.all(Gap.md),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(Gap.radiusSm),
+            ),
+            child: const Text(
+              'DECISION SUPPORT — You are the licensed clinician. Verify the '
+              'dose, route and contraindications against the patient before '
+              'administration. Each card below cites the published guideline.',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.white,
+                height: 1.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One pre-referral protocol card, with the headline, citation badge,
+/// urgency note, ordered steps (with dose / when / contraindication per
+/// step), and the protocol-level contraindications.
+class _ProtocolCard extends StatelessWidget {
+  const _ProtocolCard({required this.protocol, required this.reason});
+
+  final StabilizationProtocol protocol;
+  final String reason;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(Gap.md),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(Gap.radius),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.local_hospital_rounded,
+                color: AppColors.triageRed,
+                size: 20,
+              ),
+              const SizedBox(width: Gap.sm),
+              Expanded(
+                child: Text(
+                  protocol.headline,
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.ink,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Gap.sm),
+          // Citation badge — the audit-defensible anchor.
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: Gap.sm,
+              vertical: 4,
+            ),
+            decoration: BoxDecoration(
+              color: AppColors.triageRedBg,
+              borderRadius: BorderRadius.circular(Gap.radiusSm),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.menu_book_outlined,
+                  size: 12,
+                  color: AppColors.triageRed,
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    protocol.citation.shortName,
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.triageRed,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (protocol.urgencyNote != null) ...[
+            const SizedBox(height: Gap.sm),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.timer_outlined,
+                  size: 14,
+                  color: AppColors.triageAmber,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    protocol.urgencyNote!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ink,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (protocol.contraindications.isNotEmpty) ...[
+            const SizedBox(height: Gap.sm),
+            Container(
+              padding: const EdgeInsets.all(Gap.sm),
+              decoration: BoxDecoration(
+                color: AppColors.triageAmberBg,
+                borderRadius: BorderRadius.circular(Gap.radiusSm),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'CONTRAINDICATIONS',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.triageAmber,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  for (final c in protocol.contraindications)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 1),
+                      child: Text(
+                        '• $c',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          color: AppColors.ink,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: Gap.md),
+          const Text(
+            'STEPS',
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w900,
+              color: AppColors.inkMuted,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: Gap.xs),
+          for (final s in protocol.steps)
+            _ProtocolStepTile(step: s, reason: reason),
+        ],
+      ),
+    );
+  }
+}
+
+/// One numbered step in a pre-referral protocol.
+class _ProtocolStepTile extends StatelessWidget {
+  const _ProtocolStepTile({required this.step, required this.reason});
+
+  final ProtocolStep step;
+
+  /// The reason string for the protocol. Shown once at the bottom of
+  /// the steps, so the CHO can see *why* the protocol was activated.
+  final String reason;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Gap.xs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 22,
+            height: 22,
+            decoration: const BoxDecoration(
+              color: AppColors.triageRed,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                '${step.order}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: Gap.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  step.action,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.ink,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                // Dose, in a clinically-faithful format.
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Gap.sm,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.canvas,
+                    borderRadius: BorderRadius.circular(Gap.radiusSm),
+                    border: Border.all(color: AppColors.line, width: 0.5),
+                  ),
+                  child: Text(
+                    'DOSE: ${step.dose}',
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.ink,
+                      height: 1.4,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'WHEN: ${step.whenToDo}',
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.ink,
+                    height: 1.4,
+                  ),
+                ),
+                Text(
+                  'WHY: ${step.rationale}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.inkMuted,
+                    height: 1.4,
+                  ),
+                ),
+                if (step.contraindication != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'CAUTION: ${step.contraindication!}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.triageAmber,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// UNICEF Nurturing Care Framework section. Pillar 3 of the engine
+/// revamp. Renders the five canonical pillars as a single, cohesive
+/// card: Good Health, Adequate Nutrition, Responsive Caregiving,
+/// Opportunities for Early Learning, Security and Safety. Each
+/// action carries a citation, and actions already delivered at this
+/// visit are checked off.
+class _NurturingCareSection extends StatelessWidget {
+  const _NurturingCareSection({required this.assessment});
+
+  final NurturingCareAssessment assessment;
+
+  @override
+  Widget build(BuildContext context) {
+    return SectionCard(
+      title: 'Nurturing care for early development',
+      subtitle:
+          'WHO / UNICEF / World Bank 2018 Nurturing Care Framework. Five '
+          'pillars, applied to this visit.',
+      icon: Icons.child_care_rounded,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Pillar strip — visual indicator of which pillars have
+          // actions.
+          Row(
+            children: [
+              for (final p in NurturingCarePillar.values) ...[
+                Expanded(
+                  child: _PillarChip(
+                    pillar: p,
+                    summary: assessment.pillarSummaries[p] ?? '',
+                  ),
+                ),
+                if (p != NurturingCarePillar.values.last)
+                  const SizedBox(width: 4),
+              ],
+            ],
+          ),
+          const SizedBox(height: Gap.md),
+          // Actions grouped by pillar.
+          for (final p in NurturingCarePillar.values) ...[
+            ...assessment.actions
+                .where((a) => a.pillar == p)
+                .map(
+                  (a) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: _NurturingCareActionTile(action: a),
+                  ),
+                ),
+          ],
+          const SizedBox(height: Gap.sm),
+          // Citation footer — the audit-defensible anchor.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.menu_book_outlined,
+                size: 12,
+                color: AppColors.inkMuted,
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  'Framework: WHO / UNICEF / World Bank 2018, Nurturing '
+                  'care for early childhood development. CC BY-NC-SA 3.0 '
+                  'IGO. Each action cites a WHO/UNICEF/GHS implementing '
+                  'guideline.',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: AppColors.inkMuted,
+                    fontStyle: FontStyle.italic,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One pillar's chip, shown in the pillar strip at the top of the
+/// section.
+class _PillarChip extends StatelessWidget {
+  const _PillarChip({required this.pillar, required this.summary});
+
+  final NurturingCarePillar pillar;
+  final String summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.canvas,
+        borderRadius: BorderRadius.circular(Gap.radiusSm),
+        border: Border.all(color: AppColors.line, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            pillar.displayName,
+            style: const TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w800,
+              color: AppColors.ink,
+              height: 1.2,
+              letterSpacing: 0.2,
+            ),
+          ),
+          const SizedBox(height: 1),
+          Text(
+            summary,
+            style: const TextStyle(
+              fontSize: 8.5,
+              color: AppColors.inkMuted,
+              height: 1.2,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One action tile within a pillar.
+class _NurturingCareActionTile extends StatelessWidget {
+  const _NurturingCareActionTile({required this.action});
+
+  final NurturingCareAction action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Checkmark or hollow circle: delivered or pending.
+        Container(
+          width: 18,
+          height: 18,
+          margin: const EdgeInsets.only(top: 1),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: action.deliveredAtVisit
+                ? AppColors.triageGreen
+                : Colors.transparent,
+            border: Border.all(
+              color: action.deliveredAtVisit
+                  ? AppColors.triageGreen
+                  : AppColors.inkMuted,
+              width: 1.5,
+            ),
+          ),
+          child: action.deliveredAtVisit
+              ? const Icon(Icons.check, size: 12, color: Colors.white)
+              : null,
+        ),
+        const SizedBox(width: Gap.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                action.title,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.ink,
+                  height: 1.3,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                action.counsellingNote,
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  color: AppColors.ink,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  if (action.deliveredAtVisit)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1,
+                      ),
+                      margin: const EdgeInsets.only(right: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.triageGreenBg,
+                        borderRadius: BorderRadius.circular(Gap.radiusSm),
+                      ),
+                      child: const Text(
+                        'DELIVERED',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.triageGreen,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                  if (action.referToService)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1,
+                      ),
+                      margin: const EdgeInsets.only(right: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.triageAmberBg,
+                        borderRadius: BorderRadius.circular(Gap.radiusSm),
+                      ),
+                      child: const Text(
+                        'REFER',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.triageAmber,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                  Flexible(
+                    child: Text(
+                      action.citation.shortName,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontStyle: FontStyle.italic,
+                        color: AppColors.inkMuted,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }

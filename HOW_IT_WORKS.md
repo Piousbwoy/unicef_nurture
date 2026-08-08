@@ -281,9 +281,50 @@ record the phones have pushed, with timestamps.
 - **Capability-based, not role-based.** Screens declare *what needs doing*
   (e.g. "run a clinical assessment"), not *who is allowed*. Adding a new role
   later means editing one permission set, not hunting through the UI.
-- **Credentials stay on the device.** The PIN is stored as a salted hash
-  (HMAC-SHA256), never in plain text, and is **never synced** to the server.
-  The session lives in secure storage.
+- **Credentials stay on the device.** The 4-digit PIN is stretched on-device
+  with a 16-byte local pin_salt via a 20,000-iteration iterated HMAC-SHA256
+  chain into a local_pin_hash. Both `pin_salt` and `local_pin_hash` reside
+  **exclusively in on-device SQLite** and are **never synced, never logged,
+  and never transmitted to the server in any form** — the original Ghana
+  Health Service data-privacy promise is 100% technically and legally true.
+- **Cloud recovery uses an isolated, one-way Cloud Verifier.** To enable
+  account restoration on a blank replacement tablet without holding PIN
+  material, MariaDB stores only a **domain-separated 120,000-iteration
+  HMAC-SHA256 derived value** (the "Cloud Verifier") in a dedicated,
+  logically isolated `user_verifiers` table. The Cloud Verifier is computed
+  locally from PIN + phone + a per-user non-secret `server_salt`, never from
+  the on-device `pin_hash`. A zero-knowledge challenge-response flow
+  (`GET /api/auth/challenge` → client computes verifier locally →
+  `POST /api/auth/login {verifier_response}`) authenticates users for
+  recovery without the raw PIN, on-device `pin_hash`, or `pin_salt` ever
+  traversing the network. Even a full MariaDB breach cannot recover either
+  the 4-digit PIN or the on-device credentials. Session tokens live in
+  device secure storage (Android Keystore / iOS Keychain).
+- **Registration requires internet.** Because the MariaDB record is the
+  authoritative account record for later device loss recovery, a new account
+  is not granted a local session until (a) the server issues a per-user JWT and
+  (b) the two identity outbox rows (users + user_verifiers, both promoted
+  to highest SyncPriority.critical) have been acknowledged by MariaDB within
+  a 45-second window. If either step fails the local registration is
+  rolled back cleanly: the CHO is shown a clear "please move to coverage"
+  message rather than silently provisioned an account that would be unrecoverable
+  after a handset loss. App Store / Play Store installation already
+  implies connectivity, so this never blocks a genuine first setup.
+- **Offline sign-in is always available after the first registration.**
+  Once the server has confirmed the identity rows, the local SQLite credentials
+  and the FlutterSecureStorage session pointer are the sole ground truth.
+  A CHO working in a zero-tower village signs in with no network contact
+  indefinitely until a phone reset or a replacement device, at which point the
+  recovery flow (sign-in, not sign-up) re-authenticates the worker
+  against MariaDB and pulls the last-synced caseload down atomically.
+- **Cloud recovery NEVER fabricates records in production.** When a real sync
+  server URL is configured and `DEMO_MODE` is not set via
+  `--dart-define`, a network error during recovery is returned as-is, never
+  substituted with a synthetic local profile. This prevents the silent creation of
+  phantom caseloads that would otherwise write to a disconnected outbox and
+  contaminate district records when signal returns. Field-demo simulation
+  simulation remains available by omitting the server URL or enabling
+  DEMO_MODE=true.
 - **The caregiver's scope is fixed at account creation** — bound to one
   household by a family code, with no way to widen it.
 - **Explainable AI is a safety feature, not a nice-to-have.** Every

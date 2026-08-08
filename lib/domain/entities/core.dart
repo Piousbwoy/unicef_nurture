@@ -378,7 +378,25 @@ class Person {
 }
 
 /// Obstetric and pregnancy record for a woman. Mirrors the fields in Ghana's
-/// Maternal Health Record Book so a CHO can transcribe without translating.
+/// Maternal Health Record Book (JICA/GHS national rollout since 2018,
+/// 1,000,000+ copies printed/year by NHIA + Birth & Deaths Registry) so a
+/// CHO transcribes without translating.
+///
+/// Expanded August 2026 against the actual paper form field list:
+///   • Blood group + Rhesus (MCH RB p. 5, ANC contact 1)
+///   • Urinalysis strips: protein, glucose, ketones, blood (MCH RB p. 7)
+///   • HBsAg (hepatitis B surface antigen), HSV screening, syphilis RST
+///     dates (MCH RB p. 5, ANC contact 1 and 6)
+///   • Sickle-cell genotype (HbAA / HbAS / HbSS / HbSC / other trait) —
+///     clinically mandatory in the Northern Region where 15-20% of the
+///     population carries a sickle-cell allele (Kintampo HRC data 2023)
+///   • Urine glucose + ketones + blood alongside protein (GHS ANC 2024)
+///   • Pre-eclampsia extras: epigastric pain, hand/face oedema, brisk
+///     reflexes, oliguria, weight gain >1 kg/wk (MCH RB pre-eclampsia box)
+///   • Previous medical history flags (anaemia, HTN, DM, TB, asthma, heart)
+///   • Edinburgh Postnatal Depression Scale 10-item score (PNC days 7, 42)
+///   • Puerperal: uterine involution in cm, lochia (colour/odour/amount),
+///     episiotomy/Caesarean wound, breastfeeding exam (MCH RB pp. 25–26)
 class MaternalRecord {
   const MaternalRecord({
     required this.personId,
@@ -395,13 +413,68 @@ class MaternalRecord {
     this.llinSupplied = false,
     this.haemoglobin,
     this.bloodGroup,
+    this.rhesusPositive,
     this.sicklingStatus,
+    this.sickleGenotype,
     this.hivTested = false,
+    this.hivTestDate,
+    this.syphilisTested = false,
+    this.syphilisTestDate,
+    this.hbsagTested = false,
+    this.hbsagTestDate,
     this.deliveryDate,
     this.deliveryPlace,
     this.deliveryMode,
     this.plurality = BirthPlurality.singleton,
     this.familyPlanningMethod,
+    // ── Urinalysis strips (ANC each contact) ────────────────────────────
+    this.urineProtein, // 0/1/2/3/4
+    this.urineGlucose, // 0/1/2/3/4
+    this.urineKetones, // 0/1/2/3
+    this.urineBlood,   // 0/1/2/3
+    // ── Pre-eclampsia extras ────────────────────────────────────────────
+    this.oedemaHandsOrFace = false,
+    this.epigastricPain = false,
+    this.headacheSevere = false,
+    this.blurredVision = false,
+    this.briskReflexes = false,
+    this.oliguria = false,
+    this.weightGainOver1kgPerWeek = false,
+    // ── Previous medical history ────────────────────────────────────────
+    this.prevHypertension = false,
+    this.prevDiabetes = false,
+    this.prevAnaemia = false,
+    this.prevTb = false,
+    this.prevAsthma = false,
+    this.prevHeartDisease = false,
+    this.prevKidneyDisease = false,
+    this.prevHepatitis = false,
+    // ── Puerperal / PNC fields (days 1 / 3 / 7 / 42) ────────────────────
+    this.involutionCmBelowUmbilicus,
+    this.lochiaColour, // rubra / serosa / alba
+    this.lochiaOdour,   // normal / offensive
+    this.lochiaAmount,  // light / normal / heavy
+    this.woundRedness = false,
+    this.woundOedema = false,
+    this.woundDischarge = false,
+    this.woundApproximated,
+    this.episiotomyOrLaceration = false,
+    this.nipplesCracked = false,
+    this.nipplesInverted = false,
+    this.breastMastitisSigns = false,
+    this.breastAttachmentOk,
+    this.breastLetDownOk,
+    // ── Edinburgh EPDS 10 items (0..3 each, 0..30 total) ────────────────
+    this.edinburghLaugh,
+    this.edinburghEnjoy,
+    this.edinburghBlame,
+    this.edinburghAnxious,
+    this.edinburghScared,
+    this.edinburghOverwhelm,
+    this.edinburghSleep,
+    this.edinburghSad,
+    this.edinburghCry,
+    this.edinburghSelfHarm,
     this.updatedAt,
   });
 
@@ -436,16 +509,112 @@ class MaternalRecord {
   /// Haemoglobin in g/dL. <11 anaemia, 7–9.9 moderate, <7 severe.
   final double? haemoglobin;
 
-  final String? bloodGroup;
-  final String? sicklingStatus;
+  final String? bloodGroup; // A/B/AB/O
+  final bool? rhesusPositive; // null = not typed, true = Rh+, false = Rh-
+  final String? sicklingStatus; // positive/negative/unknown/untested
+  final String? sickleGenotype; // HbAA, HbAS, HbSS, HbSC, HbF (newborn), other
+
   final bool hivTested;
+  final DateTime? hivTestDate;
+  final bool syphilisTested;
+  final DateTime? syphilisTestDate;
+  final bool hbsagTested;
+  final DateTime? hbsagTestDate;
 
   final DateTime? deliveryDate;
   final DeliveryPlace? deliveryPlace;
   final DeliveryMode? deliveryMode;
   final BirthPlurality plurality;
   final String? familyPlanningMethod;
+
+  // Urinalysis strip readings. Values mirror a standard Multistix 10 SG:
+  // glucose (neg/trace=0, 1+, 2+, 3+, 4+), ketones 0..3, blood 0..3,
+  // protein already captured separately as 0..4 in the existing
+  // PregnancyInput (but replicated here for persistence in entity records).
+  final int? urineProtein;
+  final int? urineGlucose;
+  final int? urineKetones;
+  final int? urineBlood;
+
+  // Pre-eclampsia / imminent eclampsia red flags.
+  final bool oedemaHandsOrFace;
+  final bool epigastricPain;
+  final bool headacheSevere;
+  final bool blurredVision;
+  final bool briskReflexes;
+  final bool oliguria;
+  final bool weightGainOver1kgPerWeek;
+
+  // Previous medical history — important for risk stratification.
+  final bool prevHypertension;
+  final bool prevDiabetes;
+  final bool prevAnaemia;
+  final bool prevTb;
+  final bool prevAsthma;
+  final bool prevHeartDisease;
+  final bool prevKidneyDisease;
+  final bool prevHepatitis;
+
+  // Puerperal (PNC 1/3/7/42 day checks)
+  final int? involutionCmBelowUmbilicus; // day1 = 1-2, day7 = 4-5, day42 = non-palp
+  final String? lochiaColour;   // 'rubra' / 'serosa' / 'alba'
+  final String? lochiaOdour;    // 'normal' / 'offensive'
+  final String? lochiaAmount;   // 'light'/'normal'/'heavy'
+  // Breast / wound / perineum
+  final bool woundRedness;
+  final bool woundOedema;
+  final bool woundDischarge;
+  final bool? woundApproximated;
+  final bool episiotomyOrLaceration;
+  final bool nipplesCracked;
+  final bool nipplesInverted;
+  final bool breastMastitisSigns;
+  final bool? breastAttachmentOk;
+  final bool? breastLetDownOk;
+
+  // Edinburgh EPDS 10-item answers. Each 0..3. Range 0..30.
+  //   ≥13 = probable depression. ≥20 = severe.
+  //   Item 10 ≥1 = immediate self-harm referral.
+  final int? edinburghLaugh;   // Q1: been able to laugh and see the funny side
+  final int? edinburghEnjoy;   // Q2: looked forward with enjoyment
+  final int? edinburghBlame;   // Q3: blamed myself unnecessarily
+  final int? edinburghAnxious; // Q4: anxious or worried for no good reason
+  final int? edinburghScared;  // Q5: felt scared or panicky for no reason
+  final int? edinburghOverwhelm;// Q6: things been getting on top of me
+  final int? edinburghSleep;   // Q7: difficult to sleep properly
+  final int? edinburghSad;     // Q8: felt sad/miserable
+  final int? edinburghCry;     // Q9: been so unhappy that I have been crying
+  final int? edinburghSelfHarm;// Q10: thought of harming myself
+
   final DateTime? updatedAt;
+
+  /// Computed Edinburgh EPDS score. Returns null when any item is missing.
+  int? get edinburghScore {
+    final items = [
+      edinburghLaugh, edinburghEnjoy, edinburghBlame,
+      edinburghAnxious, edinburghScared, edinburghOverwhelm,
+      edinburghSleep, edinburghSad, edinburghCry, edinburghSelfHarm,
+    ];
+    if (items.any((v) => v == null)) return null;
+    return items.fold<int>(0, (a, b) => a + (b ?? 0));
+  }
+
+  /// Returns true if a red flag item (self-harm, Q10 ≥ 1) has been affirmed.
+  /// Requires immediate psychosocial or mental-health referral regardless of
+  /// the overall score (Edinburgh manual, 2003).
+  bool get edinburghSelfHarmFlag => (edinburghSelfHarm ?? 0) >= 1;
+
+  /// Severe = score ≥20 OR self-harm ideation (any).
+  bool get edinburghSevere {
+    final s = edinburghScore;
+    return (s != null && s >= 20) || edinburghSelfHarmFlag;
+  }
+
+  /// Probable postnatal depression (≥13).
+  bool get edinburghProbablePnd {
+    final s = edinburghScore;
+    return s != null && s >= 13;
+  }
 
   /// Gestational age in completed weeks, from LMP where available, otherwise
   /// back-calculated from the EDD.
@@ -495,13 +664,71 @@ class MaternalRecord {
     'llin_supplied': llinSupplied ? 1 : 0,
     'haemoglobin': haemoglobin,
     'blood_group': bloodGroup,
+    'rhesus_positive': rhesusPositive == null
+        ? null
+        : (rhesusPositive! ? 1 : 0),
     'sickling_status': sicklingStatus,
+    'sickle_genotype': sickleGenotype,
     'hiv_tested': hivTested ? 1 : 0,
+    'hiv_test_date': hivTestDate?.toIso8601String(),
+    'syphilis_tested': syphilisTested ? 1 : 0,
+    'syphilis_test_date': syphilisTestDate?.toIso8601String(),
+    'hbsag_tested': hbsagTested ? 1 : 0,
+    'hbsag_test_date': hbsagTestDate?.toIso8601String(),
     'delivery_date': deliveryDate?.toIso8601String(),
     'delivery_place': deliveryPlace?.name,
     'delivery_mode': deliveryMode?.name,
     'plurality': plurality.name,
     'family_planning_method': familyPlanningMethod,
+    'urine_protein': urineProtein,
+    'urine_glucose': urineGlucose,
+    'urine_ketones': urineKetones,
+    'urine_blood': urineBlood,
+    'oedema_hands_or_face': oedemaHandsOrFace ? 1 : 0,
+    'epigastric_pain': epigastricPain ? 1 : 0,
+    'headache_severe': headacheSevere ? 1 : 0,
+    'blurred_vision': blurredVision ? 1 : 0,
+    'brisk_reflexes': briskReflexes ? 1 : 0,
+    'oliguria': oliguria ? 1 : 0,
+    'weight_gain_over_1kg_per_week': weightGainOver1kgPerWeek ? 1 : 0,
+    'prev_hypertension': prevHypertension ? 1 : 0,
+    'prev_diabetes': prevDiabetes ? 1 : 0,
+    'prev_anaemia': prevAnaemia ? 1 : 0,
+    'prev_tb': prevTb ? 1 : 0,
+    'prev_asthma': prevAsthma ? 1 : 0,
+    'prev_heart_disease': prevHeartDisease ? 1 : 0,
+    'prev_kidney_disease': prevKidneyDisease ? 1 : 0,
+    'prev_hepatitis': prevHepatitis ? 1 : 0,
+    'involution_cm_below_umbilicus': involutionCmBelowUmbilicus,
+    'lochia_colour': lochiaColour,
+    'lochia_odour': lochiaOdour,
+    'lochia_amount': lochiaAmount,
+    'wound_redness': woundRedness ? 1 : 0,
+    'wound_oedema': woundOedema ? 1 : 0,
+    'wound_discharge': woundDischarge ? 1 : 0,
+    'wound_approximated': woundApproximated == null
+        ? null
+        : (woundApproximated! ? 1 : 0),
+    'episiotomy_or_laceration': episiotomyOrLaceration ? 1 : 0,
+    'nipples_cracked': nipplesCracked ? 1 : 0,
+    'nipples_inverted': nipplesInverted ? 1 : 0,
+    'breast_mastitis_signs': breastMastitisSigns ? 1 : 0,
+    'breast_attachment_ok': breastAttachmentOk == null
+        ? null
+        : (breastAttachmentOk! ? 1 : 0),
+    'breast_let_down_ok': breastLetDownOk == null
+        ? null
+        : (breastLetDownOk! ? 1 : 0),
+    'edinburgh_laugh': edinburghLaugh,
+    'edinburgh_enjoy': edinburghEnjoy,
+    'edinburgh_blame': edinburghBlame,
+    'edinburgh_anxious': edinburghAnxious,
+    'edinburgh_scared': edinburghScared,
+    'edinburgh_overwhelm': edinburghOverwhelm,
+    'edinburgh_sleep': edinburghSleep,
+    'edinburgh_sad': edinburghSad,
+    'edinburgh_cry': edinburghCry,
+    'edinburgh_self_harm': edinburghSelfHarm,
     'updated_at': (updatedAt ?? DateTime.now()).toIso8601String(),
   };
 
@@ -526,8 +753,23 @@ class MaternalRecord {
     llinSupplied: (m['llin_supplied'] as num?) == 1,
     haemoglobin: (m['haemoglobin'] as num?)?.toDouble(),
     bloodGroup: m['blood_group'] as String?,
+    rhesusPositive: m['rhesus_positive'] == null
+        ? null
+        : (m['rhesus_positive'] as num) == 1,
     sicklingStatus: m['sickling_status'] as String?,
+    sickleGenotype: m['sickle_genotype'] as String?,
     hivTested: (m['hiv_tested'] as num?) == 1,
+    hivTestDate: DateTime.tryParse(
+      (m['hiv_test_date'] as String?) ?? '',
+    ),
+    syphilisTested: (m['syphilis_tested'] as num?) == 1,
+    syphilisTestDate: DateTime.tryParse(
+      (m['syphilis_test_date'] as String?) ?? '',
+    ),
+    hbsagTested: (m['hbsag_tested'] as num?) == 1,
+    hbsagTestDate: DateTime.tryParse(
+      (m['hbsag_test_date'] as String?) ?? '',
+    ),
     deliveryDate: DateTime.tryParse((m['delivery_date'] as String?) ?? ''),
     deliveryPlace: m['delivery_place'] == null
         ? null
@@ -540,25 +782,116 @@ class MaternalRecord {
       orElse: () => BirthPlurality.singleton,
     ),
     familyPlanningMethod: m['family_planning_method'] as String?,
+    urineProtein: (m['urine_protein'] as num?)?.toInt(),
+    urineGlucose: (m['urine_glucose'] as num?)?.toInt(),
+    urineKetones: (m['urine_ketones'] as num?)?.toInt(),
+    urineBlood: (m['urine_blood'] as num?)?.toInt(),
+    oedemaHandsOrFace: (m['oedema_hands_or_face'] as num?) == 1,
+    epigastricPain: (m['epigastric_pain'] as num?) == 1,
+    headacheSevere: (m['headache_severe'] as num?) == 1,
+    blurredVision: (m['blurred_vision'] as num?) == 1,
+    briskReflexes: (m['brisk_reflexes'] as num?) == 1,
+    oliguria: (m['oliguria'] as num?) == 1,
+    weightGainOver1kgPerWeek:
+        (m['weight_gain_over_1kg_per_week'] as num?) == 1,
+    prevHypertension: (m['prev_hypertension'] as num?) == 1,
+    prevDiabetes: (m['prev_diabetes'] as num?) == 1,
+    prevAnaemia: (m['prev_anaemia'] as num?) == 1,
+    prevTb: (m['prev_tb'] as num?) == 1,
+    prevAsthma: (m['prev_asthma'] as num?) == 1,
+    prevHeartDisease: (m['prev_heart_disease'] as num?) == 1,
+    prevKidneyDisease: (m['prev_kidney_disease'] as num?) == 1,
+    prevHepatitis: (m['prev_hepatitis'] as num?) == 1,
+    involutionCmBelowUmbilicus:
+        (m['involution_cm_below_umbilicus'] as num?)?.toInt(),
+    lochiaColour: m['lochia_colour'] as String?,
+    lochiaOdour: m['lochia_odour'] as String?,
+    lochiaAmount: m['lochia_amount'] as String?,
+    woundRedness: (m['wound_redness'] as num?) == 1,
+    woundOedema: (m['wound_oedema'] as num?) == 1,
+    woundDischarge: (m['wound_discharge'] as num?) == 1,
+    woundApproximated: m['wound_approximated'] == null
+        ? null
+        : (m['wound_approximated'] as num) == 1,
+    episiotomyOrLaceration:
+        (m['episiotomy_or_laceration'] as num?) == 1,
+    nipplesCracked: (m['nipples_cracked'] as num?) == 1,
+    nipplesInverted: (m['nipples_inverted'] as num?) == 1,
+    breastMastitisSigns: (m['breast_mastitis_signs'] as num?) == 1,
+    breastAttachmentOk: m['breast_attachment_ok'] == null
+        ? null
+        : (m['breast_attachment_ok'] as num) == 1,
+    breastLetDownOk: m['breast_let_down_ok'] == null
+        ? null
+        : (m['breast_let_down_ok'] as num) == 1,
+    edinburghLaugh: (m['edinburgh_laugh'] as num?)?.toInt(),
+    edinburghEnjoy: (m['edinburgh_enjoy'] as num?)?.toInt(),
+    edinburghBlame: (m['edinburgh_blame'] as num?)?.toInt(),
+    edinburghAnxious: (m['edinburgh_anxious'] as num?)?.toInt(),
+    edinburghScared: (m['edinburgh_scared'] as num?)?.toInt(),
+    edinburghOverwhelm: (m['edinburgh_overwhelm'] as num?)?.toInt(),
+    edinburghSleep: (m['edinburgh_sleep'] as num?)?.toInt(),
+    edinburghSad: (m['edinburgh_sad'] as num?)?.toInt(),
+    edinburghCry: (m['edinburgh_cry'] as num?)?.toInt(),
+    edinburghSelfHarm: (m['edinburgh_self_harm'] as num?)?.toInt(),
     updatedAt: DateTime.tryParse((m['updated_at'] as String?) ?? ''),
   );
 }
 
 /// Birth details for a newborn. Separated from [Person] because these facts are
 /// fixed at birth and drive the young-infant risk model for the first 59 days.
+///
+/// Expanded against WHO Young-Infant IMCI 0–59 day danger signs and Ghana CHPS
+/// newborn examination checklist (Kintampo HRC newborn home-visit package 2023).
 class BirthRecord {
   const BirthRecord({
     required this.personId,
     this.birthWeightKg,
+    this.birthLengthCm,
     this.gestationWeeksAtBirth,
     this.deliveryPlace,
     this.deliveryMode,
     this.plurality = BirthPlurality.singleton,
     this.birthOrder = 1,
     this.resuscitationNeeded,
+    this.apgar1Minute,
+    this.apgar5Minute,
     this.cordCareGiven,
+    this.cordChlorhexidineApplied,
     this.vitaminKGiven,
+    this.vitaminKDoseMg = 1,
     this.breastfedWithinOneHour,
+    this.breastfeedingOkOnDay1,
+    this.temperatureCelsius,
+    this.respiratoryRatePerMin,
+    this.heartRatePerMin,
+    this.oxygenSaturationPerCent,
+    // ── Neonatal danger signs (Young-Infant IMCI 0–59d) ────────────────────
+    this.historyOfConvulsions = false,
+    this.severeChestIndrawing = false,
+    this.nasalFlaring = false,
+    this.grunting = false,
+    this.bulgingFontanelle = false,
+    this.jaundiceBefore24h = false,
+    this.jaundiceOnDay3OrLater,
+    this.feedingDifficulty = false,
+    this.abdominalDistension = false,
+    this.cordRednessBeyondBase = false,
+    this.cordPus = false,
+    this.cordOedemaBeyondBase = false,
+    this.skinPustules = false,
+    this.lethargicOrUnconscious = false,
+    this.bleedingFromAnySite = false,
+    // ── KMC (Kangaroo Mother Care) ────────────────────────────────────────
+    this.kmcEligible = false,
+    this.kmcInitiated,
+    this.kmcSite,
+    this.kmcHoursPerDay,
+    // ── Newborn screening ─────────────────────────────────────────────────
+    this.sickleScreenSampleCollected,
+    this.sickleScreenSampleDate,
+    this.hearingScreenDone,
+    this.hearingScreenResult,
     this.updatedAt,
   });
 
@@ -567,6 +900,9 @@ class BirthRecord {
   /// <2.5 kg is low birth weight; <1.5 kg very low. The strongest single
   /// predictor of neonatal death in this setting.
   final double? birthWeightKg;
+
+  /// Birth length in cm, for SGA screening.
+  final double? birthLengthCm;
 
   final int? gestationWeeksAtBirth;
   final DeliveryPlace? deliveryPlace;
@@ -578,10 +914,55 @@ class BirthRecord {
 
   /// Birth asphyxia is the leading cause of neonatal death in the Upper East.
   final bool? resuscitationNeeded;
+  final int? apgar1Minute;
+  final int? apgar5Minute;
 
   final bool? cordCareGiven;
+  final bool? cordChlorhexidineApplied;
   final bool? vitaminKGiven;
+
+  /// Standard dose = 1 mg IM. 0.5 mg for <1500 g newborns.
+  final double vitaminKDoseMg;
+
   final bool? breastfedWithinOneHour;
+  final bool? breastfeedingOkOnDay1;
+
+  /// Measured axillary; >37.5 fever, <35.5 hypothermia (both urgent).
+  final double? temperatureCelsius;
+  final int? respiratoryRatePerMin;
+  final int? heartRatePerMin;
+  final int? oxygenSaturationPerCent;
+
+  // Young-Infant IMCI 0–59 day danger signs — any one = POSSIBLE SEVERE
+  // BACTERIAL INFECTION (PSBI) → urgent referral.
+  final bool historyOfConvulsions;
+  final bool severeChestIndrawing;
+  final bool nasalFlaring;
+  final bool grunting;
+  final bool bulgingFontanelle;
+  final bool jaundiceBefore24h;
+  final String? jaundiceOnDay3OrLater; // none / face+trunk / palms+soles
+  final bool feedingDifficulty;
+  final bool abdominalDistension;
+  final bool cordRednessBeyondBase;
+  final bool cordPus;
+  final bool cordOedemaBeyondBase;
+  final bool skinPustules;
+  final bool lethargicOrUnconscious;
+  final bool bleedingFromAnySite;
+
+  // KMC (Kangaroo Mother Care) — LBW newborns, Northern Region priority.
+  final bool kmcEligible;
+  final bool? kmcInitiated;
+  final String? kmcSite; // CHPS / hospital / home
+  final double? kmcHoursPerDay;
+
+  // Newborn screening (GHS national rollout of sickle + hearing 2024).
+  final bool? sickleScreenSampleCollected;
+  final DateTime? sickleScreenSampleDate;
+  final bool? hearingScreenDone;
+  final String? hearingScreenResult; // pass / refer / rescreen
+
   final DateTime? updatedAt;
 
   bool get isLowBirthWeight =>
@@ -592,9 +973,35 @@ class BirthRecord {
       gestationWeeksAtBirth != null && gestationWeeksAtBirth! < 37;
   bool get isMultiple => plurality != BirthPlurality.singleton;
 
+  /// Fever or hypothermia — both neonatal red flags.
+  bool get hasTemperatureAbnormality {
+    if (temperatureCelsius == null) return false;
+    return temperatureCelsius! > 37.5 || temperatureCelsius! < 35.5;
+  }
+
+  /// True if ANY Young-Infant IMCI PSBI danger sign is affirmed.
+  /// PSBI = immediate IMCI referral (injectable gentamicin before transport).
+  bool get hasAnyPsbiDangerSign =>
+      historyOfConvulsions ||
+      severeChestIndrawing ||
+      nasalFlaring ||
+      grunting ||
+      bulgingFontanelle ||
+      jaundiceBefore24h ||
+      feedingDifficulty ||
+      abdominalDistension ||
+      cordRednessBeyondBase ||
+      cordPus ||
+      cordOedemaBeyondBase ||
+      skinPustules ||
+      lethargicOrUnconscious ||
+      bleedingFromAnySite ||
+      hasTemperatureAbnormality;
+
   Map<String, Object?> toMap() => {
     'person_id': personId,
     'birth_weight_kg': birthWeightKg,
+    'birth_length_cm': birthLengthCm,
     'gestation_weeks_at_birth': gestationWeeksAtBirth,
     'delivery_place': deliveryPlace?.name,
     'delivery_mode': deliveryMode?.name,
@@ -603,17 +1010,57 @@ class BirthRecord {
     'resuscitation_needed': resuscitationNeeded == null
         ? null
         : (resuscitationNeeded! ? 1 : 0),
+    'apgar_1_minute': apgar1Minute,
+    'apgar_5_minute': apgar5Minute,
     'cord_care_given': cordCareGiven == null ? null : (cordCareGiven! ? 1 : 0),
+    'cord_chlorhexidine_applied': cordChlorhexidineApplied == null
+        ? null
+        : (cordChlorhexidineApplied! ? 1 : 0),
     'vitamin_k_given': vitaminKGiven == null ? null : (vitaminKGiven! ? 1 : 0),
+    'vitamin_k_dose_mg': vitaminKDoseMg,
     'breastfed_within_one_hour': breastfedWithinOneHour == null
         ? null
         : (breastfedWithinOneHour! ? 1 : 0),
+    'breastfeeding_ok_on_day1': breastfeedingOkOnDay1 == null
+        ? null
+        : (breastfeedingOkOnDay1! ? 1 : 0),
+    'temperature_celsius': temperatureCelsius,
+    'respiratory_rate_per_min': respiratoryRatePerMin,
+    'heart_rate_per_min': heartRatePerMin,
+    'oxygen_saturation_per_cent': oxygenSaturationPerCent,
+    'history_of_convulsions': historyOfConvulsions ? 1 : 0,
+    'severe_chest_indrawing': severeChestIndrawing ? 1 : 0,
+    'nasal_flaring': nasalFlaring ? 1 : 0,
+    'grunting': grunting ? 1 : 0,
+    'bulging_fontanelle': bulgingFontanelle ? 1 : 0,
+    'jaundice_before_24h': jaundiceBefore24h ? 1 : 0,
+    'jaundice_on_day3_or_later': jaundiceOnDay3OrLater,
+    'feeding_difficulty': feedingDifficulty ? 1 : 0,
+    'abdominal_distension': abdominalDistension ? 1 : 0,
+    'cord_redness_beyond_base': cordRednessBeyondBase ? 1 : 0,
+    'cord_pus': cordPus ? 1 : 0,
+    'cord_oedema_beyond_base': cordOedemaBeyondBase ? 1 : 0,
+    'skin_pustules': skinPustules ? 1 : 0,
+    'lethargic_or_unconscious': lethargicOrUnconscious ? 1 : 0,
+    'bleeding_from_any_site': bleedingFromAnySite ? 1 : 0,
+    'kmc_eligible': kmcEligible ? 1 : 0,
+    'kmc_initiated': kmcInitiated == null ? null : (kmcInitiated! ? 1 : 0),
+    'kmc_site': kmcSite,
+    'kmc_hours_per_day': kmcHoursPerDay,
+    'sickle_screen_sample_collected': sickleScreenSampleCollected == null
+        ? null
+        : (sickleScreenSampleCollected! ? 1 : 0),
+    'sickle_screen_sample_date': sickleScreenSampleDate?.toIso8601String(),
+    'hearing_screen_done':
+        hearingScreenDone == null ? null : (hearingScreenDone! ? 1 : 0),
+    'hearing_screen_result': hearingScreenResult,
     'updated_at': (updatedAt ?? DateTime.now()).toIso8601String(),
   };
 
   factory BirthRecord.fromMap(Map<String, Object?> m) => BirthRecord(
     personId: m['person_id'] as String,
     birthWeightKg: (m['birth_weight_kg'] as num?)?.toDouble(),
+    birthLengthCm: (m['birth_length_cm'] as num?)?.toDouble(),
     gestationWeeksAtBirth: (m['gestation_weeks_at_birth'] as num?)?.toInt(),
     deliveryPlace: m['delivery_place'] == null
         ? null
@@ -629,15 +1076,60 @@ class BirthRecord {
     resuscitationNeeded: m['resuscitation_needed'] == null
         ? null
         : (m['resuscitation_needed'] as num) == 1,
+    apgar1Minute: (m['apgar_1_minute'] as num?)?.toInt(),
+    apgar5Minute: (m['apgar_5_minute'] as num?)?.toInt(),
     cordCareGiven: m['cord_care_given'] == null
         ? null
         : (m['cord_care_given'] as num) == 1,
+    cordChlorhexidineApplied: m['cord_chlorhexidine_applied'] == null
+        ? null
+        : (m['cord_chlorhexidine_applied'] as num) == 1,
     vitaminKGiven: m['vitamin_k_given'] == null
         ? null
         : (m['vitamin_k_given'] as num) == 1,
+    vitaminKDoseMg: (m['vitamin_k_dose_mg'] as num?)?.toDouble() ?? 1,
     breastfedWithinOneHour: m['breastfed_within_one_hour'] == null
         ? null
         : (m['breastfed_within_one_hour'] as num) == 1,
+    breastfeedingOkOnDay1: m['breastfeeding_ok_on_day1'] == null
+        ? null
+        : (m['breastfeeding_ok_on_day1'] as num) == 1,
+    temperatureCelsius: (m['temperature_celsius'] as num?)?.toDouble(),
+    respiratoryRatePerMin: (m['respiratory_rate_per_min'] as num?)?.toInt(),
+    heartRatePerMin: (m['heart_rate_per_min'] as num?)?.toInt(),
+    oxygenSaturationPerCent:
+        (m['oxygen_saturation_per_cent'] as num?)?.toInt(),
+    historyOfConvulsions: (m['history_of_convulsions'] as num?) == 1,
+    severeChestIndrawing: (m['severe_chest_indrawing'] as num?) == 1,
+    nasalFlaring: (m['nasal_flaring'] as num?) == 1,
+    grunting: (m['grunting'] as num?) == 1,
+    bulgingFontanelle: (m['bulging_fontanelle'] as num?) == 1,
+    jaundiceBefore24h: (m['jaundice_before_24h'] as num?) == 1,
+    jaundiceOnDay3OrLater: m['jaundice_on_day3_or_later'] as String?,
+    feedingDifficulty: (m['feeding_difficulty'] as num?) == 1,
+    abdominalDistension: (m['abdominal_distension'] as num?) == 1,
+    cordRednessBeyondBase: (m['cord_redness_beyond_base'] as num?) == 1,
+    cordPus: (m['cord_pus'] as num?) == 1,
+    cordOedemaBeyondBase: (m['cord_oedema_beyond_base'] as num?) == 1,
+    skinPustules: (m['skin_pustules'] as num?) == 1,
+    lethargicOrUnconscious: (m['lethargic_or_unconscious'] as num?) == 1,
+    bleedingFromAnySite: (m['bleeding_from_any_site'] as num?) == 1,
+    kmcEligible: (m['kmc_eligible'] as num?) == 1,
+    kmcInitiated: m['kmc_initiated'] == null
+        ? null
+        : (m['kmc_initiated'] as num) == 1,
+    kmcSite: m['kmc_site'] as String?,
+    kmcHoursPerDay: (m['kmc_hours_per_day'] as num?)?.toDouble(),
+    sickleScreenSampleCollected: m['sickle_screen_sample_collected'] == null
+        ? null
+        : (m['sickle_screen_sample_collected'] as num) == 1,
+    sickleScreenSampleDate: DateTime.tryParse(
+      (m['sickle_screen_sample_date'] as String?) ?? '',
+    ),
+    hearingScreenDone: m['hearing_screen_done'] == null
+        ? null
+        : (m['hearing_screen_done'] as num) == 1,
+    hearingScreenResult: m['hearing_screen_result'] as String?,
     updatedAt: DateTime.tryParse((m['updated_at'] as String?) ?? ''),
   );
 }
@@ -650,10 +1142,12 @@ class GrowthMeasurement {
     required this.id,
     required this.personId,
     required this.takenAt,
+    this.muacMm,
     this.muacCm,
     this.weightKg,
     this.heightCm,
     this.hasBilateralOedema = false,
+    this.palmarPallorSeverity, // none / some / severe (IMCI malnutrition)
     this.recordedBy,
   });
 
@@ -661,7 +1155,13 @@ class GrowthMeasurement {
   final String personId;
   final DateTime takenAt;
 
-  /// Mid-upper arm circumference, 6–59 months. SAM <11.5, MAM 11.5–12.5.
+  /// Mid-upper arm circumference in MILLIMETRES as read directly from the
+  /// standard GHS MUAC tape. SAM <115 mm, MAM 115–124 mm, normal ≥125 mm.
+  /// This is the "source of truth" — `muacCm` is derived.
+  final int? muacMm;
+
+  /// Derived MUAC in centimetres (kept for backwards compatibility with the
+  /// existing z-score and chart code that expects cm). Computed as muacMm/10.
   final double? muacCm;
 
   final double? weightKg;
@@ -670,16 +1170,30 @@ class GrowthMeasurement {
   /// Bilateral pitting oedema means SAM regardless of MUAC. Never ignore it.
   final bool hasBilateralOedema;
 
+  /// IMCI malnutrition palmar pallor: none / some / severe.
+  /// Severe = anaemia SAM trigger → iron + referral.
+  final String? palmarPallorSeverity;
+
   final String? recordedBy;
+
+  /// Returns true if this is SAM by ANY IMCI criterion (oedema, MUAC mm <115,
+  /// WFH z-score < -3). Use alongside the WHZ engine, not in isolation.
+  bool get isSamByMuacOrOedema =>
+      hasBilateralOedema || (muacMm != null && muacMm! < 115);
+
+  bool get isMamByMuac =>
+      muacMm != null && muacMm! >= 115 && muacMm! < 125;
 
   Map<String, Object?> toMap() => {
     'id': id,
     'person_id': personId,
     'taken_at': takenAt.toIso8601String(),
+    'muac_mm': muacMm,
     'muac_cm': muacCm,
     'weight_kg': weightKg,
     'height_cm': heightCm,
     'has_bilateral_oedema': hasBilateralOedema ? 1 : 0,
+    'palmar_pallor_severity': palmarPallorSeverity,
     'recorded_by': recordedBy,
   };
 
@@ -687,10 +1201,444 @@ class GrowthMeasurement {
     id: m['id'] as String,
     personId: m['person_id'] as String,
     takenAt: DateTime.parse(m['taken_at'] as String),
+    muacMm: (m['muac_mm'] as num?)?.toInt(),
     muacCm: (m['muac_cm'] as num?)?.toDouble(),
     weightKg: (m['weight_kg'] as num?)?.toDouble(),
     heightCm: (m['height_cm'] as num?)?.toDouble(),
     hasBilateralOedema: (m['has_bilateral_oedema'] as num?) == 1,
+    palmarPallorSeverity: m['palmar_pallor_severity'] as String?,
     recordedBy: m['recorded_by'] as String?,
   );
+}
+
+/// Structured snapshot of an IMCI sick-child or well-child assessment at a
+/// single encounter.
+///
+/// The layout mirrors the EXACT section order of the Ghana GHS IMCI Sick-Child
+/// Case Recording Form (blue book, 2022 revision) used in every CHPS compound:
+///
+///   1. General danger signs (able to drink/breastfeed? vomits everything?
+///      convulsions? lethargic/unconscious?)
+///   2. Cough / difficult breathing (RR numeric, age-based cutoffs,
+///      chest indrawing, stridor, SaO₂)
+///   3. Diarrhoea + dehydration (duration, blood in stool, sunken eyes,
+///      drinks eagerly/poorly, skin pinch — slowly/very slowly)
+///   4. Fever (duration, stiff neck, runny nose, measles 3Cs, eye discharge,
+///      corneal clouding, mouth ulcers, RDT result, tourniquet test for
+///      Dengue, petechiae, capillary refill seconds)
+///   5. Ear problem (ear pain days, pus draining, tender mastoid — mastoiditis)
+///   6. Malnutrition / anaemia (MUAC mm, bilateral oedema, palmar pallor,
+///      WFH/L z-score, ability to finish RUTF, BF assessment, complementary)
+///   7. HIV screening / ART exposure status
+///   8. Immunization status — vaccines due TODAY
+///   9. Feeding assessment (6–23 month indicators per WHO 2023)
+///  10. Initial vs Follow-up flag (IMCI FU classification rules DIFFER)
+///
+/// Every field name is aligned with the paper form so a CHO transcribes
+/// without mentally translating. This is the #1 requirement for adoption.
+class ChildAssessmentSnapshot {
+  const ChildAssessmentSnapshot({
+    required this.id,
+    required this.personId,
+    required this.assessedAt,
+    this.visitType = 'initial', // initial / follow_up
+    this.ageDaysCompleted,
+    // ── 1. General danger signs ───────────────────────────────────────────
+    this.ableToDrinkOrBreastfeed,
+    this.vomitsEverything,
+    this.hasConvulsionsThisVisit,
+    this.isLethargicOrUnconscious,
+    // ── 2. Cough / difficult breathing ────────────────────────────────────
+    this.coughPresent = false,
+    this.coughDurationDays,
+    this.respiratoryRatePerMin,
+    this.chestIndrawing = false,
+    this.stridorCalm = false,
+    this.nasalFlaring = false,
+    this.oxygenSaturationPerCent,
+    // ── 3. Diarrhoea + dehydration ────────────────────────────────────────
+    this.diarrhoeaPresent = false,
+    this.diarrhoeaDurationDays,
+    this.bloodInStool = false,
+    this.restlessOrIrritable,
+    this.sunkenEyes,
+    this.drinksEagerly,
+    this.skinPinchResult, // normal / slowly / very_slowly
+    // ── 4. Fever ──────────────────────────────────────────────────────────
+    this.feverReported = false,
+    this.feverDurationDays,
+    this.temperatureCelsius,
+    this.stiffNeck = false,
+    this.runnyNose = false,
+    this.measlesRashPresent = false,
+    this.measlesCough = false,
+    this.measlesCoryza = false,
+    this.measlesConjunctivitis = false,
+    this.mouthUlcers = false,
+    this.eyeDischarge = false,
+    this.cornealClouding = false,
+    this.measlesWithinPast3Months = false,
+    this.malariaRdtDone = false,
+    this.malariaRdtResult, // negative / pf_positive / pv_positive / mixed
+    this.tourniquetTestDone = false,
+    this.tourniquetTestPositive,
+    this.skinPetechiae = false,
+    this.capillaryRefillSeconds,
+    // ── 5. Ear problem ────────────────────────────────────────────────────
+    this.earProblemPresent = false,
+    this.earPainDurationDays,
+    this.earPusDraining = false,
+    this.earPusDurationDays,
+    this.tenderSwellingBehindEar = false, // mastoiditis → SEVERE
+    // ── 6. Malnutrition / anaemia / HIV ───────────────────────────────────
+    this.weightForHeightOrLengthZscore,
+    this.hivExposedOrInfectedStatus, // unexposed / exposed_unknown / exposed_on_art / infected_on_art
+    this.ableToFinishRutf,
+    // ── 7. Feeding assessment (WHO IYCF 2023, 6–23 months) ────────────────
+    this.breastfedToday,
+    this.nightFeedsPer24h,
+    this.complementaryFoodsGivenToday,
+    this.minimumDietaryDiversity,
+    this.minimumMealFrequency,
+    this.minimumAcceptableDiet,
+    // ── 8. Immunizations DUE TODAY (EPI Ghana schedule) ───────────────────
+    this.immunizationsDueToday,
+    this.immunizationsGivenToday,
+    // ── Meta ──────────────────────────────────────────────────────────────
+    this.assessedByUserId,
+    this.recordedByUserId,
+    this.updatedAt,
+  });
+
+  final String id;
+  final String personId;
+  final DateTime assessedAt;
+
+  /// IMCI CRITICAL: classification rules are DIFFERENT for initial vs FU.
+  /// 'initial' = first visit for this illness episode.
+  /// 'follow_up' = return visit → class rules can UPGRADE severity.
+  final String visitType;
+  final int? ageDaysCompleted;
+
+  // 1. General danger signs — ANY ONE = SEVERE classification.
+  final bool? ableToDrinkOrBreastfeed;
+  final bool? vomitsEverything;
+  final bool? hasConvulsionsThisVisit;
+  final bool? isLethargicOrUnconscious;
+
+  // 2. Cough / difficult breathing.
+  // RR is the #1 gap (4% of Kintampo CHOs actually counted — Baiden 2011),
+  // so we enforce a numeric capture + auto-classify.
+  final bool coughPresent;
+  final int? coughDurationDays;
+  final int? respiratoryRatePerMin;
+  final bool chestIndrawing;
+  final bool stridorCalm;
+  final bool nasalFlaring;
+  final int? oxygenSaturationPerCent;
+
+  // 3. Diarrhoea + IMCI dehydration Plan A / B / C.
+  final bool diarrhoeaPresent;
+  final int? diarrhoeaDurationDays;
+  final bool bloodInStool;
+  final bool? restlessOrIrritable;
+  final bool? sunkenEyes;
+  final bool? drinksEagerly;
+  final String? skinPinchResult;
+
+  // 4. Fever + measles + malaria + dengue.
+  final bool feverReported;
+  final int? feverDurationDays;
+  final double? temperatureCelsius;
+  final bool stiffNeck;
+  final bool runnyNose;
+  final bool measlesRashPresent;
+  final bool measlesCough;
+  final bool measlesCoryza;
+  final bool measlesConjunctivitis;
+  final bool mouthUlcers;
+  final bool eyeDischarge;
+  final bool cornealClouding;
+  final bool measlesWithinPast3Months;
+  final bool malariaRdtDone;
+  final String? malariaRdtResult;
+  final bool tourniquetTestDone;
+  final bool? tourniquetTestPositive;
+  final bool skinPetechiae;
+  final double? capillaryRefillSeconds;
+
+  // 5. Ear. Tender mastoid = SEVERE.
+  final bool earProblemPresent;
+  final int? earPainDurationDays;
+  final bool earPusDraining;
+  final int? earPusDurationDays;
+  final bool tenderSwellingBehindEar;
+
+  // 6. Malnutrition / HIV / RUTF response.
+  final double? weightForHeightOrLengthZscore;
+  final String? hivExposedOrInfectedStatus;
+  final bool? ableToFinishRutf;
+
+  // 7. IYCF feeding assessment (WHO 2023 8-indicator module, 6–23 months).
+  final bool? breastfedToday;
+  final int? nightFeedsPer24h;
+  final bool? complementaryFoodsGivenToday;
+  final bool? minimumDietaryDiversity;
+  final bool? minimumMealFrequency;
+  final bool? minimumAcceptableDiet;
+
+  // 8. Immunizations due today — GHS EPI schedule.
+  final List<String>? immunizationsDueToday;
+  final List<String>? immunizationsGivenToday;
+
+  final String? assessedByUserId;
+  final String? recordedByUserId;
+  final DateTime? updatedAt;
+
+  // ── Convenience getters ────────────────────────────────────────────────
+
+  /// True if any general danger sign is affirmed → SEVERE.
+  bool get hasAnyGeneralDangerSign =>
+      (ableToDrinkOrBreastfeed == false) ||
+      (vomitsEverything == true) ||
+      (hasConvulsionsThisVisit == true) ||
+      (isLethargicOrUnconscious == true);
+
+  /// IMCI pneumonia classification using RR cutoffs by age.
+  ///   <2mo  ≥60  → SEVERE pneumonia
+  ///   2–11mo ≥50 → pneumonia
+  ///   12–59mo ≥40 → pneumonia
+  /// + chest indrawing → upgrade
+  String? get imciPneumoniaClass {
+    if (!coughPresent || respiratoryRatePerMin == null || ageDaysCompleted == null) {
+      return null;
+    }
+    final rr = respiratoryRatePerMin!;
+    final ageDays = ageDaysCompleted!;
+    final bool indrawing = chestIndrawing;
+    if (ageDays < 60) {
+      if (rr >= 60 || indrawing || stridorCalm) return 'severe_pneumonia';
+      if (rr >= 60) return 'pneumonia';
+      return 'no_pneumonia_cough_or_cold';
+    } else if (ageDays < 365) {
+      if (indrawing || stridorCalm) return 'severe_pneumonia';
+      if (rr >= 50) return 'pneumonia';
+      return 'no_pneumonia_cough_or_cold';
+    } else {
+      if (indrawing || stridorCalm) return 'severe_pneumonia';
+      if (rr >= 40) return 'pneumonia';
+      return 'no_pneumonia_cough_or_cold';
+    }
+  }
+
+  /// IMCI dehydration classification (Plan A / B / C).
+  String? get imciDehydrationClass {
+    if (!diarrhoeaPresent) return null;
+    int signs = 0;
+    if (restlessOrIrritable == true) signs++;
+    if (sunkenEyes == true) signs++;
+    if (drinksEagerly == true) signs++;
+    if (skinPinchResult == 'slowly') signs++;
+    int severeSigns = 0;
+    if (isLethargicOrUnconscious == true) severeSigns++;
+    if (skinPinchResult == 'very_slowly') severeSigns++;
+    if (ableToDrinkOrBreastfeed == false) severeSigns++;
+    if (vomitsEverything == true) severeSigns++;
+    if (severeSigns >= 1) return 'severe_dehydration_plan_c';
+    if (signs >= 2) return 'some_dehydration_plan_b';
+    return 'no_dehydration_plan_a';
+  }
+
+  Map<String, Object?> toMap() => {
+    'id': id,
+    'person_id': personId,
+    'assessed_at': assessedAt.toIso8601String(),
+    'visit_type': visitType,
+    'age_days_completed': ageDaysCompleted,
+    'able_to_drink_or_breastfeed': ableToDrinkOrBreastfeed == null
+        ? null
+        : (ableToDrinkOrBreastfeed! ? 1 : 0),
+    'vomits_everything':
+        vomitsEverything == null ? null : (vomitsEverything! ? 1 : 0),
+    'has_convulsions_this_visit': hasConvulsionsThisVisit == null
+        ? null
+        : (hasConvulsionsThisVisit! ? 1 : 0),
+    'is_lethargic_or_unconscious': isLethargicOrUnconscious == null
+        ? null
+        : (isLethargicOrUnconscious! ? 1 : 0),
+    'cough_present': coughPresent ? 1 : 0,
+    'cough_duration_days': coughDurationDays,
+    'respiratory_rate_per_min': respiratoryRatePerMin,
+    'chest_indrawing': chestIndrawing ? 1 : 0,
+    'stridor_calm': stridorCalm ? 1 : 0,
+    'nasal_flaring': nasalFlaring ? 1 : 0,
+    'oxygen_saturation_per_cent': oxygenSaturationPerCent,
+    'diarrhoea_present': diarrhoeaPresent ? 1 : 0,
+    'diarrhoea_duration_days': diarrhoeaDurationDays,
+    'blood_in_stool': bloodInStool ? 1 : 0,
+    'restless_or_irritable': restlessOrIrritable == null
+        ? null
+        : (restlessOrIrritable! ? 1 : 0),
+    'sunken_eyes': sunkenEyes == null ? null : (sunkenEyes! ? 1 : 0),
+    'drinks_eagerly': drinksEagerly == null ? null : (drinksEagerly! ? 1 : 0),
+    'skin_pinch_result': skinPinchResult,
+    'fever_reported': feverReported ? 1 : 0,
+    'fever_duration_days': feverDurationDays,
+    'temperature_celsius': temperatureCelsius,
+    'stiff_neck': stiffNeck ? 1 : 0,
+    'runny_nose': runnyNose ? 1 : 0,
+    'measles_rash_present': measlesRashPresent ? 1 : 0,
+    'measles_cough': measlesCough ? 1 : 0,
+    'measles_coryza': measlesCoryza ? 1 : 0,
+    'measles_conjunctivitis': measlesConjunctivitis ? 1 : 0,
+    'mouth_ulcers': mouthUlcers ? 1 : 0,
+    'eye_discharge': eyeDischarge ? 1 : 0,
+    'corneal_clouding': cornealClouding ? 1 : 0,
+    'measles_within_past_3_months': measlesWithinPast3Months ? 1 : 0,
+    'malaria_rdt_done': malariaRdtDone ? 1 : 0,
+    'malaria_rdt_result': malariaRdtResult,
+    'tourniquet_test_done': tourniquetTestDone ? 1 : 0,
+    'tourniquet_test_positive': tourniquetTestPositive == null
+        ? null
+        : (tourniquetTestPositive! ? 1 : 0),
+    'skin_petechiae': skinPetechiae ? 1 : 0,
+    'capillary_refill_seconds': capillaryRefillSeconds,
+    'ear_problem_present': earProblemPresent ? 1 : 0,
+    'ear_pain_duration_days': earPainDurationDays,
+    'ear_pus_draining': earPusDraining ? 1 : 0,
+    'ear_pus_duration_days': earPusDurationDays,
+    'tender_swelling_behind_ear': tenderSwellingBehindEar ? 1 : 0,
+    'weight_for_height_or_length_zscore': weightForHeightOrLengthZscore,
+    'hiv_exposed_or_infected_status': hivExposedOrInfectedStatus,
+    'able_to_finish_rutf':
+        ableToFinishRutf == null ? null : (ableToFinishRutf! ? 1 : 0),
+    'breastfed_today':
+        breastfedToday == null ? null : (breastfedToday! ? 1 : 0),
+    'night_feeds_per_24h': nightFeedsPer24h,
+    'complementary_foods_given_today': complementaryFoodsGivenToday == null
+        ? null
+        : (complementaryFoodsGivenToday! ? 1 : 0),
+    'minimum_dietary_diversity': minimumDietaryDiversity == null
+        ? null
+        : (minimumDietaryDiversity! ? 1 : 0),
+    'minimum_meal_frequency': minimumMealFrequency == null
+        ? null
+        : (minimumMealFrequency! ? 1 : 0),
+    'minimum_acceptable_diet': minimumAcceptableDiet == null
+        ? null
+        : (minimumAcceptableDiet! ? 1 : 0),
+    'immunizations_due_today':
+        immunizationsDueToday?.join(','),
+    'immunizations_given_today': immunizationsGivenToday?.join(','),
+    'assessed_by_user_id': assessedByUserId,
+    'recorded_by_user_id': recordedByUserId,
+    'updated_at': (updatedAt ?? DateTime.now()).toIso8601String(),
+  };
+
+  factory ChildAssessmentSnapshot.fromMap(Map<String, Object?> m) =>
+      ChildAssessmentSnapshot(
+        id: m['id'] as String,
+        personId: m['person_id'] as String,
+        assessedAt: DateTime.parse(m['assessed_at'] as String),
+        visitType: (m['visit_type'] as String?) ?? 'initial',
+        ageDaysCompleted: (m['age_days_completed'] as num?)?.toInt(),
+        ableToDrinkOrBreastfeed: m['able_to_drink_or_breastfeed'] == null
+            ? null
+            : (m['able_to_drink_or_breastfeed'] as num) == 1,
+        vomitsEverything: m['vomits_everything'] == null
+            ? null
+            : (m['vomits_everything'] as num) == 1,
+        hasConvulsionsThisVisit: m['has_convulsions_this_visit'] == null
+            ? null
+            : (m['has_convulsions_this_visit'] as num) == 1,
+        isLethargicOrUnconscious: m['is_lethargic_or_unconscious'] == null
+            ? null
+            : (m['is_lethargic_or_unconscious'] as num) == 1,
+        coughPresent: (m['cough_present'] as num?) == 1,
+        coughDurationDays: (m['cough_duration_days'] as num?)?.toInt(),
+        respiratoryRatePerMin:
+            (m['respiratory_rate_per_min'] as num?)?.toInt(),
+        chestIndrawing: (m['chest_indrawing'] as num?) == 1,
+        stridorCalm: (m['stridor_calm'] as num?) == 1,
+        nasalFlaring: (m['nasal_flaring'] as num?) == 1,
+        oxygenSaturationPerCent:
+            (m['oxygen_saturation_per_cent'] as num?)?.toInt(),
+        diarrhoeaPresent: (m['diarrhoea_present'] as num?) == 1,
+        diarrhoeaDurationDays:
+            (m['diarrhoea_duration_days'] as num?)?.toInt(),
+        bloodInStool: (m['blood_in_stool'] as num?) == 1,
+        restlessOrIrritable: m['restless_or_irritable'] == null
+            ? null
+            : (m['restless_or_irritable'] as num) == 1,
+        sunkenEyes:
+            m['sunken_eyes'] == null ? null : (m['sunken_eyes'] as num) == 1,
+        drinksEagerly: m['drinks_eagerly'] == null
+            ? null
+            : (m['drinks_eagerly'] as num) == 1,
+        skinPinchResult: m['skin_pinch_result'] as String?,
+        feverReported: (m['fever_reported'] as num?) == 1,
+        feverDurationDays: (m['fever_duration_days'] as num?)?.toInt(),
+        temperatureCelsius:
+            (m['temperature_celsius'] as num?)?.toDouble(),
+        stiffNeck: (m['stiff_neck'] as num?) == 1,
+        runnyNose: (m['runny_nose'] as num?) == 1,
+        measlesRashPresent: (m['measles_rash_present'] as num?) == 1,
+        measlesCough: (m['measles_cough'] as num?) == 1,
+        measlesCoryza: (m['measles_coryza'] as num?) == 1,
+        measlesConjunctivitis:
+            (m['measles_conjunctivitis'] as num?) == 1,
+        mouthUlcers: (m['mouth_ulcers'] as num?) == 1,
+        eyeDischarge: (m['eye_discharge'] as num?) == 1,
+        cornealClouding: (m['corneal_clouding'] as num?) == 1,
+        measlesWithinPast3Months:
+            (m['measles_within_past_3_months'] as num?) == 1,
+        malariaRdtDone: (m['malaria_rdt_done'] as num?) == 1,
+        malariaRdtResult: m['malaria_rdt_result'] as String?,
+        tourniquetTestDone: (m['tourniquet_test_done'] as num?) == 1,
+        tourniquetTestPositive: m['tourniquet_test_positive'] == null
+            ? null
+            : (m['tourniquet_test_positive'] as num) == 1,
+        skinPetechiae: (m['skin_petechiae'] as num?) == 1,
+        capillaryRefillSeconds:
+            (m['capillary_refill_seconds'] as num?)?.toDouble(),
+        earProblemPresent: (m['ear_problem_present'] as num?) == 1,
+        earPainDurationDays: (m['ear_pain_duration_days'] as num?)?.toInt(),
+        earPusDraining: (m['ear_pus_draining'] as num?) == 1,
+        earPusDurationDays: (m['ear_pus_duration_days'] as num?)?.toInt(),
+        tenderSwellingBehindEar:
+            (m['tender_swelling_behind_ear'] as num?) == 1,
+        weightForHeightOrLengthZscore:
+            (m['weight_for_height_or_length_zscore'] as num?)?.toDouble(),
+        hivExposedOrInfectedStatus:
+            m['hiv_exposed_or_infected_status'] as String?,
+        ableToFinishRutf: m['able_to_finish_rutf'] == null
+            ? null
+            : (m['able_to_finish_rutf'] as num) == 1,
+        breastfedToday: m['breastfed_today'] == null
+            ? null
+            : (m['breastfed_today'] as num) == 1,
+        nightFeedsPer24h: (m['night_feeds_per_24h'] as num?)?.toInt(),
+        complementaryFoodsGivenToday:
+            m['complementary_foods_given_today'] == null
+                ? null
+                : (m['complementary_foods_given_today'] as num) == 1,
+        minimumDietaryDiversity: m['minimum_dietary_diversity'] == null
+            ? null
+            : (m['minimum_dietary_diversity'] as num) == 1,
+        minimumMealFrequency: m['minimum_meal_frequency'] == null
+            ? null
+            : (m['minimum_meal_frequency'] as num) == 1,
+        minimumAcceptableDiet: m['minimum_acceptable_diet'] == null
+            ? null
+            : (m['minimum_acceptable_diet'] as num) == 1,
+        immunizationsDueToday: (m['immunizations_due_today'] as String?)
+            ?.split(',')
+          ?..removeWhere((s) => s.isEmpty),
+        immunizationsGivenToday: (m['immunizations_given_today'] as String?)
+            ?.split(',')
+          ?..removeWhere((s) => s.isEmpty),
+        assessedByUserId: m['assessed_by_user_id'] as String?,
+        recordedByUserId: m['recorded_by_user_id'] as String?,
+        updatedAt: DateTime.tryParse((m['updated_at'] as String?) ?? ''),
+      );
 }

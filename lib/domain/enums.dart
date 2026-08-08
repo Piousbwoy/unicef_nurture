@@ -5,6 +5,8 @@
 /// never asks a health worker to learn a second language for the same job.
 library;
 
+import 'dart:ui' show Color;
+
 // ---------------------------------------------------------------------- Roles
 
 enum UserRole {
@@ -222,13 +224,28 @@ enum HomeCheckVerdict {
 /// The family's read on their child's development, from the milestone check.
 /// Same rule as [HomeCheckVerdict]: this is the family's words, never a
 /// diagnosis — a flag means "show the health worker", nothing more.
+///
+/// [colourArgb] is the canonical int (ARGB) form, and [colour] is the
+/// presentation-side [Color]. Both are exposed so the domain tests can
+/// stay free of [Color] while the UI gets a typed colour.
 enum MilestoneVerdict {
-  onTrack('Growing as expected'),
-  watch('Keep playing — check again soon'),
-  flag('Show the health worker');
+  onTrack(
+    'Growing as expected',
+    0xFF2F9E44, // green
+  ),
+  watch(
+    'Keep playing — check again soon',
+    0xFFE67700, // amber
+  ),
+  flag(
+    'Show the health worker',
+    0xFFE03131, // red
+  );
 
-  const MilestoneVerdict(this.label);
+  const MilestoneVerdict(this.label, this.colourArgb);
   final String label;
+  final int colourArgb;
+  Color get colour => Color(colourArgb);
 }
 
 /// Acute malnutrition bands by MUAC (mid-upper arm circumference), 6–59 months.
@@ -303,8 +320,7 @@ enum ReferralStatus {
   const ReferralStatus(this.label);
   final String label;
 
-  bool get isOpen =>
-      this == issued || this == travelling;
+  bool get isOpen => this == issued || this == travelling;
   bool get isFailure => this == didNotAttend || this == refused;
 }
 

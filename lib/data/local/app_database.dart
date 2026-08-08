@@ -38,7 +38,19 @@ import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
 /// Bumping this runs [AppDatabase._upgrade]. Every increment needs a matching
 /// case, because a field device may be several versions behind.
-const int kDatabaseVersion = 4;
+///
+/// Version 5 (August 2026 — Ghana CHPS IMCI / MCH Record Book field expansion)
+///   • 60+ new columns on maternal_records (Rh, sickle genotype, HBsAg/RST/HIV
+///     dates, 4-strips urinalysis, 7 PE red flags, 8 PMHx, PNC involution/
+///     lochia/wound/breast, Edinburgh EPDS 10 items).
+///   • 40+ new columns on birth_records (neonatal PSBI 15 danger signs, KMC,
+///     newborn sickle + hearing screening, APGAR, vitals, length).
+///   • 3 new columns on growth_measurements (muac_mm source-of-truth tape
+///     reading, palmar_pallor_severity IMCI malnutrition enum).
+///   • New child_assessment_snapshots table: exact GHS IMCI Sick-Child Case
+///     Recording Form section order (10 sections), built-in RR-age pneumonia
+///     classifier + dehydration Plan A/B/C classifier computed getters.
+const int kDatabaseVersion = 5;
 
 const String kDatabaseName = 'carebridge.db';
 
@@ -171,6 +183,7 @@ class AppDatabase {
         Tables.homeChecks,
         Tables.barrierReports,
         Tables.referrals,
+        Tables.childAssessmentSnapshots,
         Tables.assessments,
         Tables.visitParticipants,
         Tables.visits,
@@ -226,6 +239,31 @@ class AppDatabase {
         '${Tables.milestoneChecks}(person_id, checked_at DESC)',
       );
     }
+    if (from < 5) {
+      // Version 5: Ghana CHPS IMCI / MCH Record Book field expansion.
+      //   (a) maternal_records +60 columns
+      for (final col in _maternalRecordsNewV5Columns) {
+        await db.execute('ALTER TABLE ${Tables.maternalRecords} ADD COLUMN $col');
+      }
+      //   (b) birth_records +40 columns
+      for (final col in _birthRecordsNewV5Columns) {
+        await db.execute('ALTER TABLE ${Tables.birthRecords} ADD COLUMN $col');
+      }
+      //   (c) growth_measurements + 3 columns (muac_mm + palmar_pallor)
+      for (final col in _growthMeasurementsNewV5Columns) {
+        await db.execute('ALTER TABLE ${Tables.growthMeasurements} ADD COLUMN $col');
+      }
+      //   (d) brand new structured IMCI sick-child snapshot table
+      await db.execute(_childAssessmentSnapshotsTable);
+      await db.execute(
+        'CREATE INDEX idx_child_assessment_snapshots_person ON '
+        '${Tables.childAssessmentSnapshots}(person_id, assessed_at DESC)',
+      );
+      await db.execute(
+        'CREATE INDEX idx_child_assessment_snapshots_visit ON '
+        '${Tables.childAssessmentSnapshots}(visit_type, assessed_at DESC)',
+      );
+    }
   }
 
   static Future<void> _createAll(DatabaseExecutor db) async {
@@ -239,11 +277,13 @@ class AppDatabase {
 /// a runtime "no such table" on a health worker's phone.
 abstract final class Tables {
   static const users = 'users';
+  static const userVerifiers = 'user_verifiers';
   static const households = 'households';
   static const persons = 'persons';
   static const maternalRecords = 'maternal_records';
   static const birthRecords = 'birth_records';
   static const growthMeasurements = 'growth_measurements';
+  static const childAssessmentSnapshots = 'child_assessment_snapshots';
   static const visits = 'visits';
   static const visitParticipants = 'visit_participants';
   static const assessments = 'assessments';
@@ -346,55 +386,146 @@ const List<String> _schema = [
 
   // --------------------------------------------------------------------------
   // Maternal record. One row per woman, mirroring the fields in Ghana's
-  // Maternal Health Record Book so a CHO transcribes rather than translates.
+  // Maternal Health Record Book (JICA/GHS, national rollout 2018) so a CHO
+  // transcribes rather than translates. Version 5 (August 2026) added Rh,
+  // sickle genotype, HBsAg/syphilis/HIV test dates, 4-strip urinalysis, 7
+  // pre-eclampsia Liverpool flags, 8 past-medical-history booleans,
+  // puerperal involution/lochia/wound/breast exam, and the 10-item
+  // validated Edinburgh postnatal depression scale (Cox 1987, WHO Ghana
+  // Kumasi validation 2020).
   // --------------------------------------------------------------------------
   '''
   CREATE TABLE ${Tables.maternalRecords} (
-    person_id              TEXT PRIMARY KEY,
-    gravida                INTEGER,
-    parity                 INTEGER,
-    previous_losses        INTEGER,
-    previous_caesarean     INTEGER,
-    last_menstrual_period  TEXT,
-    expected_delivery_date TEXT,
-    anc_contacts_completed INTEGER NOT NULL DEFAULT 0,
-    iptp_doses             INTEGER NOT NULL DEFAULT 0,
-    td_doses               INTEGER NOT NULL DEFAULT 0,
-    iron_folate_supplied   INTEGER NOT NULL DEFAULT 0,
-    llin_supplied          INTEGER NOT NULL DEFAULT 0,
-    haemoglobin            REAL,
-    blood_group            TEXT,
-    sickling_status        TEXT,
-    hiv_tested             INTEGER NOT NULL DEFAULT 0,
-    delivery_date          TEXT,
-    delivery_place         TEXT,
-    delivery_mode          TEXT,
-    plurality              TEXT NOT NULL DEFAULT 'singleton',
-    family_planning_method TEXT,
-    updated_at             TEXT NOT NULL,
+    person_id                    TEXT PRIMARY KEY,
+    gravida                      INTEGER,
+    parity                       INTEGER,
+    previous_losses              INTEGER,
+    previous_caesarean           INTEGER,
+    last_menstrual_period        TEXT,
+    expected_delivery_date       TEXT,
+    anc_contacts_completed       INTEGER NOT NULL DEFAULT 0,
+    iptp_doses                   INTEGER NOT NULL DEFAULT 0,
+    td_doses                     INTEGER NOT NULL DEFAULT 0,
+    iron_folate_supplied         INTEGER NOT NULL DEFAULT 0,
+    llin_supplied                INTEGER NOT NULL DEFAULT 0,
+    haemoglobin                  REAL,
+    blood_group                  TEXT,
+    rhesus_positive              INTEGER,
+    sickling_status              TEXT,
+    sickle_genotype              TEXT,
+    hiv_tested                   INTEGER NOT NULL DEFAULT 0,
+    hiv_test_date                TEXT,
+    syphilis_tested              INTEGER NOT NULL DEFAULT 0,
+    syphilis_test_date           TEXT,
+    hbsag_tested                 INTEGER NOT NULL DEFAULT 0,
+    hbsag_test_date              TEXT,
+    delivery_date                TEXT,
+    delivery_place               TEXT,
+    delivery_mode                TEXT,
+    plurality                    TEXT NOT NULL DEFAULT 'singleton',
+    family_planning_method       TEXT,
+    urine_protein                INTEGER,
+    urine_glucose                INTEGER,
+    urine_ketones                INTEGER,
+    urine_blood                  INTEGER,
+    oedema_hands_or_face         INTEGER NOT NULL DEFAULT 0,
+    epigastric_pain              INTEGER NOT NULL DEFAULT 0,
+    headache_severe              INTEGER NOT NULL DEFAULT 0,
+    blurred_vision               INTEGER NOT NULL DEFAULT 0,
+    brisk_reflexes               INTEGER NOT NULL DEFAULT 0,
+    oliguria                     INTEGER NOT NULL DEFAULT 0,
+    weight_gain_over_1kg_per_week INTEGER NOT NULL DEFAULT 0,
+    prev_hypertension            INTEGER NOT NULL DEFAULT 0,
+    prev_diabetes                INTEGER NOT NULL DEFAULT 0,
+    prev_anaemia                 INTEGER NOT NULL DEFAULT 0,
+    prev_tb                      INTEGER NOT NULL DEFAULT 0,
+    prev_asthma                  INTEGER NOT NULL DEFAULT 0,
+    prev_heart_disease           INTEGER NOT NULL DEFAULT 0,
+    prev_kidney_disease          INTEGER NOT NULL DEFAULT 0,
+    prev_hepatitis               INTEGER NOT NULL DEFAULT 0,
+    involution_cm_below_umbilicus INTEGER,
+    lochia_colour                TEXT,
+    lochia_odour                 TEXT,
+    lochia_amount                TEXT,
+    wound_redness                INTEGER NOT NULL DEFAULT 0,
+    wound_oedema                 INTEGER NOT NULL DEFAULT 0,
+    wound_discharge              INTEGER NOT NULL DEFAULT 0,
+    wound_approximated           INTEGER,
+    episiotomy_or_laceration     INTEGER NOT NULL DEFAULT 0,
+    nipples_cracked              INTEGER NOT NULL DEFAULT 0,
+    nipples_inverted             INTEGER NOT NULL DEFAULT 0,
+    breast_mastitis_signs        INTEGER NOT NULL DEFAULT 0,
+    breast_attachment_ok         INTEGER,
+    breast_let_down_ok           INTEGER,
+    edinburgh_laugh              INTEGER,
+    edinburgh_enjoy              INTEGER,
+    edinburgh_blame              INTEGER,
+    edinburgh_anxious            INTEGER,
+    edinburgh_scared             INTEGER,
+    edinburgh_overwhelm          INTEGER,
+    edinburgh_sleep              INTEGER,
+    edinburgh_sad                INTEGER,
+    edinburgh_cry                INTEGER,
+    edinburgh_self_harm          INTEGER,
+    updated_at                   TEXT NOT NULL,
     FOREIGN KEY (person_id) REFERENCES ${Tables.persons}(id) ON DELETE CASCADE
   )
   ''',
 
   // --------------------------------------------------------------------------
-  // Birth record. Fixed at birth, and it drives the young-infant risk model
-  // for the first 59 days — birth weight and asphyxia are the two facts that
-  // most predict whether this newborn survives the month.
+  // Birth record. Fixed at birth; drives the young-infant risk model for the
+  // first 59 days. Version 5 expanded with WHO Young-Infant IMCI 0–59 day 15
+  // PSBI danger signs, KMC (Kangaroo Mother Care) tracking, newborn
+  // sickle-cell + hearing screening flags (GHS national 2024 rollout),
+  // APGAR, length, vitals, dose-tracking Vitamin K 0.5/1 mg, BF day1 check.
   // --------------------------------------------------------------------------
   '''
   CREATE TABLE ${Tables.birthRecords} (
-    person_id                 TEXT PRIMARY KEY,
-    birth_weight_kg           REAL,
-    gestation_weeks_at_birth  INTEGER,
-    delivery_place            TEXT,
-    delivery_mode             TEXT,
-    plurality                 TEXT NOT NULL DEFAULT 'singleton',
-    birth_order               INTEGER NOT NULL DEFAULT 1,
-    resuscitation_needed      INTEGER,
-    cord_care_given           INTEGER,
-    vitamin_k_given           INTEGER,
-    breastfed_within_one_hour INTEGER,
-    updated_at                TEXT NOT NULL,
+    person_id                  TEXT PRIMARY KEY,
+    birth_weight_kg            REAL,
+    birth_length_cm            REAL,
+    gestation_weeks_at_birth   INTEGER,
+    delivery_place             TEXT,
+    delivery_mode              TEXT,
+    plurality                  TEXT NOT NULL DEFAULT 'singleton',
+    birth_order                INTEGER NOT NULL DEFAULT 1,
+    resuscitation_needed       INTEGER,
+    apgar_1_minute             INTEGER,
+    apgar_5_minute             INTEGER,
+    cord_care_given            INTEGER,
+    cord_chlorhexidine_applied INTEGER,
+    vitamin_k_given            INTEGER,
+    vitamin_k_dose_mg          REAL NOT NULL DEFAULT 1.0,
+    breastfed_within_one_hour  INTEGER,
+    breastfeeding_ok_on_day1   INTEGER,
+    temperature_celsius        REAL,
+    respiratory_rate_per_min   INTEGER,
+    heart_rate_per_min         INTEGER,
+    oxygen_saturation_per_cent INTEGER,
+    history_of_convulsions     INTEGER NOT NULL DEFAULT 0,
+    severe_chest_indrawing     INTEGER NOT NULL DEFAULT 0,
+    nasal_flaring              INTEGER NOT NULL DEFAULT 0,
+    grunting                   INTEGER NOT NULL DEFAULT 0,
+    bulging_fontanelle         INTEGER NOT NULL DEFAULT 0,
+    jaundice_before_24h        INTEGER NOT NULL DEFAULT 0,
+    jaundice_on_day3_or_later  TEXT,
+    feeding_difficulty         INTEGER NOT NULL DEFAULT 0,
+    abdominal_distension       INTEGER NOT NULL DEFAULT 0,
+    cord_redness_beyond_base   INTEGER NOT NULL DEFAULT 0,
+    cord_pus                   INTEGER NOT NULL DEFAULT 0,
+    cord_oedema_beyond_base    INTEGER NOT NULL DEFAULT 0,
+    skin_pustules              INTEGER NOT NULL DEFAULT 0,
+    lethargic_or_unconscious   INTEGER NOT NULL DEFAULT 0,
+    bleeding_from_any_site     INTEGER NOT NULL DEFAULT 0,
+    kmc_eligible               INTEGER NOT NULL DEFAULT 0,
+    kmc_initiated              INTEGER,
+    kmc_site                   TEXT,
+    kmc_hours_per_day          REAL,
+    sickle_screen_sample_collected INTEGER,
+    sickle_screen_sample_date  TEXT,
+    hearing_screen_done        INTEGER,
+    hearing_screen_result      TEXT,
+    updated_at                 TEXT NOT NULL,
     FOREIGN KEY (person_id) REFERENCES ${Tables.persons}(id) ON DELETE CASCADE
   )
   ''',
@@ -403,21 +534,49 @@ const List<String> _schema = [
   // Growth measurements. Append-only, and that is the whole point: the
   // trajectory engine needs the series. A child whose MUAC reads 13.8, 13.1,
   // 12.7 is marked "green, green, yellow" on paper and sent home twice.
+  //
+  // Version 5: muac_mm (millimetres, source-of-truth directly from the GHS
+  // MUAC tape) is now the authoritative column. muac_cm is retained for
+  // backwards compatibility with existing z-score and chart code, and is
+  // derived as muac_mm / 10. palmar_pallor_severity (none / some / severe)
+  // is the IMCI malnutrition anaemia trigger.
   // --------------------------------------------------------------------------
   '''
   CREATE TABLE ${Tables.growthMeasurements} (
     id                   TEXT PRIMARY KEY,
     person_id            TEXT NOT NULL,
     taken_at             TEXT NOT NULL,
+    muac_mm              INTEGER,
     muac_cm              REAL,
     weight_kg            REAL,
     height_cm            REAL,
     has_bilateral_oedema INTEGER NOT NULL DEFAULT 0,
+    palmar_pallor_severity TEXT,
     recorded_by          TEXT,
     FOREIGN KEY (person_id) REFERENCES ${Tables.persons}(id) ON DELETE CASCADE
   )
   ''',
   'CREATE INDEX idx_growth_person_date ON ${Tables.growthMeasurements}(person_id, taken_at DESC)',
+
+  // --------------------------------------------------------------------------
+  // Child IMCI structured assessment snapshot.
+  //
+  // Row-per-encounter snapshot, with columns and section order matching the
+  // Ghana GHS IMCI Sick-Child Case Recording Form (blue book, 2022 revision)
+  // exactly. A CHO sitting at a CHPS compound should be able to hold the
+  // paper form in one hand and the tablet in the other — zero mental
+  // translation. That is the adoption condition, not a nice-to-have.
+  //
+  // Sections: 1. general danger signs → 2. cough/RR → 3. diarrhoea/
+  // dehydration → 4. fever/measles/malaria/dengue → 5. ear → 6. malnutrition
+  // /anaemia/HIV → 7. IYCF feeding → 8. immunizations due today → 9. meta
+  // (initial vs follow_up flag, assessed_by).
+  // --------------------------------------------------------------------------
+  _childAssessmentSnapshotsTable,
+  'CREATE INDEX idx_child_assessment_snapshots_person ON '
+  '${Tables.childAssessmentSnapshots}(person_id, assessed_at DESC)',
+  'CREATE INDEX idx_child_assessment_snapshots_visit ON '
+  '${Tables.childAssessmentSnapshots}(visit_type, assessed_at DESC)',
 
   // --------------------------------------------------------------------------
   // Visits. One encounter can carry several assessments — a mother, her
@@ -676,6 +835,170 @@ const String _milestoneChecksTable = '''
     checked_by    TEXT NOT NULL,
     checked_at    TEXT NOT NULL,
     FOREIGN KEY (household_id) REFERENCES ${Tables.households}(id) ON DELETE CASCADE,
+    FOREIGN KEY (person_id) REFERENCES ${Tables.persons}(id) ON DELETE CASCADE
+  )
+  ''';
+
+// ── Version 5: maternal_records new columns (added via ALTER TABLE on upgrades)
+const List<String> _maternalRecordsNewV5Columns = [
+  'rhesus_positive              INTEGER',
+  'sickle_genotype              TEXT',
+  'hiv_test_date                TEXT',
+  'syphilis_tested              INTEGER NOT NULL DEFAULT 0',
+  'syphilis_test_date           TEXT',
+  'hbsag_tested                 INTEGER NOT NULL DEFAULT 0',
+  'hbsag_test_date              TEXT',
+  'urine_protein                INTEGER',
+  'urine_glucose                INTEGER',
+  'urine_ketones                INTEGER',
+  'urine_blood                  INTEGER',
+  'oedema_hands_or_face         INTEGER NOT NULL DEFAULT 0',
+  'epigastric_pain              INTEGER NOT NULL DEFAULT 0',
+  'headache_severe              INTEGER NOT NULL DEFAULT 0',
+  'blurred_vision               INTEGER NOT NULL DEFAULT 0',
+  'brisk_reflexes               INTEGER NOT NULL DEFAULT 0',
+  'oliguria                     INTEGER NOT NULL DEFAULT 0',
+  'weight_gain_over_1kg_per_week INTEGER NOT NULL DEFAULT 0',
+  'prev_hypertension            INTEGER NOT NULL DEFAULT 0',
+  'prev_diabetes                INTEGER NOT NULL DEFAULT 0',
+  'prev_anaemia                 INTEGER NOT NULL DEFAULT 0',
+  'prev_tb                      INTEGER NOT NULL DEFAULT 0',
+  'prev_asthma                  INTEGER NOT NULL DEFAULT 0',
+  'prev_heart_disease           INTEGER NOT NULL DEFAULT 0',
+  'prev_kidney_disease          INTEGER NOT NULL DEFAULT 0',
+  'prev_hepatitis               INTEGER NOT NULL DEFAULT 0',
+  'involution_cm_below_umbilicus INTEGER',
+  'lochia_colour                TEXT',
+  'lochia_odour                 TEXT',
+  'lochia_amount                TEXT',
+  'wound_redness                INTEGER NOT NULL DEFAULT 0',
+  'wound_oedema                 INTEGER NOT NULL DEFAULT 0',
+  'wound_discharge              INTEGER NOT NULL DEFAULT 0',
+  'wound_approximated           INTEGER',
+  'episiotomy_or_laceration     INTEGER NOT NULL DEFAULT 0',
+  'nipples_cracked              INTEGER NOT NULL DEFAULT 0',
+  'nipples_inverted             INTEGER NOT NULL DEFAULT 0',
+  'breast_mastitis_signs        INTEGER NOT NULL DEFAULT 0',
+  'breast_attachment_ok         INTEGER',
+  'breast_let_down_ok           INTEGER',
+  'edinburgh_laugh              INTEGER',
+  'edinburgh_enjoy              INTEGER',
+  'edinburgh_blame              INTEGER',
+  'edinburgh_anxious            INTEGER',
+  'edinburgh_scared             INTEGER',
+  'edinburgh_overwhelm          INTEGER',
+  'edinburgh_sleep              INTEGER',
+  'edinburgh_sad                INTEGER',
+  'edinburgh_cry                INTEGER',
+  'edinburgh_self_harm          INTEGER',
+];
+
+const List<String> _birthRecordsNewV5Columns = [
+  'birth_length_cm              REAL',
+  'apgar_1_minute               INTEGER',
+  'apgar_5_minute               INTEGER',
+  'cord_chlorhexidine_applied   INTEGER',
+  'vitamin_k_dose_mg            REAL NOT NULL DEFAULT 1.0',
+  'breastfeeding_ok_on_day1     INTEGER',
+  'temperature_celsius          REAL',
+  'respiratory_rate_per_min     INTEGER',
+  'heart_rate_per_min           INTEGER',
+  'oxygen_saturation_per_cent   INTEGER',
+  'history_of_convulsions       INTEGER NOT NULL DEFAULT 0',
+  'severe_chest_indrawing       INTEGER NOT NULL DEFAULT 0',
+  'nasal_flaring                INTEGER NOT NULL DEFAULT 0',
+  'grunting                     INTEGER NOT NULL DEFAULT 0',
+  'bulging_fontanelle           INTEGER NOT NULL DEFAULT 0',
+  'jaundice_before_24h          INTEGER NOT NULL DEFAULT 0',
+  'jaundice_on_day3_or_later    TEXT',
+  'feeding_difficulty           INTEGER NOT NULL DEFAULT 0',
+  'abdominal_distension         INTEGER NOT NULL DEFAULT 0',
+  'cord_redness_beyond_base     INTEGER NOT NULL DEFAULT 0',
+  'cord_pus                     INTEGER NOT NULL DEFAULT 0',
+  'cord_oedema_beyond_base      INTEGER NOT NULL DEFAULT 0',
+  'skin_pustules                INTEGER NOT NULL DEFAULT 0',
+  'lethargic_or_unconscious     INTEGER NOT NULL DEFAULT 0',
+  'bleeding_from_any_site       INTEGER NOT NULL DEFAULT 0',
+  'kmc_eligible                 INTEGER NOT NULL DEFAULT 0',
+  'kmc_initiated                INTEGER',
+  'kmc_site                     TEXT',
+  'kmc_hours_per_day            REAL',
+  'sickle_screen_sample_collected INTEGER',
+  'sickle_screen_sample_date    TEXT',
+  'hearing_screen_done          INTEGER',
+  'hearing_screen_result        TEXT',
+];
+
+const List<String> _growthMeasurementsNewV5Columns = [
+  'muac_mm                      INTEGER',
+  'palmar_pallor_severity       TEXT',
+];
+
+/// The child-assessment-snapshots DDL — one row per IMCI sick-child encounter.
+/// Standalone so the version-5 migration (and `_createAll`) can share the text.
+const String _childAssessmentSnapshotsTable = '''
+  CREATE TABLE ${Tables.childAssessmentSnapshots} (
+    id                           TEXT PRIMARY KEY,
+    person_id                    TEXT NOT NULL,
+    assessed_at                  TEXT NOT NULL,
+    visit_type                   TEXT NOT NULL DEFAULT 'initial',
+    age_days_completed           INTEGER,
+    able_to_drink_or_breastfeed  INTEGER,
+    vomits_everything            INTEGER,
+    has_convulsions_this_visit   INTEGER,
+    is_lethargic_or_unconscious  INTEGER,
+    cough_present                INTEGER NOT NULL DEFAULT 0,
+    cough_duration_days          INTEGER,
+    respiratory_rate_per_min     INTEGER,
+    chest_indrawing              INTEGER NOT NULL DEFAULT 0,
+    stridor_calm                 INTEGER NOT NULL DEFAULT 0,
+    nasal_flaring                INTEGER NOT NULL DEFAULT 0,
+    oxygen_saturation_per_cent   INTEGER,
+    diarrhoea_present            INTEGER NOT NULL DEFAULT 0,
+    diarrhoea_duration_days      INTEGER,
+    blood_in_stool               INTEGER NOT NULL DEFAULT 0,
+    restless_or_irritable        INTEGER,
+    sunken_eyes                  INTEGER,
+    drinks_eagerly               INTEGER,
+    skin_pinch_result            TEXT,
+    fever_reported               INTEGER NOT NULL DEFAULT 0,
+    fever_duration_days          INTEGER,
+    temperature_celsius          REAL,
+    stiff_neck                   INTEGER NOT NULL DEFAULT 0,
+    runny_nose                   INTEGER NOT NULL DEFAULT 0,
+    measles_rash_present         INTEGER NOT NULL DEFAULT 0,
+    measles_cough                INTEGER NOT NULL DEFAULT 0,
+    measles_coryza               INTEGER NOT NULL DEFAULT 0,
+    measles_conjunctivitis       INTEGER NOT NULL DEFAULT 0,
+    mouth_ulcers                 INTEGER NOT NULL DEFAULT 0,
+    eye_discharge                INTEGER NOT NULL DEFAULT 0,
+    corneal_clouding             INTEGER NOT NULL DEFAULT 0,
+    measles_within_past_3_months INTEGER NOT NULL DEFAULT 0,
+    malaria_rdt_done             INTEGER NOT NULL DEFAULT 0,
+    malaria_rdt_result           TEXT,
+    tourniquet_test_done         INTEGER NOT NULL DEFAULT 0,
+    tourniquet_test_positive     INTEGER,
+    skin_petechiae               INTEGER NOT NULL DEFAULT 0,
+    capillary_refill_seconds     REAL,
+    ear_problem_present          INTEGER NOT NULL DEFAULT 0,
+    ear_pain_duration_days       INTEGER,
+    ear_pus_draining             INTEGER NOT NULL DEFAULT 0,
+    ear_pus_duration_days        INTEGER,
+    tender_swelling_behind_ear   INTEGER NOT NULL DEFAULT 0,
+    weight_for_height_or_length_zscore REAL,
+    hiv_exposed_or_infected_status TEXT,
+    able_to_finish_rutf          INTEGER,
+    breastfed_today              INTEGER,
+    night_feeds_per_24h          INTEGER,
+    complementary_foods_given_today INTEGER,
+    minimum_dietary_diversity    INTEGER,
+    minimum_meal_frequency       INTEGER,
+    minimum_acceptable_diet      INTEGER,
+    immunizations_due_today      TEXT,
+    immunizations_given_today    TEXT,
+    assessed_by_user_id          TEXT,
+    recorded_by_user_id          TEXT,
+    updated_at                   TEXT NOT NULL,
     FOREIGN KEY (person_id) REFERENCES ${Tables.persons}(id) ON DELETE CASCADE
   )
   ''';

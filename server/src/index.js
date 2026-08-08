@@ -8,9 +8,10 @@
 const express = require('express');
 const config = require('./config');
 const { ping } = require('./db');
-const { requireToken } = require('./auth');
+const { requireAuth, requireJwtUser } = require('./auth');
 const { handleSync } = require('./sync');
 const { handleProfileLookup, handleCaseloadRestore } = require('./recovery');
+const { handleChallenge, handleLogin, handleRefresh, handleLogout } = require('./auth_login');
 
 const app = express();
 
@@ -28,7 +29,7 @@ app.use((req, res, next) => {
 // The phone's "Test connection" button does a plain GET on the base URL, so
 // answer it honestly and without auth (it reveals nothing but "I am alive").
 app.get('/', (req, res) => {
-  res.status(200).json({ ok: true, service: 'carebridge-sync', version: '1.0.0' });
+  res.status(200).json({ ok: true, service: 'carebridge-sync', version: '1.1.0', auth: 'jwt-per-user + legacy-token-window' });
 });
 
 app.get('/health', async (req, res) => {
@@ -40,13 +41,23 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// The one write endpoint, behind the bearer token.
-app.post('/api/sync', requireToken, handleSync);
+// -------- Auth endpoints (challenge is unauth; login/refresh unauth; logout requires auth) --------
+app.get('/api/auth/challenge', handleChallenge);
+app.post('/api/auth/challenge', handleChallenge);
+app.post('/api/auth/login', handleLogin);
+app.post('/api/auth/refresh', handleRefresh);
+app.post('/api/auth/logout', requireAuth, handleLogout);
 
-// Account & caseload restoration endpoints for our Hybrid Architecture (behind bearer token).
-app.post('/api/restore/lookup', requireToken, handleProfileLookup);
-app.get('/api/restore/caseload', requireToken, handleCaseloadRestore);
-app.post('/api/restore/caseload', requireToken, handleCaseloadRestore);
+// -------- Authenticated write endpoints --------
+// Legacy devices still get through via the global token (if configured); new
+// devices use a per-user JWT. Either way the sync_log carries attribution.
+app.post('/api/sync', requireAuth, handleSync);
+
+// -------- Recovery endpoints (STRICT: JWT-only, legacy tokens rejected) ---
+// Profile & caseload restoration leak patient data; they MUST be attributable.
+app.post('/api/restore/lookup', requireJwtUser, handleProfileLookup);
+app.get('/api/restore/caseload', requireJwtUser, handleCaseloadRestore);
+app.post('/api/restore/caseload', requireJwtUser, handleCaseloadRestore);
 
 // Nothing else exists.
 app.use((req, res) => {

@@ -38,7 +38,6 @@ import '../../domain/enums.dart';
 import '../shared/ui.dart';
 import 'form_kit.dart';
 import 'types.dart';
-import 'widgets/muac_gauge.dart';
 
 const _uuid = Uuid();
 
@@ -66,16 +65,23 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
 
   bool _busy = false;
 
+  // --------------------------------------------------------- ENHANCEMENT 1
+  String _visitType = 'initial';
+
   // ------------------------------------------------------------------- Anchor
   final _ageDays = TextEditingController();
   final _ageMonths = TextEditingController();
 
   // ------------------------------------------------------------- Measurements
   final _rr = TextEditingController();
+  // ------------------------------------------------------- ENHANCEMENT 2
+  int? _rrTimerSecs;
   final _temp = TextEditingController();
   final _weight = TextEditingController();
   final _height = TextEditingController();
   final _muac = TextEditingController();
+  // ------------------------------------------------------- ENHANCEMENT 3
+  final _muacMm = TextEditingController();
   final _spo2 = TextEditingController();
   final _hb = TextEditingController();
 
@@ -104,6 +110,12 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
   bool? _vitA;
   bool? _dewormed;
 
+  // ------------------------------------------------------ ENHANCEMENT 3 cont.
+  String? _palmarPallorSeverity;
+
+  // ---------------------------------------------------------- ENHANCEMENT 4
+  String? _skinPinchResult;
+
   /// The age anchor in days (young infant) or months (sick child), from the
   /// date of birth or from the manual box.
   int? get ageDays => person.ageInDays ?? parseInt(_ageDays);
@@ -131,6 +143,8 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
       c.addListener(_onEdited);
     }
     _bfOneHour = birth?.breastfedWithinOneHour;
+    // ENHANCEMENT 1: Visit type default
+    _visitType = 'initial';
   }
 
   @override
@@ -152,6 +166,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     _weight,
     _height,
     _muac,
+    _muacMm,
     _spo2,
     _hb,
     _coughDays,
@@ -159,6 +174,11 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     _feverDays,
     _earDays,
   ];
+
+  /// ENHANCEMENT 3: Backwards-compat MUAC cm — auto-populated from mm if the
+  /// user typed mm, otherwise falls back to the legacy cm field.
+  double? _muacMmToCm() =>
+      parseInt(_muacMm) == null ? parseDouble(_muac) : parseInt(_muacMm)! / 10.0;
 
   void _onEdited() {
     if (mounted) setState(() {});
@@ -257,26 +277,50 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
   // ------------------------------------------------------------ Young infant
 
   List<Widget> _youngInfantSections() => [
+    // -------------------------------------------------------------- ENH 1
+    SectionCard(
+      title: 'Visit type',
+      icon: Icons.how_to_reg_outlined,
+      child: ChoiceChipsField<String>(
+        label: 'What kind of visit is this?',
+        options: const ['initial', 'follow_up'],
+        labelOf: (v) => v == 'initial'
+            ? 'Initial visit (first for this illness)'
+            : 'Return / follow-up visit',
+        value: _visitType,
+        onChanged: (v) => setState(() => _visitType = v ?? 'initial'),
+      ),
+    ),
+    const SizedBox(height: Gap.lg),
+
     SectionCard(
       title: 'Measurements',
       subtitle: 'Count the breaths for a full minute while the baby is calm.',
       icon: Icons.monitor_heart_outlined,
       child: Column(
         children: [
-          MeasurePair(
-            left: MeasureField(
-              label: 'Respiratory rate',
-              controller: _rr,
-              unit: '/min',
-              cutoff: 'Fast breathing ≥60 in a young infant',
-            ),
-            right: MeasureField(
-              label: 'Temperature',
-              controller: _temp,
-              unit: '°C',
-              decimal: true,
-              cutoff: 'Fever ≥37.5 · hypothermia <35.5',
-            ),
+          // ------------------------------------------------------------ ENH 2
+          MeasureField(
+            label: 'Respiratory rate',
+            controller: _rr,
+            unit: '/min',
+            cutoff:
+                'Count for a full 60 seconds while calm. ≥60 0–11mo, ≥50 12–59mo',
+          ),
+          CountField(
+            label: 'Count seconds elapsed',
+            value: _rrTimerSecs,
+            onChanged: (v) => setState(() => _rrTimerSecs = v),
+            max: 120,
+            why: 'If you counted 30s and ×2, record how many seconds you actually counted.',
+          ),
+          MeasureField(
+            label: 'Temperature',
+            controller: _temp,
+            unit: '°C',
+            decimal: true,
+            cutoff: 'Fever ≥37.5 · hypothermia <35.5',
+            width: 180,
           ),
           MeasureField(
             label: 'Weight today',
@@ -413,23 +457,20 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
                   : _signs.remove('sunkenEyes'),
             ),
           ),
-          DangerSign(
-            label: 'Skin pinch goes back very slowly (>2 seconds)',
-            value: _signs.contains('pinchVerySlow'),
-            onChanged: (v) => setState(
-              () => v == true
-                  ? _signs.add('pinchVerySlow')
-                  : _signs.remove('pinchVerySlow'),
-            ),
-          ),
-          DangerSign(
-            label: 'Skin pinch goes back slowly',
-            value: _signs.contains('pinchSlow'),
-            onChanged: (v) => setState(
-              () => v == true
-                  ? _signs.add('pinchSlow')
-                  : _signs.remove('pinchSlow'),
-            ),
+          // -------------------------------------------------------------- ENH 4
+          ChoiceChipsField<String>(
+            label: 'Skin pinch result',
+            options: const ['normal', 'slow', 'very_slow'],
+            labelOf: (v) => switch (v) {
+              'normal' => 'Normal (goes back immediately)',
+              'slow' => 'Slow (<2s)',
+              'very_slow' => 'Very slow (≥2s)',
+              _ => v,
+            },
+            value: _skinPinchResult,
+            onChanged: (v) => setState(() => _skinPinchResult = v),
+            dangerIf: (s) => s == 'very_slow',
+            why: 'IMCI Plan A/B/C classifier uses this 3-category result.',
           ),
           DangerSign(
             label: 'Restless and irritable',
@@ -526,6 +567,22 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     final muacApplies = months != null && months >= 6;
 
     return [
+      // -------------------------------------------------------------- ENH 1
+      SectionCard(
+        title: 'Visit type',
+        icon: Icons.how_to_reg_outlined,
+        child: ChoiceChipsField<String>(
+          label: 'What kind of visit is this?',
+          options: const ['initial', 'follow_up'],
+          labelOf: (v) => v == 'initial'
+              ? 'Initial visit (first for this illness)'
+              : 'Return / follow-up visit',
+          value: _visitType,
+          onChanged: (v) => setState(() => _visitType = v ?? 'initial'),
+        ),
+      ),
+      const SizedBox(height: Gap.lg),
+
       SectionCard(
         title: 'General danger signs',
         subtitle: 'Any one of these is a referral, whatever the rest of the '
@@ -578,21 +635,27 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
                     : _signs.remove('diffBreath'),
               ),
             ),
-            MeasurePair(
-              left: MeasureField(
-                label: 'Respiratory rate',
-                controller: _rr,
-                unit: '/min',
-                cutoff: months == null
-                    ? 'Fast: ≥50 under 12 months, ≥40 after'
-                    : 'Fast at ≥${months < 12 ? 50 : 40}/min for this child',
-              ),
-              right: MeasureField(
-                label: 'Oxygen saturation',
-                controller: _spo2,
-                unit: '%',
-                cutoff: 'Below 90 is a referral',
-              ),
+            // ------------------------------------------------------------ ENH 2
+            MeasureField(
+              label: 'Respiratory rate',
+              controller: _rr,
+              unit: '/min',
+              cutoff:
+                  'Count for a full 60 seconds while calm. ≥60 0–11mo, ≥50 12–59mo',
+            ),
+            CountField(
+              label: 'Count seconds elapsed',
+              value: _rrTimerSecs,
+              onChanged: (v) => setState(() => _rrTimerSecs = v),
+              max: 120,
+              why: 'If you counted 30s and ×2, record how many seconds you actually counted.',
+            ),
+            MeasureField(
+              label: 'Oxygen saturation',
+              controller: _spo2,
+              unit: '%',
+              cutoff: 'Below 90 is a referral',
+              width: 180,
             ),
             DangerSign(
               label: 'Chest indrawing',
@@ -667,23 +730,20 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
                     : _signs.remove('sunkenEyes'),
               ),
             ),
-            DangerSign(
-              label: 'Skin pinch goes back very slowly (>2 seconds)',
-              value: _signs.contains('pinchVerySlow'),
-              onChanged: (v) => setState(
-                () => v == true
-                    ? _signs.add('pinchVerySlow')
-                    : _signs.remove('pinchVerySlow'),
-              ),
-            ),
-            DangerSign(
-              label: 'Skin pinch goes back slowly',
-              value: _signs.contains('pinchSlow'),
-              onChanged: (v) => setState(
-                () => v == true
-                    ? _signs.add('pinchSlow')
-                    : _signs.remove('pinchSlow'),
-              ),
+            // -------------------------------------------------------------- ENH 4
+            ChoiceChipsField<String>(
+              label: 'Skin pinch result',
+              options: const ['normal', 'slow', 'very_slow'],
+              labelOf: (v) => switch (v) {
+                'normal' => 'Normal (goes back immediately)',
+                'slow' => 'Slow (<2s)',
+                'very_slow' => 'Very slow (≥2s)',
+                _ => v,
+              },
+              value: _skinPinchResult,
+              onChanged: (v) => setState(() => _skinPinchResult = v),
+              dangerIf: (s) => s == 'very_slow',
+              why: 'IMCI Plan A/B/C classifier uses this 3-category result.',
             ),
             DangerSign(
               label: 'Restless and irritable',
@@ -875,15 +935,14 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              MuacGauge(controller: _muac),
-              const SizedBox(height: Gap.md),
+              // ---------------------------------------------------------- ENH 3
               MeasureField(
-                label: 'MUAC',
-                controller: _muac,
-                unit: 'cm',
-                decimal: true,
-                cutoff: 'Tap the tape. The needle and zone update as you type.',
-                width: 180,
+                label: 'MUAC (read directly from GHS tape in mm, not cm)',
+                controller: _muacMm,
+                unit: 'mm',
+                cutoff:
+                    'Red <115 mm (SAM) · Yellow 115–124 mm (MAM) · Green ≥125 mm',
+                width: 220,
               ),
             ],
           ),
@@ -901,13 +960,14 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
         child: Column(
           children: [
             if (!muacApplies)
+              // ---------------------------------------------------------- ENH 3
               MeasureField(
-                label: 'MUAC',
-                controller: _muac,
-                unit: 'cm',
-                decimal: true,
-                cutoff: 'MUAC applies from 6 months — use weight for this child',
-                width: 180,
+                label: 'MUAC (read directly from GHS tape in mm, not cm)',
+                controller: _muacMm,
+                unit: 'mm',
+                cutoff:
+                    'MUAC applies from 6 months — use weight for this child',
+                width: 220,
               ),
             MeasurePair(
               left: MeasureField(
@@ -930,24 +990,19 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
               value: _oedema,
               onChanged: (v) => setState(() => _oedema = v ?? false),
             ),
-            DangerSign(
-              label: 'Severe palmar pallor',
-              value: _signs.contains('pallorSevere'),
-              onChanged: (v) => setState(
-                () => v == true
-                    ? _signs.add('pallorSevere')
-                    : _signs.remove('pallorSevere'),
-              ),
-            ),
-            DangerSign(
-              label: 'Some palmar pallor',
-              danger: false,
-              value: _signs.contains('pallorSome'),
-              onChanged: (v) => setState(
-                () => v == true
-                    ? _signs.add('pallorSome')
-                    : _signs.remove('pallorSome'),
-              ),
+            // -------------------------------------------------------------- ENH 3
+            ChoiceChipsField<String>(
+              label: 'Palmar pallor',
+              options: const ['none', 'some', 'severe'],
+              labelOf: (v) => switch (v) {
+                'none' => 'None',
+                'some' => 'Some pallor',
+                'severe' => 'Severe pallor',
+                _ => v,
+              },
+              value: _palmarPallorSeverity,
+              onChanged: (v) => setState(() => _palmarPallorSeverity = v),
+              dangerIf: (s) => s == 'severe',
             ),
             MeasureField(
               label: 'Haemoglobin',
@@ -1098,7 +1153,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     final flags = MeasurementSafetyEngine.checkAll({
       MeasurementKind.weightKg: parseDouble(_weight),
       MeasurementKind.heightCm: parseDouble(_height),
-      MeasurementKind.muacCm: parseDouble(_muac),
+      MeasurementKind.muacCm: _muacMmToCm(),
       MeasurementKind.temperatureC: parseDouble(_temp),
       MeasurementKind.respiratoryRate: parseInt(_rr)?.toDouble(),
       MeasurementKind.haemoglobin: parseDouble(_hb),
@@ -1114,6 +1169,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     final AssessmentResult result;
     final Map<String, Object?> inputs;
     GrowthMeasurement? growth;
+    ChildAssessmentSnapshot? snapshot;
 
     if (isYoungInfant) {
       final input = _youngInfantInput();
@@ -1127,27 +1183,138 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
       growth = _growthMeasurement();
     }
 
+    // -------------------------------------------------------------- ENH 5
+    final days = person.ageInDays ??
+        (isYoungInfant ? (ageDays ?? 0) : ((ageMonths ?? 0) * 30.4375).round());
+    final plan = ImmunisationEngine.plan(
+      ageInDays: days,
+      givenLabels: _vaxGiven,
+    );
+    snapshot = ChildAssessmentSnapshot(
+      id: _uuid.v4(),
+      personId: person.id,
+      assessedAt: DateTime.now(),
+      visitType: _visitType,
+      ageDaysCompleted: days,
+      // 1. General danger signs
+      ableToDrinkOrBreastfeed: isYoungInfant
+          ? !_signs.contains('noFeed')
+          : !_signs.contains('noDrink'),
+      vomitsEverything: _signs.contains('vomitsAll'),
+      hasConvulsionsThisVisit: _signs.contains('convulsions') ||
+          _signs.contains('convulsingNow'),
+      isLethargicOrUnconscious: _signs.contains('lethargic') ||
+          _signs.contains('noMove') ||
+          _signs.contains('movesStim'),
+      // 2. Cough / difficult breathing
+      coughPresent: _signs.contains('cough'),
+      coughDurationDays: parseInt(_coughDays),
+      respiratoryRatePerMin: parseInt(_rr),
+      chestIndrawing: _signs.contains('indrawing'),
+      stridorCalm: _signs.contains('stridor'),
+      nasalFlaring: _signs.contains('nasalFlaring'),
+      oxygenSaturationPerCent: parseInt(_spo2),
+      // 3. Diarrhoea + dehydration
+      diarrhoeaPresent: _signs.contains('diarrhoea'),
+      diarrhoeaDurationDays: parseInt(_diarrhoeaDays),
+      bloodInStool: _signs.contains('bloodStool'),
+      restlessOrIrritable: _signs.contains('restless'),
+      sunkenEyes: _signs.contains('sunkenEyes'),
+      drinksEagerly: _signs.contains('drinksEagerly'),
+      skinPinchResult: _skinPinchResult == 'normal'
+          ? 'normal'
+          : _skinPinchResult == 'slow'
+              ? 'slowly'
+              : _skinPinchResult == 'very_slow'
+                  ? 'very_slowly'
+                  : null,
+      // 4. Fever
+      feverReported: _signs.contains('fever'),
+      feverDurationDays: parseInt(_feverDays),
+      temperatureCelsius: parseDouble(_temp),
+      stiffNeck: _signs.contains('stiffNeck'),
+      runnyNose: _signs.contains('runnyNose'),
+      measlesRashPresent: _signs.contains('measlesRash'),
+      mouthUlcers: _signs.contains('mouthUlcers'),
+      eyeDischarge: _signs.contains('eyePus'),
+      cornealClouding: _signs.contains('corneaClouding'),
+      malariaRdtDone: _rdtDone,
+      malariaRdtResult: _rdtDone
+          ? (_rdtPositive == true ? 'pf_positive' : 'negative')
+          : null,
+      // 5. Ear
+      earProblemPresent: _signs.contains('earPain') ||
+          _signs.contains('earDischarge'),
+      earPainDurationDays: _signs.contains('earPain')
+          ? parseInt(_earDays)
+          : null,
+      earPusDraining: _signs.contains('earDischarge'),
+      earPusDurationDays: _signs.contains('earDischarge')
+          ? parseInt(_earDays)
+          : null,
+      tenderSwellingBehindEar: _signs.contains('mastoid'),
+      // 6. Malnutrition / anaemia / HIV
+      weightForHeightOrLengthZscore: null,
+      ableToFinishRutf: _appetite,
+      // 7. Feeding assessment
+      breastfedToday: isYoungInfant ? true : _stillBf,
+      nightFeedsPer24h: isYoungInfant ? _feedsPerDay : null,
+      complementaryFoodsGivenToday: isYoungInfant
+          ? _signs.contains('otherDrinks')
+          : (_mealsPerDay ?? 0) > 0,
+      minimumDietaryDiversity: _groups.length >= 4,
+      minimumMealFrequency: isYoungInfant
+          ? (_feedsPerDay ?? 0) >= 8
+          : (ageMonths == null
+              ? null
+              : ageMonths! < 12
+                  ? (_mealsPerDay ?? 0) >= 2
+                  : (_mealsPerDay ?? 0) >= 3),
+      minimumAcceptableDiet: null,
+      // 8. Immunizations
+      immunizationsDueToday:
+          plan.giveToday.map((d) => d.label).toList(growable: false),
+      immunizationsGivenToday: _vaxGiven.toList()..sort(),
+      // Meta
+      assessedByUserId: input.user.id,
+      recordedByUserId: input.user.id,
+    );
+
     setState(() => _busy = false);
     widget.onComplete(
-      AssessmentDraft(inputs: inputs, result: result, growth: growth),
+      AssessmentDraft(
+        inputs: inputs,
+        result: result,
+        growth: growth,
+        snapshot: snapshot,
+      ),
     );
   }
 
   GrowthMeasurement? _growthMeasurement() {
-    final muac = parseDouble(_muac);
+    // -------------------------------------------------------------- ENH 3
+    final muacCm = _muacMmToCm();
+    final muacMm = parseInt(_muacMm);
     final weight = parseDouble(_weight);
     final height = parseDouble(_height);
-    if (muac == null && weight == null && height == null && !_oedema) {
+    if (muacCm == null &&
+        muacMm == null &&
+        weight == null &&
+        height == null &&
+        !_oedema &&
+        _palmarPallorSeverity == null) {
       return null;
     }
     return GrowthMeasurement(
       id: _uuid.v4(),
       personId: person.id,
       takenAt: DateTime.now(),
-      muacCm: muac,
+      muacMm: muacMm,
+      muacCm: muacCm,
       weightKg: weight,
       heightCm: height,
       hasBilateralOedema: _oedema,
+      palmarPallorSeverity: _palmarPallorSeverity,
       recordedBy: input.user.id,
     );
   }
@@ -1177,8 +1344,9 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     yellowPalmsOrSoles: _signs.contains('yellowPalms'),
     diarrhoea: _signs.contains('diarrhoea'),
     sunkenEyes: _signs.contains('sunkenEyes'),
-    skinPinchGoesBackVerySlowly: _signs.contains('pinchVerySlow'),
-    skinPinchGoesBackSlowly: _signs.contains('pinchSlow'),
+    // -------------------------------------------------------------- ENH 4
+    skinPinchGoesBackVerySlowly: _skinPinchResult == 'very_slow',
+    skinPinchGoesBackSlowly: _skinPinchResult == 'slow',
     restlessOrIrritable: _signs.contains('restless'),
     bloodInStool: _signs.contains('bloodStool'),
     breastfeedsPerDay: _feedsPerDay,
@@ -1202,7 +1370,8 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
       temperatureCelsius: parseDouble(_temp),
       weightKg: parseDouble(_weight),
       heightCm: parseDouble(_height),
-      muacCm: parseDouble(_muac),
+      // -------------------------------------------------------------- ENH 3
+      muacCm: _muacMmToCm(),
       hasBilateralOedema: _oedema,
       unableToDrinkOrBreastfeed: _signs.contains('noDrink'),
       vomitsEverything: _signs.contains('vomitsAll'),
@@ -1220,8 +1389,9 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
       diarrhoeaDurationDays: parseInt(_diarrhoeaDays),
       bloodInStool: _signs.contains('bloodStool'),
       sunkenEyes: _signs.contains('sunkenEyes'),
-      skinPinchVerySlow: _signs.contains('pinchVerySlow'),
-      skinPinchSlow: _signs.contains('pinchSlow'),
+      // -------------------------------------------------------------- ENH 4
+      skinPinchVerySlow: _skinPinchResult == 'very_slow',
+      skinPinchSlow: _skinPinchResult == 'slow',
       restlessOrIrritable: _signs.contains('restless'),
       drinksEagerly: _signs.contains('drinksEagerly'),
       feverReported: _signs.contains('fever'),
@@ -1238,8 +1408,9 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
       earDischarge: _signs.contains('earDischarge'),
       earDischargeDurationDays: parseInt(_earDays),
       tenderSwellingBehindEar: _signs.contains('mastoid'),
-      severePalmarPallor: _signs.contains('pallorSevere'),
-      somePalmarPallor: _signs.contains('pallorSome'),
+      // -------------------------------------------------------------- ENH 3
+      severePalmarPallor: _palmarPallorSeverity == 'severe',
+      somePalmarPallor: _palmarPallorSeverity == 'some',
       haemoglobin: parseDouble(_hb),
       stillBreastfeeding: _stillBf,
       mealsPerDay: _mealsPerDay,
@@ -1257,11 +1428,17 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
 
   Map<String, Object?> _youngInfantInputs() => {
     'protocol': 'young_infant',
+    'visit_type': _visitType,
     'age_in_days': ageDays,
     'respiratory_rate': parseInt(_rr),
+    'rr_count_seconds': _rrTimerSecs,
     'temperature_celsius': parseDouble(_temp),
     'weight_kg': parseDouble(_weight),
+    'muac_mm': parseInt(_muacMm),
+    'muac_cm': _muacMmToCm(),
     'danger_signs': _signs.toList()..sort(),
+    'skin_pinch_result': _skinPinchResult,
+    'palmar_pallor_severity': _palmarPallorSeverity,
     'skin_pustules': _pustules,
     'breastfeeds_per_day': _feedsPerDay,
     'breastfed_within_one_hour': _bfOneHour,
@@ -1269,14 +1446,19 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
 
   Map<String, Object?> _childInputs() => {
     'protocol': 'imci_child',
+    'visit_type': _visitType,
     'age_in_months': ageMonths,
     'respiratory_rate': parseInt(_rr),
+    'rr_count_seconds': _rrTimerSecs,
     'temperature_celsius': parseDouble(_temp),
     'weight_kg': parseDouble(_weight),
     'height_cm': parseDouble(_height),
-    'muac_cm': parseDouble(_muac),
+    'muac_mm': parseInt(_muacMm),
+    'muac_cm': _muacMmToCm(),
     'has_oedema': _oedema,
     'danger_signs': _signs.toList()..sort(),
+    'skin_pinch_result': _skinPinchResult,
+    'palmar_pallor_severity': _palmarPallorSeverity,
     'cough_days': parseInt(_coughDays),
     'diarrhoea_days': parseInt(_diarrhoeaDays),
     'fever_days': parseInt(_feverDays),

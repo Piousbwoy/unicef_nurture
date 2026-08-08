@@ -244,14 +244,13 @@ class _QuickActions extends ConsumerWidget {
         // The signature CTA: a family just walked in — register everyone who
         // came, then assess them one by one in a single session.
         GradientButton(
-          label: 'Register & assess',
+          label: 'New Clinical Intake (IMCI / ANC / PNC)',
           icon: Icons.person_add_alt_1_rounded,
           onPressed: () => _registerAndAssess(context, ref),
         ),
         const SizedBox(height: Gap.md),
         Text(
-          'A family just arrived at the clinic. Register everyone who came, '
-          'then assess them one by one.',
+          'Begin structured triage and clinical assessment for walk-in maternal, newborn, and child under-5 consultations.',
           style: AppType.caption.copyWith(
             color: AppColors.inkMuted,
             fontSize: 12,
@@ -264,27 +263,27 @@ class _QuickActions extends ConsumerWidget {
             Expanded(
               child: _ActionTile(
                 icon: Icons.add_home_rounded,
-                label: 'Add household',
+                label: 'Register Family',
                 onTap: () => _addHousehold(context, ref),
-                helper: 'Register a new family',
+                helper: 'CHPS zone mapping',
               ),
             ),
             const SizedBox(width: Gap.sm),
             Expanded(
               child: _ActionTile(
                 icon: Icons.search_rounded,
-                label: 'Search',
+                label: 'Search Registry',
                 onTap: onOpenFamilies,
-                helper: 'Find a household',
+                helper: 'Find patient or family',
               ),
             ),
             const SizedBox(width: Gap.sm),
             Expanded(
               child: _ActionTile(
                 icon: Icons.cloud_sync_rounded,
-                label: 'Sync',
+                label: 'District Sync',
                 onTap: () => _sync(context, ref),
-                helper: 'Push records',
+                helper: 'Push records to server',
               ),
             ),
           ],
@@ -477,31 +476,31 @@ class _CountsGrid extends StatelessWidget {
       children: [
         _CountTile(
           icon: Icons.home_rounded,
-          label: 'Households',
+          label: 'Registered Families',
           value: householdCount,
           colour: AppColors.primary,
         ),
         _CountTile(
           icon: Icons.event_available_rounded,
-          label: 'Pending contacts',
+          label: 'Due Assessments',
           value: pendingCount,
           colour: AppColors.info,
         ),
         _CountTile(
           icon: Icons.priority_high_rounded,
-          label: 'High risk',
+          label: 'AI High Priority',
           value: highRiskCount,
           colour: AppColors.triageRed,
         ),
         _CountTile(
           icon: Icons.local_hospital_rounded,
-          label: 'Open referrals',
+          label: 'Active Referrals',
           value: referralsCount,
           colour: AppColors.triageAmber,
         ),
         _CountTile(
           icon: Icons.cloud_off_rounded,
-          label: 'Offline queue',
+          label: 'Pending Sync Records',
           value: offlineCount,
           colour: AppColors.offline,
           fullWidth: true,
@@ -599,9 +598,9 @@ class _SuggestedRouteCard extends StatelessWidget {
         }
         final first = p.priorities.first;
         return SectionCard(
-          title: 'Today\u2019s suggested route',
+          title: 'AI Outreach Priority Route',
           subtitle:
-              'See ${first.household.name} first — ${first.reason.toLowerCase()}.',
+              'Top priority: See ${first.household.name} first — ${first.reason}.',
           icon: Icons.route_outlined,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -617,7 +616,7 @@ class _SuggestedRouteCard extends StatelessWidget {
                   ),
                 ),
                 icon: const Icon(Icons.map_outlined),
-                label: const Text('See full route'),
+                label: const Text('View Full AI Outreach Schedule'),
               ),
             ],
           ),
@@ -776,9 +775,9 @@ class _TopThreeCard extends StatelessWidget {
     }
 
     return SectionCard(
-      title: 'Today\u2019s top three',
+      title: 'AI Triage: Highest Priority Families',
       subtitle:
-          'Ranked by the risk score — the household nobody has measured is not a safe household.',
+          'Ranked by predictive clinical risk scores computed across Maternal, Newborn, and Child Under-5 indicators.',
       icon: Icons.auto_awesome_rounded,
       child: Column(
         children: [
