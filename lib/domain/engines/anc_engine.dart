@@ -893,6 +893,16 @@ abstract final class AncEngine {
       findings: findings,
       actions: actions,
       confidence: _confidence(i, missing),
+      confidenceScore: protocolConfidenceScore(
+        measuredKeyInputs: [
+          i.systolic != null && i.diastolic != null,
+          i.haemoglobin != null,
+          i.muacCm != null,
+          i.gestationalWeeks > 0,
+        ].where((m) => m).length,
+        keyInputCount: 4,
+        observedDangerSign: i.convulsions || i.vaginalBleeding || i.hasSevereHypertension,
+      ),
       protocolSource: _protocol,
       nutritionStatus: nutrition,
       nutritionPathway: nutrition == NutritionStatus.normal

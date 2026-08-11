@@ -107,6 +107,7 @@ class StabilizationAiRisks {
     this.neonatalSepsisRisk,
     this.childPneumoniaRisk,
     this.lbwSgaRisk,
+    this.neonatalSepsisRuleInCandidate,
   });
 
   /// 0..1 calibrated probability.
@@ -114,6 +115,14 @@ class StabilizationAiRisks {
   final double? neonatalSepsisRisk;
   final double? childPneumoniaRisk;
   final double? lbwSgaRisk;
+
+  /// Two-tier triage flag computed by the inference service: true only
+  /// when the neonatal-sepsis probability is at or above the rule-in
+  /// threshold on the 2%-prior scale (0.15). Null when the caller built
+  /// the risks by hand without the prediction object — the selector then
+  /// falls back to comparing [neonatalSepsisRisk] against the same
+  /// threshold. Drift-suppressed predictions carry false, never null.
+  final bool? neonatalSepsisRuleInCandidate;
 
   factory StabilizationAiRisks.fromPredictions(
     Map<String, OfflineRiskPrediction>? predictions,
@@ -124,6 +133,8 @@ class StabilizationAiRisks {
       neonatalSepsisRisk: predictions['neonatal_sepsis']?.riskProbability,
       childPneumoniaRisk: predictions['child_pneumonia']?.riskProbability,
       lbwSgaRisk: predictions['lbw_sga']?.riskProbability,
+      neonatalSepsisRuleInCandidate:
+          predictions['neonatal_sepsis']?.ruleInCandidate,
     );
   }
 }
@@ -132,10 +143,14 @@ class StabilizationAiRisks {
 /// `OfflineInferenceService._GhsThresholds` constants and the WHO IMCI
 /// 2014 classification cutoffs.
 class _StabThresholds {
-  // TriageLevel.urgent threshold = 0.30 (neonatal sepsis) / 0.22 (preeclampsia)
-  // TriageLevel.priority threshold = 0.28 (child pneumonia)
+  // TriageLevel.urgent threshold = 0.22 (preeclampsia)
+  // Two-tier rule-in threshold for PSBI = 0.15 on the v2.0 real-data
+  // 2%-prior scale (mirrors _GhsThresholds.neonatalSepsisRuleIn in
+  // offline_inference_service.dart — the single constant the GHS
+  // re-sign-off ratifies). The old 0.30 sat on the 78%-cohort scale and
+  // is not valid on the deployed scale.
   static const peUrgent = 0.22;
-  static const psbiUrgent = 0.30;
+  static const psbiRuleIn = 0.15;
   static const pneumoniaUrgent = 0.28;
 
   // WHO IMCI severe hypertension = 160/110 (matches WHO 2011 PE guideline)
@@ -173,7 +188,8 @@ class StabilizationProtocolSelector {
   ///
   /// **Young-infant PSBI protocol** when ALL of:
   ///   * age 0-59 days
-  ///   * AI `neonatal_sepsis` >= 0.30 OR any IMCI danger sign present
+  ///   * AI `neonatal_sepsis` is a rule-in candidate (>= 0.15 on the
+  ///     2%-prior scale) OR any IMCI danger sign present
   ///   * (convulsions, unable to feed, lethargic/unconscious, severe chest
   ///     indrawing, bulging fontanelle, fever >= 37.5 or hypothermia
   ///     < 35.5, cord pus with skin extension, etc.)
@@ -215,15 +231,20 @@ class StabilizationProtocolSelector {
 
     // ── Young-infant PSBI ────────────────────────────────────────────────
     final aiPsbi = risks.neonatalSepsisRisk ?? 0.0;
+    final psbiRuleIn = risks.neonatalSepsisRuleInCandidate ??
+        (aiPsbi >= _StabThresholds.psbiRuleIn);
     final ageDays = context.patientAgeDays;
     final inPsbiAge =
         ageDays != null && ageDays <= _StabThresholds.psbiMaxAgeDays;
     final psbiDanger = _psbiDangerSignPresent(context);
-    if (inPsbiAge && (aiPsbi >= _StabThresholds.psbiUrgent || psbiDanger)) {
+    if (inPsbiAge && (psbiRuleIn || psbiDanger)) {
       activated.add(psbiProtocol);
       final r = <String>[];
-      if (aiPsbi >= _StabThresholds.psbiUrgent) {
-        r.add('AI neonatal_sepsis=${aiPsbi.toStringAsFixed(2)}');
+      if (psbiRuleIn) {
+        r.add(
+          'AI rule-in candidate: neonatal_sepsis='
+          '${aiPsbi.toStringAsFixed(3)} >= ${_StabThresholds.psbiRuleIn}',
+        );
       }
       if (psbiDanger) {
         r.add('IMCI danger sign present');

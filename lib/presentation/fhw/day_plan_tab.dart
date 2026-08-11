@@ -628,7 +628,9 @@ class _ContactTile extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: Gap.sm),
       child: Row(
         children: [
-          TriageBadge(contact.priority, label: when, compact: true),
+          Flexible(
+            child: TriageBadge(contact.priority, label: when, compact: true),
+          ),
           const SizedBox(width: Gap.md),
           Expanded(
             child: Text(

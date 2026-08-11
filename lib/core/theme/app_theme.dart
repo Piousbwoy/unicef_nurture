@@ -479,13 +479,21 @@ class _GradientButtonState extends State<GradientButton> {
                     ),
                     const SizedBox(width: Gap.sm),
                   ],
-                  Text(
-                    widget.label,
-                    style: GoogleFonts.manrope(
-                      fontSize: 15.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.2,
-                      color: enabled ? Colors.white : AppColors.inkFaint,
+                  // Flexible + maxLines so a long primary label can never
+                  // push the button off-screen on a narrow phone; it wraps
+                  // to a second line and the row centers it.
+                  Flexible(
+                    child: Text(
+                      widget.label,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.manrope(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                        color: enabled ? Colors.white : AppColors.inkFaint,
+                      ),
                     ),
                   ),
                 ],

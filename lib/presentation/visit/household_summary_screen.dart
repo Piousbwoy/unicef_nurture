@@ -343,15 +343,30 @@ class _SummaryTile extends ConsumerWidget {
                 latest.maybeWhen(
                   data: (a) => a == null
                       ? const SizedBox.shrink()
-                      : Text(
-                          a.result.classification,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.inkMuted,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              a.result.classification,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.inkMuted,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${a.result.effectiveConfidenceScore}% '
+                              'confidence',
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                color: AppColors.inkFaint,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
                         ),
                   orElse: () => const SizedBox.shrink(),
                 ),
@@ -362,7 +377,9 @@ class _SummaryTile extends ConsumerWidget {
           latest.maybeWhen(
             data: (a) => a == null
                 ? const SizedBox.shrink()
-                : TriageBadge(a.effectiveTriage, compact: true),
+                : Flexible(
+                    child: TriageBadge(a.effectiveTriage, compact: true),
+                  ),
             orElse: () => const SizedBox.shrink(),
           ),
         ],

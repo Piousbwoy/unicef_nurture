@@ -901,6 +901,33 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
         leading: BackButton(onPressed: (_busy || isSuccess) ? null : _back),
         title: Text(title),
       ),
+      // The primary action lives in a persistent footer instead of the
+      // scroll body: on a phone the form can exceed one screen, and a
+      // submit button that needs scrolling to find feels broken. The CTA
+      // stays visible on every step, one tap away.
+      bottomNavigationBar: isSuccess
+          ? null
+          : SafeArea(
+              top: false,
+              minimum: const EdgeInsets.fromLTRB(
+                Gap.lg,
+                Gap.xs,
+                Gap.lg,
+                Gap.lg,
+              ),
+              child: isPrivacyStep
+                  ? GradientButton(
+                      label: _isFhw
+                          ? 'Agree & Create Account'
+                          : 'Agree & Link My Family',
+                      icon: Icons.verified_user_rounded,
+                      onPressed: _busy ? null : _submit,
+                    )
+                  : GradientButton(
+                      label: 'Continue',
+                      onPressed: _busy ? null : _next,
+                    ),
+            ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(Gap.lg),
@@ -912,21 +939,6 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
               const SizedBox(height: Gap.lg),
               _ErrorBox(_error!),
             ],
-            const SizedBox(height: Gap.xl),
-            if (isSuccess)
-              const SizedBox.shrink()
-            else if (isPrivacyStep)
-              GradientButton(
-                label: _isFhw ? 'Agree & Create Account' : 'Agree & Link My Family',
-                icon: Icons.verified_user_rounded,
-                onPressed: _busy ? null : _submit,
-              )
-            else
-              GradientButton(
-                label: 'Continue',
-                onPressed: _busy ? null : _next,
-              ),
-            const SizedBox(height: Gap.xl),
           ],
         ),
       ),

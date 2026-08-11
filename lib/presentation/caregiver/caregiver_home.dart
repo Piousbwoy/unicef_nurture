@@ -553,7 +553,9 @@ class _MemberTile extends ConsumerWidget {
           latest.maybeWhen(
             data: (a) => a == null
                 ? const SizedBox.shrink()
-                : TriageBadge(a.effectiveTriage, compact: true),
+                : Flexible(
+                    child: TriageBadge(a.effectiveTriage, compact: true),
+                  ),
             orElse: () => const SizedBox.shrink(),
           ),
         ],

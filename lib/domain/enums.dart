@@ -104,7 +104,44 @@ enum ClientType {
     if (days <= 59 * 30.4375) return ClientType.childUnderFive;
     return null;
   }
+
+  /// Reads a stored client type without ever throwing.
+  ///
+  /// The SQLite register outlives app versions: rows written by older builds
+  /// (and the cloud-restore path) can carry legacy names like `mother` or
+  /// `infant`. One such row used to crash the whole AI Triage tab with
+  /// "Bad state: No element". A register that cannot be read is a register
+  /// nobody trusts, so unknown names fall back to the nearest protocol and
+  /// the age-based type when one can be derived.
+  static ClientType fromStoredName(
+    Object? name, {
+    DateTime? dateOfBirth,
+    int? ageYearsApprox,
+  }) {
+    final direct = enumByNameOrNull(ClientType.values, name);
+    if (direct != null) return direct;
+    switch (name) {
+      case 'mother':
+        return ClientType.pregnantWoman;
+      case 'infant':
+      case 'child':
+        return ClientType.childUnderFive;
+    }
+    final days = dateOfBirth != null
+        ? DateTime.now().difference(dateOfBirth).inDays
+        : ageYearsApprox != null
+        ? ageYearsApprox * 365
+        : null;
+    return (days == null ? null : ClientType.forChildAgeInDays(days)) ??
+        ClientType.womanOfReproductiveAge;
+  }
 }
+
+/// Name lookup that never throws. Stored enum names written by older app
+/// versions (or a mis-synced server record) must degrade to a fallback, never
+/// take a whole screen down.
+T? enumByNameOrNull<T extends Enum>(List<T> values, Object? name) =>
+    name is String ? values.asNameMap()[name] : null;
 
 enum Sex {
   male('Male'),

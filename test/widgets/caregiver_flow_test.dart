@@ -11,6 +11,8 @@
 /// back in to find their record still there.
 library;
 
+import 'dart:io';
+
 import 'package:carebridge_ai/app/providers.dart';
 import 'package:carebridge_ai/core/router/app_router.dart';
 import 'package:carebridge_ai/data/local/app_database.dart';
@@ -58,12 +60,13 @@ Future<void> _pumpApp(WidgetTester tester) {
   );
 }
 
-/// Runs out the timed routing of the splash, then settles the transition.
+/// Taps the splash (it never auto-advances), then settles the transition.
 Future<void> _leaveSplash(WidgetTester tester) async {
-  await tester.pump(); // Schedule the routing microtask of the splash.
-  await tester.pump(const Duration(milliseconds: 2000)); // Past the hold.
-  await tester.pump(const Duration(milliseconds: 100)); // Flush flag reads.
-  await tester.pump(const Duration(milliseconds: 100)); // Flush navigation.
+  await tester.pump(); // Build the splash.
+  await tester.pump(const Duration(milliseconds: 300)); // First paint.
+  await tester.tapAt(tester.getCenter(find.byType(Scaffold))); // Tap to continue.
+  await tester.pump(const Duration(milliseconds: 100)); // Flush session reads.
+  await tester.pump(const Duration(milliseconds: 100)); // Flush the navigation.
   await tester.pump(const Duration(milliseconds: 600)); // Settle the fade.
 }
 
@@ -137,6 +140,22 @@ void main() {
       messenger.setMockMethodCallHandler(
         const MethodChannel('flutter_tts'),
         (call) async => null,
+      );
+      // The database resolves its file through the path_provider channel,
+      // which has no plugin in the test VM either. Point it at a fresh
+      // temp folder so the whole journey (register -> sign out -> sign
+      // back in) runs against a genuine, persistent SQLite file. The sync
+      // variant is required: an awaited async File IO would deadlock under
+      // the FakeAsync test zone.
+      final dbDir = Directory.systemTemp.createTempSync('carebridge_e2e');
+      messenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        (call) async {
+          if (call.method == 'getApplicationDocumentsDirectory') {
+            return dbDir.path;
+          }
+          return null;
+        },
       );
 
       AppDatabase.initialiseForDesktopAndTests();
@@ -216,11 +235,11 @@ void main() {
       expect(find.byType(CaregiverHome), findsOneWidget);
       const caregiverTabs = ['Family', 'Check', 'Grow & Play', 'Care plan', 'Help'];
       for (final label in caregiverTabs) {
-        expect(find.text(label), findsWidgets, reason: 'tab ' + label);
+        expect(find.text(label), findsWidgets, reason: 'tab $label');
       }
       const fhwTabs = ['Day plan', 'Assess', 'Referrals', 'Me'];
       for (final label in fhwTabs) {
-        expect(find.text(label), findsNothing, reason: 'FHW tab ' + label);
+        expect(find.text(label), findsNothing, reason: 'FHW tab $label');
       }
       expect(find.text('Our family'), findsOneWidget);
       // The household row arrives on the real clock via the SQLite isolate.

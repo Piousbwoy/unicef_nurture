@@ -368,7 +368,10 @@ abstract final class CloudRecoveryService {
           'id': 'person-mother-$phone',
           'household_id': hhId,
           'full_name': 'Aisha Ibrahim',
-          'client_type': 'mother',
+          // Must be a real ClientType name: the register reader maps stored
+          // names back onto the enum, and a legacy alias used to crash the
+          // AI Triage tab with "Bad state: No element".
+          'client_type': 'pregnantWoman',
           'sex': 'female',
           'date_of_birth': '1998-04-12',
           'age_years_approx': 27,
@@ -390,7 +393,7 @@ abstract final class CloudRecoveryService {
           'id': 'person-child-$phone',
           'household_id': hhId,
           'full_name': 'Zainab Ibrahim (Recovered)',
-          'client_type': 'infant',
+          'client_type': 'childUnderFive',
           'sex': 'female',
           'date_of_birth': now.subtract(const Duration(days: 120)).toIso8601String(),
           'age_years_approx': 0,

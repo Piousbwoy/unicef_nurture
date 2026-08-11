@@ -133,6 +133,72 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     return null;
   }
 
+  // --------------------------------------- IMCI danger-sign gating (T2)
+  bool _showOptional = false;
+
+  static const _youngInfantGeneral = {
+    'notFeeding', 'noFeed', 'convulsions', 'movesStim', 'noMove', 'indrawing',
+    'fontanelle',
+  };
+  static const _childGeneral = {
+    'noDrink', 'vomitsAll', 'convulsions', 'convulsingNow', 'lethargic',
+  };
+
+  /// IMCI screens general danger signs first: any one of them makes this a
+  /// referral today, whatever the rest of the chart finds.
+  bool get _hasGeneralDangerSign => isYoungInfant
+      ? _signs.any(_youngInfantGeneral.contains)
+      : _signs.any(_childGeneral.contains);
+
+  /// With a general danger sign the child is referred regardless, so the
+  /// detailed symptom chart is optional — collapsed unless the worker asks.
+  bool get _optionalHidden => _hasGeneralDangerSign && !_showOptional;
+
+  Widget _referralBanner() {
+    if (!_hasGeneralDangerSign) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(bottom: Gap.md),
+      padding: const EdgeInsets.all(Gap.md),
+      decoration: BoxDecoration(
+        color: AppColors.triageRed.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(Gap.radius),
+        border: Border.all(color: AppColors.triageRed.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: AppColors.triageRed,
+            size: 22,
+          ),
+          const SizedBox(width: Gap.sm),
+          Expanded(
+            child: Text(
+              'General danger sign present — refer today. Record quick '
+              'measurements and save; the detailed chart below is optional.',
+              style: TextStyle(
+                color: AppColors.triageRed,
+                fontWeight: FontWeight.w700,
+                fontSize: 12.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _optionalToggle() => Padding(
+    padding: const EdgeInsets.only(bottom: Gap.lg),
+    child: OutlinedButton(
+      onPressed: () => setState(() => _showOptional = !_showOptional),
+      child: Text(
+        _showOptional ? 'Hide optional sections' : 'Show optional sections',
+      ),
+    ),
+  );
+
   @override
   void initState() {
     super.initState();
@@ -213,6 +279,9 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
             ),
             const SizedBox(height: Gap.lg),
 
+            _referralBanner(),
+            if (_hasGeneralDangerSign) _optionalToggle(),
+
             if (person.dateOfBirth == null)
               Padding(
                 padding: const EdgeInsets.only(bottom: Gap.lg),
@@ -276,7 +345,35 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
 
   // ------------------------------------------------------------ Young infant
 
+  Widget _youngInfantDangerCard() => SectionCard(
+    title: 'Danger signs',
+    subtitle:
+        'In a young infant almost every sign here means refer now. Off '
+        'means asked and absent.',
+    icon: Icons.warning_amber_rounded,
+    accent: AppColors.triageRed,
+    child: SignChecklist(
+      signs: const [
+        ('notFeeding', 'Not feeding well'),
+        ('noFeed', 'Unable to feed at all'),
+        ('convulsions', 'Convulsions / fits'),
+        ('movesStim', 'Moves only when stimulated'),
+        ('noMove', 'No movement at all'),
+        ('indrawing', 'Severe chest indrawing'),
+        ('fontanelle', 'Bulging fontanelle'),
+      ],
+      selected: _signs,
+      onToggle: (k, on) =>
+          setState(() => on ? _signs.add(k) : _signs.remove(k)),
+    ),
+  );
+
   List<Widget> _youngInfantSections() => [
+    // Danger signs lead, exactly as the young-infant chart is worked at the
+    // bedside: screen for a referral sign before anything else.
+    _youngInfantDangerCard(),
+    const SizedBox(height: Gap.lg),
+
     // -------------------------------------------------------------- ENH 1
     SectionCard(
       title: 'Visit type',
@@ -335,30 +432,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     ),
     const SizedBox(height: Gap.lg),
 
-    SectionCard(
-      title: 'Danger signs',
-      subtitle:
-          'In a young infant almost every sign here means refer now. Off '
-          'means asked and absent.',
-      icon: Icons.warning_amber_rounded,
-      accent: AppColors.triageRed,
-      child: SignChecklist(
-        signs: const [
-          ('notFeeding', 'Not feeding well'),
-          ('noFeed', 'Unable to feed at all'),
-          ('convulsions', 'Convulsions / fits'),
-          ('movesStim', 'Moves only when stimulated'),
-          ('noMove', 'No movement at all'),
-          ('indrawing', 'Severe chest indrawing'),
-          ('fontanelle', 'Bulging fontanelle'),
-        ],
-        selected: _signs,
-        onToggle: (k, on) =>
-            setState(() => on ? _signs.add(k) : _signs.remove(k)),
-      ),
-    ),
-    const SizedBox(height: Gap.lg),
-
+    if (!_optionalHidden) ...[
     SectionCard(
       title: 'Local infection',
       subtitle: 'Check the cord and the skin in good light.',
@@ -558,6 +632,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
         ],
       ),
     ),
+    ],
   ];
 
   // -------------------------------------------------------------- Sick child
@@ -604,6 +679,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
       ),
       const SizedBox(height: Gap.lg),
 
+      if (!_optionalHidden) ...[
       SectionCard(
         title: 'Cough and breathing',
         icon: Icons.air_outlined,
@@ -1134,6 +1210,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
           ],
         ),
       ),
+    ],
     ];
   }
 

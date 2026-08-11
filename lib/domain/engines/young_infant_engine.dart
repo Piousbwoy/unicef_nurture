@@ -699,6 +699,11 @@ abstract final class YoungInfantEngine {
       findings: findings,
       actions: actions,
       confidence: _confidence(i, missing),
+      confidenceScore: protocolConfidenceScore(
+        measuredKeyInputs: (i.temperatureCelsius != null ? 1 : 0) +
+            (i.respiratoryRate != null ? 1 : 0),
+        keyInputCount: 2,
+      ),
       protocolSource: _protocol,
       dangerSignsPresent: dangerSigns,
       missingData: missing,

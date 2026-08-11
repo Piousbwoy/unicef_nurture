@@ -147,7 +147,8 @@ class ClinicalFinding {
   factory ClinicalFinding.fromJson(Map<String, Object?> j) => ClinicalFinding(
     label: j['label'] as String,
     detail: j['detail'] as String,
-    severity: TriageLevel.values.firstWhere((t) => t.name == j['severity']),
+    severity: enumByNameOrNull(TriageLevel.values, j['severity']) ??
+        TriageLevel.routine,
     protocolSource: j['protocol_source'] as String?,
     measuredValue: j['measured_value'] as String?,
     threshold: j['threshold'] as String?,
@@ -227,7 +228,8 @@ class RecommendedAction {
 
   factory RecommendedAction.fromJson(Map<String, Object?> j) => RecommendedAction(
     instruction: j['instruction'] as String,
-    urgency: ReferralUrgency.values.firstWhere((u) => u.name == j['urgency']),
+    urgency: enumByNameOrNull(ReferralUrgency.values, j['urgency']) ??
+        ReferralUrgency.scheduled,
     rationale: j['rationale'] as String?,
     protocolSource: j['protocol_source'] as String?,
     isReferral: j['is_referral'] == true,
@@ -236,6 +238,35 @@ class RecommendedAction {
     isPrereferralTreatment: j['is_prereferral_treatment'] == true,
   );
 }
+
+/// A single 0–100 confidence score shared by every protocol engine.
+///
+/// The number is the share of *decisive* measurements that were actually
+/// taken (blood pressure + Hb + MUAC + gestation for ANC; temperature,
+/// respiratory rate, MUAC, weight for a child). An observed danger sign
+/// needs no instrument, so it pins the score at 95 rather than punishing
+/// the CHO for acting on what they saw. The bucket ([RecommendationConfidence])
+/// still carries the wording; this carries the number a CHO can quote in
+/// the register or defend at the facility gate.
+int protocolConfidenceScore({
+  required int measuredKeyInputs,
+  required int keyInputCount,
+  bool observedDangerSign = false,
+}) {
+  if (observedDangerSign) return 95;
+  if (keyInputCount <= 0) return 50;
+  return (measuredKeyInputs / keyInputCount * 100).round().clamp(0, 100);
+}
+
+/// Estimate for records written before the numeric score existed. Old rows
+/// only carry the bucket, so the closest honest number for that bucket is
+/// used instead of inventing precision.
+int legacyConfidenceEstimate(RecommendationConfidence c) => switch (c) {
+  RecommendationConfidence.protocolCertain => 95,
+  RecommendationConfidence.high => 82,
+  RecommendationConfidence.moderate => 65,
+  RecommendationConfidence.low => 45,
+};
 
 /// The complete, explainable output of one protocol engine run.
 class AssessmentResult {
@@ -246,6 +277,7 @@ class AssessmentResult {
     required this.findings,
     required this.actions,
     required this.confidence,
+    this.confidenceScore,
     this.protocolSource,
     this.nutritionStatus,
     this.nutritionPathway,
@@ -266,6 +298,11 @@ class AssessmentResult {
   final List<ClinicalFinding> findings;
   final List<RecommendedAction> actions;
   final RecommendationConfidence confidence;
+
+  /// 0–100 score from the engine's measured-inputs arithmetic. Null only on
+  /// records written before the score existed; [effectiveConfidenceScore]
+  /// covers that with a bucket estimate.
+  final int? confidenceScore;
   final String? protocolSource;
 
   final NutritionStatus? nutritionStatus;
@@ -288,6 +325,11 @@ class AssessmentResult {
 
   bool get needsReferral => triage.requiresReferral;
 
+  /// The score to display: the engine's number when there is one, otherwise
+  /// the honest estimate for the bucket.
+  int get effectiveConfidenceScore =>
+      confidenceScore ?? legacyConfidenceEstimate(confidence);
+
   List<ClinicalFinding> get urgentFindings =>
       findings.where((f) => f.severity == TriageLevel.urgent).toList();
 
@@ -298,6 +340,7 @@ class AssessmentResult {
     'findings': findings.map((f) => f.toJson()).toList(),
     'actions': actions.map((a) => a.toJson()).toList(),
     'confidence': confidence.name,
+    'confidence_score': confidenceScore,
     'protocol_source': protocolSource,
     'nutrition_status': nutritionStatus?.name,
     'nutrition_pathway': nutritionPathway?.name,
@@ -309,8 +352,9 @@ class AssessmentResult {
   };
 
   factory AssessmentResult.fromJson(Map<String, Object?> j) => AssessmentResult(
-    clientType: ClientType.values.firstWhere((c) => c.name == j['client_type']),
-    triage: TriageLevel.values.firstWhere((t) => t.name == j['triage']),
+    clientType: ClientType.fromStoredName(j['client_type']),
+    triage: enumByNameOrNull(TriageLevel.values, j['triage']) ??
+        TriageLevel.routine,
     classification: j['classification'] as String,
     findings: ((j['findings'] as List?) ?? [])
         .map((f) => ClinicalFinding.fromJson(Map<String, Object?>.from(f as Map)))
@@ -324,17 +368,13 @@ class AssessmentResult {
       (c) => c.name == j['confidence'],
       orElse: () => RecommendationConfidence.moderate,
     ),
+    confidenceScore: (j['confidence_score'] as num?)?.toInt(),
     protocolSource: j['protocol_source'] as String?,
-    nutritionStatus: j['nutrition_status'] == null
-        ? null
-        : NutritionStatus.values.firstWhere(
-            (n) => n.name == j['nutrition_status'],
-          ),
-    nutritionPathway: j['nutrition_pathway'] == null
-        ? null
-        : NutritionPathway.values.firstWhere(
-            (n) => n.name == j['nutrition_pathway'],
-          ),
+    nutritionStatus: enumByNameOrNull(NutritionStatus.values, j['nutrition_status']),
+    nutritionPathway: enumByNameOrNull(
+      NutritionPathway.values,
+      j['nutrition_pathway'],
+    ),
     dangerSignsPresent: ((j['danger_signs_present'] as List?) ?? [])
         .map((e) => e as String)
         .toList(),
@@ -428,7 +468,7 @@ class Assessment {
     id: m['id'] as String,
     visitId: m['visit_id'] as String,
     personId: m['person_id'] as String,
-    clientType: ClientType.values.firstWhere((c) => c.name == m['client_type']),
+    clientType: ClientType.fromStoredName(m['client_type']),
     performedBy: m['performed_by'] as String,
     performedAt: DateTime.parse(m['performed_at'] as String),
     inputs: Map<String, Object?>.from(
@@ -438,9 +478,7 @@ class Assessment {
       Map<String, Object?>.from(jsonDecode(m['result_json'] as String) as Map),
     ),
     carePlanJson: m['care_plan_json'] as String?,
-    overriddenTriage: m['overridden_triage'] == null
-        ? null
-        : TriageLevel.values.firstWhere((t) => t.name == m['overridden_triage']),
+    overriddenTriage: enumByNameOrNull(TriageLevel.values, m['overridden_triage']),
     overrideReason: m['override_reason'] as String?,
     overrideBy: m['override_by'] as String?,
     syncState: SyncState.values.firstWhere(
@@ -562,7 +600,8 @@ class Referral {
     assessmentId: m['assessment_id'] as String,
     facilityName: m['facility_name'] as String,
     reason: m['reason'] as String,
-    urgency: ReferralUrgency.values.firstWhere((u) => u.name == m['urgency']),
+    urgency: enumByNameOrNull(ReferralUrgency.values, m['urgency']) ??
+        ReferralUrgency.scheduled,
     issuedBy: m['issued_by'] as String,
     issuedAt: DateTime.parse(m['issued_at'] as String),
     status: ReferralStatus.values.firstWhere(

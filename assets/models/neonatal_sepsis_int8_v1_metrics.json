@@ -1,106 +1,164 @@
 {
   "model_name": "neonatal_sepsis",
-  "model_version": "v1.0-ghana-baseline-public-data-and-ghana-priors",
+  "model_version": "v2.0-real-data-neonatal_sepsis",
   "version_ladder": {
-    "this": "v1.0-ghana-baseline",
-    "next": "v2.0-kintampo-cohort",
+    "this": "v2.0-real-data",
+    "next": "v3.0-kintampo-cohort",
     "v3_prospective": "v3.0-prospective-pilot"
   },
-  "training_dataset": "[M11] Opiyo & English 2011 (PSBI signs); [M14] WHO IMCI 2014 (age cutoffs)",
+  "training_dataset": "REAL: Mbarara RRH neonatal sepsis EMR, Uganda (964 rows [756 positive, 208 negative]; age 0-3 days; vitals + feeding/lethargy signs)",
   "ghana_calibration": {
     "priors_used": [
-      "[M11]+[M14]"
+      "[neonatal sepsis (PSBI): target prior 0.02 = deterministic fallback baseline, Northern Region NB home visits]"
     ],
-    "external_validation": null
+    "note": "Probability scale re-anchored to the 2% Ghana prior used by the deterministic fallback (see calibration.prior_adjustment)."
   },
-  "clinical_note": "v1.0 Ghana baseline. Simulator cohort seeded from 1 peer-reviewed Ghanaian clinical studies (DOIs in `priors_used`); UCI Maternal Health Risk used as held-out external validation set. Calibration via Platt scaling on the internal 20% hold-out; 95% CI derived from per-bin Platt-residual std; drift detection via per-feature z-score against the training distribution.",
+  "clinical_note": "Trained on REAL clinical data (Mbarara Regional Referral Hospital (Uganda), neonatal admissions; n=964, 756 cases). Features absent from the source cohort (13 zero-filled) are learned as constants by the model; the deterministic WHO/GHS rules in the app cover those red lines at runtime (the selector ORs AI risk with clinical danger signs). Calibration: logit-correct Platt scaling fitted on 5-fold out-of-fold predictions; 95% CI from per-bin residual std. Training features are the SAME [0,1]-normalized representation the app feeds at inference (v1.0 had a raw-scale train/serve skew - fixed). Cohort: Mbarara Regional Referral Hospital (Uganda), neonatal admissions; population transfer to the Northern Ghana CHPS context is unvalidated. Decision-support, not diagnosis.",
+  "dataset_sha256": {
+    "mbarara_neonatal_sepsis_cases.csv": {
+      "sha256": "a8f31d980c35ad2871964f43638b67a6e2ef4b3a3e129f70c264fe95ae5948a8",
+      "n_bytes": 61474
+    },
+    "mbarara_neonatal_sepsis_controls.csv": {
+      "sha256": "4a1930926c796bc1bd4a36b8aadda308dac73184e64645e9b14d126d8e08ff61",
+      "n_bytes": 64788
+    }
+  },
+  "features_present": [
+    "age_days",
+    "temperature_celsius",
+    "respiratory_rate_per_min",
+    "heart_rate_per_min",
+    "birth_weight_kg",
+    "feeding_difficulty",
+    "lethargic_unconscious"
+  ],
+  "features_zero_imputed": [
+    "oxygen_saturation_per_cent",
+    "apgar_5_minute",
+    "history_of_convulsions",
+    "severe_chest_indrawing",
+    "nasal_flaring_grunting",
+    "bulging_fontanelle",
+    "jaundice_before_24h",
+    "abdominal_distension",
+    "cord_infection",
+    "skin_pustules",
+    "bleeding",
+    "hiv_exposed",
+    "multiple_birth"
+  ],
   "validation": {
     "internal": {
-      "holdout_auc": 0.7386,
-      "sensitivity": 0.6487,
-      "specificity": 0.7079,
-      "youden_j": 0.3566,
-      "best_threshold": 0.37,
-      "n_train": 6400,
-      "n_test": 1600,
+      "method": "5-fold stratified cross-validation (pooled OOF)",
+      "holdout_auc": 0.9,
+      "fold_auc_mean": 0.9039,
+      "fold_auc_std": 0.0326,
+      "sensitivity": 0.7778,
+      "specificity": 0.9327,
+      "youden_j": 0.7105,
+      "best_threshold": 0.0158,
+      "n_pool": 964,
+      "n_folds": 5,
+      "fold_size": 193,
+      "oof_n": 964,
       "calibration": {
         "method": "platt_scaling",
-        "A": 1.191635,
-        "B": 0.082632,
-        "brier_score": 0.2911,
+        "A": 2.013769,
+        "B": -5.826344,
+        "brier_score": 0.4108,
         "ci_table": [
           {
             "bin_lo": 0.0,
             "bin_hi": 0.1,
             "bin_mid": 0.05,
-            "residual_std": null,
-            "n": 0
+            "residual_std": 0.491,
+            "n": 465
           },
           {
             "bin_lo": 0.1,
             "bin_hi": 0.2,
             "bin_mid": 0.15,
-            "residual_std": null,
-            "n": 0
+            "residual_std": 0.0318,
+            "n": 71
           },
           {
             "bin_lo": 0.2,
             "bin_hi": 0.3,
             "bin_mid": 0.25,
-            "residual_std": null,
-            "n": 0
+            "residual_std": 0.0297,
+            "n": 64
           },
           {
             "bin_lo": 0.3,
             "bin_hi": 0.4,
             "bin_mid": 0.35,
-            "residual_std": null,
-            "n": 0
+            "residual_std": 0.2597,
+            "n": 43
           },
           {
             "bin_lo": 0.4,
             "bin_hi": 0.5,
             "bin_mid": 0.45,
-            "residual_std": null,
-            "n": 0
+            "residual_std": 0.1353,
+            "n": 55
           },
           {
             "bin_lo": 0.5,
             "bin_hi": 0.6,
             "bin_mid": 0.55,
-            "residual_std": 0.3578,
-            "n": 654
+            "residual_std": 0.0306,
+            "n": 50
           },
           {
             "bin_lo": 0.6,
             "bin_hi": 0.7,
             "bin_mid": 0.65,
-            "residual_std": 0.4869,
-            "n": 936
+            "residual_std": 0.0313,
+            "n": 58
           },
           {
             "bin_lo": 0.7,
             "bin_hi": 0.8,
             "bin_mid": 0.75,
-            "residual_std": 0.3158,
-            "n": 10
+            "residual_std": 0.0259,
+            "n": 65
           },
           {
             "bin_lo": 0.8,
             "bin_hi": 0.9,
             "bin_mid": 0.85,
-            "residual_std": null,
-            "n": 0
+            "residual_std": 0.0276,
+            "n": 47
           },
           {
             "bin_lo": 0.9,
             "bin_hi": 1.0,
             "bin_mid": 0.95,
-            "residual_std": null,
-            "n": 0
+            "residual_std": 0.0185,
+            "n": 46
           }
-        ]
+        ],
+        "prior_adjustment": {
+          "cohort_prior": 0.7842,
+          "target_prior": 0.02,
+          "logit_shift": -5.1823,
+          "note": "Platt intercept re-anchored so calibrated probabilities express P(sepsis) at the Ghana CHPS prior used by the deterministic fallback. Discrimination (AUC) unchanged.",
+          "cohort_scale_brier": 0.1021,
+          "target_prior_baseline_brier": 0.0196
+        },
+        "brier_score_cohort_scale": 0.1021
       }
+    },
+    "external": {
+      "dataset": "PhysioNet 2019 adult ICU (n=4000) - out-of-domain transfer check",
+      "n": 4000,
+      "holdout_auc": 0.5112,
+      "sensitivity": 0.2689,
+      "specificity": 0.8155,
+      "youden_j": 0.0844,
+      "best_threshold": 0.68,
+      "calibrated_brier": 0.0293
     }
   },
   "drift_baseline": {
@@ -109,143 +167,143 @@
     "features": [
       {
         "feature": "age_days",
-        "mean": 0.4967,
-        "std": 0.2941,
+        "mean": 0.0296,
+        "std": 0.0118,
         "p_lo": 0.0,
-        "p_hi": 1.0
+        "p_hi": 0.0508
       },
       {
         "feature": "temperature_celsius",
-        "mean": 0.3846,
-        "std": 0.1145,
-        "p_lo": 0.0828,
-        "p_hi": 0.6795
+        "mean": 0.6548,
+        "std": 0.1766,
+        "p_lo": 0.0286,
+        "p_hi": 1.0
       },
       {
         "feature": "respiratory_rate_per_min",
-        "mean": 0.304,
-        "std": 0.119,
+        "mean": 0.4019,
+        "std": 0.1562,
         "p_lo": 0.0,
-        "p_hi": 0.5989
+        "p_hi": 0.91
       },
       {
         "feature": "heart_rate_per_min",
-        "mean": 0.5026,
-        "std": 0.1548,
-        "p_lo": 0.1007,
-        "p_hi": 0.905
+        "mean": 0.5754,
+        "std": 0.148,
+        "p_lo": 0.2125,
+        "p_hi": 0.9688
       },
       {
         "feature": "oxygen_saturation_per_cent",
-        "mean": 0.8971,
-        "std": 0.0692,
-        "p_lo": 0.7164,
-        "p_hi": 1.0
+        "mean": 0.0,
+        "std": 0.0,
+        "p_lo": 0.0,
+        "p_hi": 0.0
       },
       {
         "feature": "birth_weight_kg",
-        "mean": 0.4971,
-        "std": 0.1435,
-        "p_lo": 0.1283,
-        "p_hi": 0.8499
+        "mean": 0.5274,
+        "std": 0.1259,
+        "p_lo": 0.1071,
+        "p_hi": 0.8714
       },
       {
         "feature": "apgar_5_minute",
-        "mean": 0.8365,
-        "std": 0.1293,
-        "p_lo": 0.4443,
-        "p_hi": 1.0
+        "mean": 0.0,
+        "std": 0.0,
+        "p_lo": 0.0,
+        "p_hi": 0.0
       },
       {
         "feature": "history_of_convulsions",
-        "mean": 0.1005,
-        "std": 0.3006,
+        "mean": 0.0,
+        "std": 0.0,
         "p_lo": 0.0,
-        "p_hi": 1.0
+        "p_hi": 0.0
       },
       {
         "feature": "severe_chest_indrawing",
-        "mean": 0.1033,
-        "std": 0.3043,
+        "mean": 0.0,
+        "std": 0.0,
         "p_lo": 0.0,
-        "p_hi": 1.0
+        "p_hi": 0.0
       },
       {
         "feature": "nasal_flaring_grunting",
-        "mean": 0.0992,
-        "std": 0.299,
+        "mean": 0.0,
+        "std": 0.0,
         "p_lo": 0.0,
-        "p_hi": 1.0
+        "p_hi": 0.0
       },
       {
         "feature": "bulging_fontanelle",
-        "mean": 0.1006,
-        "std": 0.3008,
+        "mean": 0.0,
+        "std": 0.0,
         "p_lo": 0.0,
-        "p_hi": 1.0
+        "p_hi": 0.0
       },
       {
         "feature": "jaundice_before_24h",
-        "mean": 0.1013,
-        "std": 0.3017,
+        "mean": 0.0,
+        "std": 0.0,
         "p_lo": 0.0,
-        "p_hi": 1.0
+        "p_hi": 0.0
       },
       {
         "feature": "feeding_difficulty",
-        "mean": 0.1017,
-        "std": 0.3023,
+        "mean": 0.0,
+        "std": 0.0,
         "p_lo": 0.0,
-        "p_hi": 1.0
+        "p_hi": 0.0
       },
       {
         "feature": "abdominal_distension",
-        "mean": 0.1011,
-        "std": 0.3015,
+        "mean": 0.0,
+        "std": 0.0,
         "p_lo": 0.0,
-        "p_hi": 1.0
+        "p_hi": 0.0
       },
       {
         "feature": "cord_infection",
-        "mean": 0.0983,
-        "std": 0.2977,
+        "mean": 0.0,
+        "std": 0.0,
         "p_lo": 0.0,
-        "p_hi": 1.0
+        "p_hi": 0.0
       },
       {
         "feature": "skin_pustules",
-        "mean": 0.1034,
-        "std": 0.3045,
+        "mean": 0.0,
+        "std": 0.0,
         "p_lo": 0.0,
-        "p_hi": 1.0
+        "p_hi": 0.0
       },
       {
         "feature": "lethargic_unconscious",
-        "mean": 0.0981,
-        "std": 0.2975,
+        "mean": 0.0,
+        "std": 0.0,
         "p_lo": 0.0,
-        "p_hi": 1.0
+        "p_hi": 0.0
       },
       {
         "feature": "bleeding",
-        "mean": 0.0962,
-        "std": 0.2949,
+        "mean": 0.0,
+        "std": 0.0,
         "p_lo": 0.0,
-        "p_hi": 1.0
+        "p_hi": 0.0
       },
       {
         "feature": "hiv_exposed",
-        "mean": 0.0994,
-        "std": 0.2992,
+        "mean": 0.0,
+        "std": 0.0,
         "p_lo": 0.0,
-        "p_hi": 1.0
+        "p_hi": 0.0
       },
       {
         "feature": "multiple_birth",
-        "mean": 0.1034,
-        "std": 0.3045,
+        "mean": 0.0,
+        "std": 0.0,
         "p_lo": 0.0,
-        "p_hi": 1.0
+        "p_hi": 0.0
       }
     ]
   },
@@ -272,81 +330,23 @@
     "multiple_birth"
   ],
   "input_quantization": {
-    "scale": 0.0078125,
+    "scale": 0.00392157,
     "zero_point": -128
   },
-  "tflite_sha256": "7d22bd682dc894070610508bd412d46159cac10de6682696333ee6e272e5db28",
-  "trained_on": "2026-08-06",
+  "tflite_sha256": "b40ce5c43958b16bf6508887f49d79e7de7c0e6b8c4fd68ffabefb8a8d2b0fff",
+  "trained_on": "2026-08-08",
   "provenance": {
-    "[M1]": {
-      "short": "Adokiya 2022, Women & Health",
-      "citation": "Adokiya MN, Abodoon GN, Boah M. Prevalence and determinants of anaemia during third trimester of pregnancy: a retrospective cohort study of women in the northern region of Ghana. Women & Health. 2022;62(2):168-179.",
-      "doi_or_url": "doi:10.1080/03630242.2022.2030450",
-      "n": 359,
-      "setting": "Tatale-Sanguli + Zabzugu, Northern Region"
+    "mbarara_neonatal_sepsis_cases.csv": {
+      "sha256": "a8f31d980c35ad28",
+      "source_url": "https://raw.githubusercontent.com/Helenaden/Neonatal-Sepsis-Prediction/main/Dennis_Neonatal_Sepsis_D.csv",
+      "license": "Public GitHub mirror of anonymised Mbarara RRH neonatal sepsis EMR (Dennis et al.); no PHI in mirror.",
+      "accessed": "2026-08-01"
     },
-    "[M4]": {
-      "short": "Adjei-Gyamfi 2023, medRxiv",
-      "citation": "Adjei-Gyamfi S, Zakaria MS, Asirifi A, et al. Maternal anaemia and polycythaemia during pregnancy and risk of inappropriate birthweight for-gestational-age babies in northern belt of Ghana. medRxiv. 2023.",
-      "doi_or_url": "doi:10.1101/2023.11.19.23298744",
-      "n": 422,
-      "setting": "5 primary/public health facilities, Northern Region"
-    },
-    "[M8]": {
-      "short": "Bugri 2023, IJERPH",
-      "citation": "Bugri AA, Gumanga SK, Yamoah P, et al. Prevalence of Hypertensive Disorders, Antihypertensive Therapy and Pregnancy Outcomes among Pregnant Women at Tamale Teaching Hospital, Ghana. Int J Environ Res Public Health. 2023;20(12):6153.",
-      "doi_or_url": "doi:10.3390/ijerph20126153",
-      "n": 843,
-      "setting": "TTH, 2018-2019"
-    },
-    "[M7]": {
-      "short": "Charadan 2025, OALib",
-      "citation": "Charadan AMS, Boamah KO, Hernandez S. Prevalence, Risk Factors, and Outcomes of Pregnancy-Induced Hypertension at Tamale Teaching Hospital, Northern Region. Open Access Library Journal. 2025;12(6):1-21.",
-      "doi_or_url": "doi:10.4236/oalib.1113362",
-      "n": 115,
-      "setting": "TTH"
-    },
-    "[M9]": {
-      "short": "Boafo 2025, HSR meta-analysis",
-      "citation": "Boafo EA, Amponsah RD, Atiase Y, et al. Pre-Eclampsia Among Pregnant Women in Ghana: A Systematic Review & Meta-Analysis. Health Science Reports. 2025;9(7):e72622.",
-      "doi_or_url": "doi:10.1002/hsr2.72622",
-      "n": null,
-      "setting": "Meta-analysis, 14 studies 2015-2025"
-    },
-    "[M3]": {
-      "short": "Adjei-Gyamfi 2023, J Health Popul Nutr",
-      "citation": "Adjei-Gyamfi S, Musah B, Asirifi A, et al. Maternal risk factors for low birthweight and macrosomia: a cross-sectional study in Northern Region, Ghana. J Health Popul Nutr. 2023;42(1):87.",
-      "doi_or_url": "doi:10.1186/s41043-023-00443-0",
-      "n": 356,
-      "setting": "Savelugu municipality, 2022"
-    },
-    "[M6]": {
-      "short": "Abubakari 2023, PAMJ",
-      "citation": "Abubakari A, Asumah MN, Abdulai NZ. Effect of maternal dietary habits and gestational weight gain on birth weight in the Tamale Metropolis. Pan Afr Med J. 2023;44:19.",
-      "doi_or_url": "doi:10.11604/pamj.2023.44.19.38036",
-      "n": 316,
-      "setting": "Tamale Metropolis"
-    },
-    "[M5]": {
-      "short": "Fosu 2013, GSS MICS",
-      "citation": "Fosu MO, Munyakazi L, Nsowah-Nuamah NNN. Low Birth Weight and Associated Maternal Factors in Ghana. IISTE JBAM. 2013;3(7).",
-      "doi_or_url": "https://www.iiste.org/Journals/index.php/JBAH/article/view/6341",
-      "n": 10963,
-      "setting": "Ghana MICS 2011, national + regional"
-    },
-    "[M11]+[M14]": {
-      "short": "Opiyo 2011 + WHO IMCI 2014",
-      "citation": "Opiyo N, English M. What clinical signs best identify severe illness in young infants aged 0-59 days? Arch Dis Child. 2011;96(11):1052. + WHO IMCI Chart Booklet 2014.",
-      "doi_or_url": "doi:10.1136/adc.2010.186049",
-      "n": null,
-      "setting": "Systematic review of 0-59d predictors + WHO IMCI"
-    },
-    "[M10]": {
-      "short": "Baiden 2011, PLoS ONE",
-      "citation": "Baiden F, Owusu-Agyei S, Bawah J, et al. An Evaluation of the Clinical Assessments of Under-Five Febrile Children Presenting to Primary Health Facilities in Rural Ghana. PLoS ONE. 2011;6(12):e28944.",
-      "doi_or_url": "doi:10.1371/journal.pone.0028944",
-      "n": 1983,
-      "setting": "Kintampo, 10 health centres + 5 district hospitals"
+    "mbarara_neonatal_sepsis_controls.csv": {
+      "sha256": "4a1930926c796bc1",
+      "source_url": "https://raw.githubusercontent.com/Helenaden/Neonatal-Sepsis-Prediction/main/Dennis_Neonatal_Sepsis_N.csv",
+      "license": "Public GitHub mirror of anonymised Mbarara RRH neonatal sepsis EMR (Dennis et al.); no PHI in mirror.",
+      "accessed": "2026-08-01"
     }
   }
 }

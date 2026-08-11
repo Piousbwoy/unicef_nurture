@@ -285,6 +285,68 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
 
   String _epdsCaption(int q, int v) => _epdsCaptions[q][v];
 
+  // --------------------------------------- Danger-sign gating (T2)
+  bool _showOptional = false;
+
+  static const _maternalGeneral = {
+    'bleeding', 'headache', 'vision', 'convulsions', 'abdoPain', 'reducedFM',
+    'noFM', 'leaking', 'fever', 'swelling', 'breathing', 'urination',
+    'vomiting', 'heavyBleeding', 'foulDischarge', 'legPain', 'breastPain',
+    'perineal', 'csWound', 'leakage', 'dizziness',
+  };
+
+  /// Any one of these maternal danger signs is a referral today.
+  bool get _hasGeneralDangerSign => _signs.any(_maternalGeneral.contains);
+
+  /// With a danger sign present she is referred regardless, so the remaining
+  /// history/coverage sections are optional — collapsed unless expanded.
+  bool get _optionalHidden => _hasGeneralDangerSign && !_showOptional;
+
+  Widget _referralBanner() {
+    if (!_hasGeneralDangerSign) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(bottom: Gap.md),
+      padding: const EdgeInsets.all(Gap.md),
+      decoration: BoxDecoration(
+        color: AppColors.triageRed.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(Gap.radius),
+        border: Border.all(color: AppColors.triageRed.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: AppColors.triageRed,
+            size: 22,
+          ),
+          const SizedBox(width: Gap.sm),
+          Expanded(
+            child: Text(
+              'Maternal danger sign present — refer today. Record quick '
+              'measurements and save; the rest of the chart is optional.',
+              style: TextStyle(
+                color: AppColors.triageRed,
+                fontWeight: FontWeight.w700,
+                fontSize: 12.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _optionalToggle() => Padding(
+    padding: const EdgeInsets.only(bottom: Gap.lg),
+    child: OutlinedButton(
+      onPressed: () => setState(() => _showOptional = !_showOptional),
+      child: Text(
+        _showOptional ? 'Hide optional sections' : 'Show optional sections',
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final person = input.person;
@@ -323,6 +385,9 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
                     : null,
               ),
               const SizedBox(height: Gap.lg),
+
+              _referralBanner(),
+              if (_hasGeneralDangerSign) _optionalToggle(),
 
               if (isGeneralWoman) ...[
                 SectionCard(
@@ -520,6 +585,7 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
       ),
       const SizedBox(height: Gap.lg),
 
+      if (!_optionalHidden) ...[
       SectionCard(
         title: 'History the chart needs',
         subtitle: 'Two things the registration form does not ask, because they '
@@ -798,6 +864,7 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
           ],
         ),
       ),
+    ],
     ];
   }
 

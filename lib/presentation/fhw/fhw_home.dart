@@ -2,11 +2,11 @@
 ///
 /// Five tabs, in the order a working day actually runs:
 ///
-/// **Home** — a glance: counts and the "Register & assess" button. Opens here
+/// **Today** — a glance: counts and the "Register & assess" button. Opens here
 /// because the first question every morning is "what does my day look like?",
 /// and the answer is a number, not a list.
 ///
-/// **Day plan** — the ranked plan. The detailed queue, with reasons and tags.
+/// **Queue** — the ranked plan. The detailed queue, with reasons and tags.
 ///
 /// **Assess** — the register with a launch point. Search a household and start
 /// a clinical assessment straight from the bottom nav, without first opening
@@ -15,7 +15,7 @@
 /// **Referrals** — the open work that doesn't depend on a family being in
 /// front of you. These need a phone call, not an assessment.
 ///
-/// **Me** — sync state, account, sign out. Sign-out is here and obvious because
+/// **Profile** — sync state, account, sign out. Sign-out is here and obvious because
 /// handing the phone to a mother for caregiver mode is a normal daily action.
 ///
 /// An [IndexedStack] rather than a `PageView`: switching from Assess back to
@@ -45,11 +45,11 @@ class _FhwHomeState extends ConsumerState<FhwHome> {
   int _tab = 0;
 
   static const _titles = [
-    'CHPS Compound Dashboard',
-    'AI Triage & Outreach',
-    'Clinical Intake & Register',
-    'Emergency & Referral Track',
-    'Facility & Sync Hub',
+    'Today',
+    'Queue',
+    'Assess',
+    'Referrals',
+    'Profile',
   ];
 
   @override
@@ -102,29 +102,29 @@ class _FhwHomeState extends ConsumerState<FhwHome> {
         onTap: (i) => setState(() => _tab = i),
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard_outlined),
-            activeIcon: Icon(Icons.dashboard_rounded),
-            label: 'Dashboard',
+            icon: Icon(Icons.calendar_month_outlined),
+            activeIcon: Icon(Icons.calendar_month_rounded),
+            label: 'Today',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.psychology_outlined),
-            activeIcon: Icon(Icons.psychology_rounded),
-            label: 'AI Triage',
+            icon: Icon(Icons.people_outlined),
+            activeIcon: Icon(Icons.people_rounded),
+            label: 'Queue',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.medical_services_outlined),
             activeIcon: Icon(Icons.medical_services_rounded),
-            label: 'Clinical Intake',
+            label: 'Assess',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.emergency_outlined),
-            activeIcon: Icon(Icons.emergency_rounded),
-            label: 'Referrals Track',
+            icon: Icon(Icons.local_hospital_outlined),
+            activeIcon: Icon(Icons.local_hospital_rounded),
+            label: 'Referrals',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.health_and_safety_outlined),
-            activeIcon: Icon(Icons.health_and_safety_rounded),
-            label: 'Facility & Sync',
+            icon: Icon(Icons.person_outlined),
+            activeIcon: Icon(Icons.person_rounded),
+            label: 'Profile',
           ),
         ],
       ),

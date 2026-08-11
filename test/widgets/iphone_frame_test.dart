@@ -44,6 +44,11 @@ void main() {
 
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 2500));
+    // The splash is tap-to-continue; leave it the way a user would.
+    // (Fixed point: the frame harness adds its own Scaffold, so a
+    // byType(Scaffold) finder would be ambiguous here.)
+    await tester.tapAt(const Offset(640, 400));
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
@@ -77,6 +82,11 @@ void main() {
 
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 2500));
+      // The splash is tap-to-continue; leave it the way a user would.
+      // (Fixed point: the frame harness adds its own Scaffold, so a
+      // byType(Scaffold) finder would be ambiguous here.)
+      await tester.tapAt(const Offset(640, 400));
+      await tester.pump(const Duration(milliseconds: 400));
       await tester.pumpAndSettle();
 
       // On the web the pointer is a mouse; use a mouse gesture for the
@@ -124,7 +134,8 @@ void main() {
 
       // The family step must render inside the simulated phone screen.
       expect(find.text('Your family'), findsWidgets);
-      expect(find.text('FAMILY CODE'), findsOneWidget);
+      // FieldLabel renders its text uppercased.
+      expect(find.text('OR ENTER 6-CHARACTER SHORT CODE'), findsOneWidget);
 
       // Regression: the theme gives every OutlinedButton an infinite minimum
       // width (Size.fromHeight). On web the Check button received unbounded

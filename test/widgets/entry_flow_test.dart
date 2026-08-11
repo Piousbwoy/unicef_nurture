@@ -46,13 +46,14 @@ Future<void> _pumpApp(WidgetTester tester, SessionState session) {
   );
 }
 
-/// Runs out the splash's timed routing, then settles the page transition.
+/// Taps the splash (it never auto-advances), then settles the page transition.
 Future<void> _leaveSplash(WidgetTester tester) async {
-  await tester.pump(); // Schedule the splash's routing microtask.
-  await tester.pump(const Duration(milliseconds: 2000)); // Past the ~1.9s hold.
-  await tester.pump(const Duration(milliseconds: 100)); // Flush the flag reads.
+  await tester.pump(); // Build the splash.
+  await tester.pump(const Duration(milliseconds: 300)); // First paint.
+  await tester.tapAt(tester.getCenter(find.byType(Scaffold))); // Tap to continue.
+  await tester.pump(const Duration(milliseconds: 100)); // Flush session reads.
   await tester.pump(const Duration(milliseconds: 100)); // Flush the navigation.
-  await tester.pump(const Duration(milliseconds: 500)); // Settle the fade.
+  await tester.pump(const Duration(milliseconds: 600)); // Settle the fade.
 }
 
 void main() {
@@ -179,7 +180,8 @@ void main() {
       // The family step must actually render — the reported freeze was a
       // blank body on this step.
       expect(find.text('Your family'), findsWidgets);
-      expect(find.text('FAMILY CODE'), findsOneWidget);
+      // FieldLabel renders its text uppercased.
+      expect(find.text('OR ENTER 6-CHARACTER SHORT CODE'), findsOneWidget);
       expect(find.text('Check'), findsOneWidget);
 
       // Tapping Continue without a code shows the validation error, and
@@ -193,7 +195,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.text('FAMILY CODE'), findsOneWidget);
+      expect(find.text('OR ENTER 6-CHARACTER SHORT CODE'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

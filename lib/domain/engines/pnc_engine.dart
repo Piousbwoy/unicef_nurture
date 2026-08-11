@@ -778,6 +778,16 @@ abstract final class PncEngine {
       findings: findings,
       actions: actions,
       confidence: _confidence(i, missing),
+      confidenceScore: protocolConfidenceScore(
+        measuredKeyInputs: [
+          i.systolic != null && i.diastolic != null,
+          i.temperatureCelsius != null,
+          i.haemoglobin != null,
+          i.muacCm != null,
+        ].where((m) => m).length,
+        keyInputCount: 4,
+        observedDangerSign: i.heavyBleeding || i.convulsions || i.thoughtsOfSelfHarm,
+      ),
       protocolSource: _protocol,
       nutritionStatus: i.muacCm == null
           ? null

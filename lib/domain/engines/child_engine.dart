@@ -1013,6 +1013,16 @@ abstract final class ChildEngine {
       findings: findings,
       actions: actions,
       confidence: _confidence(i, missing),
+      confidenceScore: protocolConfidenceScore(
+        measuredKeyInputs: [
+          i.temperatureCelsius != null,
+          i.respiratoryRate != null,
+          i.muacCm != null || !i.muacApplies,
+          i.weightKg != null,
+        ].where((m) => m).length,
+        keyInputCount: 4,
+        observedDangerSign: i.hasAnyGeneralDangerSign || i.hasBilateralOedema,
+      ),
       protocolSource: _protocol,
       nutritionStatus: nutrition,
       nutritionPathway: pathway,

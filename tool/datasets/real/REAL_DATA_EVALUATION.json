@@ -1,0 +1,74 @@
+{
+  "generated": "2026-08-08",
+  "policy": "Real-data model replaces shipped v1.0 ONLY if 5-fold OOF AUC >= 0.65; deterministic WHO/GHS rules remain the runtime fallback.",
+  "models": {
+    "neonatal_sepsis": {
+      "swapped": true,
+      "oof_auc": 0.9,
+      "sensitivity": 0.7778,
+      "specificity": 0.9327,
+      "brier": 0.4108,
+      "n_pool": 964,
+      "external_auc": 0.5112,
+      "external": "PhysioNet 2019 adult ICU (n=4000) - out-of-domain transfer check",
+      "training_dataset": "REAL: Mbarara RRH neonatal sepsis EMR, Uganda (964 rows [756 positive, 208 negative]; age 0-3 days; vitals + feeding/lethargy signs)",
+      "features_present": [
+        "age_days",
+        "temperature_celsius",
+        "respiratory_rate_per_min",
+        "heart_rate_per_min",
+        "birth_weight_kg",
+        "feeding_difficulty",
+        "lethargic_unconscious"
+      ],
+      "tflite_sha256": "b40ce5c43958b16bf6508887f49d79e7de7c0e6b8c4fd68ffabefb8a8d2b0fff",
+      "reason": "Real African neonatal EMR (Mbarara RRH, Uganda): OOF AUC 0.90 vs v1.0 simulator 0.74/Brier 0.29; logit-correct Platt restored; probability scale re-anchored to the 2% Ghana prior (prior_adjustment).",
+      "robustness": {
+        "unweighted_5fold_oof_auc": 0.9,
+        "balanced_5fold_oof_auc": 0.9086,
+        "note": "Discrimination (ranking) survives class rebalancing. Brier is reported on the target-prior scale (2%); an uninformative model at that prior has Brier 0.0196 (see calibration.prior_adjustment)."
+      }
+    },
+    "preeclampsia_risk": {
+      "swapped": false,
+      "oof_auc": 0.4978,
+      "sensitivity": 0.9364,
+      "specificity": 0.125,
+      "brier": 0.2437,
+      "n_pool": 190,
+      "external_auc": 0.3531,
+      "external": "UCI Maternal Health Risk (n=868, Bangladesh) - held out",
+      "training_dataset": "REAL: cfarkas/preeclampsia_ml ANC cohort, n=190 (maternal age, BMI, gravidity, pregnancy losses)",
+      "features_present": [
+        "maternal_age",
+        "gravida",
+        "parity",
+        "maternal_bmi",
+        "previous_losses"
+      ],
+      "tflite_sha256": "135636e8a35a80977311b2136e46bf065c395f6d073828043d2531c38fb71b50",
+      "reason": "Real cohort shows NO discriminative signal on the 5 mappable features (OOF AUC ~0.50 below the 0.65 swap threshold; UCI external AUC 0.35). v1.0 simulator model retained."
+    },
+    "lbw_sga": {
+      "swapped": false,
+      "oof_auc": 0.5254,
+      "sensitivity": 0.3733,
+      "specificity": 0.7308,
+      "brier": 0.1911,
+      "n_pool": 101,
+      "external_auc": null,
+      "external": null,
+      "training_dataset": "REAL: lbw-classification community study, n=101 (age, Hb only)",
+      "features_present": [
+        "maternal_age",
+        "haemoglobin"
+      ],
+      "tflite_sha256": "39ff8ab4720e297f78c8892d3a7088d0a4fcb6bf451db62aeb52dd15c9aea9a6",
+      "reason": "Real cohort maps only 2/11 schema features and shows no discriminative signal (OOF AUC 0.53). v1.0 simulator model retained (documented gap)."
+    },
+    "child_pneumonia": {
+      "swapped": false,
+      "reason": "No public dataset records IMCI clinical signs (cough/indrawing/stridor); v1.0 simulator retained."
+    }
+  }
+}

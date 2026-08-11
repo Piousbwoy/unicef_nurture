@@ -3,6 +3,9 @@
 /// Features the signature Mother & Infant portrait framed by dynamic blue wave curves,
 /// high-contrast diagnostic badges, and a deep royal blue Sahelian footer centered
 /// around a pulsating heartbeat emblem.
+///
+/// The brand moment never auto-advances: it rests on screen until the health
+/// worker taps it, so nobody is rushed past the logo on a slow day in the field.
 library;
 
 import 'dart:math' as math;
@@ -15,7 +18,6 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../app/providers.dart';
 import '../../core/auth/session.dart';
 import '../../core/router/app_router.dart';
-import '../../core/theme/app_theme.dart';
 import '../../data/local/preferences_store.dart';
 import '../shared/app_image.dart';
 
@@ -38,8 +40,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     )..repeat(reverse: true);
-
-    Future.microtask(_route);
   }
 
   @override
@@ -49,16 +49,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Future<void> _route() async {
-    // 2.0s dwell time gives users time to register the brand and slogans
-    // while remaining fast, responsive, and compatible with widget test timers.
-    const minDwell = Duration(milliseconds: 2000);
-    final min = Future<void>.delayed(minDwell);
-    final ready = () async {
-      while (ref.read(sessionProvider) is SessionLoading) {
-        await Future<void>.delayed(const Duration(milliseconds: 50));
-      }
-    }();
-    await Future.wait([min, ready]);
+    // The splash is tap-to-continue; this is only ever called from the tap
+    // gesture. Session readiness is awaited here so a very eager tap on a
+    // cold start never routes against a database that is still opening.
+    while (ref.read(sessionProvider) is SessionLoading) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
     if (!mounted || _routed) return;
     _advance();
   }
@@ -91,7 +87,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return GestureDetector(
-      onTap: _advance,
+      onTap: _route,
       behavior: HitTestBehavior.opaque,
       child: Scaffold(
         backgroundColor: const Color(0xFFE6F2FF), // Soft baby-blue tint behind features
@@ -100,7 +96,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
             // ── 1. Header Zone: Logo & Typography ────────────────────────────
             Container(
               width: double.infinity,
-              padding: EdgeInsets.fromLTRB(20, topPadding + 10, 20, 10),
+              padding: EdgeInsets.fromLTRB(20, topPadding + 24, 20, 14),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
@@ -116,14 +112,30 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SizedBox(
-                    height: 72,
-                    width: 72,
-                    child: AppImage(
-                      src: AppImages.logo,
-                      fit: BoxFit.contain,
+                    height: 108,
+                    width: 122,
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0.0, end: 1.0),
+                      duration: const Duration(milliseconds: 900),
+                      curve: Curves.easeOutCubic,
+                      builder: (context, t, child) => Opacity(
+                        opacity: t,
+                        child: Transform.scale(
+                          scale: 0.92 + 0.08 * t,
+                          child: child,
+                        ),
+                      ),
+                      // Raw Image.asset, not AppImage: the brand mark is
+                      // transparent and must float on the header gradient,
+                      // never on a placeholder tint.
+                      child: Image.asset(
+                        AppImages.logo,
+                        fit: BoxFit.contain,
+                        filterQuality: FilterQuality.high,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   RichText(
                     textAlign: TextAlign.center,
                     text: TextSpan(
@@ -131,7 +143,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                         TextSpan(
                           text: 'CareBridge',
                           style: GoogleFonts.sora(
-                            fontSize: 31,
+                            fontSize: 32,
                             fontWeight: FontWeight.w800,
                             letterSpacing: -0.8,
                             color: const Color(0xFF0C41AC),
@@ -141,7 +153,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                         TextSpan(
                           text: ' AI',
                           style: GoogleFonts.sora(
-                            fontSize: 31,
+                            fontSize: 32,
                             fontWeight: FontWeight.w800,
                             letterSpacing: -0.8,
                             color: const Color(0xFF148CF5),
@@ -179,14 +191,19 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                     ],
                   ),
                   const SizedBox(height: 7),
-                  Text(
-                    'Smart Support. Healthier Mothers. Brighter Futures.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.sora(
-                      fontSize: 12.5,
-                      fontStyle: FontStyle.italic,
-                      fontWeight: FontWeight.w500,
-                      color: const Color(0xFF3B5E94),
+                  Transform(
+                    // The bundled font set ships no italic cut, so the
+                    // tagline gets a hand-set oblique instead.
+                    transform: Matrix4.skewX(-0.18),
+                    alignment: Alignment.center,
+                    child: Text(
+                      'Smart Support. Healthier Mothers. Brighter Futures.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.manrope(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF3B5E94),
+                      ),
                     ),
                   ),
                 ],
@@ -215,13 +232,40 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                       ),
                     ),
                   ),
-                  // Clipped mother & child photo just above the rim
+                  // Clipped mother & child photo with rural clinic background
                   ClipPath(
-                    clipper: const _HeroWaveClipper(bottomOffset: 10.0),
-                    child: const AppImage(
-                      src: AppImages.motherChild,
-                      fit: BoxFit.cover,
-                      placeholderIcon: Icons.family_restroom_rounded,
+                    clipper: const _HeroWaveClipper(bottomOffset: 6.0),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        const AppImage(
+                          src: AppImages.motherChild,
+                          fit: BoxFit.cover,
+                          placeholderIcon: Icons.family_restroom_rounded,
+                        ),
+                        // Soft sky scrim so the header's pale gradient melts
+                        // seamlessly into the photograph's horizon.
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          height: 64,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  const Color(0xFFEBF5FF),
+                                  const Color(
+                                    0xFFEBF5FF,
+                                  ).withValues(alpha: 0),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -236,29 +280,29 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   const Expanded(
-                    child: _FeatureBadge(
-                      icon: Icons.wifi_off_rounded,
+                    child: _FeatureBadge.custom(
+                      painter: _OfflineIconPainter(),
                       label: 'Works Offline',
                     ),
                   ),
                   _buildDivider(),
                   const Expanded(
-                    child: _FeatureBadge(
-                      icon: Icons.psychology_rounded,
+                    child: _FeatureBadge.custom(
+                      painter: _AiGuidanceIconPainter(),
                       label: 'AI Guidance',
                     ),
                   ),
                   _buildDivider(),
                   const Expanded(
-                    child: _FeatureBadge(
-                      icon: Icons.shield_rounded,
+                    child: _FeatureBadge.custom(
+                      painter: _TrustedCareIconPainter(),
                       label: 'Trusted Care',
                     ),
                   ),
                   _buildDivider(),
                   const Expanded(
-                    child: _FeatureBadge(
-                      icon: Icons.groups_rounded,
+                    child: _FeatureBadge.custom(
+                      painter: _CommunityIconPainter(),
                       label: 'Community\nFocused',
                     ),
                   ),
@@ -272,15 +316,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
               child: Container(
                 width: double.infinity,
                 decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0xFF072C7A),
-                      Color(0xFF041C52),
-                      Color(0xFF02123C),
-                    ],
-                  ),
+                  color: Color(0xFF11408F),
                 ),
                 child: Stack(
                   children: [
@@ -294,7 +330,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                       ),
                     ),
                     Padding(
-                      padding: EdgeInsets.fromLTRB(20, 36, 20, math.max(16, bottomPadding + 10)),
+                      padding: EdgeInsets.fromLTRB(20, 64, 20, math.max(20, bottomPadding + 12)),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -321,9 +357,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                           Text(
                             'Empowering every mother.',
                             textAlign: TextAlign.center,
-                            style: GoogleFonts.sora(
+                            style: GoogleFonts.manrope(
                               fontSize: 14.5,
-                              fontWeight: FontWeight.w500,
+                              fontWeight: FontWeight.w600,
                               color: Colors.white.withValues(alpha: 0.96),
                               letterSpacing: 0.2,
                             ),
@@ -332,11 +368,29 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                           Text(
                             'Protecting every life.',
                             textAlign: TextAlign.center,
-                            style: GoogleFonts.sora(
+                            style: GoogleFonts.manrope(
                               fontSize: 14.5,
-                              fontWeight: FontWeight.w500,
+                              fontWeight: FontWeight.w600,
                               color: Colors.white.withValues(alpha: 0.96),
                               letterSpacing: 0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          AnimatedBuilder(
+                            animation: _pulse,
+                            builder: (context, child) => Opacity(
+                              opacity: 0.45 + 0.25 * math.sin(_pulse.value * math.pi),
+                              child: child,
+                            ),
+                            child: Text(
+                              'TAP ANYWHERE TO CONTINUE',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.manrope(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.6,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ],
@@ -362,9 +416,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 }
 
 class _FeatureBadge extends StatelessWidget {
-  const _FeatureBadge({required this.icon, required this.label});
+  const _FeatureBadge.custom({
+    required this.painter,
+    required this.label,
+  });
 
-  final IconData icon;
+  final CustomPainter painter;
   final String label;
 
   @override
@@ -372,22 +429,10 @@ class _FeatureBadge extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: const Color(0xFFD7EAFF),
-            border: Border.all(
-              color: const Color(0xFF1460DF),
-              width: 1.5,
-            ),
-          ),
-          child: Icon(
-            icon,
-            color: const Color(0xFF0B4CC9),
-            size: 22,
-          ),
+        SizedBox(
+          width: 34,
+          height: 34,
+          child: CustomPaint(painter: painter),
         ),
         const SizedBox(height: 7),
         Text(
@@ -395,11 +440,11 @@ class _FeatureBadge extends StatelessWidget {
           textAlign: TextAlign.center,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.sora(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: const Color(0xFF0C3D8F),
-            height: 1.15,
+          style: GoogleFonts.manrope(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF1B4FA8),
+            height: 1.25,
           ),
         ),
       ],
@@ -415,9 +460,10 @@ class _HeroWaveClipper extends CustomClipper<Path> {
   Path getClip(Size size) {
     final w = size.width;
     final h = size.height - bottomOffset;
+    final dip = w * 0.18;
     final path = Path()
-      ..lineTo(0, h - 35)
-      ..quadraticBezierTo(w * 0.5, h + 22, w, h - 35)
+      ..lineTo(0, h - dip)
+      ..quadraticBezierTo(w * 0.5, h + dip, w, h - dip)
       ..lineTo(w, 0)
       ..close();
     return path;
@@ -436,8 +482,8 @@ class _BottomWaveClipper extends CustomClipper<Path> {
     final w = size.width;
     final h = size.height;
     final path = Path()
-      ..moveTo(0, 24)
-      ..quadraticBezierTo(w * 0.5, -16, w, 24)
+      ..moveTo(0, 0)
+      ..quadraticBezierTo(w * 0.5, w * 0.24, w, 0)
       ..lineTo(w, h)
       ..lineTo(0, h)
       ..close();
@@ -502,25 +548,225 @@ class _SahelianLatticePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const step = 44.0;
-    const size2 = 14.0;
+    // Rows of alternating triangle motifs — the woven zigzag of a Sahelian
+    // smock, kept faint so the footer reads as fabric, not wallpaper.
+    const rowH = 26.0;
+    const triW = 30.0;
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.9
       ..color = const Color(0xFFFFFFFF);
-    for (double y = -step; y < size.height + step; y += step) {
-      for (double x = -step; x < size.width + step; x += step) {
-        final off = ((y / step).floor().isEven) ? step / 2 : 0.0;
-        final cx = x + off;
-        final cy = y;
-        canvas.drawRect(
-          Rect.fromCenter(center: Offset(cx, cy), width: size2, height: size2),
-          paint,
-        );
+    var row = 0;
+    for (double y = -rowH; y < size.height + rowH; y += rowH) {
+      final up = row.isEven;
+      for (double x = -triW; x < size.width + triW; x += triW) {
+        final path = Path();
+        if (up) {
+          path
+            ..moveTo(x, y + rowH * 0.8)
+            ..lineTo(x + triW / 2, y + rowH * 0.2)
+            ..lineTo(x + triW, y + rowH * 0.8)
+            ..close();
+        } else {
+          path
+            ..moveTo(x, y + rowH * 0.2)
+            ..lineTo(x + triW / 2, y + rowH * 0.8)
+            ..lineTo(x + triW, y + rowH * 0.2)
+            ..close();
+        }
+        canvas.drawPath(path, paint);
       }
+      row++;
     }
   }
 
   @override
   bool shouldRepaint(covariant _SahelianLatticePainter oldDelegate) => false;
+}
+
+/// Circled Wi-Fi with a diagonal slash — Works Offline icon.
+class _OfflineIconPainter extends CustomPainter {
+  const _OfflineIconPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = math.min(size.width, size.height);
+    final c = Offset(size.width / 2, size.height / 2);
+    final stroke = Paint()
+      ..color = const Color(0xFF1B4FA8)
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    // Enclosing circle
+    canvas.drawCircle(c, s * 0.44, stroke..strokeWidth = s * 0.075);
+
+    // Wi-Fi arcs opening downward, anchored below centre
+    final arcCenter = Offset(c.dx, c.dy + s * 0.16);
+    for (final r in [0.13, 0.23, 0.33]) {
+      canvas.drawPath(
+        Path()
+          ..arcTo(
+            Rect.fromCircle(center: arcCenter, radius: s * r),
+            -2.20,
+            1.25,
+            false,
+          ),
+        stroke..strokeWidth = s * 0.07,
+      );
+    }
+
+    // Antenna dot
+    canvas.drawCircle(
+      Offset(c.dx, c.dy + s * 0.20),
+      s * 0.05,
+      Paint()..color = const Color(0xFF1B4FA8),
+    );
+
+    // Diagonal slash
+    canvas.drawLine(
+      Offset(c.dx - s * 0.30, c.dy - s * 0.30),
+      Offset(c.dx + s * 0.30, c.dy + s * 0.30),
+      stroke..strokeWidth = s * 0.09,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _OfflineIconPainter oldDelegate) => false;
+}
+
+/// Solid head silhouette with a white brain-circuit — AI Guidance icon.
+class _AiGuidanceIconPainter extends CustomPainter {
+  const _AiGuidanceIconPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    final headPath = Path()
+      ..moveTo(w * 0.52, h * 0.04)
+      ..cubicTo(w * 0.30, h * 0.04, w * 0.17, h * 0.20, w * 0.17, h * 0.42)
+      ..cubicTo(w * 0.17, h * 0.54, w * 0.21, h * 0.63, w * 0.27, h * 0.70)
+      ..lineTo(w * 0.27, h * 0.94)
+      ..lineTo(w * 0.62, h * 0.94)
+      ..lineTo(w * 0.62, h * 0.78)
+      ..cubicTo(w * 0.72, h * 0.70, w * 0.79, h * 0.58, w * 0.79, h * 0.42)
+      ..cubicTo(w * 0.79, h * 0.20, w * 0.70, h * 0.04, w * 0.52, h * 0.04)
+      ..close();
+
+    canvas.drawPath(headPath, Paint()..color = const Color(0xFF1B4FA8));
+
+    // White circuit: nodes + wires inside the head
+    final wire = Paint()
+      ..color = const Color(0xFFFFFFFF)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = w * 0.05
+      ..strokeCap = StrokeCap.round;
+    final node = Paint()..color = const Color(0xFFFFFFFF);
+
+    final n1 = Offset(w * 0.40, h * 0.34);
+    final n2 = Offset(w * 0.58, h * 0.30);
+    final n3 = Offset(w * 0.50, h * 0.48);
+    final n4 = Offset(w * 0.36, h * 0.52);
+
+    final wires = Path()
+      ..moveTo(n1.dx, n1.dy)
+      ..lineTo(n3.dx, n3.dy)
+      ..moveTo(n2.dx, n2.dy)
+      ..lineTo(n3.dx, n3.dy)
+      ..moveTo(n1.dx, n1.dy)
+      ..lineTo(n4.dx, n4.dy);
+    canvas.drawPath(wires, wire);
+
+    for (final n in [n1, n2, n3, n4]) {
+      canvas.drawCircle(n, w * 0.045, node);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _AiGuidanceIconPainter oldDelegate) => false;
+}
+
+/// Two-tone quadrant shield — Trusted Care icon.
+class _TrustedCareIconPainter extends CustomPainter {
+  const _TrustedCareIconPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    final shieldPath = Path()
+      ..moveTo(w * 0.5, h * 0.02)
+      ..lineTo(w * 0.90, h * 0.16)
+      ..lineTo(w * 0.90, h * 0.52)
+      ..cubicTo(w * 0.90, h * 0.74, w * 0.72, h * 0.90, w * 0.50, h * 0.98)
+      ..cubicTo(w * 0.28, h * 0.90, w * 0.10, h * 0.74, w * 0.10, h * 0.52)
+      ..lineTo(w * 0.10, h * 0.16)
+      ..close();
+
+    // Light base fill
+    canvas.drawPath(shieldPath, Paint()..color = const Color(0xFFBBD7F6));
+
+    // Dark quadrants (top-left, bottom-right), clipped to the shield
+    canvas.save();
+    canvas.clipPath(shieldPath);
+    final dark = Paint()..color = const Color(0xFF1B4FA8);
+    canvas.drawRect(Rect.fromLTRB(w * 0.10, h * 0.02, w * 0.50, h * 0.50), dark);
+    canvas.drawRect(Rect.fromLTRB(w * 0.50, h * 0.50, w * 0.90, h * 0.98), dark);
+    canvas.restore();
+
+    // Outline
+    canvas.drawPath(
+      shieldPath,
+      Paint()
+        ..color = const Color(0xFF1B4FA8)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = w * 0.06
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _TrustedCareIconPainter oldDelegate) => false;
+}
+
+/// Three solid figures — Community Focused icon.
+class _CommunityIconPainter extends CustomPainter {
+  const _CommunityIconPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final fill = Paint()..color = const Color(0xFF1B4FA8);
+
+    // Side figures first (behind)
+    for (final side in [-1.0, 1.0]) {
+      final cx = w * 0.5 + side * w * 0.28;
+      canvas.drawCircle(Offset(cx, h * 0.30), h * 0.10, fill);
+      canvas.drawRRect(
+        RRect.fromRectAndCorners(
+          Rect.fromLTRB(cx - w * 0.12, h * 0.46, cx + w * 0.12, h * 0.76),
+          topLeft: const Radius.circular(6),
+          topRight: const Radius.circular(6),
+        ),
+        fill,
+      );
+    }
+
+    // Centre figure in front, slightly larger
+    canvas.drawCircle(Offset(w * 0.5, h * 0.22), h * 0.12, fill);
+    canvas.drawRRect(
+      RRect.fromRectAndCorners(
+        Rect.fromLTRB(w * 0.34, h * 0.42, w * 0.66, h * 0.86),
+        topLeft: const Radius.circular(7),
+        topRight: const Radius.circular(7),
+      ),
+      fill,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _CommunityIconPainter oldDelegate) => false;
 }

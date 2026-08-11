@@ -622,11 +622,14 @@ class _Fact extends StatelessWidget {
         color: danger ? AppColors.triageRedBg : AppColors.canvas,
         borderRadius: BorderRadius.circular(Gap.radiusSm),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      // A Wrap, not a Row, so a long value ("To facility: 120 min walk")
+      // wraps onto its own line instead of shoving the row off-screen.
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: Gap.xs,
+        runSpacing: 2,
         children: [
           Icon(icon, size: 14, color: colour),
-          const SizedBox(width: Gap.xs),
           Text(
             '$label: ',
             style: TextStyle(fontSize: 12, color: colour),
@@ -714,13 +717,15 @@ class _RiskCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                Wrap(
+                  spacing: Gap.sm,
+                  runSpacing: Gap.xs,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     ConfidenceChip(
                       score.confidence,
                       missingCount: score.unknowns.length,
                     ),
-                    const SizedBox(width: Gap.sm),
                     Text(
                       '${(score.dataCompleteness * 100).round()}% measured',
                       style: const TextStyle(
@@ -1114,7 +1119,12 @@ class _MemberTile extends ConsumerWidget {
                     padding: const EdgeInsets.only(top: Gap.sm),
                     child: Row(
                       children: [
-                        TriageBadge(a.effectiveTriage, compact: true),
+                        Flexible(
+                          child: TriageBadge(
+                            a.effectiveTriage,
+                            compact: true,
+                          ),
+                        ),
                         const SizedBox(width: Gap.sm),
                         Expanded(
                           child: Text(

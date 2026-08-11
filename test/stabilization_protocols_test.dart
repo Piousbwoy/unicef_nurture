@@ -11,6 +11,7 @@ library;
 
 import 'package:carebridge_ai/domain/engines/protocols/stabilization_protocol_selector.dart';
 import 'package:carebridge_ai/domain/engines/protocols/stabilization_protocols.dart';
+import 'package:carebridge_ai/core/ml/offline_inference_service.dart';
 import 'package:carebridge_ai/domain/engines/recommendation_engine.dart';
 import 'package:carebridge_ai/domain/entities/visit.dart';
 import 'package:carebridge_ai/domain/enums.dart';
@@ -146,14 +147,81 @@ void main() {
   });
 
   group('StabilizationProtocolSelector — young-infant PSBI activation', () {
-    test('activates on AI neonatal_sepsis >= 0.30 in a 14-day-old', () {
+    test(
+      'activates on AI rule-in candidate (neonatal_sepsis >= 0.15 on the '
+      '2%-prior scale) in a 14-day-old',
+      () {
+        final plan = _selector.select(
+          context: const StabilizationContext(patientAgeDays: 14),
+          risks: const StabilizationAiRisks(neonatalSepsisRisk: 0.75),
+        );
+        expect(plan.protocols, contains(psbiProtocol));
+        expect(plan.activatedBy[psbiProtocol.id], contains('rule-in'));
+        expect(
+          plan.activatedBy[psbiProtocol.id],
+          contains('neonatal_sepsis=0.750'),
+        );
+      },
+    );
+
+    test(
+      'activates on the explicit rule-in flag (the service-computed path, '
+      'drift-safe)',
+      () {
+        final plan = _selector.select(
+          context: const StabilizationContext(patientAgeDays: 3),
+          risks: const StabilizationAiRisks(
+            neonatalSepsisRisk: 0.42,
+            neonatalSepsisRuleInCandidate: true,
+          ),
+        );
+        expect(plan.protocols, contains(psbiProtocol));
+        expect(
+          plan.activatedBy[psbiProtocol.id],
+          contains('AI rule-in candidate'),
+        );
+      },
+    );
+
+    test('does NOT activate on low-tier AI risk without danger signs', () {
       final plan = _selector.select(
         context: const StabilizationContext(patientAgeDays: 14),
-        risks: const StabilizationAiRisks(neonatalSepsisRisk: 0.75),
+        risks: const StabilizationAiRisks(neonatalSepsisRisk: 0.05),
       );
-      expect(plan.protocols, contains(psbiProtocol));
-      expect(plan.activatedBy[psbiProtocol.id], contains('neonatal_sepsis'));
+      expect(plan.protocols, isNot(contains(psbiProtocol)));
+      expect(plan.activatedBy, isEmpty);
     });
+
+    test(
+      'does NOT activate when AI is drift-suppressed (null riskProbability) '
+      'without danger signs',
+      () {
+        final plan = _selector.select(
+          context: const StabilizationContext(patientAgeDays: 14),
+          risks: const StabilizationAiRisks(), // riskProbability is null
+        );
+        expect(plan.protocols, isNot(contains(psbiProtocol)));
+      },
+    );
+
+    test(
+      'deterministic rules keep rule-out coverage when AI is '
+      'drift-suppressed',
+      () {
+        final plan = _selector.select(
+          context: const StabilizationContext(
+            patientAgeDays: 14,
+            convulsions: true,
+          ),
+          risks: const StabilizationAiRisks(), // riskProbability is null
+        );
+        expect(plan.protocols, contains(psbiProtocol));
+        expect(
+          plan.activatedBy[psbiProtocol.id],
+          contains('IMCI danger sign'),
+        );
+      },
+    );
 
     test('activates on IMCI danger sign (convulsions) at age 7 days', () {
       final plan = _selector.select(
@@ -261,6 +329,48 @@ void main() {
       );
       expect(plan.isEmpty, isTrue);
       expect(plan.activatedBy, isEmpty);
+    });
+  });
+
+  group('StabilizationAiRisks.fromPredictions — rule-in tier propagation', () {
+    test('carries the tier flag, the probability and the drift null', () {
+      final now = DateTime.now();
+      OfflineRiskPrediction pred({double? rp, bool ruleIn = false}) =>
+          OfflineRiskPrediction(
+            modelName: 'neonatal_sepsis',
+            usingModel: false,
+            riskProbability: rp,
+            classification: 'low',
+            featuresUsed: const [],
+            featuresMissing: const [],
+            predictedAt: now,
+            ruleInCandidate: ruleIn,
+            ruleInThreshold: 0.15,
+          );
+
+      // High tier: rule-in candidate.
+      final high = StabilizationAiRisks.fromPredictions({
+        'neonatal_sepsis': pred(rp: 0.42, ruleIn: true),
+      });
+      expect(high.neonatalSepsisRisk, equals(0.42));
+      expect(high.neonatalSepsisRuleInCandidate, isTrue);
+
+      // Low tier: below the rule-in threshold.
+      final low = StabilizationAiRisks.fromPredictions({
+        'neonatal_sepsis': pred(rp: 0.05),
+      });
+      expect(low.neonatalSepsisRuleInCandidate, isFalse);
+
+      // Drift-suppressed: null probability, never a rule-in candidate.
+      final drift = StabilizationAiRisks.fromPredictions({
+        'neonatal_sepsis': pred(rp: null),
+      });
+      expect(drift.neonatalSepsisRisk, isNull);
+      expect(drift.neonatalSepsisRuleInCandidate, isFalse);
+
+      // No predictions at all: everything stays null/false-safe.
+      final empty = StabilizationAiRisks.fromPredictions(null);
+      expect(empty.neonatalSepsisRuleInCandidate, isNull);
     });
   });
 

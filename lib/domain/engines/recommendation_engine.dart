@@ -100,6 +100,7 @@ class CarePlan {
     required this.actions,
     required this.interactions,
     required this.confidence,
+    this.confidenceScore,
     required this.missingData,
     required this.dangerSigns,
     required this.referralCapabilitiesNeeded,
@@ -131,6 +132,15 @@ class CarePlan {
 
   /// The least confident input wins — honest, never over-assured.
   final RecommendationConfidence confidence;
+
+  /// 0–100 numeric companion to [confidence]. The weakest engine's score
+  /// governs, matching the bucket logic; null only on legacy records, for
+  /// which [effectiveConfidenceScore] falls back to a bucket estimate.
+  final int? confidenceScore;
+
+  /// The score to display on the verdict.
+  int get effectiveConfidenceScore =>
+      confidenceScore ?? legacyConfidenceEstimate(confidence);
 
   /// Union of everything that was not measured, across every engine.
   final List<String> missingData;
@@ -189,6 +199,7 @@ class CarePlan {
     'actions': actions.map((a) => a.toJson()).toList(),
     'interactions': interactions.map((i) => i.toJson()).toList(),
     'confidence': confidence.name,
+    'confidence_score': confidenceScore,
     'missing_data': missingData,
     'danger_signs': dangerSigns,
     'referral_capabilities_needed': referralCapabilitiesNeeded.toList(),
@@ -229,6 +240,7 @@ class CarePlan {
       (c) => c.name == j['confidence'],
       orElse: () => RecommendationConfidence.moderate,
     ),
+    confidenceScore: (j['confidence_score'] as num?)?.toInt(),
     missingData: ((j['missing_data'] as List?) ?? [])
         .map((e) => e as String)
         .toList(),
@@ -426,6 +438,7 @@ abstract final class RecommendationEngine {
 
     // ------------------------------------------ 7. Consolidate uncertainty
     final confidence = _leastConfident(results);
+    final confidenceScore = _leastConfidentScore(results);
     final missingData = _union([for (final r in results) r.missingData]);
     final dangerSigns = _union([
       for (final r in results) r.dangerSignsPresent,
@@ -460,6 +473,7 @@ abstract final class RecommendationEngine {
       actions: actions,
       interactions: interactions,
       confidence: confidence,
+      confidenceScore: confidenceScore,
       missingData: missingData,
       dangerSigns: dangerSigns,
       referralCapabilitiesNeeded: capabilities,
@@ -733,6 +747,15 @@ abstract final class RecommendationEngine {
     return results
         .map((r) => r.confidence)
         .reduce((a, b) => _confidenceRank[a]! >= _confidenceRank[b]! ? a : b);
+  }
+
+  /// The weakest link governs the number too, so the displayed score can
+  /// never look more assured than the bucket it sits next to.
+  static int? _leastConfidentScore(List<AssessmentResult> results) {
+    if (results.isEmpty) return null;
+    return results
+        .map((r) => r.effectiveConfidenceScore)
+        .reduce((a, b) => a < b ? a : b);
   }
 
   static List<String> _union(List<List<String>> lists) {

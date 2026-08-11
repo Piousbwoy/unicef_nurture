@@ -62,7 +62,7 @@ class OfflineRiskPrediction {
   const OfflineRiskPrediction({
     required this.modelName,
     required this.usingModel,
-    required this.riskProbability, // 0.0 … 1.0, Platt-calibrated when usingModel
+    required this.riskProbability, // 0.0 … 1.0 (calibrated), or null if drift detected
     required this.classification, // 'low' | 'moderate' | 'high'
     required this.featuresUsed,
     required this.featuresMissing,
@@ -72,6 +72,8 @@ class OfflineRiskPrediction {
     this.driftDetected = false,
     this.driftFeatures = const <String>[],
     this.confidenceInterval95,
+    this.ruleInCandidate = false,
+    this.ruleInThreshold,
   });
 
   final String modelName;
@@ -81,8 +83,8 @@ class OfflineRiskPrediction {
 
   /// Continuous risk score on [0, 1]. Calibrated via Platt scaling on the
   /// Kintampo hold-out set so that e.g. 0.15 means "~15% chance of the
-  /// adverse outcome in this population".
-  final double riskProbability;
+  /// adverse outcome in this population". Null if drift is detected.
+  final double? riskProbability;
 
   /// Three-bin classification using the thresholds agreed with Northern
   /// Region GHS Head of Health Services during the June 2026 sign-off.
@@ -112,6 +114,19 @@ class OfflineRiskPrediction {
   /// both in [0, 1]. Null when no CI table was bundled (older model packs).
   final ({double low, double high})? confidenceInterval95;
 
+  /// Two-tier triage: true when [riskProbability] is at or above
+  /// [ruleInThreshold] — the "rule-in candidate" tier. Only the AI can
+  /// raise this flag; below the threshold the model is in the screening
+  /// tier and the deterministic WHO/GHS rules keep the rule-out coverage.
+  /// Always false when the probability is drift-suppressed (null).
+  final bool ruleInCandidate;
+
+  /// The rule-in threshold on the calibrated probability scale, e.g. 0.15
+  /// for neonatal sepsis on the 2%-prior scale (7.5x the prior, above the
+  /// 0.0158 Youden screening point). Null when the model has no rule-in
+  /// tier configured.
+  final double? ruleInThreshold;
+
   Map<String, Object?> toMap() => {
     'model_name': modelName,
     'using_model': usingModel ? 1 : 0,
@@ -124,6 +139,8 @@ class OfflineRiskPrediction {
     'inference_ms': inferenceMs,
     'drift_detected': driftDetected ? 1 : 0,
     'drift_features': driftFeatures.join(','),
+    'rule_in_candidate': ruleInCandidate ? 1 : 0,
+    'rule_in_threshold': ruleInThreshold,
     if (confidenceInterval95 != null) ...{
       'ci95_low': confidenceInterval95!.low,
       'ci95_high': confidenceInterval95!.high,
@@ -136,6 +153,17 @@ class OfflineRiskPrediction {
 /// 'moderate' triggers a closer follow-up, 'low' passes to routine.
 class _GhsThresholds {
   static const neonatalSepsis = (low: 0.10, high: 0.30);
+
+  /// Rule-in tier for neonatal sepsis, expressed on the v2.0 real-data
+  /// 2%-prior calibration scale (the scale the deployed Platt B uses).
+  /// At or above this calibrated posterior the AI alone labels the
+  /// newborn a "rule-in candidate" — urgent referral is justified
+  /// without waiting for a danger sign. It sits well above the 0.0158
+  /// Youden screening operating point: below it the AI is the screening
+  /// tier and the deterministic WHO/GHS rules keep the rule-out
+  /// coverage. A single configurable constant = the one number the GHS
+  /// re-sign-off has to ratify (0.15 ≈ 7.5× the 2% target prior).
+  static const neonatalSepsisRuleIn = 0.15;
   static const childPneumonia = (low: 0.08, high: 0.28);
   static const preeclampsia = (low: 0.06, high: 0.22);
   static const lbwSga = (low: 0.12, high: 0.35);
@@ -581,10 +609,22 @@ class OfflineInferenceService {
   }) {
     final drift = _computeDrift(name, tensor);
     final ci = _computeCI95(name, p);
+
+    // Suppress AI probability when out-of-distribution drift is detected
+    final finalP = drift.drift ? null : p;
+
+    // Two-tier triage: a newborn becomes a "rule-in candidate" only when
+    // the (drift-checked) probability clears the rule-in threshold. The
+    // deterministic WHO/GHS rules keep the rule-out coverage below it.
+    final ruleInThreshold = _ruleInThreshold(name);
+    final ruleIn = ruleInThreshold != null &&
+        finalP != null &&
+        finalP >= ruleInThreshold;
+
     return OfflineRiskPrediction(
       modelName: name,
       usingModel: usingModel,
-      riskProbability: p,
+      riskProbability: finalP,
       classification: _classify(p, _switchThresholds(name)),
       featuresUsed: used,
       featuresMissing: missing,
@@ -594,6 +634,8 @@ class OfflineInferenceService {
       driftDetected: drift.drift,
       driftFeatures: drift.features,
       confidenceInterval95: ci,
+      ruleInCandidate: ruleIn,
+      ruleInThreshold: ruleInThreshold,
     );
   }
 
@@ -606,6 +648,14 @@ class OfflineInferenceService {
       _ => _GhsThresholds.neonatalSepsis,
     };
   }
+
+  /// Rule-in threshold on the calibrated probability scale, or null when
+  /// the model has no rule-in tier configured. Only neonatal sepsis has
+  /// one today (see [_GhsThresholds.neonatalSepsisRuleIn]).
+  double? _ruleInThreshold(String name) => switch (name) {
+    'neonatal_sepsis' => _GhsThresholds.neonatalSepsisRuleIn,
+    _ => null,
+  };
 
   /// Newborn 0–59 days: Possible Severe Bacterial Infection.
   Future<OfflineRiskPrediction> neonatalSepsisRisk(OfflineFeatureBag f) async {

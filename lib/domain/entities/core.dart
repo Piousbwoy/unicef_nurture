@@ -69,7 +69,8 @@ class AppUser {
     id: m['id'] as String,
     fullName: m['full_name'] as String,
     phone: m['phone'] as String,
-    role: UserRole.values.firstWhere((r) => r.name == m['role']),
+    role: enumByNameOrNull(UserRole.values, m['role']) ??
+        UserRole.caregiver,
     region: m['region'] as String,
     district: m['district'] as String,
     community: m['community'] as String,
@@ -336,10 +337,12 @@ class Person {
     id: m['id'] as String,
     householdId: m['household_id'] as String,
     fullName: m['full_name'] as String,
-    clientType: ClientType.values.firstWhere((c) => c.name == m['client_type']),
-    sex: m['sex'] == null
-        ? null
-        : Sex.values.firstWhere((s) => s.name == m['sex']),
+    clientType: ClientType.fromStoredName(
+      m['client_type'],
+      dateOfBirth: DateTime.tryParse((m['date_of_birth'] as String?) ?? ''),
+      ageYearsApprox: (m['age_years_approx'] as num?)?.toInt(),
+    ),
+    sex: enumByNameOrNull(Sex.values, m['sex']),
     dateOfBirth: DateTime.tryParse((m['date_of_birth'] as String?) ?? ''),
     ageYearsApprox: (m['age_years_approx'] as num?)?.toInt(),
     phone: m['phone'] as String?,
@@ -771,12 +774,11 @@ class MaternalRecord {
       (m['hbsag_test_date'] as String?) ?? '',
     ),
     deliveryDate: DateTime.tryParse((m['delivery_date'] as String?) ?? ''),
-    deliveryPlace: m['delivery_place'] == null
-        ? null
-        : DeliveryPlace.values.firstWhere((d) => d.name == m['delivery_place']),
-    deliveryMode: m['delivery_mode'] == null
-        ? null
-        : DeliveryMode.values.firstWhere((d) => d.name == m['delivery_mode']),
+    deliveryPlace: enumByNameOrNull(
+      DeliveryPlace.values,
+      m['delivery_place'],
+    ),
+    deliveryMode: enumByNameOrNull(DeliveryMode.values, m['delivery_mode']),
     plurality: BirthPlurality.values.firstWhere(
       (p) => p.name == m['plurality'],
       orElse: () => BirthPlurality.singleton,
@@ -1062,12 +1064,11 @@ class BirthRecord {
     birthWeightKg: (m['birth_weight_kg'] as num?)?.toDouble(),
     birthLengthCm: (m['birth_length_cm'] as num?)?.toDouble(),
     gestationWeeksAtBirth: (m['gestation_weeks_at_birth'] as num?)?.toInt(),
-    deliveryPlace: m['delivery_place'] == null
-        ? null
-        : DeliveryPlace.values.firstWhere((d) => d.name == m['delivery_place']),
-    deliveryMode: m['delivery_mode'] == null
-        ? null
-        : DeliveryMode.values.firstWhere((d) => d.name == m['delivery_mode']),
+    deliveryPlace: enumByNameOrNull(
+      DeliveryPlace.values,
+      m['delivery_place'],
+    ),
+    deliveryMode: enumByNameOrNull(DeliveryMode.values, m['delivery_mode']),
     plurality: BirthPlurality.values.firstWhere(
       (p) => p.name == m['plurality'],
       orElse: () => BirthPlurality.singleton,

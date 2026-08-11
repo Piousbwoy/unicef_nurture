@@ -519,6 +519,11 @@ class _QueuePhase extends ConsumerWidget {
     final remaining = present
         .where((p) => !state._assessed.contains(p.id))
         .length;
+    // The next person in clinical order — the CHO reads the queue the way
+    // they would read a paper list: who am I seeing now, who is next.
+    final next = present
+        .where((p) => !state._assessed.contains(p.id))
+        .firstOrNull;
 
     return Column(
       children: [
@@ -546,19 +551,38 @@ class _QueuePhase extends ConsumerWidget {
                     ),
                     const SizedBox(width: Gap.md),
                     Expanded(
-                      child: Text(
-                        remaining == 0
-                            ? 'Everyone present has been assessed. Add a note '
-                                  'if you need to, then sign off.'
-                            : '$remaining of ${present.length} still to assess.',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                          height: 1.35,
-                          color: remaining == 0
-                              ? AppColors.triageGreen
-                              : AppColors.primary,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            remaining == 0
+                                ? 'Everyone present has been assessed. Add a '
+                                      'note if you need to, then sign off.'
+                                : '$remaining of ${present.length} still to '
+                                      'assess.',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              height: 1.35,
+                              color: remaining == 0
+                                  ? AppColors.triageGreen
+                                  : AppColors.primary,
+                            ),
+                          ),
+                          if (next != null) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              'Next: ${next.fullName}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12.5,
+                                color: remaining == 0
+                                    ? AppColors.triageGreen
+                                    : AppColors.primary,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ],
@@ -729,11 +753,18 @@ class _QueueTile extends ConsumerWidget {
                             padding: const EdgeInsets.only(top: Gap.xs),
                             child: Row(
                               children: [
-                                TriageBadge(a.effectiveTriage, compact: true),
+                                Flexible(
+                                  child: TriageBadge(
+                                    a.effectiveTriage,
+                                    compact: true,
+                                  ),
+                                ),
                                 const SizedBox(width: Gap.sm),
                                 Expanded(
                                   child: Text(
-                                    a.result.classification,
+                                    '${a.result.classification} · '
+                                    '${a.result.effectiveConfidenceScore}% '
+                                    'confidence',
                                     style: const TextStyle(
                                       fontSize: 11.5,
                                       color: AppColors.inkMuted,

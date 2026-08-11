@@ -1,0 +1,32 @@
+{
+  "mbarara_neonatal_sepsis_cases.csv": {
+    "sha256": "a8f31d980c35ad2871964f43638b67a6e2ef4b3a3e129f70c264fe95ae5948a8",
+    "n_bytes": 61474,
+    "source_url": "https://raw.githubusercontent.com/Helenaden/Neonatal-Sepsis-Prediction/main/Dennis_Neonatal_Sepsis_D.csv",
+    "license": "Public GitHub mirror of anonymised Mbarara RRH neonatal sepsis EMR (Dennis et al.); no PHI in mirror."
+  },
+  "mbarara_neonatal_sepsis_controls.csv": {
+    "sha256": "4a1930926c796bc1bd4a36b8aadda308dac73184e64645e9b14d126d8e08ff61",
+    "n_bytes": 64788,
+    "source_url": "https://raw.githubusercontent.com/Helenaden/Neonatal-Sepsis-Prediction/main/Dennis_Neonatal_Sepsis_N.csv",
+    "license": "Public GitHub mirror of anonymised Mbarara RRH neonatal sepsis EMR (Dennis et al.); no PHI in mirror."
+  },
+  "preeclampsia_cfarkas.csv": {
+    "sha256": "319e79453531aa2bb48cdf3c05099601e965dfce3c15f4e924a25c7909fd69fe",
+    "n_bytes": 19167,
+    "source_url": "https://raw.githubusercontent.com/cfarkas/preeclampsia_ml/main/data/dataframe.csv",
+    "license": "Public research cohort (Benedetto et al. / cfarkas mirror); anonymised."
+  },
+  "lbw_classic.csv": {
+    "sha256": "55eb41cc2d1661f7d4b710bf15d8d9cef3306009df30a89c6f7e15f6702af695",
+    "n_bytes": 2963,
+    "source_url": "https://raw.githubusercontent.com/parthvshah/lbw-classification/main/data/Final.csv",
+    "license": "Public academic dataset (LBW risk factors); anonymised."
+  },
+  "fetal_health_ctg.csv": {
+    "sha256": "90bd62b95020ffa466f01a2942a79cf6b8b04cc5ac680144d705002d893f6622",
+    "n_bytes": 228715,
+    "source_url": "https://raw.githubusercontent.com/SagarSharma4244/Fetal-Health/main/fetal_health.csv",
+    "license": "Public cardiotocography dataset (Ayres-de-Campos et al.); not used by the 4 app models (no schema match)."
+  }
+}

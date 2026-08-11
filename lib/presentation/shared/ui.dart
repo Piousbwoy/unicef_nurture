@@ -63,18 +63,27 @@ class TriageBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(Gap.radiusSm),
         border: Border.all(color: c.fg.withValues(alpha: 0.30), width: 1),
       ),
+      // The label is flexible so a long verdict like "PRIORITY — TREAT AND
+      // FOLLOW UP" can never push the badge (or the row containing it) off
+      // the screen. In a bounded parent it ellipsises; call sites that put
+      // the badge inside a Row should wrap it in [Flexible] for the same
+      // reason.
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(triageIcon(level), size: compact ? 13 : 15, color: c.fg),
           const SizedBox(width: Gap.xs),
-          Text(
-            (label ?? level.label).toUpperCase(),
-            style: TextStyle(
-              color: c.fg,
-              fontWeight: FontWeight.w700,
-              fontSize: compact ? 10.5 : 11.5,
-              letterSpacing: 0.8,
+          Flexible(
+            child: Text(
+              (label ?? level.label).toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: c.fg,
+                fontWeight: FontWeight.w700,
+                fontSize: compact ? 10.5 : 11.5,
+                letterSpacing: 0.8,
+              ),
             ),
           ),
         ],

@@ -77,7 +77,7 @@ class _AssessTabState extends ConsumerState<AssessTab> {
         Padding(
           padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.md, Gap.lg, Gap.sm),
           child: GradientButton(
-            label: 'Begin Clinical Assessment (IMCI / ANC / PNC)',
+            label: 'Start Assessment',
             icon: Icons.play_circle_outline_rounded,
             onPressed: _startAssessment,
           ),
