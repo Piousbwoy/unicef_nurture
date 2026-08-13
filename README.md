@@ -56,7 +56,7 @@ test/             266 automated tests (engines, protocols, widgets)
 
 ```bash
 flutter pub get
-flutter run
+flutter run -d chrome
 flutter test   # 266 tests
 ```
 
