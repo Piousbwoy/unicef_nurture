@@ -94,9 +94,9 @@ class _PlanBody extends ConsumerWidget {
 
         if (plan.chaseReferrals.isNotEmpty) ...[
           SectionCard(
-            title: 'Urgent Referral Tracing (Priority 1)',
+            title: 'Urgent referrals — did they arrive?',
             subtitle:
-                'Unconfirmed emergency referrals requiring immediate community follow-up and facility arrival verification.',
+                'Sent to a facility but not confirmed. Ask about these before anything else.',
             icon: Icons.crisis_alert_rounded,
             accent: AppColors.triageRed,
             child: Column(
@@ -124,9 +124,9 @@ class _PlanBody extends ConsumerWidget {
 
         if (plan.overdueContacts.isNotEmpty) ...[
           SectionCard(
-            title: 'Overdue ANC & PNC Follow-ups',
+            title: 'Overdue ANC & PNC checks',
             subtitle:
-                'Scheduled clinical check-ups past due date. Early postnatal checks (Days 1-7) represent critical intervention windows for neonatal mortality prevention.',
+                'A missed first-week check is where newborns are lost. See these families this week.',
             icon: Icons.event_busy_outlined,
             accent: AppColors.triageAmber,
             child: Column(
@@ -141,7 +141,7 @@ class _PlanBody extends ConsumerWidget {
 
         if (plan.dueContacts.isNotEmpty) ...[
           SectionCard(
-            title: 'Scheduled Contacts Today',
+            title: 'Due today',
             icon: Icons.event_available_outlined,
             child: Column(
               children: [
@@ -157,12 +157,12 @@ class _PlanBody extends ConsumerWidget {
           child: Row(
             children: [
               const Text(
-                'AI Predictive Risk Ranking',
+                'Who to see first, and why',
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
               ),
               const Spacer(),
               Text(
-                '${plan.priorities.length} CHPS zone families',
+                '${plan.priorities.length} families in your zone',
                 style: const TextStyle(
                   fontSize: 12.5,
                   color: AppColors.inkMuted,
@@ -174,7 +174,7 @@ class _PlanBody extends ConsumerWidget {
         const Padding(
           padding: EdgeInsets.only(left: Gap.xs, bottom: Gap.md),
           child: Text(
-            'Prioritized by AI risk scores computed across maternal, neonatal, and child under-5 indicators. Households with outdated or unverified vital measurements are automatically escalated.',
+            'Ranked from the latest record for each family. A family with no recent measurements moves up — the gap itself is the warning.',
             style: TextStyle(
               fontSize: 12.5,
               color: AppColors.inkFaint,
@@ -222,7 +222,7 @@ class _Headline extends StatelessWidget {
           Row(
             children: [
               const Icon(
-                Icons.auto_awesome_rounded,
+                Icons.route_outlined,
                 color: Colors.white70,
                 size: 16,
               ),

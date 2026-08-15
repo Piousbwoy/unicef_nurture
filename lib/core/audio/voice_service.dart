@@ -92,6 +92,9 @@ String? _ttsLocaleFor(String language) {
   if (lower.startsWith('dag')) return 'ha-NG';   // Dagbani → Hausa bridge
   if (lower.startsWith('hausa') || lower.startsWith('ha')) return 'ha-NG';
   if (lower.startsWith('en')) return 'en-NG';
+  // Twi has a locale on some devices: try it, and fall through to the Hausa
+  // bridge below when the phone has no Twi voice to lend.
+  if (lower.startsWith('tw')) return 'tw-GH';
   // Ghanaian languages without TTS fall through to Hausa bridge.
   if (_ghanaianLanguagesWithoutTts.contains(language)) return 'ha-NG';
   return null;

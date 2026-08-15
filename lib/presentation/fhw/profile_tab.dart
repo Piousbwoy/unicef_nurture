@@ -15,10 +15,12 @@ import 'package:intl/intl.dart';
 
 import '../../app/providers.dart';
 import '../../core/ml/offline_inference_service.dart';
+import '../../core/ml/recalibration_store.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/local/outbox_dao.dart';
 import '../../data/local/preferences_store.dart';
 import '../../domain/entities/core.dart';
+import '../../domain/enums.dart';
 import '../assessment/form_kit.dart';
 import '../settings/sync_settings_screen.dart';
 import '../shared/ui.dart';
@@ -137,9 +139,9 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
         const SizedBox(height: Gap.md),
 
         SectionCard(
-          title: 'District Database & Offline Sync',
+          title: 'Records & sync',
           subtitle:
-              'Records captured offline persist locally on SQLite and automatically synchronize when network connectivity with the district health server is re-established.',
+              'Everything you save stays on this phone and goes to the district office when the network returns.',
           icon: Icons.cloud_sync_outlined,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -197,7 +199,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                         Expanded(
                           child: StatTile(
                             value: '${summary.pending}',
-                            label: 'Pending Sync Queue',
+                            label: 'Waiting to Send',
                             colour: AppColors.offline,
                           ),
                         ),
@@ -205,7 +207,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                         Expanded(
                           child: StatTile(
                             value: '${summary.criticalPending}',
-                            label: 'Urgent Priority',
+                            label: 'Urgent',
                             colour: summary.criticalPending > 0
                                 ? AppColors.triageRed
                                 : AppColors.triageGreen,
@@ -215,7 +217,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                         Expanded(
                           child: StatTile(
                             value: '${summary.failing}',
-                            label: 'Sync Retries / Errors',
+                            label: 'Need a Retry',
                             colour: summary.failing > 0
                                 ? AppColors.triageAmber
                                 : AppColors.triageGreen,
@@ -243,7 +245,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                             ),
                           )
                         : const Icon(Icons.sync_rounded),
-                    label: Text(_draining ? 'Synchronizing District Server...' : 'Sync Records to District Database'),
+                    label: Text(_draining ? 'Sending\u2026' : 'Send records now'),
                   ),
                   OutlinedButton.icon(
                     onPressed: () => Navigator.of(context).push(
@@ -252,14 +254,14 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                       ),
                     ),
                     icon: const Icon(Icons.dns_rounded),
-                    label: const Text('District Server Config'),
+                    label: const Text('Connection settings'),
                   ),
                 ],
               ),
               if (_stuck.isNotEmpty) ...[
                 const SizedBox(height: Gap.md),
                 const Text(
-                  'Unresolved records requiring district supervisor diagnostic review:',
+                  'These records keep failing. Show them to your supervisor:',
                   style: TextStyle(
                     fontSize: 12.5,
                     color: AppColors.triageAmber,
@@ -316,15 +318,15 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
         const SizedBox(height: Gap.md),
 
         SectionCard(
-          title: 'Clinical Localization & Voice',
+          title: 'Language & voice',
           icon: Icons.translate_rounded,
           padding: const EdgeInsets.symmetric(vertical: Gap.sm),
           child: Column(
             children: [
               _SettingsTile(
                 icon: Icons.language_rounded,
-                title: 'Regional Languages & Audio Guidance',
-                subtitle: 'Configured for Northern Region deployments. Switch display and voice prompt read-aloud preferences (English, Twi, Dagbani, Hausa).',
+                title: 'Language & read-aloud',
+                subtitle: 'Pick the language the app shows and speaks.',
                 onTap: () async {
                   await showModalBottomSheet<void>(
                     context: context,
@@ -340,15 +342,15 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
         const SizedBox(height: Gap.md),
 
         SectionCard(
-          title: 'Offline AI Model Pack',
+          title: 'The on-device assistant',
           icon: Icons.psychology_rounded,
           padding: const EdgeInsets.symmetric(vertical: Gap.sm),
           child: Column(
             children: [
               _SettingsTile(
                 icon: Icons.verified_outlined,
-                title: 'Model integrity & versions',
-                subtitle: 'Verify which TFLite models are installed and whether their SHA-256 matches the shipped metrics pack.',
+                title: 'Which checks run on this phone',
+                subtitle: 'Versions and status of the offline risk checks, and the rule charts that back them up.',
                 onTap: () async {
                   await showModalBottomSheet<void>(
                     context: context,
@@ -358,27 +360,42 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                   );
                 },
               ),
+              if (user.can(Permission.exportRecords))
+                _SettingsTile(
+                  icon: Icons.science_outlined,
+                  title: 'Recalibration export (Kintampo/Navrongo)',
+                  subtitle:
+                      'De-identified records that retrain these checks on real Northern Ghana data.',
+                  onTap: () async {
+                    await showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      showDragHandle: true,
+                      builder: (_) => const _RecalibrationExportSheet(),
+                    );
+                  },
+                ),
             ],
           ),
         ),
         const SizedBox(height: Gap.md),
 
         SectionCard(
-          title: 'Device Governance & RBAC Security',
+          title: 'Security & this device',
           icon: Icons.security_rounded,
           padding: const EdgeInsets.symmetric(vertical: Gap.sm),
           child: Column(
             children: [
               _SettingsTile(
                 icon: Icons.lock_outline_rounded,
-                title: 'RBAC PIN Security Guard Active',
-                subtitle: 'Authentication credential resets are governed by the District Health Office supervisor to ensure clinical data compliance and audit trail validity.',
+                title: 'PIN & sign-in',
+                subtitle: 'Forgot your PIN? The district supervisor resets it, so family records stay safe.',
                 onTap: null,
               ),
               _SettingsTile(
                 icon: Icons.tablet_mac_rounded,
-                title: 'CHPS Assigned Terminal',
-                subtitle: 'Registered ${user.createdAt != null ? DateFormat('d MMM yyyy').format(user.createdAt!) : 'Active Terminal'} · Offline encryption & audit log enabled',
+                title: 'This device',
+                subtitle: 'Registered ${user.createdAt != null ? DateFormat('d MMM yyyy').format(user.createdAt!) : 'to your zone'} · records stay on this phone until they sync',
                 onTap: null,
               ),
             ],
@@ -393,7 +410,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
               child: FilledButton.icon(
                 onPressed: _signOut,
                 icon: const Icon(Icons.lock_rounded),
-                label: const Text('Lock Session (Sign Out)'),
+                label: const Text('Sign out'),
               ),
             ),
             const SizedBox(width: Gap.sm),
@@ -406,7 +423,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                   side: const BorderSide(color: AppColors.line, width: 1.2),
                 ),
                 icon: const Icon(Icons.restart_alt_rounded),
-                label: const Text('Device Reset'),
+                label: const Text('Reset this device'),
               ),
             ),
           ],
@@ -690,15 +707,18 @@ class _LanguageAndVoiceSheetState
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Clinical Language & Voice', style: AppType.title),
+          Text('Language & voice', style: AppType.title),
           const SizedBox(height: Gap.xs),
           Text(
-            'Select language preferences for clinical assessments, counseling, and automated voice guidance across Northern Region health zones.',
+            'Pick the language this phone speaks in. Every audio button in '
+            'the app — both flows — follows this choice. Recordings play '
+            'first when verified; otherwise the phone uses its own voice, '
+            'falling back to the Hausa bridge.',
             style: AppType.caption.copyWith(color: AppColors.inkMuted),
           ),
           const SizedBox(height: Gap.md),
           ChoiceChipsField<String?>(
-            label: 'Display language',
+            label: 'Guidance language',
             options: _languageCodes,
             labelOf: (code) => _languageLabels[code ?? 'en'] ?? 'English',
             value: _selected,
@@ -706,8 +726,14 @@ class _LanguageAndVoiceSheetState
               setState(() => _selected = val);
               final navigator = Navigator.of(context);
               if (val != null) {
+                // The full language name — not the chip code — lands on the
+                // user record, the one source of truth every audio call site
+                // reads. The session re-renders immediately and the DAO
+                // enqueues the sync.
                 try {
-                  await PreferencesStore.setPreferredLanguage(val);
+                  await ref
+                      .read(sessionProvider.notifier)
+                      .updateLanguage(_languageLabels[val]!);
                 } catch (_) {}
               }
               if (mounted) navigator.pop();
@@ -716,33 +742,33 @@ class _LanguageAndVoiceSheetState
           const Divider(),
           const SizedBox(height: Gap.sm),
           Text(
-            'Voice Guidance Profiles:',
+            'Read-aloud by language:',
             style: AppType.eyebrow,
           ),
           const SizedBox(height: Gap.sm),
           _VoiceRow(
             langName: 'English',
-            pillStatus: 'Active Voice Engine',
+            pillStatus: 'Reads aloud',
             pillBg: AppColors.triageGreenBg,
             pillFg: AppColors.triageGreen,
           ),
           _VoiceRow(
             langName: 'Twi',
-            pillStatus: 'Scheduled Field Enhancement',
+            pillStatus: 'Phone voice or Hausa bridge',
             pillBg: AppColors.primaryLight,
             pillFg: AppColors.primary,
           ),
           _VoiceRow(
             langName: 'Dagbani',
-            pillStatus: 'Scheduled Field Enhancement',
+            pillStatus: 'Recording or Hausa bridge',
             pillBg: AppColors.primaryLight,
             pillFg: AppColors.primary,
           ),
           _VoiceRow(
             langName: 'Hausa',
-            pillStatus: 'Scheduled Field Enhancement',
-            pillBg: AppColors.primaryLight,
-            pillFg: AppColors.primary,
+            pillStatus: 'Phone voice',
+            pillBg: AppColors.triageGreenBg,
+            pillFg: AppColors.triageGreen,
           ),
           const SizedBox(height: Gap.md),
           Center(
@@ -821,10 +847,10 @@ class _ModelPackSheet extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Offline AI Model Pack', style: AppType.title),
+          Text('The on-device assistant', style: AppType.title),
           const SizedBox(height: Gap.xs),
           Text(
-            'Models run fully offline on the tablet. When a model is not installed or not verified, the app uses the deterministic clinical calculator fallback.',
+            'Every check runs on this phone with no network. If one is missing or out of date, the app falls back to the standard clinical rule charts, so you always get an answer.',
             style: AppType.caption.copyWith(color: AppColors.inkMuted),
           ),
           const SizedBox(height: Gap.md),
@@ -979,17 +1005,37 @@ class _ModelStatusTile extends StatelessWidget {
               valueColor: AppColors.ink,
             ),
           ],
-          if (status.internalValidation.isNotEmpty)
-            _ModelPackMetrics(
-              block: status.internalValidation,
-              blockLabel: 'Internal hold-out (20%)',
-              brierScore: status.brierScore,
-            ),
-          if (status.externalValidation.isNotEmpty)
-            _ModelPackMetrics(
-              block: status.externalValidation,
-              blockLabel: 'External validation (UCI Bangladesh)',
-            ),
+          // Frame the numbers by how the model was built: a model trained
+          // on real patient records leads with its cross-validation, while
+          // a simulator-seeded model leads with the external check on real
+          // patients and its internal numbers are labelled a sanity check.
+          if (status.trainedOnRealPatients) ...[
+            if (status.internalValidation.isNotEmpty)
+              _ModelPackMetrics(
+                block: status.internalValidation,
+                blockLabel: 'Cross-validation — real patient data',
+                brierScore: status.brierScore,
+              ),
+            if (status.externalValidation.isNotEmpty)
+              _ModelPackMetrics(
+                block: status.externalValidation,
+                blockLabel: 'Out-of-domain check (expected near-chance)',
+              ),
+          ] else ...[
+            if (status.externalValidation.isNotEmpty)
+              _ModelPackMetrics(
+                block: status.externalValidation,
+                blockLabel: 'External check on real patients',
+              ),
+            if (status.internalValidation.isNotEmpty)
+              _ModelPackMetrics(
+                block: status.internalValidation,
+                blockLabel: status.externalValidation.isNotEmpty
+                    ? 'Simulator self-check (sanity only)'
+                    : 'Simulator self-check (not yet patient-checked)',
+                brierScore: status.brierScore,
+              ),
+          ],
           if (status.versionLadder.isNotEmpty) ...[
             const SizedBox(height: Gap.xs),
             _ModelPackRow(
@@ -1150,6 +1196,269 @@ class _MiniStat extends StatelessWidget {
               color: AppColors.ink,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// My Work → The on-device assistant → Recalibration export.
+///
+/// The visible half of the signed Kintampo HRC / Navrongo HDSS pathway.
+/// The district officer arms the device once with the GHS-issued linkage
+/// salt; from then on every saved assessment quietly appends a
+/// de-identified record (no names, no communities, no exact dates) to the
+/// on-device batch. The batch leaves the phone only here: export a
+/// month-stamped copy, hand it to the officer, then clear. Nothing syncs
+/// silently — that is what the data agreement requires.
+class _RecalibrationExportSheet extends StatefulWidget {
+  const _RecalibrationExportSheet();
+
+  @override
+  State<_RecalibrationExportSheet> createState() =>
+      _RecalibrationExportSheetState();
+}
+
+class _RecalibrationExportSheetState
+    extends State<_RecalibrationExportSheet> {
+  RecalibrationStore? _store;
+  bool _loaded = false;
+  int _pending = 0;
+  bool _busy = false;
+  final _saltController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  @override
+  void dispose() {
+    _saltController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _reload() async {
+    final store = await RecalibrationStore.forDevice();
+    final pending = store == null ? 0 : await store.count();
+    if (!mounted) return;
+    setState(() {
+      _store = store;
+      _pending = pending;
+      _loaded = true;
+      _busy = false;
+    });
+  }
+
+  Future<void> _arm() async {
+    final salt = _saltController.text.trim();
+    if (salt.length < 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('The GHS-issued salt is at least 8 characters.'),
+        ),
+      );
+      return;
+    }
+    setState(() => _busy = true);
+    await RecalibrationStore.provisionSalt(salt);
+    _saltController.clear();
+    await _reload();
+  }
+
+  Future<void> _export() async {
+    final store = _store;
+    if (store == null) return;
+    setState(() => _busy = true);
+    try {
+      final out = await store.exportBatch();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Batch exported to:\n${out.path}\nCopy it to the officer\u2019s '
+            'drive, then come back and clear.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _clearAfterHandover() async {
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear after handover?'),
+        content: const Text(
+          'Only do this after the exported file is safely with the district '
+          'officer. The copy on this phone will be deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Not yet'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Handed over — clear'),
+          ),
+        ],
+      ),
+    );
+    if (sure == true) {
+      await _store?.clear();
+      await _reload();
+    }
+  }
+
+  Future<void> _stopCollecting() async {
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Stop collecting on this device?'),
+        content: const Text(
+          'The linkage salt is removed and no new records are kept. Use this '
+          'if the agreement is paused or the phone changes hands.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep collecting'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.triageRed,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Stop collecting'),
+          ),
+        ],
+      ),
+    );
+    if (sure == true) {
+      await RecalibrationStore.revokeSalt();
+      await _reload();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final armed = _store?.isArmed ?? false;
+    return Padding(
+      padding: EdgeInsets.only(
+        left: Gap.lg,
+        right: Gap.lg,
+        top: Gap.sm,
+        bottom: MediaQuery.of(context).viewInsets.bottom + Gap.lg,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Recalibration export', style: AppType.title),
+          const SizedBox(height: Gap.xs),
+          Text(
+            'Under the signed Kintampo HRC / Navrongo HDSS agreement this '
+            'phone keeps one de-identified record per check — no names, no '
+            'communities, no exact dates — so the risk checks can be '
+            'retrained on real Northern Ghana data. Nothing leaves this '
+            'phone by itself.',
+            style: AppType.caption.copyWith(color: AppColors.inkMuted),
+          ),
+          const SizedBox(height: Gap.md),
+          if (!_loaded)
+            const Center(child: CircularProgressIndicator())
+          else if (_store == null)
+            const Text(
+              'Secure storage is not available on this device.',
+              style: TextStyle(color: AppColors.triageAmber),
+            )
+          else ...[
+            Row(
+              children: [
+                Icon(
+                  armed ? Icons.check_circle_rounded : Icons.pause_circle_outline_rounded,
+                  size: 18,
+                  color: armed ? AppColors.triageGreen : AppColors.triageAmber,
+                ),
+                const SizedBox(width: Gap.sm),
+                Expanded(
+                  child: Text(
+                    armed
+                        ? 'Armed — every saved check keeps a record.'
+                        : 'Not armed — this phone is collecting nothing.',
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: Gap.md),
+            if (!armed) ...[
+              Text(
+                'The district officer arms this device once, with the '
+                'GHS-issued linkage salt, during a supervisory visit.',
+                style: AppType.caption.copyWith(color: AppColors.inkMuted),
+              ),
+              const SizedBox(height: Gap.sm),
+              TextField(
+                controller: _saltController,
+                decoration: const InputDecoration(
+                  labelText: 'GHS-issued linkage salt',
+                  hintText: 'Officer types it here',
+                ),
+              ),
+              const SizedBox(height: Gap.sm),
+              FilledButton.icon(
+                onPressed: _busy ? null : _arm,
+                icon: const Icon(Icons.key_rounded),
+                label: const Text('Arm this device'),
+              ),
+            ] else ...[
+              Text(
+                '$_pending record${_pending == 1 ? '' : 's'} waiting on this phone.',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.inkMuted,
+                ),
+              ),
+              const SizedBox(height: Gap.sm),
+              Wrap(
+                spacing: Gap.sm,
+                runSpacing: Gap.sm,
+                children: [
+                  FilledButton.icon(
+                    onPressed: _busy || _pending == 0 ? null : _export,
+                    icon: const Icon(Icons.ios_share_rounded),
+                    label: const Text('Export monthly batch'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _busy || _pending == 0
+                        ? null
+                        : _clearAfterHandover,
+                    icon: const Icon(Icons.cleaning_services_outlined),
+                    label: const Text('Handed over — clear'),
+                  ),
+                  TextButton.icon(
+                    onPressed: _busy ? null : _stopCollecting,
+                    icon: const Icon(
+                      Icons.stop_circle_outlined,
+                      color: AppColors.triageRed,
+                    ),
+                    label: const Text(
+                      'Stop collecting',
+                      style: TextStyle(color: AppColors.triageRed),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
         ],
       ),
     );

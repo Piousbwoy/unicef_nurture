@@ -623,126 +623,6 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
     });
   }
 
-  void _openQrScanner() {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (sheetContext) => Padding(
-        padding: EdgeInsets.fromLTRB(
-          Gap.xl,
-          Gap.md,
-          Gap.xl,
-          MediaQuery.of(sheetContext).viewInsets.bottom + Gap.xl,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary, size: 28),
-                const SizedBox(width: Gap.sm),
-                const Text(
-                  'Optical QR Scanner',
-                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
-                ),
-              ],
-            ),
-            const SizedBox(height: Gap.xs),
-            const Text(
-              'Align the camera with the digital pass on the health worker’s tablet screen to perform an offline database transfer.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: AppColors.inkMuted, height: 1.4),
-            ),
-            const SizedBox(height: Gap.xl),
-            Center(
-              child: Container(
-                width: 220,
-                height: 220,
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.04),
-                  borderRadius: BorderRadius.circular(Gap.radius),
-                  border: Border.all(color: AppColors.primary, width: 2),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.qr_code_2_rounded, size: 84, color: AppColors.primary),
-                    const SizedBox(height: Gap.sm),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.xs),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text(
-                        'CAMERA VIEWFINDER ACTIVE',
-                        style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: Gap.xl),
-            FilledButton.icon(
-              icon: const Icon(Icons.flash_on_rounded, size: 18),
-              label: const Text('Simulate Live Tablet Scan (Demo & Field Test)'),
-              onPressed: () async {
-                Navigator.of(sheetContext).pop();
-                await _simulateOpticalTransfer();
-              },
-            ),
-            const SizedBox(height: Gap.sm),
-            OutlinedButton(
-              onPressed: () => Navigator.of(sheetContext).pop(),
-              child: const Text('Cancel'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _simulateOpticalTransfer() async {
-    setState(() {
-      _checkingCode = true;
-      _error = null;
-      _linkedHousehold = null;
-    });
-    const demoId = 'a1f7c320-b458-4912-8e31-9a00f89e2c45';
-    const demoHousehold = Household(
-      id: demoId,
-      name: 'Dawura Family (CHPS Verified)',
-      region: 'Northern',
-      district: 'Savelugu',
-      community: 'Kpalsogu',
-      createdBy: 'CHO-OFFLINE-TABLET',
-      landmark: 'Behind the central community solar pump',
-    );
-    final encodedPayload = FamilyCode.encodeQrPayload(demoHousehold);
-    final decoded = FamilyCode.decodeQrPayload(encodedPayload)!;
-
-    await HouseholdDao.upsert(decoded);
-
-    if (!mounted) return;
-    setState(() {
-      _checkingCode = false;
-      _familyCode.text = FamilyCode.pretty(decoded.id);
-      _linkedHousehold = decoded;
-      _error = null;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('⚡ Optical Offline Database Transfer complete! Household seeded in local SQLite.'),
-        backgroundColor: AppColors.triageGreen,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
   Future<void> _pasteCode() async {
     final clip = await Clipboard.getData('text/plain');
     final text = clip?.text?.trim() ?? '';
@@ -1017,7 +897,6 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
           household: _linkedHousehold,
           checking: _checkingCode,
           onCheck: _lookUpCode,
-          onScanQr: _openQrScanner,
           onPaste: _pasteCode,
           selfCreate: _selfCreate,
           familyName: _familyName,
@@ -1424,7 +1303,6 @@ class _FamilyStep extends StatelessWidget {
     required this.household,
     required this.checking,
     required this.onCheck,
-    required this.onScanQr,
     required this.onPaste,
     required this.selfCreate,
     required this.familyName,
@@ -1443,7 +1321,6 @@ class _FamilyStep extends StatelessWidget {
   final Household? household;
   final bool checking;
   final VoidCallback onCheck;
-  final VoidCallback onScanQr;
   final VoidCallback onPaste;
 
   final bool selfCreate;
@@ -1462,9 +1339,10 @@ class _FamilyStep extends StatelessWidget {
   Widget build(BuildContext context) => SectionCard(
     title: 'Your family',
     subtitle:
-        'If the health worker registered your family, scan their QR digital pass or enter the six-character '
-        'code they gave you. If not, start your own family record — the '
-        'health worker will pick it up the first time you meet.',
+        'If the health worker registered your family, enter the six-character '
+        'code they give you — or paste it if it arrived by SMS. If not, '
+        'start your own family record and the health worker will pick it up '
+        'the first time you meet.',
     icon: Icons.vpn_key_outlined,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1482,11 +1360,11 @@ class _FamilyStep extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary, size: 22),
+                    const Icon(Icons.phonelink_ring_outlined, color: AppColors.primary, size: 22),
                     const SizedBox(width: Gap.sm),
                     const Expanded(
                       child: Text(
-                        'Optical Zero-Network Linkage',
+                        'With the health worker right now?',
                         style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.primary, fontSize: 13.5),
                       ),
                     ),
@@ -1494,41 +1372,24 @@ class _FamilyStep extends StatelessWidget {
                 ),
                 const SizedBox(height: Gap.xs),
                 const Text(
-                  'With the health worker? Scan their screen to instantly copy records to your phone offline without any mobile network.',
+                  'They can read the code out for you to type below, or send it by SMS. If it arrived as a message, paste it — no network needed.',
                   style: TextStyle(color: AppColors.inkMuted, fontSize: 12, height: 1.3),
                 ),
                 const SizedBox(height: Gap.md),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: checking ? null : onScanQr,
-                        icon: const Icon(Icons.camera_alt_outlined, size: 16),
-                        label: const Text('Scan QR Pass', overflow: TextOverflow.ellipsis),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.primary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: Gap.sm),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: checking ? null : onPaste,
-                        icon: const Icon(Icons.content_paste_rounded, size: 16),
-                        label: const Text('Paste Code', overflow: TextOverflow.ellipsis),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.ink,
-                        ),
-                      ),
-                    ),
-                  ],
+                OutlinedButton.icon(
+                  onPressed: checking ? null : onPaste,
+                  icon: const Icon(Icons.content_paste_rounded, size: 16),
+                  label: const Text('Paste code from a message'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.ink,
+                  ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: Gap.md),
         ],
-        const FieldLabel('Or enter 6-character short code'),
+        const FieldLabel('Or type the 6-character code'),
         Row(
           children: [
             Expanded(
@@ -2032,19 +1893,19 @@ class FamilyCodeSheet extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
             ),
             child: const Text(
-              'OPTICAL OFFLINE DATABASE SYNC',
+              'FAMILY CODE',
               style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: AppColors.primary, letterSpacing: 0.8),
             ),
           ),
           const SizedBox(height: Gap.sm),
           Text(
-            'Digital Pass for ${household.name}',
+            household.name,
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: Gap.xs),
           const Text(
-            'Scan this QR pass with the caregiver’s phone during clinic consultations to transfer family records totally offline without mobile network.',
+            'The caregiver enters the code below when they set up their phone — it links their account to this family, no network needed. They can also scan the QR with any scanner app and paste what it reads.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 13,
@@ -2079,7 +1940,7 @@ class FamilyCodeSheet extends StatelessWidget {
           ),
           const SizedBox(height: Gap.lg),
           const Text(
-            'VERBAL OR SMS SHORT CODE',
+            'READ IT OUT, OR SEND IT BY SMS',
             style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.inkMuted, letterSpacing: 1.2),
           ),
           const SizedBox(height: Gap.xs),
@@ -2105,13 +1966,13 @@ class FamilyCodeSheet extends StatelessWidget {
                 ),
                 const SizedBox(width: Gap.sm),
                 IconButton(
-                  tooltip: 'Copy Code for SMS / WhatsApp',
+                  tooltip: 'Copy to send by SMS or WhatsApp',
                   icon: const Icon(Icons.copy_rounded, color: AppColors.primary, size: 24),
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: shortCode));
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Copied family code "$shortCode" to clipboard for sharing!'),
+                        content: Text('Code $shortCode copied — send it by SMS or WhatsApp.'),
                         behavior: SnackBarBehavior.floating,
                         backgroundColor: AppColors.primary,
                       ),

@@ -875,15 +875,40 @@ class _HelpTab extends ConsumerWidget {
               'The app can read its guidance aloud. Test the voice here '
               'before you need it.',
           icon: Icons.settings_voice_rounded,
-          child: OutlinedButton.icon(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const VoiceTestScreen()),
-            ),
-            icon: const Icon(Icons.graphic_eq_rounded),
-            label: const Text('Test the voice'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(0, Gap.tapTarget),
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const VoiceTestScreen()),
+                ),
+                icon: const Icon(Icons.graphic_eq_rounded),
+                label: const Text('Test the voice'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, Gap.tapTarget),
+                ),
+              ),
+              const SizedBox(height: Gap.sm),
+              // The chosen language lands on the user record, so every audio
+              // button in this flow — questions, topics, the result —
+              // follows it from this moment on.
+              OutlinedButton.icon(
+                onPressed: () => showModalBottomSheet<void>(
+                  context: context,
+                  showDragHandle: true,
+                  isScrollControlled: true,
+                  builder: (_) => _GuidanceLanguageSheet(
+                    current: user.preferredLanguage,
+                    region: user.region,
+                  ),
+                ),
+                icon: const Icon(Icons.translate_rounded),
+                label: Text('Guidance language: ${user.preferredLanguage}'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, Gap.tapTarget),
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: Gap.md),
@@ -1382,15 +1407,6 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
     };
   }
 
-  AudioTopic get _topic {
-    final type = _person?.effectiveClientType;
-    return switch (type) {
-      ClientType.newborn => AudioTopic.newbornDangerSigns,
-      ClientType.childUnderFive => AudioTopic.childDangerSigns,
-      _ => AudioTopic.motherDangerSigns,
-    };
-  }
-
   _TriageVerdict _verdict() {
     final yes = _answers.values.where((a) => a == _SignAnswer.yes).length;
     final unsure =
@@ -1683,6 +1699,7 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
 
   Widget _buildResult(Household? household) {
     final verdict = _verdict();
+    final person = _person!;
     final chosenYes = _signs
         .where((s) => _answers[s.$1] == _SignAnswer.yes)
         .map((s) => s.$2)
@@ -1692,46 +1709,153 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
         .map((s) => s.$2)
         .toList(growable: false);
     final walk = household?.walkingMinutesToFacility;
+    // Clinical colours (red / amber) are reserved for safety. A green
+    // outcome is a calm moment, so it wears the brand blue instead of a
+    // green that could be read as "medical".
+    final heroGradient = verdict == _TriageVerdict.fine
+        ? AppColors.heroGradient
+        : LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [verdict.colour, verdict.colour.withValues(alpha: 0.82)],
+          );
 
     return ListView(
       padding: const EdgeInsets.all(Gap.lg),
       children: [
-        // ------------------------- Verdict banner
+        // ------------------------- Who this check is about
+        Container(
+          padding: const EdgeInsets.all(Gap.md),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceTint,
+            borderRadius: BorderRadius.circular(Gap.radius),
+          ),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(Gap.radiusSm),
+                child: SizedBox(
+                  width: 54,
+                  height: 54,
+                  child: AppImage(
+                    src: switch (person.effectiveClientType) {
+                      ClientType.newborn => AppImages.cardNewborn,
+                      ClientType.childUnderFive => AppImages.cardChild,
+                      _ => AppImages.cardMother,
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: Gap.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Check for ${person.fullName}',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Saved on this phone for your health worker to see.',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.inkMuted,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: Gap.md),
+
+        // ------------------------- Verdict hero
         Container(
           padding: const EdgeInsets.all(Gap.lg),
           decoration: BoxDecoration(
-            color: verdict.colour.withValues(alpha: 0.10),
+            gradient: heroGradient,
             borderRadius: BorderRadius.circular(Gap.radius),
-            border: Border.all(
-              color: verdict.colour.withValues(alpha: 0.5),
-            ),
+            boxShadow: const [AppShadows.card],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Icon(_iconFor(verdict), color: verdict.colour, size: 28),
-                  const SizedBox(width: Gap.sm),
+                  Container(
+                    padding: const EdgeInsets.all(Gap.xs + 2),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.20),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _iconFor(verdict),
+                      color: Colors.white,
+                      size: 26,
+                    ),
+                  ),
+                  const SizedBox(width: Gap.md),
                   Expanded(
                     child: Text(
                       verdict.headline,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 19,
                         fontWeight: FontWeight.w800,
-                        color: verdict.colour,
+                        color: Colors.white,
+                        height: 1.25,
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: Gap.sm),
+              const SizedBox(height: Gap.md),
               Text(
-                '${verdict.advice}${verdict == _TriageVerdict.urgent && walk != null
-                    ? ' The facility is about $walk minutes on foot.'
-                    : ''}',
-                style: const TextStyle(fontSize: 14, height: 1.45),
+                verdict.advice,
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.5,
+                  color: Colors.white.withValues(alpha: 0.94),
+                ),
               ),
+              if (verdict == _TriageVerdict.urgent && walk != null) ...[
+                const SizedBox(height: Gap.md),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Gap.md,
+                    vertical: Gap.sm,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(Gap.radiusSm),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.directions_walk_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                      const SizedBox(width: Gap.sm),
+                      Expanded(
+                        child: Text(
+                          'The facility is about $walk minutes on foot.',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -1749,79 +1873,37 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
                 ? _Stage.watchFor
                 : _Stage.tellChw;
           }),
-          onHearAloud: _playTopic,
+          onHearAloud: () => _playVerdict(verdict),
           onCheckAnother: _restart,
         ),
         const SizedBox(height: Gap.md),
 
+        // ------------------------- Feeding today
+        // The check ends with what the family CAN do, not only what is
+        // wrong. Real Northern Ghana foods, photographed, per master
+        // flow [48]. Newborns get breastfeeding guidance only.
+        _FamilyFeedingCard(person: person, verdict: verdict),
+        const SizedBox(height: Gap.md),
+
         // ------------------------- Reasons the recommendation rests on
         if (chosenYes.isNotEmpty)
-          SectionCard(
+          _SignsCard(
             title: 'Signs you said YES to',
             icon: Icons.campaign_outlined,
-            accent: AppColors.triageRed,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (final s in chosenYes)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: Gap.xs),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.arrow_right_rounded,
-                          color: AppColors.triageRed,
-                        ),
-                        Expanded(
-                          child: Text(
-                            s,
-                            style: const TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                const Text(
-                  'Say when each sign started, and what has been eaten, '
-                  'drunk or vomited since.',
-                  style: TextStyle(fontSize: 12.5, color: AppColors.inkMuted),
-                ),
-              ],
-            ),
+            colour: AppColors.triageRed,
+            signs: chosenYes,
+            note:
+                'Say when each sign started, and what has been eaten, '
+                'drunk or vomited since.',
           ),
         if (chosenUnsure.isNotEmpty) ...[
           const SizedBox(height: Gap.md),
-          SectionCard(
+          _SignsCard(
             title: 'Signs you were not sure about',
             icon: Icons.help_outline_rounded,
-            accent: AppColors.triageAmber,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (final s in chosenUnsure)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: Gap.xs),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.arrow_right_rounded,
-                          color: AppColors.triageAmber,
-                        ),
-                        Expanded(
-                          child: Text(s, style: const TextStyle(fontSize: 14)),
-                        ),
-                      ],
-                    ),
-                  ),
-                const Text(
-                  'These are the signs the nurse should look at first.',
-                  style: TextStyle(fontSize: 12.5, color: AppColors.inkMuted),
-                ),
-              ],
-            ),
+            colour: AppColors.triageAmber,
+            signs: chosenUnsure,
+            note: 'These are the signs the nurse should look at first.',
           ),
         ],
       ],
@@ -2080,20 +2162,25 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
     }
   }
 
-  Future<void> _playTopic() async {
+  /// The result exactly as the screen shows it — headline and advice — heard
+  /// aloud in the caregiver's chosen language. The voice chain is the same
+  /// one every other button uses: verified recording, then the phone's own
+  /// voice, then the Hausa bridge, then the words on screen.
+  Future<void> _playVerdict(_TriageVerdict verdict) async {
     final user = ref.read(currentUserProvider);
-    final outcome = await AudioGuide.play(
-      _topic,
-      user?.preferredLanguage ?? 'English',
+    final language = user?.preferredLanguage ?? 'English';
+    final outcome = await VoiceService.speakText(
+      id: 'caregiver_verdict_${verdict.name}',
+      text: '${verdict.headline}. ${verdict.advice}',
+      language: language,
     );
     if (!mounted) return;
     if (outcome.source == VoiceSource.readAloud) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'The ${user?.preferredLanguage ?? 'local'} recording is not on '
-            'this phone yet. The words are on the screen — read them aloud '
-            'or ask someone to.',
+            'The $language voice is not on this phone yet. The words are on '
+            'the screen — read them aloud, or ask someone to.',
           ),
         ),
       );
@@ -2443,6 +2530,377 @@ class _ActionButton extends StatelessWidget {
             ),
           );
   }
+}
+
+/// The check ends with what the family CAN do at the next meal, not only
+/// with what is wrong. Real Northern Ghana foods, photographed — advice
+/// that shows the actual pot is advice that gets cooked.
+class _FamilyFeedingCard extends StatelessWidget {
+  const _FamilyFeedingCard({required this.person, required this.verdict});
+
+  final Person person;
+  final _TriageVerdict verdict;
+
+  /// Every food below is drawn from the same LocalFoods dataset the
+  /// nutrition engine recommends from: year-round, in the cheapest cost
+  /// tiers, and age-appropriate from six months. One card per WHO food
+  /// group a child needs for dietary diversity.
+  static const _childFoods = [
+    (
+      image: AppImages.foodMilletPorridge,
+      name: 'Millet porridge',
+      local: 'Za',
+      reason:
+          'Gives energy for the whole day. Cook it thick, so it sits on '
+          'the spoon — thin porridge fills the stomach without feeding.',
+    ),
+    (
+      image: AppImages.foodGroundnutPaste,
+      name: 'Groundnut paste',
+      local: 'Sinkpam',
+      reason:
+          'Stir one spoon into every bowl of porridge. The cheapest way '
+          'to add energy and protein. Smooth paste only — whole nuts '
+          'choke young children.',
+    ),
+    (
+      image: AppImages.foodCowpeaStew,
+      name: 'Cowpea (beans)',
+      local: 'Tuya',
+      reason:
+          'Beans build the body with protein and iron. Cook until very '
+          'soft and mash well.',
+    ),
+    (
+      image: AppImages.foodDriedFish,
+      name: 'Dried fish powder',
+      local: 'Zahim',
+      reason:
+          'The cheapest animal food in the north. Pound one small fish, '
+          'bones included, and stir a spoon into the porridge.',
+    ),
+    (
+      image: AppImages.foodBoiledEgg,
+      name: 'Egg',
+      local: '',
+      reason:
+          'One boiled egg a day builds the body and the eyes. Always '
+          'fully cooked, never soft.',
+    ),
+    (
+      image: AppImages.foodSweetPotato,
+      name: 'Orange-fleshed sweet potato',
+      local: '',
+      reason:
+          'Choose the orange kind, not white. One small tuber covers a '
+          'young child\u2019s vitamin A for the day.',
+    ),
+    (
+      image: AppImages.foodMoringaBaobab,
+      name: 'Moringa and baobab leaves',
+      local: 'Zogale',
+      reason:
+          'Green leaves protect against illness. Stir a spoon of dried '
+          'powder into the porridge every day.',
+    ),
+    (
+      image: AppImages.foodPawpaw,
+      name: 'Ripe pawpaw',
+      local: '',
+      reason:
+          'Soft, sweet and available all year. Mash two spoons as a '
+          'snack between meals.',
+    ),
+  ];
+
+  static const _motherFoods = [
+    (
+      image: AppImages.foodMilletPorridge,
+      name: 'Millet porridge',
+      local: 'Za',
+      reason:
+          'Warm porridge keeps your strength up and helps your milk flow.',
+    ),
+    (
+      image: AppImages.foodCowpeaStew,
+      name: 'Cowpea (beans)',
+      local: 'Tuya',
+      reason: 'Beans give the protein and iron your body is rebuilding with.',
+    ),
+    (
+      image: AppImages.foodMoringaBaobab,
+      name: 'Moringa and baobab leaves',
+      local: 'Zogale',
+      reason:
+          'Green leaves give iron and vitamins for you and your milk. '
+          'Free from the compound tree, every month of the year.',
+    ),
+    (
+      image: AppImages.foodGroundnutPaste,
+      name: 'Groundnut paste',
+      local: 'Sinkpam',
+      reason:
+          'One spoon in your porridge adds the energy a nursing mother '
+          'burns through.',
+    ),
+    (
+      image: AppImages.foodDriedFish,
+      name: 'Dried fish powder',
+      local: 'Zahim',
+      reason:
+          'Cheap iron and calcium, especially while you are recovering '
+          'after delivery.',
+    ),
+    (
+      image: AppImages.foodBoiledEgg,
+      name: 'Egg',
+      local: '',
+      reason: 'One boiled egg a day helps you rebuild strength quickly.',
+    ),
+    (
+      image: AppImages.foodDawadawa,
+      name: 'Dawadawa (locust bean)',
+      local: 'Kpalgu',
+      reason:
+          'Already in almost every northern kitchen and unusually rich '
+          'in iron. Add a ball to your daily soup.',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final type = person.effectiveClientType;
+    final isNewborn = type == ClientType.newborn;
+    final isChild = type == ClientType.childUnderFive;
+    final foods = isChild ? _childFoods : _motherFoods;
+
+    return SectionCard(
+      title: isNewborn ? 'Feeding your newborn today' : 'Feeding today',
+      subtitle: isNewborn
+          ? 'Breastmilk is the one food and the first medicine.'
+          : 'Foods from your own market that help recovery.',
+      icon: isNewborn ? Icons.child_care_rounded : Icons.restaurant_rounded,
+      accent: AppColors.primary,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (verdict == _TriageVerdict.urgent)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Gap.md),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(Gap.md),
+                decoration: BoxDecoration(
+                  color: AppColors.triageAmber.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(Gap.radiusSm),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(
+                      Icons.local_drink_rounded,
+                      color: AppColors.triageAmber,
+                      size: 20,
+                    ),
+                    SizedBox(width: Gap.sm),
+                    Expanded(
+                      child: Text(
+                        'Keep offering breastmilk and fluids, even on the '
+                        'way to the clinic.',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (isNewborn)
+            for (final (icon, line) in const [
+              (Icons.favorite_rounded, 'Breastfeed often, day and night.'),
+              (
+                Icons.water_drop_outlined,
+                'Breastmilk alone is enough. No water is needed.',
+              ),
+              (
+                Icons.self_improvement_rounded,
+                'Skin-to-skin cuddles keep the baby warm and feeding well.',
+              ),
+            ])
+              Padding(
+                padding: const EdgeInsets.only(bottom: Gap.xs),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(icon, size: 18, color: AppColors.primary),
+                    const SizedBox(width: Gap.sm),
+                    Expanded(
+                      child: Text(
+                        line,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+          else
+            for (final f in foods) _FeedingTile(food: f),
+        ],
+      ),
+    );
+  }
+}
+
+/// One photographed food: picture, name with its local name, and the
+/// reason it helps, in three lines a caregiver can read at a glance.
+class _FeedingTile extends StatelessWidget {
+  const _FeedingTile({required this.food});
+
+  final ({String image, String name, String local, String reason}) food;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.only(bottom: Gap.sm),
+    padding: const EdgeInsets.all(Gap.md),
+    decoration: BoxDecoration(
+      color: AppColors.canvas,
+      borderRadius: BorderRadius.circular(Gap.radiusSm),
+      border: Border.all(color: AppColors.line),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(Gap.radiusXs),
+          child: SizedBox(
+            width: 64,
+            height: 64,
+            child: AppImage(src: food.image),
+          ),
+        ),
+        const SizedBox(width: Gap.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      food.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  if (food.local.isNotEmpty) ...[
+                    const SizedBox(width: Gap.xs),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: Gap.sm,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryLight,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        food.local,
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: Gap.xs),
+              Text(
+                food.reason,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.inkMuted,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// The recommendation's evidence, restyled: the very signs the family
+/// just answered, now laid out like a note the nurse can read at a glance.
+class _SignsCard extends StatelessWidget {
+  const _SignsCard({
+    required this.title,
+    required this.icon,
+    required this.colour,
+    required this.signs,
+    required this.note,
+  });
+
+  final String title;
+  final IconData icon;
+  final Color colour;
+  final List<String> signs;
+  final String note;
+
+  @override
+  Widget build(BuildContext context) => SectionCard(
+    title: title,
+    icon: icon,
+    accent: colour,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final s in signs)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Gap.xs),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(top: 6),
+                  width: 9,
+                  height: 9,
+                  decoration:
+                      BoxDecoration(color: colour, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: Gap.sm),
+                Expanded(
+                  child: Text(
+                    s,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        Text(
+          note,
+          style: const TextStyle(fontSize: 12.5, color: AppColors.inkMuted),
+        ),
+      ],
+    ),
+  );
 }
 
 // ----------------------------------------------------------------- Referrals
@@ -3679,5 +4137,74 @@ extension on MilestoneVerdict {
     MilestoneVerdict.watch => AppColors.triageAmber,
     MilestoneVerdict.flag => AppColors.triageRed,
   };
+}
+
+// ------------------------------------------------------------ Language sheet
+
+/// The caregiver's language picker. The region decides the list; picking a
+/// language writes it to the user record through the session, so every audio
+/// button — danger-sign questions, topics, the spoken result — plays in it
+/// immediately.
+class _GuidanceLanguageSheet extends ConsumerWidget {
+  const _GuidanceLanguageSheet({required this.current, required this.region});
+
+  final String current;
+  final String? region;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final languages = NorthernGhana.languagesOf(region ?? 'Northern Region');
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(Gap.lg, 0, Gap.lg, Gap.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Guidance language',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: Gap.xs),
+            Text(
+              'Every voice in this app — the questions, the guidance, and '
+              'your check results — speaks in the language you pick here.',
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.4,
+              ).copyWith(color: AppColors.inkMuted),
+            ),
+            const SizedBox(height: Gap.md),
+            for (final lang in languages)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  lang == current
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  color: lang == current
+                      ? AppColors.primary
+                      : AppColors.inkFaint,
+                ),
+                title: Text(
+                  lang,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight:
+                        lang == current ? FontWeight.w800 : FontWeight.w500,
+                  ),
+                ),
+                onTap: () async {
+                  await ref
+                      .read(sessionProvider.notifier)
+                      .updateLanguage(lang);
+                  if (context.mounted) Navigator.of(context).pop();
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 

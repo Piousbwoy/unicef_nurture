@@ -17,6 +17,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/auth/session.dart';
 import '../data/local/app_database.dart';
 import '../data/local/outbox_dao.dart';
+import '../data/local/preferences_store.dart';
+import '../data/local/user_dao.dart';
 import '../data/repositories/care_repository.dart';
 import '../data/repositories/insight_repository.dart';
 import '../data/sync/sync_service.dart';
@@ -150,6 +152,20 @@ class SessionNotifier extends Notifier<SessionState> {
   /// Moves a device back to the setup screen. Used by the "reset this device"
   /// action in settings, which clears data and lets a new user start fresh.
   void markNeedsSetup() => state = const SessionNeedsSetup();
+
+  /// Persists a new guidance language in the one place every audio call site
+  /// reads it — the signed-in user — then mirrors it into the preferences
+  /// store and the live session state so every screen re-renders at once.
+  /// The DAO enqueues the MariaDB outbox entry, so the choice also travels on
+  /// the next sync window.
+  Future<void> updateLanguage(String language) async {
+    final current = state;
+    if (current is! SessionActive) return;
+    final updated = current.user.copyWith(preferredLanguage: language);
+    await UserDao.updateLanguage(updated.id, language);
+    await PreferencesStore.setPreferredLanguage(language);
+    state = SessionActive(updated, linkedHouseholdId: current.linkedHouseholdId);
+  }
 }
 
 /// The signed-in user, or null. Almost every screen wants this and nothing else.
@@ -337,6 +353,29 @@ final latestHomeCheckProvider =
       final user = ref.watch(currentUserProvider);
       if (user == null) return null;
       return ref.read(careRepositoryProvider).latestHomeCheck(user, personId);
+    });
+
+/// The morning briefing on the FHW's Today tab: every family's home check
+/// across the zone in the last week, newest first. FHW-only by permission —
+/// a caregiver gets an empty list, so the card simply never renders for them.
+final zoneHomeChecksProvider = FutureProvider<List<HomeCheck>>((ref) async {
+  await ref.watch(bootstrapProvider.future);
+  final user = ref.watch(currentUserProvider);
+  if (user == null || !user.can(Permission.viewAllHouseholds)) {
+    return const [];
+  }
+  return ref.read(careRepositoryProvider).recentZoneHomeChecks(user);
+});
+
+/// The signed-in worker's own month — assessments written and overrides
+/// recorded. Powers the "your month with this phone" card: impact the worker
+/// can feel, not just numbers the district consumes.
+final workerImpactProvider =
+    FutureProvider<({int assessments, int overrides})>((ref) async {
+      await ref.watch(bootstrapProvider.future);
+      final user = ref.watch(currentUserProvider);
+      if (user == null) return (assessments: 0, overrides: 0);
+      return ref.read(careRepositoryProvider).personalImpact(user);
     });
 
 /// The milestone checks this family ran at home, newest first — the nurturing

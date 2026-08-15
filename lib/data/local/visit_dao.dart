@@ -483,6 +483,41 @@ abstract final class AssessmentDao {
     );
     return (rows.first['c'] as num).toInt();
   }
+
+  /// Assessments this worker recorded within the window — the personal
+  /// workload figure behind "register time handed back".
+  static Future<int> countWithin(String workerId, {int withinDays = 30}) async {
+    final db = await AppDatabase.instance.database;
+    final since = DateTime.now()
+        .subtract(Duration(days: withinDays))
+        .toIso8601String();
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM ${Tables.assessments} '
+      'WHERE performed_by = ? AND performed_at >= ?',
+      [workerId, since],
+    );
+    return (rows.first['c'] as num).toInt();
+  }
+
+  /// How many times this worker overruled the engine within the window.
+  /// Every one carries a written clinical reason, so the honest framing is
+  /// "times your judgement is on record", never "times the AI was wrong".
+  static Future<int> countOverridesWithin(
+    String workerId, {
+    int withinDays = 30,
+  }) async {
+    final db = await AppDatabase.instance.database;
+    final since = DateTime.now()
+        .subtract(Duration(days: withinDays))
+        .toIso8601String();
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM ${Tables.assessments} '
+      'WHERE performed_by = ? AND performed_at >= ? '
+      'AND overridden_triage IS NOT NULL',
+      [workerId, since],
+    );
+    return (rows.first['c'] as num).toInt();
+  }
 }
 
 abstract final class ReferralDao {
@@ -907,6 +942,24 @@ abstract final class HomeCheckDao {
       whereArgs: [verdict.name, since],
     );
     return (rows.first['n'] as num).toInt();
+  }
+
+  /// Every home check in the zone within the window, newest first. The
+  /// morning briefing: what families saw at home since the worker last
+  /// looked. Zone-wide on purpose — the Today tab must answer "who needs
+  /// me" before any single household is opened.
+  static Future<List<HomeCheck>> recentAcrossZone({int withinDays = 7}) async {
+    final db = await AppDatabase.instance.database;
+    final since = DateTime.now()
+        .subtract(Duration(days: withinDays))
+        .toIso8601String();
+    final rows = await db.query(
+      Tables.homeChecks,
+      where: 'checked_at >= ?',
+      whereArgs: [since],
+      orderBy: 'checked_at DESC',
+    );
+    return rows.map(HomeCheck.fromMap).toList(growable: false);
   }
 }
 

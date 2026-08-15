@@ -23,6 +23,8 @@ class LocalizedString {
     required this.dagbani,
     required this.verified,
     this.notes,
+    this.otherDrafts = const <String, String>{},
+    this.verifiedLanguages = const <String>{},
   });
 
   /// Stable key used in the UI, e.g. `triage.urgent_go_now`.
@@ -42,12 +44,24 @@ class LocalizedString {
   /// Free-text note for the reviewer. Lives in the source so it cannot be
   /// lost.
   final String? notes;
+
+  /// Drafts in languages beyond Dagbani, keyed by the exact language name
+  /// the app uses (e.g. `'Mampruli'`, `'Kusaal'`). Same rule as [dagbani]:
+  /// a draft is shown only after a native speaker signs off and the language
+  /// is added to [verifiedLanguages]. **Nothing is drafted here that cannot
+  /// be defended** — a missing draft means "needs a speaker", never "guess".
+  final Map<String, String> otherDrafts;
+
+  /// Languages from [otherDrafts] whose draft has been signed off. Per-
+  /// language, so Mampruli can go live without waiting for Kusaal.
+  final Set<String> verifiedLanguages;
 }
 
 /// One LocalizedString, looked up by key, returning the right value for the
-/// given language. Currently only Dagbani has drafts; English is always
-/// available; every other language falls back to English with a note in
-/// the source.
+/// given language. Dagbani has the deepest draft coverage; Mampruli drafts
+/// exist for the highest-leverage strings via [LocalizedString.otherDrafts];
+/// English is always available; every other language falls back to English
+/// with a note in the source.
 @immutable
 class LocalizedText {
   const LocalizedText(this.value, {required this.language, this.draft = false});
@@ -109,7 +123,11 @@ abstract final class DagbaniStrings {
     english: 'Yes',
     dagbani: 'Ee',
     verified: false,
-    notes: 'The standard affirmative. Used across Northern Region.',
+    notes: 'The standard affirmative. Used across Northern Region. The '
+        'Mampruli form is the shared Mole-Dagbani affirmative; the Kusaal '
+        'form is deliberately NOT drafted until a Kusaal speaker confirms '
+        'it — an unreviewed guess never enters this file.',
+    otherDrafts: {'Mampruli': 'Ɛɛ'},
   );
 
   static const answerNo = LocalizedString(
@@ -117,7 +135,10 @@ abstract final class DagbaniStrings {
     english: 'No',
     dagbani: 'Ayi',
     verified: false,
-    notes: 'The standard negative. Used across Northern Region.',
+    notes: 'The standard negative. Used across Northern Region. The '
+        'Mampruli form is the shared Mole-Dagbani negative; Kusaal pending '
+        'speaker review, as above.',
+    otherDrafts: {'Mampruli': 'Ayi'},
   );
 
   static const answerUnsure = LocalizedString(
@@ -580,13 +601,23 @@ abstract final class DagbaniStrings {
 /// a half-checked translation from reaching a CHW in Yendi. Until a native
 /// speaker signs off, the app shows the English source.
 LocalizedText resolveLocalized(LocalizedString s, String language) {
-  if (language != 'Dagbani') {
-    return LocalizedText(s.english, language: language);
+  if (language == 'Dagbani') {
+    if (s.verified) {
+      return LocalizedText(s.dagbani, language: language);
+    }
+    // Dagbani draft, not yet verified — show the English source with a
+    // "draft" badge so a CHW knows it has not been reviewed.
+    return LocalizedText(s.english, language: language, draft: true);
   }
-  if (s.verified) {
-    return LocalizedText(s.dagbani, language: language);
+  // Other drafted languages (Mampruli today; Kusaal once a speaker signs
+  // off): the same verified-gate, applied per language so one language can
+  // go live without waiting for another.
+  final other = s.otherDrafts[language];
+  if (other != null) {
+    if (s.verifiedLanguages.contains(language)) {
+      return LocalizedText(other, language: language);
+    }
+    return LocalizedText(s.english, language: language, draft: true);
   }
-  // Dagbani draft, not yet verified — show the English source with a
-  // "draft" badge so a CHW knows it has not been reviewed.
-  return LocalizedText(s.english, language: language, draft: true);
+  return LocalizedText(s.english, language: language);
 }

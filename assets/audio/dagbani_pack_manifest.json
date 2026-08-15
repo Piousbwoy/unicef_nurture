@@ -1,0 +1,37 @@
+{
+  "pack": "dagbani_v1",
+  "language": "Dagbani",
+  "slug": "dagbani",
+  "status": "recording-pending",
+  "notes": "First verified Dagbani voice pack. 23 files: 5 guidance topics + 18 unique triage-question lines. The app's Voice test screen reads the full 29-line script (the extra 6 lines are per-client wordings of signs that share one file). Files are picked up automatically by name — no code change is needed when a recording lands.",
+  "voice": {
+    "rule": "One consistent, trusted native-Dagbani voice across all 23 files.",
+    "verification": "Ear-test each file with at least 3 native speakers at a CHPS compound; two independent sign-offs before status becomes verified and the matching DagbaniStrings entries flip to verified=true."
+  },
+  "files": [
+    { "id": "child_danger_signs", "file": "child_danger_signs_dagbani.mp3", "kind": "topic", "scriptKey": "audio.child_danger_signs", "status": "pending" },
+    { "id": "newborn_danger_signs", "file": "newborn_danger_signs_dagbani.mp3", "kind": "topic", "scriptKey": "audio.newborn_danger_signs", "status": "pending" },
+    { "id": "mother_danger_signs", "file": "mother_danger_signs_dagbani.mp3", "kind": "topic", "scriptKey": "audio.mother_danger_signs", "status": "pending" },
+    { "id": "feeding", "file": "feeding_dagbani.mp3", "kind": "topic", "scriptKey": "audio.feeding", "status": "pending" },
+    { "id": "referral", "file": "referral_dagbani.mp3", "kind": "topic", "scriptKey": "audio.referral", "status": "pending" },
+
+    { "id": "q_feed", "file": "q_feed_dagbani.mp3", "kind": "question", "usedFor": ["newborn"], "status": "pending" },
+    { "id": "q_fast", "file": "q_fast_dagbani.mp3", "kind": "question", "usedFor": ["newborn"], "status": "pending" },
+    { "id": "q_fits", "file": "q_fits_dagbani.mp3", "kind": "question", "usedFor": ["newborn", "child", "mother"], "status": "pending" },
+    { "id": "q_sleepy", "file": "q_sleepy_dagbani.mp3", "kind": "question", "usedFor": ["newborn", "child"], "status": "pending" },
+    { "id": "q_temp", "file": "q_temp_dagbani.mp3", "kind": "question", "usedFor": ["newborn"], "status": "pending" },
+    { "id": "q_yellow", "file": "q_yellow_dagbani.mp3", "kind": "question", "usedFor": ["newborn"], "status": "pending" },
+    { "id": "q_cord", "file": "q_cord_dagbani.mp3", "kind": "question", "usedFor": ["newborn"], "status": "pending" },
+    { "id": "q_vomit", "file": "q_vomit_dagbani.mp3", "kind": "question", "usedFor": ["newborn", "child", "mother"], "status": "pending" },
+    { "id": "q_drink", "file": "q_drink_dagbani.mp3", "kind": "question", "usedFor": ["child"], "status": "pending" },
+    { "id": "q_breath", "file": "q_breath_dagbani.mp3", "kind": "question", "usedFor": ["child"], "status": "pending" },
+    { "id": "q_blood", "file": "q_blood_dagbani.mp3", "kind": "question", "usedFor": ["child"], "status": "pending" },
+    { "id": "q_thin", "file": "q_thin_dagbani.mp3", "kind": "question", "usedFor": ["child"], "status": "pending" },
+    { "id": "q_fever", "file": "q_fever_dagbani.mp3", "kind": "question", "usedFor": ["child", "mother"], "status": "pending" },
+    { "id": "q_bleed", "file": "q_bleed_dagbani.mp3", "kind": "question", "usedFor": ["mother"], "status": "pending" },
+    { "id": "q_head", "file": "q_head_dagbani.mp3", "kind": "question", "usedFor": ["mother"], "status": "pending" },
+    { "id": "q_pain", "file": "q_pain_dagbani.mp3", "kind": "question", "usedFor": ["mother"], "status": "pending" },
+    { "id": "q_smell", "file": "q_smell_dagbani.mp3", "kind": "question", "usedFor": ["mother"], "status": "pending" },
+    { "id": "q_move", "file": "q_move_dagbani.mp3", "kind": "question", "usedFor": ["mother"], "status": "pending" }
+  ]
+}

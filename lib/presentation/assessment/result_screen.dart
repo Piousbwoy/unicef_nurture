@@ -23,6 +23,8 @@ import 'package:uuid/uuid.dart';
 
 import '../../app/providers.dart';
 import '../../core/ml/offline_inference_service.dart';
+import '../../core/ml/recalibration_export.dart';
+import '../../core/ml/recalibration_store.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/reference/facilities.dart';
 import '../../data/reference/local_foods.dart';
@@ -41,6 +43,7 @@ import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
 import '../../domain/enums.dart';
 import '../shared/app_image.dart';
+import '../shared/audio_button.dart';
 import '../shared/ui.dart';
 import 'form_kit.dart';
 import 'types.dart';
@@ -674,8 +677,13 @@ class _AssessmentResultScreenState
   static double? _flagPrecision(String modelName, OfflineModelStatus? status) {
     final prior = _regionalPriors[modelName];
     if (prior == null || status == null) return null;
-    final sens = status.internalValidation['sensitivity'];
-    final spec = status.internalValidation['specificity'];
+    // Believe the headline block only: cross-validation for a model trained
+    // on real patient records, the external real-patient check for a
+    // simulator-seeded one — never the circular simulator self-check when
+    // an external check exists.
+    final headline = status.headlineValidation;
+    final sens = headline['sensitivity'];
+    final spec = headline['specificity'];
     if (sens is! num || spec is! num) return null;
     final truePositives = sens.toDouble() * prior;
     final falsePositives = (1 - spec.toDouble()) * (1 - prior);
@@ -807,6 +815,11 @@ class _AssessmentResultScreenState
         }
       }
 
+      // Kintampo/Navrongo pathway: one de-identified record per model joins
+      // the on-device batch — but only on a device the district officer has
+      // armed with the GHS linkage salt. Never blocks or fails a save.
+      await _appendRecalibrationRecords(mlPredictions);
+
       ref.invalidate(latestAssessmentProvider(input.person.id));
       ref.invalidate(growthSeriesProvider(input.person.id));
       ref.invalidate(householdScoreProvider(input.household.id));
@@ -835,6 +848,53 @@ class _AssessmentResultScreenState
     final r = Random.secure();
     return 'CB-${List.generate(4, (_) => alphabet[r.nextInt(alphabet.length)]).join()}';
   }
+
+  /// Appends one de-identified [RecalibrationRecord] per model prediction
+  /// to the on-device recalibration batch. Fail-safe by design: an unarmed
+  /// device (no GHS salt provisioned) collects nothing, and any storage
+  /// error is swallowed — the export pathway must never cost a CHO a saved
+  /// assessment.
+  Future<void> _appendRecalibrationRecords(
+    Map<String, OfflineRiskPrediction> predictions,
+  ) async {
+    try {
+      final store = await RecalibrationStore.forDevice();
+      if (store == null || !store.isArmed) return;
+      final engineTriage = _carePlan.overallTriage.name;
+      for (final prediction in predictions.values) {
+        await store.append(
+          RecalibrationRecord.build(
+            modelName: prediction.modelName,
+            modelVersion: prediction.modelVersion,
+            district: input.household.district,
+            clientType: _exportClientStream(result.clientType),
+            ageDays: input.person.ageInDays,
+            createdAt: DateTime.now(),
+            features: prediction.featureValues,
+            predictedProbability: prediction.riskProbability,
+            predictedTier: prediction.classification,
+            engineTriage: engineTriage,
+            finalTriage: _effectiveTriage.name,
+            referralIssued: _refer,
+            referralUrgency: _refer ? _urgency.name : null,
+            personId: input.person.id,
+            salt: store.salt!,
+          ),
+        );
+      }
+    } catch (_) {
+      // Deliberately silent — see the doc comment above.
+    }
+  }
+
+  /// The export vocabulary for the client stream — `newborn` | `child` |
+  /// `mother`. Kept stable by mapping explicitly, so a rename of the app's
+  /// own enum can never silently change the cohort schema.
+  static String _exportClientStream(ClientType type) => switch (type) {
+    ClientType.newborn => 'newborn',
+    ClientType.childUnderFive => 'child',
+    _ => 'mother',
+  };
 
   // ------------------------------------------------------------------- Build
 
@@ -884,104 +944,124 @@ class _AssessmentResultScreenState
             const SizedBox(height: Gap.lg),
           ],
           // ------------------------------------------------- Verdict hero
-          // The Clinical Luxe hero: the verdict reads first, in white on the
-          // royal-blue gradient. IMCI colour stays reserved for the triage
-          // badge — the one clinical-safety signal inside the blue.
+          // The moment the whole assessment builds to: what was found, the
+          // level that governs the care, and how far the data can be
+          // trusted — readable in one glance, in white on the royal-blue
+          // gradient. IMCI colour appears only inside the white verdict
+          // band, where it carries the clinical-safety signal.
           AppMotion.reveal(
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(Gap.lg),
               decoration: BoxDecoration(
                 gradient: AppColors.heroGradient,
                 borderRadius: BorderRadius.circular(Gap.radius),
                 boxShadow: const [AppShadows.glow],
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.16),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.health_and_safety_outlined,
-                          size: 16,
-                          color: Colors.white,
-                        ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(Gap.radius),
+                child: Stack(
+                  children: [
+                    // The level's own mark, oversized and barely there —
+                    // the depth cue that makes the hero feel built, not flat.
+                    Positioned(
+                      right: -28,
+                      bottom: -32,
+                      child: Icon(
+                        triageIcon(effective),
+                        size: 168,
+                        color: Colors.white.withValues(alpha: 0.07),
                       ),
-                      const SizedBox(width: Gap.sm),
-                      const Flexible(
-                        child: Text(
-                          'CLINICAL VERDICT',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.4,
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: Gap.sm,
-                          vertical: Gap.xs,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(Gap.radiusXs),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.30),
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.signal_wifi_off_outlined,
-                              size: 11,
-                              color: Colors.white,
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              'OFFLINE',
-                              style: TextStyle(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.8,
-                                color: Colors.white,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(Gap.lg),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  ('${result.clientType.protocolLabel} · '
+                                          '${input.person.ageLabel}')
+                                      .toUpperCase(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 1.4,
+                                    color: Colors.white70,
+                                  ),
+                                ),
                               ),
+                              const SizedBox(width: Gap.sm),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: Gap.sm,
+                                  vertical: Gap.xs,
+                                ),
+                                decoration: BoxDecoration(
+                                  color:
+                                      Colors.white.withValues(alpha: 0.14),
+                                  borderRadius:
+                                      BorderRadius.circular(Gap.radiusXs),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(
+                                      alpha: 0.30,
+                                    ),
+                                  ),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.signal_wifi_off_outlined,
+                                      size: 11,
+                                      color: Colors.white,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'OFFLINE',
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.8,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: Gap.md),
+                          Text(
+                            _classificationOf(plan),
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              height: 1.3,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const SizedBox(height: Gap.md),
+                          _VerdictBand(
+                            level: effective,
+                            confidenceScore: plan.effectiveConfidenceScore,
+                          ),
+                          if (_override != null) ...[
+                            const SizedBox(height: Gap.sm),
+                            _OverrideNote(
+                              engine: plan.overallTriage,
+                              chosen: effective,
                             ),
                           ],
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: Gap.md),
-                  Text(
-                    _classificationOf(plan),
-                    style: const TextStyle(
-                      fontSize: 19,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      height: 1.3,
-                      letterSpacing: -0.2,
                     ),
-                  ),
-                  const SizedBox(height: Gap.md),
-                  TriageBadge(effective),
-                  if (_override != null) ...[
-                    const SizedBox(height: Gap.sm),
-                    _OverrideNote(engine: plan.overallTriage, chosen: effective),
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -993,11 +1073,40 @@ class _AssessmentResultScreenState
           // the classification and the confidence; restating the full
           // synthesis here was clutter, so only the reasoning survives.
           SectionCard(
-            title: 'Why this verdict',
+            title: 'Why this result',
             icon: Icons.psychology_outlined,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ----------------------------------------- Read it aloud
+                // The verdict in the language this worker chose, so the
+                // family hears exactly what the screen says. The voice
+                // chain — recording, phone voice, Hausa bridge, text —
+                // is the same one every other button uses.
+                Row(
+                  children: [
+                    AudioButton(
+                      text: '${_classificationOf(plan)}. '
+                          '${plan.triageRationale}',
+                      language: input.user.preferredLanguage,
+                      id: 'result_verdict',
+                      compact: true,
+                    ),
+                    const SizedBox(width: Gap.sm),
+                    Expanded(
+                      child: Text(
+                        'Read the result aloud in '
+                        '${input.user.preferredLanguage}',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.inkMuted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: Gap.md),
                 Text(
                   plan.triageRationale,
                   style: const TextStyle(
@@ -1079,13 +1188,13 @@ class _AssessmentResultScreenState
           // pairs every risk with its 95% CI and its precision so a CHO can
           // weigh the number instead of trusting it blindly.
           SectionCard(
-            title: 'On-device AI evidence',
+            title: 'A second opinion from this phone',
             icon: Icons.memory_rounded,
             subtitle:
-                'The TFLite models run first, entirely on this phone — no '
-                'internet, and no patient data leaves the device. The '
-                'rule-based engine only steps in when a model cannot load. '
-                'Tap a card to unfold its evidence.',
+                'Each check runs entirely on this phone — no internet, and '
+                'nothing about the family leaves the device. The standard '
+                'rule charts stand in when a check cannot run. Tap a card '
+                'to unfold its evidence.',
             child: FutureBuilder<Map<String, OfflineRiskPrediction>>(
               future: _mlPredictions,
               builder: (context, snapshot) {
@@ -1135,8 +1244,13 @@ class _AssessmentResultScreenState
                         }
                         return pa.modelName.compareTo(pb.modelName);
                       });
+                    final measureNext = <String>{
+                      for (final e in entries) ...e.value.featuresMissing,
+                    }.toList();
                     return Column(
                       children: [
+                        if (measureNext.isNotEmpty)
+                          _MeasureNextCard(featureNames: measureNext),
                         for (final e in entries)
                           _AiModelCard(
                             prediction: e.value,
@@ -1162,7 +1276,7 @@ class _AssessmentResultScreenState
           // ------------------------------------------------------- Findings
           if (plan.findings.isNotEmpty) ...[
             SectionCard(
-              title: 'What the protocol found',
+              title: 'What this check found',
               subtitle:
                   'Each finding names the value, the cut-off it crossed and '
                   'the guideline it comes from.',
@@ -1191,7 +1305,7 @@ class _AssessmentResultScreenState
           // list cannot show a tired CHO.
           if (plan.interactions.isNotEmpty) ...[
             SectionCard(
-              title: 'Conditions interact',
+              title: 'When problems combine',
               subtitle: 'These change the plan — act on them first.',
               icon: Icons.warning_amber_rounded,
               child: Column(
@@ -1220,6 +1334,34 @@ class _AssessmentResultScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Speak the full plan — every step, in order — in the
+                  // language the worker picked, so it can be played to the
+                  // family before they leave the compound.
+                  if (plan.actions.isNotEmpty)
+                    Row(
+                      children: [
+                        AudioButton(
+                          text: 'What to do. '
+                              '${plan.actions.map((a) => a.instruction).join('. ')}.',
+                          language: input.user.preferredLanguage,
+                          id: 'result_actions',
+                          compact: true,
+                        ),
+                        const SizedBox(width: Gap.sm),
+                        Expanded(
+                          child: Text(
+                            'Speak the full plan in '
+                            '${input.user.preferredLanguage}',
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.inkMuted,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  if (plan.actions.isNotEmpty) const SizedBox(height: Gap.md),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(4),
                     child: LinearProgressIndicator(
@@ -1314,8 +1456,8 @@ class _AssessmentResultScreenState
           SectionCard(
             title: 'Follow-up contact',
             subtitle:
-                'Scheduled into the plan-my-day queue. The CHO who started '
-                'this case is the one who should close it.',
+                'Added to your queue. The worker who started this case '
+                'should be the one who closes it.',
             icon: Icons.event_repeat_outlined,
             child: ChoiceChipsField<int>(
               label: 'Review in',
@@ -1357,6 +1499,88 @@ class _AssessmentResultScreenState
           icon: const Icon(Icons.save_outlined),
           label: Text(_saving ? 'Saving…' : 'Save assessment'),
         ),
+      ),
+    );
+  }
+}
+
+// -------------------------------------------------------------- Verdict band
+
+/// The white band inside the verdict hero: the level that governs the care,
+/// in its IMCI colour, beside the confidence the data earned. A CHO quoting
+/// the result into the register should need nothing past this band.
+class _VerdictBand extends StatelessWidget {
+  const _VerdictBand({required this.level, required this.confidenceScore});
+
+  final TriageLevel level;
+  final int confidenceScore;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = triageColours(level);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(Gap.md),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(Gap.radiusSm),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x2E0B1B33),
+            blurRadius: 14,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(color: c.bg, shape: BoxShape.circle),
+            child: Icon(triageIcon(level), size: 22, color: c.fg),
+          ),
+          const SizedBox(width: Gap.md),
+          Expanded(
+            child: Text(
+              level.label.toUpperCase(),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.6,
+                color: c.fg,
+                height: 1.25,
+              ),
+            ),
+          ),
+          const SizedBox(width: Gap.sm),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '$confidenceScore%',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: c.fg,
+                  height: 1,
+                ),
+              ),
+              const SizedBox(height: 2),
+              const Text(
+                'CONFIDENCE',
+                style: TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                  color: AppColors.inkFaint,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1892,6 +2116,24 @@ class _FoodTile extends StatelessWidget {
   /// Ghana foods, per master flow [48] — illustrated cards, not paragraphs.
   String get _image {
     final f = food.food.toLowerCase();
+    if (f.contains('egg') && !f.contains('garden')) {
+      return AppImages.foodBoiledEgg;
+    }
+    if (f.contains('fish')) {
+      return AppImages.foodDriedFish;
+    }
+    if (f.contains('groundnut') || f.contains('peanut')) {
+      return AppImages.foodGroundnutPaste;
+    }
+    if (f.contains('sweet potato')) {
+      return AppImages.foodSweetPotato;
+    }
+    if (f.contains('pawpaw') || f.contains('papaya')) {
+      return AppImages.foodPawpaw;
+    }
+    if (f.contains('dawadawa') || f.contains('locust')) {
+      return AppImages.foodDawadawa;
+    }
     if (f.contains('millet') ||
         f.contains('sorghum') ||
         f.contains('porridge') ||
@@ -1904,11 +2146,13 @@ class _FoodTile extends StatelessWidget {
     if (f.contains('moringa') ||
         f.contains('baobab') ||
         f.contains('kuka') ||
+        f.contains('zogale') ||
         f.contains('leaf') ||
+        f.contains('leaves') ||
         f.contains('vegetable') ||
         f.contains('fruit') ||
-        f.contains('pawpaw') ||
-        f.contains('mango')) {
+        f.contains('mango') ||
+        f.contains('pumpkin')) {
       return AppImages.foodMoringaBaobab;
     }
     return AppImages.foodCowpeaStew;
@@ -3038,6 +3282,129 @@ class _AnalysisProgressCard extends StatelessWidget {
 /// and — unfolded on tap — the features, the validation metrics and the
 /// integrity check behind it. The triage badge keeps the IMCI colour
 /// contract; everything else is the blue brand voice.
+/// The "measure this next" prompt: the union of every input the models
+/// wanted but did not get, translated into nurse-speak. Each gap filled —
+/// now or at the next contact — raises the precision of the next result.
+class _MeasureNextCard extends StatelessWidget {
+  const _MeasureNextCard({required this.featureNames});
+
+  final List<String> featureNames;
+
+  /// Nurse-speak names for every input the four models can ask for.
+  /// Anything unmapped falls back to a humanised raw name.
+  static const Map<String, String> _friendlyNames = {
+    'age_days': 'age in days',
+    'temperature_celsius': 'temperature',
+    'respiratory_rate_per_min': 'breathing rate (count a full minute)',
+    'heart_rate_per_min': 'heart rate',
+    'oxygen_saturation_per_cent': 'oxygen saturation (pulse oximeter)',
+    'oxygen_saturation': 'oxygen saturation (pulse oximeter)',
+    'birth_weight_kg': 'birth weight',
+    'apgar_5_minute': 'Apgar score at 5 minutes',
+    'history_of_convulsions': 'convulsions history',
+    'severe_chest_indrawing': 'severe chest indrawing',
+    'nasal_flaring_grunting': 'nasal flaring or grunting',
+    'bulging_fontanelle': 'bulging fontanelle',
+    'jaundice_before_24h': 'jaundice within 24 hours of birth',
+    'feeding_difficulty': 'feeding difficulty',
+    'abdominal_distension': 'swollen belly',
+    'cord_infection': 'cord redness or pus',
+    'skin_pustules': 'skin pustules',
+    'lethargic_unconscious': 'lethargy or unconsciousness',
+    'bleeding': 'bleeding from any site',
+    'hiv_exposed': 'HIV exposure status',
+    'multiple_birth': 'twin or multiple birth',
+    'cough_present': 'cough',
+    'chest_indrawing': 'chest indrawing',
+    'stridor_calm': 'stridor when calm',
+    'general_danger_sign': 'IMCI general danger sign',
+    'maternal_age': "mother's age",
+    'gravida': 'gravida',
+    'parity': 'parity',
+    'systolic_bp': 'systolic BP',
+    'diastolic_bp': 'diastolic BP',
+    'haemoglobin': 'haemoglobin (Hb)',
+    'urine_protein': 'urine protein (dipstick)',
+    'maternal_muac_mm': "mother's MUAC",
+    'maternal_bmi': "mother's BMI",
+    'oedema_hands_or_face': 'swelling of hands or face',
+    'epigastric_pain': 'upper belly pain',
+    'headache_severe': 'severe headache',
+    'blurred_vision': 'blurred vision',
+    'brisk_reflexes': 'brisk reflexes',
+    'oliguria': 'passing little urine',
+    'weight_gain_over_1kg_per_week': 'weight gain over 1 kg a week',
+    'weight_gain_kg_this_pregnancy': 'weight gained this pregnancy',
+    'previous_losses': 'previous pregnancy losses',
+    'prev_caesarean': 'previous caesarean',
+  };
+
+  static String _friendly(String raw) =>
+      _friendlyNames[raw] ?? raw.replaceAll('_', ' ');
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: Gap.sm),
+      padding: const EdgeInsets.all(Gap.md),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceTint,
+        borderRadius: BorderRadius.circular(Gap.radiusXs),
+        border: Border(
+          left: BorderSide(color: AppColors.primary, width: 3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.pending_actions_rounded,
+                size: 15,
+                color: AppColors.primary,
+              ),
+              SizedBox(width: Gap.xs),
+              Expanded(
+                child: Text(
+                  'MEASURE THESE NEXT',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Gap.xs),
+          const Text(
+            'The checks in this section ran without these inputs. Each one '
+            'you measure — now or at the next contact — sharpens the next '
+            'result.',
+            style: TextStyle(
+              fontSize: 11.5,
+              color: AppColors.inkMuted,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: Gap.sm),
+          Wrap(
+            spacing: Gap.xs,
+            runSpacing: Gap.xs,
+            children: [
+              for (final f in featureNames)
+                _FeatureChip(_friendly(f), present: false),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _AiModelCard extends StatelessWidget {
   const _AiModelCard({
     required this.prediction,
@@ -3399,6 +3766,16 @@ class _AiModelCard extends StatelessWidget {
   /// often a positive flag from this model is a true positive.
   Widget _precisionBlock() {
     final hasPrecision = precision != null && prior != null;
+    // Name the evidence the precision stands on, so a CHO (and an auditor)
+    // can tell a real-patient estimate from a simulator self-check.
+    final st = status;
+    final basis = st == null
+        ? 'the bundled validation metrics'
+        : st.trainedOnRealPatients
+            ? 'the cross-validation on real patient records'
+            : st.externalValidation.isNotEmpty
+                ? 'the external check on real patients'
+                : 'the simulator self-check (not yet checked on real patients)';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(Gap.md),
@@ -3449,10 +3826,9 @@ class _AiModelCard extends StatelessWidget {
                       ? 'At the ~${(prior! * 100).toStringAsFixed(1)}% '
                             'regional prevalence, about '
                             '${(precision! * 100).round()} in 100 positive '
-                            'flags are true positives — Bayes on the '
-                            'hold-out sensitivity and specificity.'
-                      : 'No hold-out metrics are bundled for this model, so '
-                            'the precision cannot be stated honestly.',
+                            'flags are true positives — Bayes on $basis.'
+                      : 'No validation metrics are bundled for this model, '
+                            'so the precision cannot be stated honestly.',
                   style: const TextStyle(
                     fontSize: 11.5,
                     color: AppColors.inkMuted,
@@ -3470,9 +3846,7 @@ class _AiModelCard extends StatelessWidget {
   /// The unfolded audit trail: provenance, validation metrics, tier
   /// explanation and the feature list the model actually saw.
   Widget _details() {
-    final v = status?.internalValidation ?? const <String, Object?>{};
-    num? metric(String key) => v[key] is num ? v[key]! as num : null;
-    String pct(num? x) => x == null ? '—' : '${(x * 100).toStringAsFixed(1)}%';
+    final st = status;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(Gap.md, 0, Gap.md, Gap.md),
@@ -3518,6 +3892,26 @@ class _AiModelCard extends StatelessWidget {
               ),
             ],
           ),
+          if (st != null) ...[
+            const SizedBox(height: Gap.sm),
+            Text(
+              st.trainedOnRealPatients
+                  ? 'Trained on real patient records — the cross-validation '
+                        'below is the evidence for this score.'
+                  : st.externalValidation.isNotEmpty
+                        ? 'Seeded from published studies — believe the '
+                              'external check below, not the self-check.'
+                        : 'Seeded from published studies — not yet checked '
+                              'on real patients, so treat the score as a '
+                              'screening aid only.',
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.ink,
+                height: 1.4,
+              ),
+            ),
+          ],
           if (p.ruleInThreshold != null) ...[
             const SizedBox(height: Gap.sm),
             Text(
@@ -3541,44 +3935,7 @@ class _AiModelCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: Gap.md),
-          Row(
-            children: [
-              Expanded(
-                child: _MetricStat(
-                  label: 'HOLD-OUT AUC',
-                  value: metric('holdout_auc') == null
-                      ? '—'
-                      : metric('holdout_auc')!.toStringAsFixed(2),
-                ),
-              ),
-              const SizedBox(width: Gap.sm),
-              Expanded(
-                child: _MetricStat(
-                  label: 'SENSITIVITY',
-                  value: pct(metric('sensitivity')),
-                ),
-              ),
-              const SizedBox(width: Gap.sm),
-              Expanded(
-                child: _MetricStat(
-                  label: 'SPECIFICITY',
-                  value: pct(metric('specificity')),
-                ),
-              ),
-              const SizedBox(width: Gap.sm),
-              Expanded(
-                child: _MetricStat(
-                  label: 'BRIER',
-                  value: (status?.brierScore ?? metric('brier_score')) == null
-                      ? '—'
-                      : (status?.brierScore ??
-                            metric('brier_score'))!
-                            .toStringAsFixed(3),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: Gap.md),
+          ..._validationBlocks(st),
           const Text(
             'FEATURES USED',
             style: TextStyle(
@@ -3643,6 +4000,145 @@ class _AiModelCard extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// The validation evidence, framed by how the model was built. A model
+  /// trained on real patient records leads with its cross-validation; a
+  /// simulator-seeded model leads with the external check on real patients
+  /// and its internal numbers are shown as the sanity check they are.
+  List<Widget> _validationBlocks(OfflineModelStatus? st) {
+    final internal = st?.internalValidation ?? const <String, Object?>{};
+    final external = st?.externalValidation ?? const <String, Object?>{};
+    final real = st?.trainedOnRealPatients ?? false;
+    final blocks = <Widget>[];
+    if (real) {
+      if (internal.isNotEmpty) {
+        blocks.add(_metricBlock(
+          'CROSS-VALIDATION — REAL PATIENT DATA',
+          'Trained and tested on real patient records; this is the evidence '
+              'for the score above.',
+          internal,
+          brier: st?.brierScore,
+        ));
+      }
+      if (external.isNotEmpty) {
+        blocks.add(_metricBlock(
+          'OUT-OF-DOMAIN CHECK — EXPECTED NEAR-CHANCE',
+          'Scored on patients the model was never built for, as a transfer '
+              'check. A low score here is expected and does not weaken the '
+              'cross-validation above.',
+          external,
+        ));
+      }
+    } else {
+      if (external.isNotEmpty) {
+        blocks.add(_metricBlock(
+          'CHECKED ON REAL PATIENTS (EXTERNAL)',
+          'This model was seeded from published studies, so this external '
+              'check is the number to believe.',
+          external,
+        ));
+      }
+      if (internal.isNotEmpty) {
+        blocks.add(_metricBlock(
+          external.isNotEmpty
+              ? 'SIMULATOR SELF-CHECK — SANITY ONLY'
+              : 'SIMULATOR SELF-CHECK — NOT YET CHECKED ON REAL PATIENTS',
+          'Internal hold-out against the same simulator that seeded the '
+              'model. It proves the plumbing works; it is not clinical '
+              'evidence.',
+          internal,
+          brier: st?.brierScore,
+        ));
+      }
+    }
+    if (blocks.isEmpty) {
+      blocks.add(const Padding(
+        padding: EdgeInsets.only(bottom: Gap.md),
+        child: Text(
+          'No validation metrics are bundled for this model.',
+          style: TextStyle(fontSize: 11.5, color: AppColors.inkFaint),
+        ),
+      ));
+    }
+    return blocks;
+  }
+
+  /// One captioned validation block: an eyebrow label, a one-line reading
+  /// guide, then the four metric stats.
+  Widget _metricBlock(
+    String label,
+    String caption,
+    Map<String, Object?> block, {
+    double? brier,
+  }) {
+    num? metric(String key) => block[key] is num ? block[key]! as num : null;
+    String pct(num? x) => x == null ? '—' : '${(x * 100).toStringAsFixed(1)}%';
+    final brierValue =
+        brier ?? metric('brier_score') ?? metric('calibrated_brier');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Gap.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            caption,
+            style: const TextStyle(
+              fontSize: 10.5,
+              fontStyle: FontStyle.italic,
+              color: AppColors.inkFaint,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: Gap.xs),
+          Row(
+            children: [
+              Expanded(
+                child: _MetricStat(
+                  label: 'AUC',
+                  value: metric('holdout_auc') == null
+                      ? '—'
+                      : metric('holdout_auc')!.toStringAsFixed(2),
+                ),
+              ),
+              const SizedBox(width: Gap.sm),
+              Expanded(
+                child: _MetricStat(
+                  label: 'SENSITIVITY',
+                  value: pct(metric('sensitivity')),
+                ),
+              ),
+              const SizedBox(width: Gap.sm),
+              Expanded(
+                child: _MetricStat(
+                  label: 'SPECIFICITY',
+                  value: pct(metric('specificity')),
+                ),
+              ),
+              const SizedBox(width: Gap.sm),
+              Expanded(
+                child: _MetricStat(
+                  label: 'BRIER',
+                  value: brierValue == null
+                      ? '—'
+                      : brierValue.toStringAsFixed(3),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

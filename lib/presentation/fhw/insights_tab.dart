@@ -38,6 +38,7 @@ class InsightsTab extends ConsumerWidget {
     final barriers = ref.watch(barrierPatternsProvider);
     final completion = ref.watch(referralCompletionProvider);
     final impact = ref.watch(impactSummaryProvider);
+    final mine = ref.watch(workerImpactProvider);
 
     return ListView(
       padding: const EdgeInsets.all(Gap.lg),
@@ -98,6 +99,73 @@ class InsightsTab extends ConsumerWidget {
                 ),
               ],
             ),
+          ),
+        ),
+        const SizedBox(height: Gap.lg),
+
+        // ------------------------------------------ The worker's own month
+        SectionCard(
+          title: 'Your month with this phone',
+          subtitle:
+              'What the app did for you — not just what it reported about '
+              'your zone.',
+          icon: Icons.watch_later_outlined,
+          child: mine.when(
+            loading: () => const SizedBox.shrink(),
+            error: (e, _) => const SizedBox.shrink(),
+            data: (w) => w.assessments == 0
+                ? const _NoneYet(
+                    'Assess your first patient and this card starts counting: '
+                    'the records written for you, the register time handed '
+                    'back, and the times your judgement stood over the AI\u2019s.',
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          StatTile(
+                            value: '${w.assessments}',
+                            label: 'Assessments\nwritten (30 days)',
+                            colour: AppColors.primary,
+                          ),
+                          const SizedBox(width: Gap.md),
+                          StatTile(
+                            value: _savedLabel(w.assessments),
+                            label: 'Register time\nhanded back',
+                            colour: AppColors.triageGreen,
+                          ),
+                          const SizedBox(width: Gap.md),
+                          StatTile(
+                            value: '${w.overrides}',
+                            label: 'Times you\noverruled the AI',
+                            colour: w.overrides > 0
+                                ? AppColors.triageAmber
+                                : AppColors.inkMuted,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: Gap.md),
+                      Text(
+                        w.overrides > 0
+                            ? 'Every assessment above is a register line you '
+                                  'never had to write. And each override '
+                                  'carries your written reason — your '
+                                  'judgement stays the final word, and it is '
+                                  'how the thresholds learn.'
+                            : 'Every assessment above is a register line you '
+                                  'never had to write. When you disagree with '
+                                  'a recommendation, override it — your '
+                                  'reason is kept with the record, and it is '
+                                  'how the thresholds learn.',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.inkMuted,
+                          height: 1.45,
+                        ),
+                      ),
+                    ],
+                  ),
           ),
         ),
         const SizedBox(height: Gap.lg),
@@ -192,6 +260,19 @@ class InsightsTab extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// A conservative register cost per patient seen: the register line, the
+/// tally sheet and the defaulter cross-check a paper-based CHO pays for
+/// every single contact.
+const int _minutesPerPaperRecord = 6;
+
+/// "45 min" under an hour, "3.5 h" above it — the way a person says it.
+String _savedLabel(int assessments) {
+  final minutes = assessments * _minutesPerPaperRecord;
+  if (minutes < 60) return '$minutes min';
+  final hours = minutes / 60;
+  return hours >= 10 ? '${hours.round()} h' : '${hours.toStringAsFixed(1)} h';
 }
 
 class _NoneYet extends StatelessWidget {

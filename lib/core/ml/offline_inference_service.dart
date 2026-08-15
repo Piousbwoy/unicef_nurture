@@ -74,6 +74,7 @@ class OfflineRiskPrediction {
     this.confidenceInterval95,
     this.ruleInCandidate = false,
     this.ruleInThreshold,
+    this.featureValues = const <String, double>{},
   });
 
   final String modelName;
@@ -126,6 +127,13 @@ class OfflineRiskPrediction {
   /// 0.0158 Youden screening point). Null when the model has no rule-in
   /// tier configured.
   final double? ruleInThreshold;
+
+  /// The normalized numeric inputs exactly as the model (or fallback) saw
+  /// them, keyed by schema feature name. Missing features are absent —
+  /// never zero-imputed — so a recalibration record replays only what was
+  /// truly measured. Feeds the Kintampo/Navrongo export (see
+  /// `recalibration_export.dart`).
+  final Map<String, double> featureValues;
 
   Map<String, Object?> toMap() => {
     'model_name': modelName,
@@ -610,6 +618,18 @@ class OfflineInferenceService {
     final drift = _computeDrift(name, tensor);
     final ci = _computeCI95(name, p);
 
+    // The exact normalized inputs the decision saw — present features only,
+    // so a recalibration record never mistakes a zero-imputation for a
+    // measurement.
+    final schema = _inputSchemaFor(name);
+    final missingSet = missing.toSet();
+    final featureValues = <String, double>{};
+    for (int i = 0; i < schema.length; i++) {
+      final key = schema[i].$1;
+      if (missingSet.contains(key)) continue;
+      featureValues[key] = tensor[i];
+    }
+
     // Suppress AI probability when out-of-distribution drift is detected
     final finalP = drift.drift ? null : p;
 
@@ -636,6 +656,7 @@ class OfflineInferenceService {
       confidenceInterval95: ci,
       ruleInCandidate: ruleIn,
       ruleInThreshold: ruleInThreshold,
+      featureValues: featureValues,
     );
   }
 
@@ -1408,9 +1429,33 @@ class OfflineModelStatus {
   /// youden_j, best_threshold, n_train, n_test, calibration: { ... } }.
   final Map<String, Object?> internalValidation;
 
-  /// Full external validation block when an external set was scored
-  /// (currently only preeclampsia; the other three schemas don't match UCI).
+  /// Full external validation block when an external set was scored.
+  /// Two models carry one: preeclampsia (UCI Bangladesh — the honest
+  /// headline for a simulator-seeded model) and neonatal sepsis (PhysioNet
+  /// adult ICU — a deliberately out-of-domain transfer check).
   final Map<String, Object?> externalValidation;
+
+  /// True when this model was trained on real patient records (the metrics
+  /// JSON marks the training_dataset string with a `REAL:` prefix). False
+  /// means the weights were seeded from published studies via the simulator,
+  /// and its internal hold-out numbers are a sanity check, not evidence.
+  bool get trainedOnRealPatients =>
+      trainingDataset?.startsWith('REAL:') ?? false;
+
+  /// The validation block a reviewer should believe first.
+  ///
+  /// Real-data models: the internal cross-validation IS the evidence — the
+  /// external block is an out-of-domain transfer check, expected to score
+  /// near-chance. Simulator-seeded models: the internal numbers are circular
+  /// (the model is predicting its own simulator), so the external check on
+  /// real patients is the headline when one exists; otherwise the internal
+  /// block is all there is and must be read as a sanity check only.
+  Map<String, Object?> get headlineValidation {
+    if (trainedOnRealPatients) return internalValidation;
+    return externalValidation.isNotEmpty
+        ? externalValidation
+        : internalValidation;
+  }
 
   /// Platt-scaled Brier score on the internal 20% hold-out. Lower is better;
   /// 0 = perfect, 0.25 = uninformative for a 50/50 cohort.

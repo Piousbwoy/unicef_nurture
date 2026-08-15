@@ -181,7 +181,7 @@ void main() {
       // blank body on this step.
       expect(find.text('Your family'), findsWidgets);
       // FieldLabel renders its text uppercased.
-      expect(find.text('OR ENTER 6-CHARACTER SHORT CODE'), findsOneWidget);
+      expect(find.text('OR TYPE THE 6-CHARACTER CODE'), findsOneWidget);
       expect(find.text('Check'), findsOneWidget);
 
       // Tapping Continue without a code shows the validation error, and
@@ -195,7 +195,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.text('OR ENTER 6-CHARACTER SHORT CODE'), findsOneWidget);
+      expect(find.text('OR TYPE THE 6-CHARACTER CODE'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

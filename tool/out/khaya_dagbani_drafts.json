@@ -1,0 +1,117 @@
+{
+  "audio.child_danger_signs": {
+    "english": "If your child cannot drink or breastfeed, vomits everything, has fits, becomes very sleepy or hard to wake, breathes fast or with difficulty, or has blood in the stool — go to the health facility at once. Do not wait until tomorrow. These signs mean the child needs help today.",
+    "khaya_draft": "A bia yi ku tooi nyuri bee n-nyu n-niŋ, nyin’ tirila binshɛɣukam, binshɛɣukam zaa, gogaliga bee n-neei gom, vuhiri vuhim bee n-nyeri wahala bee n-ʒim zuɣu n-chani kukɔɣu ni yim. Miri ka a guhi zani hal ka biɛɣu ti neei. Lala shihira maa wuhiri lala bia maa ni simdi sɔŋbu zuŋo.",
+    "status": "draft — needs native-speaker review"
+  },
+  "audio.feeding": {
+    "english": "Give only breastmilk until six months — no water, no porridge. From six months, give thick porridge four times a day, and add groundnut paste, egg, fish or beans as they become available. Keep breastfeeding until two years. A child who eats often, grows.",
+    "khaya_draft": "Zaŋmi bihim kuli mahili chira-ayɔbu n-ti paai kom, pa kɔringa. Chira-ayɔbu saha, yin’ zaŋmiya kɔringa la siɣim bunahi dabisili ni, ka niŋ sima ni gala ni zahim bee tuya ni mali shɛm. Gbibi bihili hal ti paai yuma ayi. Bia ŋun diri waawaayili, bilimiya.",
+    "status": "draft — needs native-speaker review"
+  },
+  "audio.mother_danger_signs": {
+    "english": "If a mother bleeds heavily, has a severe headache with blurred eyes, has high fever, severe belly pain, fits, or foul-smelling discharge — go to the health facility at once. If she is pregnant and the baby moves less than before, go the same day. Do not wait for the pain to pass.",
+    "khaya_draft": "Dɔr’ yi zabi ʒim je, zuɣuyaali taliga ka nina kpamda, ka mali fiɛɣufiɛɣu, putɔɣu, biŋkpam bee tuumbiɛtali tulaale zim shɛli chaŋ alaafee yim. O yi mali pua ka o bia maa tirisi pɔri n-gari napɔŋ pɔi, nyin’ cham’ dabisili yim. Miri ka a guhi biɛrim maa n-gari.",
+    "status": "draft — needs native-speaker review"
+  },
+  "audio.newborn_danger_signs": {
+    "english": "If your baby is not feeding well, breathes fast or grunts, has fits, is very sleepy or hard to wake, feels very hot or very cold, has yellow hands or feet, or the cord is red or smells bad — go to the health facility at once. A small baby can become seriously ill very quickly, so do not wait.",
+    "khaya_draft": "A bilɛɣu yi bi dihiri viɛla vuhim nyin vɔhimla noli bee n-nyɛ bɔbiga, ka mali gom, ka mali gom, ka mali wari bee n-neei pam, ka mali nuhi bee napɔna bee nyuuŋoo, ka lee nyɛ ʒee bee wumsim be di ni n-chaŋ a alaafee polo yim. Biliɛɣu ni tooi bahi yomyom, dinzuɣu di guhiya.",
+    "status": "draft — needs native-speaker review"
+  },
+  "audio.referral": {
+    "english": "A referral means the health worker believes the facility can do something this compound cannot. Go as soon as you are told — the same day if it is urgent. Carry this phone or the paper code, and show it at the gate. If transport is the problem, tell the health worker; there are ways to help.",
+    "khaya_draft": "Tiliba wuhiya ni alaafee tuuntumdi baŋda ni suɣili maa ni tooi tum shɛli dim ŋɔ ku tooi tum lala. Di yi niŋ ka bɛ yɛli a, di yi niŋ yomyom. Zaŋmiya gbɔŋ ŋɔ bee gbaŋ maa wuhi dunoli. Lɔŋgbɔɣu yi nyɛla yɛla, yin’ zaŋmiya alaafee tuuntumdiba; soya beni n-nyɛ sɔŋsim.",
+    "status": "draft — needs native-speaker review"
+  },
+  "q.child.blood": {
+    "english": "Blood in the stool",
+    "khaya_draft": "Ʒim be kuli maa ni.",
+    "status": "draft — needs native-speaker review"
+  },
+  "q.child.breath": {
+    "english": "Breathing fast or with difficulty",
+    "khaya_draft": "Bɔrɔbɔro shɛli din be yomyom ni la.",
+    "status": "draft — needs native-speaker review"
+  },
+  "q.child.drink": {
+    "english": "Cannot drink or breastfeed",
+    "khaya_draft": "ku tooi nyu bee n nyu bim.",
+    "status": "draft — needs native-speaker review"
+  },
+  "q.child.fever": {
+    "english": "Fever for more than three days",
+    "khaya_draft": "Zuŋɔ n-gari daba ata.",
+    "status": "draft — needs native-speaker review"
+  },
+  "q.child.thin": {
+    "english": "Becoming very thin, or swollen feet",
+    "khaya_draft": "Bɛ niŋgbuŋ barina pam bee napɔmbari piɛbbu.",
+    "status": "draft — needs native-speaker review"
+  },
+  "q.mother.bleed": {
+    "english": "Heavy bleeding",
+    "khaya_draft": "Ʒim biɛɣu pam.",
+    "status": "draft — needs native-speaker review"
+  },
+  "q.mother.head": {
+    "english": "Severe headache with blurred eyes",
+    "khaya_draft": "Zuɣuyaali taliga ni niŋgbuŋ.",
+    "status": "draft — needs native-speaker review"
+  },
+  "q.mother.move": {
+    "english": "Baby moving less than before (if pregnant)",
+    "khaya_draft": "Biliɛɣu n-chani pam gari pɔi ka (zali)",
+    "status": "draft — needs native-speaker review"
+  },
+  "q.mother.pain": {
+    "english": "Severe belly pain",
+    "khaya_draft": "putɔɣu biɛrim yiriŋ.",
+    "status": "draft — needs native-speaker review"
+  },
+  "q.mother.smell": {
+    "english": "Foul-smelling discharge",
+    "khaya_draft": "Ʒiɛmbuɣisibu kumsibu.",
+    "status": "draft — needs native-speaker review"
+  },
+  "q.newborn.cord": {
+    "english": "Cord is red, swollen or smells bad",
+    "khaya_draft": "Mɔɣu nyɛla ʒee, mɔɣu bee n-wumdi biɛɣu.",
+    "status": "draft — needs native-speaker review"
+  },
+  "q.newborn.fast": {
+    "english": "Breathing fast or grunting",
+    "khaya_draft": "Wɔbigu n-no noli bee n-chimd’ o noli.",
+    "status": "draft — needs native-speaker review"
+  },
+  "q.newborn.feed": {
+    "english": "Not breastfeeding or feeding well",
+    "khaya_draft": "Bi niŋ bihili bee mɔɣisibu bee n dihili viɛnyɛla.",
+    "status": "draft — needs native-speaker review"
+  },
+  "q.newborn.fits": {
+    "english": "Fits or convulsions",
+    "khaya_draft": "Di simdi ka di saɣim bee n-nyeri naŋgbankpeeni.",
+    "status": "draft — needs native-speaker review"
+  },
+  "q.newborn.sleepy": {
+    "english": "Very sleepy or hard to wake",
+    "khaya_draft": "Gom niŋgbuŋ biɛɣu pam bee n-neei.",
+    "status": "draft — needs native-speaker review"
+  },
+  "q.newborn.temp": {
+    "english": "Very hot or very cold to touch",
+    "khaya_draft": "Wari bee wari malibu pam n-tim shim.",
+    "status": "draft — needs native-speaker review"
+  },
+  "q.newborn.vomit": {
+    "english": "Vomiting everything",
+    "khaya_draft": "Binshɛɣu kam malibu.",
+    "status": "draft — needs native-speaker review"
+  },
+  "q.newborn.yellow": {
+    "english": "Hands or feet look yellow",
+    "khaya_draft": "Nuhi bee naba n-nyɛ dɔzim.",
+    "status": "draft — needs native-speaker review"
+  }
+}

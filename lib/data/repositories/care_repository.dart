@@ -675,6 +675,37 @@ class CareRepository {
     return HomeCheckDao.forHousehold(householdId);
   }
 
+  /// The morning briefing: the home checks every family in the zone has run
+  /// within the window, newest first.
+  ///
+  /// Zone-wide, so gated on the permission only an FHW holds. Home checks
+  /// never enter the outbox — they surface here because caregiver mode runs
+  /// on this same device. What the family saw at home is what the worker
+  /// reads before deciding whom to see first.
+  Future<List<HomeCheck>> recentZoneHomeChecks(
+    AppUser user, {
+    int withinDays = 7,
+  }) async {
+    await _require(
+      user,
+      Permission.viewAllHouseholds,
+      'view home checks across the zone',
+    );
+    return HomeCheckDao.recentAcrossZone(withinDays: withinDays);
+  }
+
+  /// The worker's own month: how many assessments this device wrote for them
+  /// and how often their judgement stood over the engine's. Reads only the
+  /// signed-in worker's rows, so no zone permission is needed — a caregiver
+  /// asking gets an honest zero, not an error.
+  Future<({int assessments, int overrides})> personalImpact(
+    AppUser user,
+  ) async {
+    final assessments = await AssessmentDao.countWithin(user.id);
+    final overrides = await AssessmentDao.countOverridesWithin(user.id);
+    return (assessments: assessments, overrides: overrides);
+  }
+
   /// The latest home check for one person — the "last checked" line on the
   /// caregiver's family tiles.
   Future<HomeCheck?> latestHomeCheck(AppUser user, String personId) async {

@@ -28,21 +28,30 @@ import '../../data/local/outbox_dao.dart';
 import '../../data/repositories/insight_repository.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
+import '../../domain/enums.dart';
 import '../registration/patient_intake_screen.dart';
 import '../shared/app_image.dart';
 import '../shared/ui.dart';
 import '../visit/barrier_check_screen.dart';
 import '../visit/roll_call_screen.dart';
-import 'day_plan_tab.dart';
 import 'families_tab.dart';
 import 'household_screen.dart';
 import 'pending_followups_screen.dart';
 
 class FhwHomeTab extends ConsumerWidget {
-  const FhwHomeTab({super.key, required this.onOpenFamilies});
+  const FhwHomeTab({
+    super.key,
+    required this.onOpenFamilies,
+    required this.onOpenQueue,
+  });
 
   /// Switches the shell to the Families tab — the "Search" quick action.
   final VoidCallback onOpenFamilies;
+
+  /// Switches the shell to the Queue tab — the "full queue" action. A tab
+  /// switch, not a pushed page: the queue is a peer of this screen, not a
+  /// detail underneath it.
+  final VoidCallback onOpenQueue;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -60,6 +69,7 @@ class FhwHomeTab extends ConsumerWidget {
         ref.invalidate(visibleHouseholdsProvider);
         ref.invalidate(dayPlanProvider);
         ref.invalidate(openReferralsProvider);
+        ref.invalidate(zoneHomeChecksProvider);
       },
       child: ListView(
         padding: const EdgeInsets.all(Gap.lg),
@@ -82,14 +92,14 @@ class FhwHomeTab extends ConsumerWidget {
           ),
           const SizedBox(height: Gap.lg),
 
+          const _FamilyReportsCard(),
+          const SizedBox(height: Gap.lg),
+
           _PendingFollowUpsCard(referrals: referrals),
           const SizedBox(height: Gap.lg),
 
-          _SuggestedRouteCard(plan: plan),
-          const SizedBox(height: Gap.lg),
-
           plan.maybeWhen(
-            data: (p) => _TopThreeCard(plan: p),
+            data: (p) => _TopThreeCard(plan: p, onOpenQueue: onOpenQueue),
             orElse: () => const SizedBox.shrink(),
           ),
           const SizedBox(height: Gap.lg),
@@ -244,13 +254,13 @@ class _QuickActions extends ConsumerWidget {
         // The signature CTA: a family just walked in — register everyone who
         // came, then assess them one by one in a single session.
         GradientButton(
-          label: 'New Clinical Intake (IMCI / ANC / PNC)',
+          label: 'Register & assess',
           icon: Icons.person_add_alt_1_rounded,
           onPressed: () => _registerAndAssess(context, ref),
         ),
         const SizedBox(height: Gap.md),
         Text(
-          'Begin structured triage and clinical assessment for walk-in maternal, newborn, and child under-5 consultations.',
+          'A family has walked in. Register everyone who came, then assess them one by one in the same session.',
           style: AppType.caption.copyWith(
             color: AppColors.inkMuted,
             fontSize: 12,
@@ -263,27 +273,27 @@ class _QuickActions extends ConsumerWidget {
             Expanded(
               child: _ActionTile(
                 icon: Icons.add_home_rounded,
-                label: 'Register Family',
+                label: 'Add Household',
                 onTap: () => _addHousehold(context, ref),
-                helper: 'CHPS zone mapping',
+                helper: 'A family new to your zone',
               ),
             ),
             const SizedBox(width: Gap.sm),
             Expanded(
               child: _ActionTile(
                 icon: Icons.search_rounded,
-                label: 'Search Registry',
+                label: 'Search',
                 onTap: onOpenFamilies,
-                helper: 'Find patient or family',
+                helper: 'Find a family',
               ),
             ),
             const SizedBox(width: Gap.sm),
             Expanded(
               child: _ActionTile(
                 icon: Icons.cloud_sync_rounded,
-                label: 'District Sync',
+                label: 'Sync',
                 onTap: () => _sync(context, ref),
-                helper: 'Push records to server',
+                helper: 'Send records to the district',
               ),
             ),
           ],
@@ -482,25 +492,25 @@ class _CountsGrid extends StatelessWidget {
         ),
         _CountTile(
           icon: Icons.event_available_rounded,
-          label: 'Due Assessments',
+          label: 'Check-ups Due',
           value: pendingCount,
           colour: AppColors.info,
         ),
         _CountTile(
           icon: Icons.priority_high_rounded,
-          label: 'AI High Priority',
+          label: 'See First',
           value: highRiskCount,
           colour: AppColors.triageRed,
         ),
         _CountTile(
           icon: Icons.local_hospital_rounded,
-          label: 'Active Referrals',
+          label: 'Referrals Open',
           value: referralsCount,
           colour: AppColors.triageAmber,
         ),
         _CountTile(
           icon: Icons.cloud_off_rounded,
-          label: 'Pending Sync Records',
+          label: 'Waiting to Sync',
           value: offlineCount,
           colour: AppColors.offline,
           fullWidth: true,
@@ -576,53 +586,43 @@ class _PendingFollowUpsCard extends StatelessWidget {
   }
 }
 
-// --------------------------------------------------- Today's suggested route
+// ------------------------------------------------------- Top three to see
 
-class _SuggestedRouteCard extends StatelessWidget {
-  const _SuggestedRouteCard({required this.plan});
-
-  final AsyncValue<DayPlan> plan;
+class _TopThreeCard extends StatelessWidget {
+  const _TopThreeCard({required this.plan, required this.onOpenQueue});
+  final DayPlan plan;
+  final VoidCallback onOpenQueue;
 
   @override
   Widget build(BuildContext context) {
-    return plan.maybeWhen(
-      data: (p) {
-        if (p.priorities.isEmpty) {
-          return SectionCard(
-            title: 'Today\u2019s suggested route',
-            subtitle:
-                'No households are flagged. Use the day for routine check-ups.',
-            icon: Icons.route_outlined,
-            child: const SizedBox.shrink(),
-          );
-        }
-        final first = p.priorities.first;
-        return SectionCard(
-          title: 'AI Outreach Priority Route',
-          subtitle:
-              'Top priority: See ${first.household.name} first — ${first.reason}.',
-          icon: Icons.route_outlined,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _TopThreeTile(priority: first),
-              const SizedBox(height: Gap.md),
-              OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => Scaffold(
-                      body: DayPlanTab(),
-                    ),
-                  ),
-                ),
-                icon: const Icon(Icons.map_outlined),
-                label: const Text('View Full AI Outreach Schedule'),
-              ),
-            ],
+    if (plan.priorities.isEmpty) {
+      return SectionCard(
+        title: 'Today\u2019s plan',
+        subtitle:
+            'No households are flagged in your zone. Use the day for routine check-ups.',
+        icon: Icons.wb_sunny_outlined,
+        child: const SizedBox.shrink(),
+      );
+    }
+
+    return SectionCard(
+      title: 'See these families first',
+      subtitle:
+          'Ranked from each family\u2019s own records — the reason is printed on every card.',
+      icon: Icons.route_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final p in plan.priorities.take(3))
+            _TopThreeTile(priority: p),
+          const SizedBox(height: Gap.sm),
+          OutlinedButton.icon(
+            onPressed: onOpenQueue,
+            icon: const Icon(Icons.people_alt_outlined),
+            label: const Text('Open the full queue'),
           ),
-        );
-      },
-      orElse: () => const SizedBox.shrink(),
+        ],
+      ),
     );
   }
 }
@@ -758,37 +758,6 @@ class _HouseholdPickerState extends State<HouseholdPicker> {
 
 // ------------------------------------------------------- Top three to see
 
-class _TopThreeCard extends StatelessWidget {
-  const _TopThreeCard({required this.plan});
-  final DayPlan plan;
-
-  @override
-  Widget build(BuildContext context) {
-    if (plan.priorities.isEmpty) {
-      return SectionCard(
-        title: 'Today\u2019s plan',
-        subtitle:
-            'No households are flagged in your zone. Use the day for routine check-ups.',
-        icon: Icons.wb_sunny_outlined,
-        child: const SizedBox.shrink(),
-      );
-    }
-
-    return SectionCard(
-      title: 'AI Triage: Highest Priority Families',
-      subtitle:
-          'Ranked by predictive clinical risk scores computed across Maternal, Newborn, and Child Under-5 indicators.',
-      icon: Icons.auto_awesome_rounded,
-      child: Column(
-        children: [
-          for (final p in plan.priorities.take(3))
-            _TopThreeTile(priority: p),
-        ],
-      ),
-    );
-  }
-}
-
 class _TopThreeTile extends StatelessWidget {
   const _TopThreeTile({required this.priority});
   final HouseholdPriority priority;
@@ -855,6 +824,169 @@ class _TopThreeTile extends StatelessWidget {
                     ],
                   ),
                 ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: AppColors.inkFaint,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------------- Sync prompt
+
+/// The morning briefing. Home checks are deliberately local-only — they
+/// never enter the outbox — but caregiver mode runs on this same device, so
+/// what a mother saw at midnight is what the CHO reads at 6am. A red report
+/// here outranks the route plan: a family that found danger before the
+/// worker arrived should see the worker first.
+class _FamilyReportsCard extends ConsumerWidget {
+  const _FamilyReportsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final checks = ref.watch(zoneHomeChecksProvider).valueOrNull;
+    if (checks == null || checks.isEmpty) return const SizedBox.shrink();
+
+    final urgent = checks
+        .where((c) => c.verdict == HomeCheckVerdict.urgent)
+        .length;
+
+    return SectionCard(
+      title: 'Families checked at home',
+      subtitle: urgent > 0
+          ? '$urgent ${urgent == 1 ? 'family' : 'families'} found danger '
+                'signs this week. See them first.'
+          : 'What families saw at home this week, in their own words.',
+      icon: Icons.family_restroom_rounded,
+      accent: urgent > 0 ? AppColors.triageRed : AppColors.primary,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final check in checks.take(5)) _BriefingTile(check: check),
+          const SizedBox(height: Gap.xs),
+          const Text(
+            'These reports stay on the family\u2019s phone — they appear '
+            'here because caregiver mode shares this device.',
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.inkFaint,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One family report in the briefing. The verdict dot carries the colour so
+/// a red report is visible before it is read; tapping opens the household so
+/// the worker can act on it, not just read it.
+class _BriefingTile extends ConsumerWidget {
+  const _BriefingTile({required this.check});
+
+  final HomeCheck check;
+
+  Color get _colour => switch (check.verdict) {
+    HomeCheckVerdict.urgent => AppColors.triageRed,
+    HomeCheckVerdict.caution => AppColors.triageAmber,
+    HomeCheckVerdict.fine => AppColors.triageGreen,
+  };
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final person = ref.watch(personProvider(check.personId));
+    final days = DateTime.now().dateOnly.difference(
+      check.checkedAt.dateOnly,
+    ).inDays;
+    final when = switch (days) {
+      <= 0 => 'today',
+      1 => 'yesterday',
+      _ => '$days days ago',
+    };
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Gap.xs),
+      child: Material(
+        color: AppColors.canvas,
+        borderRadius: BorderRadius.circular(Gap.radiusSm),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(Gap.radiusSm),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) =>
+                  HouseholdScreen(householdId: check.householdId),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(Gap.md),
+            child: Row(
+              children: [
+                Container(
+                  width: 9,
+                  height: 9,
+                  decoration: BoxDecoration(
+                    color: _colour,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: Gap.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        person.valueOrNull?.fullName ?? '…',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.label.copyWith(fontSize: 14),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${check.verdict.label} · $when',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.caption.copyWith(
+                          fontSize: 12,
+                          color: check.verdict == HomeCheckVerdict.fine
+                              ? AppColors.inkMuted
+                              : _colour,
+                          fontWeight: check.verdict == HomeCheckVerdict.fine
+                              ? FontWeight.w500
+                              : FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (check.yesSigns.isNotEmpty) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: Gap.sm,
+                      vertical: Gap.xs,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.triageRedBg,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '${check.yesSigns.length} '
+                      '${check.yesSigns.length == 1 ? 'sign' : 'signs'}',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.triageRed,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: Gap.xs),
+                ],
                 const Icon(
                   Icons.chevron_right_rounded,
                   size: 18,

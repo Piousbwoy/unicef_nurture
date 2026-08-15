@@ -6,7 +6,9 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
@@ -51,13 +53,11 @@ class _CommunitySupportScreenState
 
   String get _message {
     final who = _name.text.trim();
-    final phone = _phone.text.trim();
-    final supporter = who.isEmpty
-        ? 'a community supporter'
-        : '$who ($phone)';
-    return 'CareBridge referral ${widget.referral.referenceCode}: '
-        '${widget.referral.reason}. Please help $supporter arrange '
-        'transport or accompany the family to ${widget.referral.facilityName}.';
+    final greeting = who.isEmpty ? 'Hello' : 'Hello $who';
+    return '$greeting. The health worker listed you as a community '
+        'supporter for referral ${widget.referral.referenceCode}: '
+        '${widget.referral.reason}. Please help the family arrange '
+        'transport, or go with them, to ${widget.referral.facilityName}.';
   }
 
   Future<void> _saveAndHandOff() async {
@@ -116,6 +116,7 @@ class _CommunitySupportScreenState
                   TextField(
                     controller: _name,
                     textCapitalization: TextCapitalization.words,
+                    onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(
                       hintText: 'e.g. Hajia Mariam',
                     ),
@@ -179,11 +180,7 @@ class _CommunitySupportScreenState
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: () {
-                            // Hand off to the device's share sheet. In a real
-                            // build this would use url_launcher with sms:.
-                            _copyToClipboard(context, _message);
-                          },
+                          onPressed: _copyMessage,
                           icon: const Icon(Icons.copy_rounded, size: 18),
                           label: const Text('Copy message'),
                         ),
@@ -191,11 +188,7 @@ class _CommunitySupportScreenState
                       const SizedBox(width: Gap.sm),
                       Expanded(
                         child: FilledButton.icon(
-                          onPressed: () {
-                            // Real handoff to the SMS app. url_launcher would
-                            // go here; for now we copy and tell the user.
-                            _copyToClipboard(context, _message);
-                          },
+                          onPressed: _openSms,
                           icon: const Icon(Icons.open_in_new_rounded, size: 18),
                           label: const Text('Open SMS app'),
                         ),
@@ -235,9 +228,28 @@ class _CommunitySupportScreenState
     );
   }
 
-  void _copyToClipboard(BuildContext context, String text) {
-    // Using the share-like pattern without adding clipboard dependency.
-    // In a production build this would be Clipboard.setData + url_launcher.
+  /// Hands the message to the phone's SMS app, addressed to the supporter
+  /// when their number is known. If this device cannot open one — a tablet,
+  /// the web preview — the message is copied instead, so it is never lost.
+  Future<void> _openSms() async {
+    final phone = _phone.text.trim().replaceAll(RegExp(r'[^0-9+]'), '');
+    final uri = Uri.parse(
+      'sms:$phone?body=${Uri.encodeComponent(_message)}',
+    );
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+        return;
+      }
+    } catch (_) {
+      // Fall through to the clipboard.
+    }
+    if (!mounted) return;
+    _copyMessage();
+  }
+
+  void _copyMessage() {
+    Clipboard.setData(ClipboardData(text: _message));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(

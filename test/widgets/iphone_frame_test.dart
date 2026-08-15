@@ -135,7 +135,7 @@ void main() {
       // The family step must render inside the simulated phone screen.
       expect(find.text('Your family'), findsWidgets);
       // FieldLabel renders its text uppercased.
-      expect(find.text('OR ENTER 6-CHARACTER SHORT CODE'), findsOneWidget);
+      expect(find.text('OR TYPE THE 6-CHARACTER CODE'), findsOneWidget);
 
       // Regression: the theme gives every OutlinedButton an infinite minimum
       // width (Size.fromHeight). On web the Check button received unbounded

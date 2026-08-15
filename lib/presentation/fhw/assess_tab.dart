@@ -93,7 +93,7 @@ class _AssessTabState extends ConsumerState<AssessTab> {
             decoration: InputDecoration(
               isDense: true,
               prefixIcon: const Icon(Icons.search_rounded),
-              hintText: 'Search patient, household head, compound, or landmark',
+              hintText: 'Search name, head of household, community, or landmark',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(Gap.radius),
               ),

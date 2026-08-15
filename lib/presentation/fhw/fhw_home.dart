@@ -90,6 +90,7 @@ class _FhwHomeState extends ConsumerState<FhwHome> {
         children: [
           FhwHomeTab(
             onOpenFamilies: () => setState(() => _tab = 2),
+            onOpenQueue: () => setState(() => _tab = 1),
           ),
           const DayPlanTab(),
           const AssessTab(),

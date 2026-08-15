@@ -57,6 +57,12 @@ abstract final class AppImages {
   static const String foodMilletPorridge = '${_base}food_millet_porridge.png';
   static const String foodCowpeaStew = '${_base}food_cowpea_stew.png';
   static const String foodMoringaBaobab = '${_base}food_moringa_baobab.png';
+  static const String foodGroundnutPaste = '${_base}food_groundnut_paste.png';
+  static const String foodDriedFish = '${_base}food_dried_fish.png';
+  static const String foodBoiledEgg = '${_base}food_boiled_egg.png';
+  static const String foodSweetPotato = '${_base}food_sweet_potato.png';
+  static const String foodPawpaw = '${_base}food_pawpaw.png';
+  static const String foodDawadawa = '${_base}food_dawadawa.png';
 }
 
 /// A bundled illustration that fades in and degrades gracefully.
