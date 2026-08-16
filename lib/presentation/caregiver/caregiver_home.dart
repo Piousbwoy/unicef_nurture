@@ -867,8 +867,6 @@ class _HelpTab extends ConsumerWidget {
       children: [
         const _EmergencyPlanCard(),
         const SizedBox(height: Gap.md),
-        _AudioCard(householdId: householdId),
-        const SizedBox(height: Gap.md),
         SectionCard(
           title: 'Voice',
           subtitle:
@@ -904,6 +902,22 @@ class _HelpTab extends ConsumerWidget {
                 ),
                 icon: const Icon(Icons.translate_rounded),
                 label: Text('Guidance language: ${user.preferredLanguage}'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, Gap.tapTarget),
+                ),
+              ),
+              const SizedBox(height: Gap.sm),
+              // Short heard messages about danger signs and feeding —
+              // play them to the whole family.
+              OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        _AudioGuideScreen(householdId: householdId),
+                  ),
+                ),
+                icon: const Icon(Icons.play_circle_outline_rounded),
+                label: const Text('Open the voice guide'),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(0, Gap.tapTarget),
                 ),
@@ -959,25 +973,6 @@ class _HelpTab extends ConsumerWidget {
                 ),
               ),
             ],
-          ),
-        ),
-        const SizedBox(height: Gap.md),
-        SectionCard(
-          title: 'Need help?',
-          subtitle:
-              'This app is for one family. If you need help, ask the health '
-              'worker at your CHPS compound, or call the district health line.',
-          icon: Icons.support_agent_rounded,
-          child: const ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.call_rounded, color: AppColors.primary),
-            title: Text(
-              'Talk to your health worker',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-            subtitle: Text(
-              'Bring the phone to your next CHPS visit and they will help.',
-            ),
           ),
         ),
         const SizedBox(height: Gap.lg),
@@ -1078,6 +1073,18 @@ class _EmergencyPlanCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: Gap.md),
+          // Ghana's free emergency number. One tap, no airtime needed —
+          // the most useful button on this tab at two in the morning.
+          FilledButton.icon(
+            onPressed: () => launchUrl(Uri.parse('tel:112')),
+            icon: const Icon(Icons.call_rounded),
+            label: const Text('Call 112 — emergency line'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.triageRed,
+              minimumSize: const Size(double.infinity, Gap.tapTarget),
             ),
           ),
         ],
@@ -3409,33 +3416,6 @@ class _RecentCheckTile extends ConsumerWidget {
 
 // ----------------------------------------------------------- Audio guidance
 
-class _AudioCard extends ConsumerWidget {
-  const _AudioCard({required this.householdId});
-  final String householdId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return SectionCard(
-      title: 'Listen to health advice',
-      subtitle:
-          'Short messages about danger signs and feeding, written to be '
-          'heard. Play them to the whole family.',
-      icon: Icons.record_voice_over_rounded,
-      child: OutlinedButton.icon(
-        onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => _AudioGuideScreen(householdId: householdId),
-            ),
-          );
-        },
-        icon: const Icon(Icons.play_circle_outline_rounded),
-        label: const Text('Open the voice guide'),
-      ),
-    );
-  }
-}
-
 class _AudioGuideScreen extends ConsumerStatefulWidget {
   const _AudioGuideScreen({required this.householdId});
 
@@ -3459,7 +3439,7 @@ class _AudioGuideScreenState extends ConsumerState<_AudioGuideScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Voice guide'),
+        title: const Text('Voice'),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: Gap.md),

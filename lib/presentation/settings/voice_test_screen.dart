@@ -8,14 +8,11 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
-import '../../core/audio/recording_script.dart';
 import '../../core/audio/voice_service.dart';
-import '../../core/i18n/dagbani_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../shared/audio_button.dart';
 import '../shared/ui.dart';
@@ -96,32 +93,30 @@ class _VoiceTestScreenState extends ConsumerState<VoiceTestScreen> {
           // ---------------------------------------------------- Intro
           SectionCard(
             title: 'What can this phone speak?',
-            subtitle: 'This screen tests the languages CareBridge uses for '
-                'spoken guidance. The result is honest: a green dot means a '
-                'real voice is available, amber means a bridge, grey means '
-                'the words will be on the screen instead.',
+            subtitle: 'Tap a language below to hear exactly what this phone '
+                'will say in it. The pill under each button names the voice '
+                'that actually played — this app never pretends.',
             icon: Icons.record_voice_over_rounded,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: Gap.xs),
-                Row(
-                  children: [
+                Wrap(
+                  spacing: Gap.md,
+                  runSpacing: Gap.xs,
+                  children: const [
                     _LegendDot(
                       colour: AppColors.triageGreen,
                       label: 'Real voice',
                     ),
-                    const SizedBox(width: Gap.md),
                     _LegendDot(
                       colour: AppColors.primary,
                       label: 'Phone voice',
                     ),
-                    const SizedBox(width: Gap.md),
                     _LegendDot(
                       colour: AppColors.triageAmber,
                       label: 'Bridge',
                     ),
-                    const SizedBox(width: Gap.md),
                     _LegendDot(
                       colour: AppColors.inkFaint,
                       label: 'Read aloud',
@@ -178,213 +173,7 @@ class _VoiceTestScreenState extends ConsumerState<VoiceTestScreen> {
                     error: _error,
                   ),
           ),
-          const SizedBox(height: Gap.md),
-
-          // ---------------------------------------------------- Dagbani text drafts
-          SectionCard(
-            title: 'Dagbani text drafts',
-            subtitle: 'The plain-language Dagbani wording for the danger '
-                'signs. These are drafts — a native Dagbani speaker should '
-                'review and flip the "verified" flag in the source before '
-                'the app shows them to caregivers.',
-            icon: Icons.translate_rounded,
-            child: Column(
-              children: [
-                for (final s in const [
-                  DagbaniStrings.childDangerSigns,
-                  DagbaniStrings.newbornDangerSigns,
-                  DagbaniStrings.motherDangerSigns,
-                  DagbaniStrings.feeding,
-                  DagbaniStrings.referral,
-                ])
-                  _DagbaniDraftRow(s: s),
-              ],
-            ),
-          ),
-          const SizedBox(height: Gap.md),
-
-          // ---------------------------------------------------- How to record
-          SectionCard(
-            title: 'How to add a real Dagbani voice',
-            subtitle: 'The honest version: no commercial TTS engine supports '
-                'Dagbani, and the developer of this app cannot produce one '
-                'from themselves. A real Dagbani voice has to come from a real '
-                'Dagbani speaker. The fastest way to get one is to put any '
-                'Dagbani-speaking CHO, midwife or community member in front '
-                'of a phone for 30 minutes with the script below.',
-            icon: Icons.mic_external_on_rounded,
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _HowToStep(
-                  step: '1',
-                  title: 'What a speaker can do in 30 minutes',
-                  body: 'A native Dagbani speaker records 29 short lines on a '
-                      'phone — 5 audio guidance topics + 24 triage questions. '
-                      'The script below is the prompt. Drop the files into '
-                      'assets/audio/ and the app picks them up with no code '
-                      'change.',
-                ),
-                SizedBox(height: Gap.sm),
-                _HowToStep(
-                  step: '2',
-                  title: 'What you, the developer, cannot do',
-                  body: 'You cannot synthesise a Dagbani voice from yourself, '
-                      'and you should not. Pretending to speak a language you '
-                      'do not is the single fastest way to lose a CHW\'s trust. '
-                      'CareBridge never invents a voice it does not have — '
-                      'the pill on the audio card always says which voice '
-                      'actually played.',
-                ),
-                SizedBox(height: Gap.sm),
-                _HowToStep(
-                  step: '3',
-                  title: 'What works today, without any recording',
-                  body: 'Hausa is the trade language across Northern Ghana. '
-                      'When the phone cannot speak Dagbani, CareBridge speaks '
-                      'the same message in Hausa (the amber "Bridge" pill) '
-                      'or shows the words on screen (the grey "Read aloud" '
-                      'pill). Care never waits on an MP3.',
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: Gap.md),
-
-          // ---------------------------------------------------- Recording script
-          SectionCard(
-            title: 'The recording script',
-            subtitle: '${RecordingScript.total} short lines for a Dagbani '
-                'speaker to record. Open the script, share it, or copy it to '
-                'your clipboard. The speaker can stop early if some questions '
-                'are not relevant in their dialect.',
-            icon: Icons.assignment_rounded,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton.icon(
-                        icon: const Icon(Icons.content_copy_rounded),
-                        label: const Text('Copy the script'),
-                        onPressed: () => _copyScript(context),
-                      ),
-                    ),
-                    const SizedBox(width: Gap.sm),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.visibility_rounded),
-                        label: const Text('Read it here'),
-                        onPressed: () => _showScript(context),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: Gap.sm),
-                Text(
-                  '29 lines • 5 audio topics + 24 triage questions • '
-                  '≈ 30 minutes in a quiet room. The Dagbani wording in the '
-                  'script is a draft — a starting point, not a final answer. '
-                  'A native speaker is the authority on what sounds natural.',
-                  style: AppType.caption,
-                ),
-              ],
-            ),
-          ),
           const SizedBox(height: Gap.xl),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _copyScript(BuildContext context) async {
-    await Clipboard.setData(ClipboardData(text: RecordingScript.toPlainText()));
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Copied — paste it into a message to a Dagbani-speaking CHO.',
-        ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  void _showScript(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.85,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (_, controller) => _ScriptSheetView(
-          text: RecordingScript.toPlainText(),
-          scrollController: controller,
-        ),
-      ),
-    );
-  }
-}
-
-class _ScriptSheetView extends StatelessWidget {
-  const _ScriptSheetView({required this.text, required this.scrollController});
-  final String text;
-  final ScrollController scrollController;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(Gap.lg, 0, Gap.lg, Gap.sm),
-            child: Row(
-              children: [
-                const Icon(Icons.assignment_rounded, color: AppColors.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text('Recording script', style: AppType.title),
-                ),
-                IconButton(
-                  tooltip: 'Copy',
-                  onPressed: () async {
-                    await Clipboard.setData(ClipboardData(text: text));
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Copied'),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.content_copy_rounded),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: ListView(
-              controller: scrollController,
-              padding: const EdgeInsets.all(Gap.lg),
-              children: [
-                SelectableText(
-                  text,
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    fontFamily: 'monospace',
-                    height: 1.5,
-                    color: AppColors.ink,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -656,159 +445,6 @@ class _CoverageRow extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _DagbaniDraftRow extends StatelessWidget {
-  const _DagbaniDraftRow({required this.s});
-  final LocalizedString s;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: Gap.sm),
-      padding: const EdgeInsets.all(Gap.md),
-      decoration: BoxDecoration(
-        color: AppColors.canvas,
-        borderRadius: BorderRadius.circular(Gap.radius),
-        border: Border.all(color: AppColors.line, width: Gap.hairline),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.translate_rounded,
-                  size: 16, color: AppColors.primary),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  s.key,
-                  style: const TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.primaryDeep,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: s.verified
-                      ? AppColors.triageGreenBg
-                      : AppColors.triageAmberBg,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  s.verified ? 'VERIFIED' : 'DRAFT',
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w800,
-                    color: s.verified
-                        ? AppColors.triageGreen
-                        : AppColors.triageAmber,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            s.english,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.ink,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            s.dagbani,
-            style: const TextStyle(
-              fontSize: 12.5,
-              color: AppColors.primaryDeep,
-              fontWeight: FontWeight.w600,
-              height: 1.4,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-          if (s.notes != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              s.notes!,
-              style: const TextStyle(
-                fontSize: 11,
-                color: AppColors.inkFaint,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _HowToStep extends StatelessWidget {
-  const _HowToStep({
-    required this.step,
-    required this.title,
-    required this.body,
-  });
-  final String step;
-  final String title;
-  final String body;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: const BoxDecoration(
-            color: AppColors.primary,
-            shape: BoxShape.circle,
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            step,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 13,
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                body,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.inkMuted,
-                  height: 1.4,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

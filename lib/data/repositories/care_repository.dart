@@ -227,12 +227,16 @@ class CareRepository {
   /// The two roles get genuinely different queries rather than the same query
   /// with a filter bolted on — which is what keeps a caregiver's list from ever
   /// being one missing `where` clause away from the whole zone.
+  ///
+  /// An FHW's register spans her whole region, not just her district: a worker
+  /// posted anywhere in the region she signed up in must be able to find any
+  /// family in it. The day plan keeps the narrower district scope — the
+  /// register is what she searches, the plan is what she walks.
   Future<List<Household>> visibleHouseholds(AppUser user) async {
     if (user.can(Permission.viewAllHouseholds)) {
       return HouseholdDao.caseloadFor(
         workerId: user.id,
         region: user.region,
-        district: user.district,
       );
     }
     final linked = await UserDao.linkedHouseholdFor(user.id);
@@ -252,7 +256,7 @@ class CareRepository {
       Permission.viewAllHouseholds,
       'search all households',
     );
-    return HouseholdDao.search(query);
+    return HouseholdDao.search(query, region: user.region);
   }
 
   // ---------------------------------------------------------------------------

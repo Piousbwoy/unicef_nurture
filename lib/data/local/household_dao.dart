@@ -78,25 +78,38 @@ abstract final class HouseholdDao {
   /// a map. It is every compound in their own register — including the ones
   /// picked up on an outreach run across a district boundary, which for a zone
   /// bordered by the White Volta happens most weeks — plus anything registered
-  /// in their own zone by a colleague covering for them.
+  /// anywhere in their region by a colleague, because a worker posted across a
+  /// district within the same region must still be able to find the family in
+  /// front of her. [district] narrows the geographic arm to one MMDA — the
+  /// day plan and zone analytics keep that scope; the register does not.
   ///
   /// Getting this wrong is not a cosmetic bug: a household missing from the
   /// caseload is a household that never appears in the day plan.
   static Future<List<Household>> caseloadFor({
     required String workerId,
     required String region,
-    required String district,
+    String? district,
     String? community,
   }) async {
     final db = await AppDatabase.instance.database;
+    final where = district == null
+        ? (community == null
+              ? 'created_by = ? OR region = ?'
+              : 'created_by = ? OR (region = ? AND community = ?)')
+        : (community == null
+              ? 'created_by = ? OR (region = ? AND district = ?)'
+              : 'created_by = ? OR (region = ? AND district = ? AND community = ?)');
+    final args = district == null
+        ? (community == null
+              ? [workerId, region]
+              : [workerId, region, community])
+        : (community == null
+              ? [workerId, region, district]
+              : [workerId, region, district, community]);
     final rows = await db.query(
       Tables.households,
-      where: community == null
-          ? 'created_by = ? OR (region = ? AND district = ?)'
-          : 'created_by = ? OR (region = ? AND district = ? AND community = ?)',
-      whereArgs: community == null
-          ? [workerId, region, district]
-          : [workerId, region, district, community],
+      where: where,
+      whereArgs: args,
       orderBy: 'community ASC, name ASC',
     );
     return rows.map(Household.fromMap).toList(growable: false);
@@ -125,17 +138,20 @@ abstract final class HouseholdDao {
     return rows.map(Household.fromMap).toList(growable: false);
   }
 
-  /// Name, head, community or landmark. Landmark is included deliberately: in a
-  /// village with no addresses, "behind the mosque" is how a compound is found,
-  /// and a CHO covering for a colleague will search for exactly that.
-  static Future<List<Household>> search(String query) async {
+  /// Name, head, community or landmark, narrowed to the worker's own region.
+  /// Landmark is included deliberately: in a village with no addresses,
+  /// "behind the mosque" is how a compound is found, and a CHO covering for a
+  /// colleague will search for exactly that. The region arm means a worker
+  /// posted anywhere in her region finds every family in it — while a record
+  /// synced from another region never surfaces on her phone.
+  static Future<List<Household>> search(String query, {required String region}) async {
     final db = await AppDatabase.instance.database;
     final q = '%${query.trim()}%';
     final rows = await db.query(
       Tables.households,
       where:
-          'name LIKE ? OR head_name LIKE ? OR community LIKE ? OR landmark LIKE ?',
-      whereArgs: [q, q, q, q],
+          '(name LIKE ? OR head_name LIKE ? OR community LIKE ? OR landmark LIKE ?) AND region = ?',
+      whereArgs: [q, q, q, q, region],
       orderBy: 'name ASC',
       limit: 50,
     );

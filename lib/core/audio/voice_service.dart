@@ -181,7 +181,17 @@ abstract final class VoiceService {
       return VoiceOutcome(source: VoiceSource.linguaFranca, request: request);
     }
 
-    // 4. Nothing worked. The user reads.
+    // 4. Any voice on this phone beats silence. A caregiver who hears the
+    //    message in the closest available voice is safer than one staring
+    //    at a silent button, so the script is spoken with whatever the
+    //    device can manage.
+    final anyLocale = await _bestAvailableLocale();
+    if (anyLocale != null) {
+      await _speakWithTts(request.preferredScript, anyLocale);
+      return VoiceOutcome(source: VoiceSource.systemTts, request: request);
+    }
+
+    // 5. Nothing worked. The user reads.
     return VoiceOutcome(source: VoiceSource.readAloud, request: request);
   }
 
@@ -204,19 +214,44 @@ abstract final class VoiceService {
   /// one-page diagnostic to the CHO.
   static Future<List<String>> availableTtsLanguages() async {
     if (_ttsLanguagesCache.isNotEmpty) return _ttsLanguagesCache.toList();
-    await _ensureTts();
-    try {
-      final langs = await _tts.getLanguages;
-      if (langs is List) {
-        _ttsLanguagesCache
-          ..clear()
-          ..addAll(langs.map((e) => e.toString()));
+    // Browsers and some desktop engines load their voice list asynchronously:
+    // the first call returns empty and the real list arrives a beat later.
+    // Poll briefly so a web or desktop run never misreads "empty" as "this
+    // phone has no voice" — that misread is what made every button silent.
+    for (var attempt = 0; attempt < 6 && _ttsLanguagesCache.isEmpty; attempt++) {
+      await _ensureTts();
+      try {
+        final langs = await _tts.getLanguages;
+        if (langs is List && langs.isNotEmpty) {
+          _ttsLanguagesCache
+            ..clear()
+            ..addAll(langs.map((e) => e.toString()));
+        }
+      } catch (_) {
+        // The TTS engine refused to enumerate; the next attempt may differ.
       }
-    } catch (_) {
-      // The TTS engine refused to enumerate. Treat as "nothing we can use".
-      _ttsLanguagesCache.clear();
+      if (_ttsLanguagesCache.isEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
     }
     return _ttsLanguagesCache.toList();
+  }
+
+  /// The closest voice this device can actually speak: an English voice when
+  /// it has one (every shipped engine does), otherwise the first voice the
+  /// engine reports. Null only when the device has no TTS at all.
+  static Future<String?> _bestAvailableLocale() async {
+    final langs = await availableTtsLanguages();
+    if (langs.isEmpty) return null;
+    final lower = langs.map((l) => l.toLowerCase()).toList(growable: false);
+    for (final want in const ['en-ng', 'en-us', 'en-gb', 'en']) {
+      final hit = lower.firstWhere(
+        (l) => l.startsWith(want),
+        orElse: () => '',
+      );
+      if (hit.isNotEmpty) return hit;
+    }
+    return lower.first;
   }
 
   /// Whether the given language has a system TTS voice the app can use.
