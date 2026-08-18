@@ -34,6 +34,8 @@
 /// advice in, and the sign-out.
 library;
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -50,12 +52,14 @@ import '../../data/reference/northern_ghana.dart';
 import '../../data/repositories/care_repository.dart';
 import '../../domain/engines/immunisation_engine.dart';
 import '../../domain/engines/nurturing_care_engine.dart';
+import '../../domain/engines/recommendation_engine.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
 import '../../domain/enums.dart';
 import '../../domain/family_code.dart';
 import '../settings/voice_test_screen.dart';
 import '../shared/app_image.dart';
+import '../shared/recommendation_kit.dart';
 import '../shared/ui.dart';
 
 const _uuid = Uuid();
@@ -691,6 +695,7 @@ class _CarePlanTab extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(Gap.lg),
       children: [
+        _FamilyCarePlanSection(householdId: householdId),
         _VaccineScheduleCard(householdId: householdId),
         const SizedBox(height: Gap.md),
         _ContactsSection(householdId: householdId),
@@ -700,6 +705,76 @@ class _CarePlanTab extends ConsumerWidget {
         _BarrierCard(householdId: householdId),
         const SizedBox(height: Gap.xl),
       ],
+    );
+  }
+}
+
+/// The plan the health worker left with the family — the very same
+/// [CarePlan] the CHO saw on the result screen, persisted on the
+/// assessment and re-rendered here for the family: plain language, no
+/// citations, a voice button, and a worklist they can tick off at home.
+/// Members who were never assessed simply render nothing.
+class _FamilyCarePlanSection extends ConsumerWidget {
+  const _FamilyCarePlanSection({required this.householdId});
+  final String householdId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
+    if (user == null) return const SizedBox.shrink();
+    final members = ref.watch(householdMembersProvider(householdId));
+
+    return members.maybeWhen(
+      data: (people) => Column(
+        children: [
+          for (final person in people)
+            _MemberCarePlanCard(
+              person: person,
+              language: user.preferredLanguage,
+            ),
+        ],
+      ),
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+}
+
+/// One family member's saved care plan, decoded from the assessment's
+/// persisted `carePlanJson`. A malformed or missing plan renders nothing:
+/// the family must never see a crash where a health worker's advice
+/// should be.
+class _MemberCarePlanCard extends ConsumerWidget {
+  const _MemberCarePlanCard({required this.person, required this.language});
+
+  final Person person;
+  final String language;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final latest = ref.watch(latestAssessmentProvider(person.id));
+
+    return latest.maybeWhen(
+      data: (assessment) {
+        final raw = assessment?.carePlanJson;
+        if (raw == null) return const SizedBox.shrink();
+        final CarePlan plan;
+        try {
+          plan = CarePlan.fromJson(
+            Map<String, Object?>.from(jsonDecode(raw) as Map),
+          );
+        } catch (_) {
+          return const SizedBox.shrink();
+        }
+        return Padding(
+          padding: const EdgeInsets.only(bottom: Gap.md),
+          child: FamilyCarePlanCard(
+            plan: plan,
+            personName: person.fullName,
+            language: language,
+          ),
+        );
+      },
+      orElse: () => const SizedBox.shrink(),
     );
   }
 }

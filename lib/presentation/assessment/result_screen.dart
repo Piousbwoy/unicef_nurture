@@ -36,14 +36,13 @@ import '../../domain/engines/nurturing_care_engine.dart';
 import '../../domain/engines/nutrition_engine.dart';
 import '../../domain/engines/nutrition/therapeutic_supplements.dart';
 import '../../domain/engines/protocols/stabilization_protocol_selector.dart';
-import '../../domain/engines/protocols/stabilization_protocols.dart';
 import '../../domain/engines/recommendation_engine.dart';
 import '../../domain/engines/treatment_response_engine.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
 import '../../domain/enums.dart';
-import '../shared/app_image.dart';
 import '../shared/audio_button.dart';
+import '../shared/recommendation_kit.dart';
 import '../shared/ui.dart';
 import 'form_kit.dart';
 import 'types.dart';
@@ -95,17 +94,18 @@ class _AssessmentResultScreenState
   // ---------------------------------------------------------------- Nutrition
   late CostTier _cost;
 
-  // ------------------------------------------------------- Care-plan worklist
-  /// Indices of plan actions the worker has ticked off (T3). A plan you can
-  /// check off is a worklist, not a memo.
-  final Set<int> _doneActions = {};
-
   /// Whether the full findings list is unfolded. Collapsed by default: a
   /// result screen is a decision, not a data dump — the drivers lead.
   bool _showAllFindings = false;
 
   /// Whether the clinical override panel is unfolded.
   bool _showOverride = false;
+
+  /// Which page of the result experience is showing: 0 = the verdict
+  /// moment (the decision, nothing else), 1 = the full clinical report
+  /// (the evidence, the referral, the supporting plans). Two pages, so
+  /// the decision is never buried under its own paperwork.
+  int _view = 0;
 
   // ---------------------------------------------------------------- Override
   /// The triage the CHO chose instead of the engine's, or null while the
@@ -362,6 +362,8 @@ class _AssessmentResultScreenState
       appetiteTestPassed: draft.inputs['appetite_test'] as bool?,
       hasAnyDangerSign: result.dangerSignsPresent.isNotEmpty,
       isAnaemic: anaemic,
+      hasDiarrhoea: draft.inputs['danger_signs'] is List &&
+          (draft.inputs['danger_signs'] as List).contains('diarrhoea'),
       therapeuticContext: therapeuticContext,
     );
   }
@@ -933,438 +935,568 @@ class _AssessmentResultScreenState
     final nurturingCare = _nurturingCareAssessment(immunisation, nutrition);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(input.person.fullName),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(20),
-          child: Padding(
-            padding: const EdgeInsets.only(
-              left: Gap.lg,
-              right: Gap.lg,
-              bottom: Gap.sm,
-            ),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '${result.clientType.protocolLabel} · '
-                '${input.person.ageLabel}',
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  color: AppColors.inkMuted,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(Gap.lg),
-        children: [
-          // --------------------------------------- PRE-REFERRAL STABILIZATION
-          // Life-saving pre-transport interventions outrank the verdict:
-          // they render first, because in the second-delay window the CHO
-          // must not scroll to find them.
-          if (plan.preReferralProtocols.isNotEmpty) ...[
-            _PreReferralSection(plan: plan),
-            const SizedBox(height: Gap.lg),
-          ],
-
-          // ------------------------------------------------- Verdict card
-          // The whole assessment in one glance: the governing level in its
-          // IMCI colour, the classification, and the honesty meta line —
-          // data confidence, what was not measured, when to review. A
-          // clinical chart, not a marketing hero: the colour rail is the
-          // safety signal and nothing decorates over it.
-          AppMotion.reveal(
-            _VerdictCard(
-              classification: _classificationOf(plan),
-              level: effective,
-              score: plan.effectiveConfidenceScore,
-              confidence: plan.confidence,
-              missingCount: plan.missingData.length,
-              followUpInDays: plan.followUpInDays,
-              audio: AudioButton(
-                text: '${_classificationOf(plan)}. ${plan.triageRationale}',
-                language: input.user.preferredLanguage,
-                id: 'result_verdict',
-                compact: true,
-              ),
-              overrideNote: _override == null
-                  ? null
-                  : _OverrideNote(
-                      engine: plan.overallTriage,
-                      chosen: effective,
-                    ),
-            ),
-          ),
-          const _Hairline(),
-
-          // ------------------------------------------------- Do this now
-          // The worklist is the decision: numbered, tickable, urgency-
-          // tagged, and speakable in the worker's language — this is what
-          // the CHO acts on before leaving the compound.
-          if (plan.actions.isNotEmpty) ...[
-            _Section(
-              title: 'Do this now',
-              icon: Icons.checklist_rounded,
-              trailing: AudioButton(
-                text:
-                    'What to do. '
-                    '${plan.actions.map((a) => a.instruction).join('. ')}.',
-                language: input.user.preferredLanguage,
-                id: 'result_actions',
-                compact: true,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: plan.actions.isEmpty
-                          ? 0
-                          : _doneActions.length / plan.actions.length,
-                      minHeight: 6,
-                      backgroundColor: AppColors.inkFaint.withValues(
-                        alpha: 0.2,
-                      ),
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        AppColors.accent,
-                      ),
-                    ),
+      appBar: _view == 0
+          ? AppBar(
+              title: Text(input.person.fullName),
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(20),
+                child: Padding(
+                  padding: const EdgeInsets.only(
+                    left: Gap.lg,
+                    right: Gap.lg,
+                    bottom: Gap.sm,
                   ),
-                  const SizedBox(height: Gap.xs),
-                  Text(
-                    '${_doneActions.length} of ${plan.actions.length} done',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.inkFaint,
-                    ),
-                  ),
-                  const SizedBox(height: Gap.md),
-                  for (var i = 0; i < plan.actions.length; i++)
-                    _ActionTile(
-                      plan.actions[i],
-                      done: _doneActions.contains(i),
-                      onToggle: () => setState(() {
-                        if (_doneActions.contains(i)) {
-                          _doneActions.remove(i);
-                        } else {
-                          _doneActions.add(i);
-                        }
-                      }),
-                    ),
-                ],
-              ),
-            ),
-            const _Hairline(),
-          ],
-
-          // ------------------------------------------- Why this verdict
-          // The explainability anchor, stripped to what changes behaviour:
-          // the one-line rationale, any safety net that fired, the findings
-          // that drove the verdict (drivers first, the rest one tap away),
-          // and — in the open — what was not measured.
-          _Section(
-            title: 'Why this result',
-            icon: Icons.psychology_outlined,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  plan.triageRationale,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    height: 1.4,
-                  ),
-                ),
-                if (plan.guardrailEscalated) ...[
-                  const SizedBox(height: Gap.md),
-                  const _SafetyNetNote(
-                    text:
-                        'Safety net: a danger sign was detected, so this '
-                        'plan was raised to urgent automatically.',
-                  ),
-                ],
-                if (plan.referralGuaranteed) ...[
-                  const SizedBox(height: Gap.md),
-                  const _SafetyNetNote(
-                    text:
-                        'Safety net: an urgent verdict always carries a '
-                        'referral — one was added because none was listed.',
-                  ),
-                ],
-                if (plan.interactions.isNotEmpty) ...[
-                  const SizedBox(height: Gap.md),
-                  for (final i in plan.interactions)
-                    FindingTile(
-                      label: i.label,
-                      detail: i.detail,
-                      severity: i.severity,
-                      source: i.protocolSource,
-                    ),
-                ],
-                if (plan.findings.isNotEmpty) ...[
-                  const SizedBox(height: Gap.md),
-                  for (final f in _displayFindings(plan.findings))
-                    FindingTile(
-                      label: f.label,
-                      detail: f.detail,
-                      severity: f.severity,
-                      source: f.protocolSource,
-                      measured: f.measuredValue,
-                      threshold: f.threshold,
-                    ),
-                  if (plan.findings.length > 3)
-                    TextButton(
-                      onPressed: () =>
-                          setState(() => _showAllFindings = !_showAllFindings),
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(0, Gap.tapTarget),
-                      ),
-                      child: Text(
-                        _showAllFindings
-                            ? 'Show only the drivers'
-                            : 'Show all ${plan.findings.length} findings',
-                      ),
-                    ),
-                ],
-                if (plan.missingData.isNotEmpty) ...[
-                  const SizedBox(height: Gap.sm),
-                  Text(
-                    'Not measured: ${plan.missingData.join(', ')}. '
-                    'These lower the confidence, not the safety — the engine '
-                    'still acts on what it has.',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.inkMuted,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const _Hairline(),
-
-          // --------------------------------------------- Offline AI evidence
-          // The on-device models are the primary: each card states whether
-          // the TFLite binary ran or the deterministic rules stood in, and
-          // pairs every risk with its 95% CI and its precision so a CHO can
-          // weigh the number instead of trusting it blindly.
-          _Section(
-            title: 'A second opinion from this phone',
-            icon: Icons.memory_rounded,
-            subtitle:
-                'Every check runs on this phone — no internet, and nothing '
-                'about the family leaves it. Tap a card to unfold its '
-                'evidence.',
-            child: FutureBuilder<Map<String, OfflineRiskPrediction>>(
-              future: _mlPredictions,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const _AnalysisProgressCard();
-                }
-                if (snapshot.hasError) {
-                  return Padding(
-                    padding: const EdgeInsets.all(Gap.md),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
                     child: Text(
-                      'Could not run predictions: ${snapshot.error}',
-                      style: const TextStyle(color: AppColors.triageRed),
+                      '${result.clientType.protocolLabel} · '
+                      '${input.person.ageLabel}',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        color: AppColors.inkMuted,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
                     ),
-                  );
-                }
-                final predictions = snapshot.data ?? const {};
-                if (predictions.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.all(Gap.md),
-                    child: Text('No models available on this device.'),
-                  );
-                }
-                return FutureBuilder<List<OfflineModelStatus>>(
-                  future: _modelStatuses,
-                  builder: (context, statusSnap) {
-                    final byName = {
-                      for (final s
-                          in statusSnap.data ?? const <OfflineModelStatus>[])
-                        s.name: s,
-                    };
-                    final entries = predictions.entries.toList()
-                      // Most urgent first: rule-in candidates, then the
-                      // highest risks, with drift-suppressed models last.
-                      ..sort((a, b) {
-                        final pa = a.value;
-                        final pb = b.value;
-                        if (pa.ruleInCandidate != pb.ruleInCandidate) {
-                          return pa.ruleInCandidate ? -1 : 1;
-                        }
-                        final ra = pa.riskProbability;
-                        final rb = pb.riskProbability;
-                        if ((ra == null) != (rb == null)) {
-                          return ra == null ? 1 : -1;
-                        }
-                        if (ra != null && rb != null && ra != rb) {
-                          return rb.compareTo(ra);
-                        }
-                        return pa.modelName.compareTo(pb.modelName);
-                      });
-                    final measureNext = <String>{
-                      for (final e in entries) ...e.value.featuresMissing,
-                    }.toList();
-                    return Column(
-                      children: [
-                        if (measureNext.isNotEmpty)
-                          _MeasureNextCard(featureNames: measureNext),
-                        for (final e in entries)
-                          _AiModelCard(
-                            prediction: e.value,
-                            status: byName[e.key],
-                            precision: _flagPrecision(e.key, byName[e.key]),
-                            prior: _regionalPriors[e.key],
-                            open: _openModels.contains(e.key),
-                            onToggle: () => setState(() {
-                              if (!_openModels.add(e.key)) {
-                                _openModels.remove(e.key);
-                              }
-                            }),
-                          ),
-                      ],
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-          const _Hairline(),
-
-          // ------------------------------------------------------- Referral
-          _ReferralSection(
-            refer: _refer,
-            onRefer: (v) => setState(() {
-              _referTouched = true;
-              _refer = v;
-            }),
-            facilities: _adequateFacilities(),
-            facility: _facility,
-            onFacility: (f) => setState(() => _facility = f),
-            urgency: _urgency,
-            onUrgency: (u) => setState(() => _urgency = u),
-            capabilities: result.referralCapabilitiesNeeded,
-          ),
-
-          // ------------------------------------------------------ Follow-up
-          const _Hairline(),
-          _Section(
-            title: 'Follow-up contact',
-            icon: Icons.event_repeat_outlined,
-            subtitle:
-                'Added to your queue. The worker who started this case '
-                'should be the one who closes it.',
-            child: ChoiceChipsField<int>(
-              label: 'Review in',
-              options: const [1, 2, 3, 7, 14, 30],
-              labelOf: (d) => '$d day${d == 1 ? '' : 's'}',
-              value: _followDays,
-              onChanged: (d) => setState(() => _followDays = d ?? 7),
-            ),
-          ),
-
-          // ------------------------------------------------------ Nutrition
-          if (nutrition != null) ...[
-            const _Hairline(),
-            _NutritionSection(
-              plan: nutrition,
-              cost: _cost,
-              onCost: (tier) {
-                setState(() => _cost = tier);
-              },
-            ),
-          ],
-
-          // -------------------------------------------------- Early learning
-          // Nurturing Care domains 3 & 5 — responsive caregiving and early
-          // learning. Only for the newborn and child-under-five categories.
-          if (result.clientType == ClientType.newborn ||
-              result.clientType == ClientType.childUnderFive) ...[
-            const _Hairline(),
-            _EarlyLearningSection(person: input.person),
-          ],
-
-          // -------------------------------- UNICEF Nurturing Care (PILLAR 3)
-          if (nurturingCare.isNotEmpty &&
-              (result.clientType == ClientType.newborn ||
-                  result.clientType == ClientType.childUnderFive ||
-                  result.clientType == ClientType.pregnantWoman ||
-                  result.clientType == ClientType.postpartumWoman)) ...[
-            const _Hairline(),
-            _NurturingCareSection(assessment: nurturingCare),
-          ],
-
-          // -------------------------------------------------- Immunisation
-          if (immunisation != null) ...[
-            const _Hairline(),
-            _ImmunisationSection(plan: immunisation),
-          ],
-
-          // ------------------------------------------------ Clinical override
-          // Demoted to one quiet line: the verdict owns the screen. Only
-          // when the worker disagrees does the override form unfold —
-          // saved with their name, reviewable by a supervisor.
-          if (input.user.can(Permission.overrideAiRecommendation)) ...[
-            const _Hairline(),
-            if (!_showOverride)
-              Center(
-                child: TextButton(
-                  onPressed: () => setState(() => _showOverride = true),
-                  child: const Text(
-                    'Disagree with this plan? Record a clinical override',
                   ),
+                ),
+              ),
+            )
+          : AppBar(
+              leading: BackButton(onPressed: () => setState(() => _view = 0)),
+              title: Text(_view == 1 ? 'Care plan' : 'Clinical report'),
+            ),
+      // Three pages, one state: the verdict moment, the care plan it opens,
+      // and the full clinical report behind both. The switch animates so each
+      // page feels earned — a document you open, not a scroll you drown in.
+      body: AnimatedSwitcher(
+        duration: AppMotion.duration,
+        switchInCurve: AppMotion.curve,
+        switchOutCurve: Curves.easeIn,
+        transitionBuilder: (child, animation) => SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0.05, 0),
+            end: Offset.zero,
+          ).animate(animation),
+          child: FadeTransition(opacity: animation, child: child),
+        ),
+        child: _view == 0
+            ? KeyedSubtree(
+                key: const ValueKey('verdict'),
+                child: ListView(
+                  padding: const EdgeInsets.all(Gap.lg),
+                  children: [
+                    // -------------------------------- PRE-REFERRAL (SAFETY)
+                    // Life-saving pre-transport interventions outrank the
+                    // verdict: they render first, because in the
+                    // second-delay window the CHO must not scroll to find
+                    // them.
+                    if (plan.preReferralProtocols.isNotEmpty) ...[
+                      PreReferralRecSection(plan: plan),
+                      const SizedBox(height: Gap.lg),
+                    ],
+
+                    // --------------------------------------- The verdict
+                    // The whole assessment as one premium moment: deep
+                    // royal hero, IMCI level chip, classification, the
+                    // data-confidence ring and the honesty meta line.
+                    AppMotion.reveal(
+                      _VerdictHero(
+                        classification: _classificationOf(plan),
+                        level: effective,
+                        score: plan.effectiveConfidenceScore,
+                        confidence: plan.confidence,
+                        missingCount: plan.missingData.length,
+                        followUpInDays: plan.followUpInDays,
+                        audio: AudioButton(
+                          text:
+                              '${_classificationOf(plan)}. '
+                              '${plan.triageRationale}',
+                          language: input.user.preferredLanguage,
+                          id: 'result_verdict',
+                          compact: true,
+                        ),
+                        overrideNote: _override == null
+                            ? null
+                            : _OverrideNote(
+                                engine: plan.overallTriage,
+                                chosen: effective,
+                              ),
+                      ),
+                    ),
+                    const RecHairline(),
+
+                    // -------------------------------------- What we found
+                    // The findings as severity-coloured cards: each one wears
+                    // the IMCI colour of its severity, its measured number and
+                    // its cut-off — the verdict is shown, not asserted.
+                    RecSection(
+                      title: 'What we found',
+                      icon: Icons.assignment_turned_in_outlined,
+                      subtitle:
+                          'Each card wears the colour of its severity — red '
+                          'refers, amber watches, green continues routine care.',
+                      child: _FindingsDeck(
+                        findings: _displayFindings(plan.findings),
+                        totalCount: plan.findings.length,
+                      ),
+                    ),
+                    const SizedBox(height: Gap.lg),
+
+                    // ------------------------- The care plan, one tap away
+                    // The recommendations live behind one deliberate tap: the
+                    // nurse reads what the assessment found first, then opens
+                    // what to do about it.
+                    _RecommendationsCta(
+                      actionsCount: plan.actions.length,
+                      needsReferral: _refer,
+                      followUpInDays: plan.followUpInDays,
+                      onOpen: () => setState(() => _view = 1),
+                    ),
+                    const SizedBox(height: Gap.md),
+
+                    // ----------------------------- The report, one tap away
+                    _ReportTeaser(
+                      findingsCount: plan.findings.length,
+                      actionsCount: plan.actions.length,
+                      needsReferral: _refer,
+                      onOpen: () => setState(() => _view = 2),
+                    ),
+                    const SizedBox(height: Gap.xxl),
+                  ],
                 ),
               )
-            else
-              _OverrideSection(
-                engineTriage: plan.overallTriage,
-                overrideLevel: _override,
-                reasonController: _overrideReason,
-                onOverride: (level) {
-                  setState(() {
-                    _override = level;
-                    if (level == TriageLevel.urgent) {
-                      _refer = true;
-                      _urgency = ReferralUrgency.immediate;
-                    }
-                  });
-                },
-              ),
-          ],
+            : _view == 2
+            ? KeyedSubtree(
+                key: const ValueKey('report'),
+                child: ListView(
+                  padding: const EdgeInsets.all(Gap.lg),
+                  children: [
+                    // ------------------------------------------- Why this verdict
+                    // The explainability anchor, stripped to what changes behaviour:
+                    // the one-line rationale, any safety net that fired, the findings
+                    // that drove the verdict (drivers first, the rest one tap away),
+                    // and — in the open — what was not measured.
+                    RecSection(
+                      title: 'Why this result',
+                      icon: Icons.psychology_outlined,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            plan.triageRationale,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              height: 1.4,
+                            ),
+                          ),
+                          if (plan.guardrailEscalated) ...[
+                            const SizedBox(height: Gap.md),
+                            const SafetyNetNote(
+                              text:
+                                  'Safety net: a danger sign was detected, so this '
+                                  'plan was raised to urgent automatically.',
+                            ),
+                          ],
+                          if (plan.referralGuaranteed) ...[
+                            const SizedBox(height: Gap.md),
+                            const SafetyNetNote(
+                              text:
+                                  'Safety net: an urgent verdict always carries a '
+                                  'referral — one was added because none was listed.',
+                            ),
+                          ],
+                          if (plan.interactions.isNotEmpty) ...[
+                            const SizedBox(height: Gap.md),
+                            for (final i in plan.interactions)
+                              FindingTile(
+                                label: i.label,
+                                detail: i.detail,
+                                severity: i.severity,
+                                source: i.protocolSource,
+                              ),
+                          ],
+                          if (plan.findings.isNotEmpty) ...[
+                            const SizedBox(height: Gap.md),
+                            for (final f in _displayFindings(plan.findings))
+                              FindingTile(
+                                label: f.label,
+                                detail: f.detail,
+                                severity: f.severity,
+                                source: f.protocolSource,
+                                measured: f.measuredValue,
+                                threshold: f.threshold,
+                              ),
+                            if (plan.findings.length > 3)
+                              TextButton(
+                                onPressed: () => setState(
+                                  () => _showAllFindings = !_showAllFindings,
+                                ),
+                                style: TextButton.styleFrom(
+                                  minimumSize: const Size(0, Gap.tapTarget),
+                                ),
+                                child: Text(
+                                  _showAllFindings
+                                      ? 'Show only the drivers'
+                                      : 'Show all ${plan.findings.length} findings',
+                                ),
+                              ),
+                          ],
+                          if (plan.missingData.isNotEmpty) ...[
+                            const SizedBox(height: Gap.sm),
+                            Text(
+                              'Not measured: ${plan.missingData.join(', ')}. '
+                              'These lower the confidence, not the safety — the engine '
+                              'still acts on what it has.',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.inkMuted,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const RecHairline(),
 
-          if (_error != null) ...[
-            const _Hairline(),
-            Container(
-              padding: const EdgeInsets.all(Gap.md),
-              decoration: BoxDecoration(
-                color: AppColors.triageRedBg,
-                borderRadius: BorderRadius.circular(Gap.radiusSm),
-              ),
-              child: Text(
-                _error!,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppColors.triageRed,
-                  fontWeight: FontWeight.w600,
-                  height: 1.4,
+                    // --------------------------------------------- Offline AI evidence
+                    // The on-device models are the primary: each card states whether
+                    // the TFLite binary ran or the deterministic rules stood in, and
+                    // pairs every risk with its 95% CI and its precision so a CHO can
+                    // weigh the number instead of trusting it blindly.
+                    RecSection(
+                      title: 'A second opinion from this phone',
+                      icon: Icons.memory_rounded,
+                      subtitle:
+                          'Every check runs on this phone — no internet, and nothing '
+                          'about the family leaves it. Tap a card to unfold its '
+                          'evidence.',
+                      child: FutureBuilder<Map<String, OfflineRiskPrediction>>(
+                        future: _mlPredictions,
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const _AnalysisProgressCard();
+                          }
+                          if (snapshot.hasError) {
+                            return Padding(
+                              padding: const EdgeInsets.all(Gap.md),
+                              child: Text(
+                                'Could not run predictions: ${snapshot.error}',
+                                style: const TextStyle(
+                                  color: AppColors.triageRed,
+                                ),
+                              ),
+                            );
+                          }
+                          final predictions = snapshot.data ?? const {};
+                          if (predictions.isEmpty) {
+                            return const Padding(
+                              padding: EdgeInsets.all(Gap.md),
+                              child: Text(
+                                'No models available on this device.',
+                              ),
+                            );
+                          }
+                          return FutureBuilder<List<OfflineModelStatus>>(
+                            future: _modelStatuses,
+                            builder: (context, statusSnap) {
+                              final byName = {
+                                for (final s
+                                    in statusSnap.data ??
+                                        const <OfflineModelStatus>[])
+                                  s.name: s,
+                              };
+                              final entries = predictions.entries.toList()
+                                // Most urgent first: rule-in candidates, then the
+                                // highest risks, with drift-suppressed models last.
+                                ..sort((a, b) {
+                                  final pa = a.value;
+                                  final pb = b.value;
+                                  if (pa.ruleInCandidate !=
+                                      pb.ruleInCandidate) {
+                                    return pa.ruleInCandidate ? -1 : 1;
+                                  }
+                                  final ra = pa.riskProbability;
+                                  final rb = pb.riskProbability;
+                                  if ((ra == null) != (rb == null)) {
+                                    return ra == null ? 1 : -1;
+                                  }
+                                  if (ra != null && rb != null && ra != rb) {
+                                    return rb.compareTo(ra);
+                                  }
+                                  return pa.modelName.compareTo(pb.modelName);
+                                });
+                              final measureNext = <String>{
+                                for (final e in entries)
+                                  ...e.value.featuresMissing,
+                              }.toList();
+                              final tfliteRan = entries
+                                  .where((e) => e.value.usingModel)
+                                  .length;
+                              return Column(
+                                children: [
+                                  // The engine-status line: the honest, at-a-glance
+                                  // answer to "did the models really run?".
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      bottom: Gap.md,
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Icon(
+                                          tfliteRan > 0
+                                              ? Icons.memory_rounded
+                                              : Icons.menu_book_outlined,
+                                          size: 15,
+                                          color: tfliteRan > 0
+                                              ? AppColors.triageGreen
+                                              : AppColors.triageAmber,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            tfliteRan == entries.length
+                                                ? 'All ${entries.length} models ran '
+                                                      'the TFLite binary on this '
+                                                      'device.'
+                                                : tfliteRan > 0
+                                                ? '$tfliteRan of ${entries.length} '
+                                                      'models ran TFLite; the rest '
+                                                      'used the protocol rules.'
+                                                : 'The TFLite interpreter could not '
+                                                      'load on this OS, so the '
+                                                      'WHO/GHS protocol rules carried '
+                                                      'every check. On the Android '
+                                                      'tablet the models run '
+                                                      'on-device.',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                              color: AppColors.inkMuted,
+                                              height: 1.4,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (measureNext.isNotEmpty)
+                                    _MeasureNextCard(featureNames: measureNext),
+                                  for (final e in entries)
+                                    _AiModelCard(
+                                      prediction: e.value,
+                                      status: byName[e.key],
+                                      precision: _flagPrecision(
+                                        e.key,
+                                        byName[e.key],
+                                      ),
+                                      prior: _regionalPriors[e.key],
+                                      open: _openModels.contains(e.key),
+                                      onToggle: () => setState(() {
+                                        if (!_openModels.add(e.key)) {
+                                          _openModels.remove(e.key);
+                                        }
+                                      }),
+                                    ),
+                                ],
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: Gap.xxl),
+                  ],
+                ),
+              )
+            : KeyedSubtree(
+                key: const ValueKey('careplan'),
+                child: ListView(
+                  padding: const EdgeInsets.all(Gap.lg),
+                  children: [
+                    // ----------------------------------- Tailored plan
+                    // Who this plan is for, before what to do: the
+                    // synthesizer names the cohort and its deterioration
+                    // pattern, so the same screen reads differently for a
+                    // newborn, a child under five and a mother.
+                    if (plan.patientCohort != null &&
+                        plan.cohortNote != null) ...[
+                      CohortCallout(
+                        cohort: plan.patientCohort!,
+                        note: plan.cohortNote!,
+                      ),
+                      const SizedBox(height: Gap.lg),
+                    ],
+
+                    // ------------------------------------- Do this now
+                    // The worklist is the decision: numbered, tickable,
+                    // urgency-tagged, and speakable in the worker's
+                    // language — what the CHO acts on before leaving the
+                    // compound. One deliberate tap away, behind the results:
+                    // the nurse reads the verdict first.
+                    if (plan.actions.isNotEmpty) ...[
+                      RecSection(
+                        title: 'Do this now',
+                        icon: Icons.checklist_rounded,
+                        trailing: AudioButton(
+                          text:
+                              'What to do. '
+                              '${plan.actions.map((a) => a.instruction).join('. ')}.',
+                          language: input.user.preferredLanguage,
+                          id: 'result_actions',
+                          compact: true,
+                        ),
+                        child: ActionWorklist(actions: plan.actions),
+                      ),
+                      const RecHairline(),
+                    ],
+
+                    // ------------------------------------------------------- Referral
+                    _ReferralSection(
+                      refer: _refer,
+                      onRefer: (v) => setState(() {
+                        _referTouched = true;
+                        _refer = v;
+                      }),
+                      facilities: _adequateFacilities(),
+                      facility: _facility,
+                      onFacility: (f) => setState(() => _facility = f),
+                      urgency: _urgency,
+                      onUrgency: (u) => setState(() => _urgency = u),
+                      capabilities: result.referralCapabilitiesNeeded,
+                    ),
+
+                    // ------------------------------------------------------ Follow-up
+                    const RecHairline(),
+                    RecSection(
+                      title: 'Follow-up contact',
+                      icon: Icons.event_repeat_outlined,
+                      subtitle:
+                          'Added to your queue. The worker who started this case '
+                          'should be the one who closes it.',
+                      child: ChoiceChipsField<int>(
+                        label: 'Review in',
+                        options: const [1, 2, 3, 7, 14, 30],
+                        labelOf: (d) => '$d day${d == 1 ? '' : 's'}',
+                        value: _followDays,
+                        onChanged: (d) => setState(() => _followDays = d ?? 7),
+                      ),
+                    ),
+
+                    // ------------------------------------------------------ Nutrition
+                    if (nutrition != null) ...[
+                      const RecHairline(),
+                      NutritionRecSection(
+                        plan: nutrition,
+                        cost: _cost,
+                        onCost: (tier) {
+                          setState(() => _cost = tier);
+                        },
+                      ),
+                    ],
+
+                    // -------------------------------------------------- Early learning
+                    // Nurturing Care domains 3 & 5 — responsive caregiving and early
+                    // learning. Only for the newborn and child-under-five categories.
+                    if (result.clientType == ClientType.newborn ||
+                        result.clientType == ClientType.childUnderFive) ...[
+                      const RecHairline(),
+                      EarlyLearningRecSection(person: input.person),
+                    ],
+
+                    // -------------------------------- UNICEF Nurturing Care (PILLAR 3)
+                    if (nurturingCare.isNotEmpty &&
+                        (result.clientType == ClientType.newborn ||
+                            result.clientType == ClientType.childUnderFive ||
+                            result.clientType == ClientType.pregnantWoman ||
+                            result.clientType ==
+                                ClientType.postpartumWoman)) ...[
+                      const RecHairline(),
+                      NurturingCareRecSection(assessment: nurturingCare),
+                    ],
+
+                    // -------------------------------------------------- Immunisation
+                    if (immunisation != null) ...[
+                      const RecHairline(),
+                      ImmunisationRecSection(plan: immunisation),
+                    ],
+
+                    // ------------------------------------------------ Clinical override
+                    // Demoted to one quiet line: the verdict owns the screen. Only
+                    // when the worker disagrees does the override form unfold —
+                    // saved with their name, reviewable by a supervisor.
+                    if (input.user.can(
+                      Permission.overrideAiRecommendation,
+                    )) ...[
+                      const RecHairline(),
+                      if (!_showOverride)
+                        Center(
+                          child: TextButton(
+                            onPressed: () =>
+                                setState(() => _showOverride = true),
+                            child: const Text(
+                              'Disagree with this plan? Record a clinical override',
+                            ),
+                          ),
+                        )
+                      else
+                        _OverrideSection(
+                          engineTriage: plan.overallTriage,
+                          overrideLevel: _override,
+                          reasonController: _overrideReason,
+                          onOverride: (level) {
+                            setState(() {
+                              _override = level;
+                              if (level == TriageLevel.urgent) {
+                                _refer = true;
+                                _urgency = ReferralUrgency.immediate;
+                              }
+                            });
+                          },
+                        ),
+                    ],
+
+                    if (_error != null) ...[
+                      const RecHairline(),
+                      Container(
+                        padding: const EdgeInsets.all(Gap.md),
+                        decoration: BoxDecoration(
+                          color: AppColors.triageRedBg,
+                          borderRadius: BorderRadius.circular(Gap.radiusSm),
+                        ),
+                        child: Text(
+                          _error!,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.triageRed,
+                            fontWeight: FontWeight.w600,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: Gap.lg),
+                    ],
+
+                    // ------------------------ The evidence, still one tap away
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () => setState(() => _view = 2),
+                        icon: const Icon(
+                          Icons.description_outlined,
+                          size: 17,
+                        ),
+                        label: const Text('Open full clinical report'),
+                      ),
+                    ),
+                    const SizedBox(height: Gap.xxl),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(height: Gap.lg),
-          ],
-
-          const SizedBox(height: Gap.xxl),
-        ],
       ),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.all(Gap.lg),
@@ -1378,14 +1510,15 @@ class _AssessmentResultScreenState
   }
 }
 
-// -------------------------------------------------------------- Verdict card
+// -------------------------------------------------------------- Verdict hero
 
-/// The whole assessment in one glance: the governing level in its IMCI
-/// colour, the classification, and the honesty meta line — data confidence,
-/// what was not measured, when to review. A clinical chart, not a marketing
-/// hero: the colour rail is the safety signal and nothing decorates over it.
-class _VerdictCard extends StatelessWidget {
-  const _VerdictCard({
+/// The verdict as one premium moment: the deep royal hero (the brand's
+/// authority voice), the IMCI level chip (the safety colours, untouched),
+/// the classification in large type, the data-confidence ring, and the
+/// honesty meta line. This is the card the nurse remembers — and the one
+/// card that carries the entire decision.
+class _VerdictHero extends StatelessWidget {
+  const _VerdictHero({
     required this.classification,
     required this.level,
     required this.score,
@@ -1408,99 +1541,414 @@ class _VerdictCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = triageColours(level);
-    final dotColour = switch (confidence) {
-      RecommendationConfidence.protocolCertain => AppColors.triageGreen,
-      RecommendationConfidence.high => AppColors.accent,
-      RecommendationConfidence.moderate => AppColors.triageAmber,
-      RecommendationConfidence.low => AppColors.inkFaint,
-    };
     return Container(
+      decoration: BoxDecoration(
+        gradient: AppColors.heroGradient,
+        borderRadius: BorderRadius.circular(Gap.radius + 6),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x3D1B56DB), // royal blue at ~24%
+            blurRadius: 38,
+            offset: Offset(0, 18),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(Gap.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                // The IMCI chip — the safety colour, intact on the dark
+                // surface, the first thing the eye lands on. Flexible, so
+                // a long triage phrase yields to the width instead of
+                // overflowing it.
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: Gap.md,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: c.fg,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      level.label.toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.1,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+                if (audio != null) ...[const SizedBox(width: Gap.sm), audio!],
+              ],
+            ),
+            const SizedBox(height: Gap.lg),
+            Text(
+              'THE VERDICT',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.6,
+                color: Colors.white.withValues(alpha: 0.6),
+              ),
+            ),
+            const SizedBox(height: Gap.sm),
+            Text(
+              classification,
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                height: 1.25,
+                letterSpacing: -0.3,
+              ),
+            ),
+            const SizedBox(height: Gap.lg),
+            Divider(
+              height: 1,
+              thickness: 1,
+              color: Colors.white.withValues(alpha: 0.18),
+            ),
+            const SizedBox(height: Gap.md),
+            Row(
+              children: [
+                // The confidence ring — thin, white, calm. The number the
+                // data earned, shown once and beautifully.
+                SizedBox(
+                  width: 62,
+                  height: 62,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CircularProgressIndicator(
+                        value: score / 100,
+                        strokeWidth: 5,
+                        backgroundColor: Colors.white.withValues(alpha: 0.18),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Colors.white,
+                        ),
+                      ),
+                      Center(
+                        child: Text(
+                          '$score%',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: Gap.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'DATA CONFIDENCE',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.4,
+                          color: Colors.white.withValues(alpha: 0.6),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        confidence.label,
+                        style: const TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Wrap(
+                        spacing: Gap.md,
+                        runSpacing: Gap.xs,
+                        children: [
+                          if (missingCount > 0)
+                            _HeroMeta(text: '$missingCount not measured'),
+                          if (followUpInDays != null)
+                            _HeroMeta(
+                              text:
+                                  'Review in $followUpInDays '
+                                  'day${followUpInDays == 1 ? '' : 's'}',
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (overrideNote != null) ...[
+              const SizedBox(height: Gap.md),
+              overrideNote!,
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One honesty fact in the hero's meta line, quiet white on the gradient.
+class _HeroMeta extends StatelessWidget {
+  const _HeroMeta({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    text,
+    style: TextStyle(
+      fontSize: 11.5,
+      fontWeight: FontWeight.w700,
+      color: Colors.white.withValues(alpha: 0.75),
+    ),
+  );
+}
+
+// ---------------------------------------------------------- Findings deck
+
+/// The findings as severity-coloured cards.
+///
+/// Colour here is clinical, never decorative: every card wears the IMCI band
+/// of the finding it carries, so a nurse scanning the deck reads the severity
+/// before she reads a single word.
+class _FindingsDeck extends StatelessWidget {
+  const _FindingsDeck({required this.findings, required this.totalCount});
+
+  final List<ClinicalFinding> findings;
+  final int totalCount;
+
+  @override
+  Widget build(BuildContext context) {
+    if (findings.isEmpty) return const _AllClearCard();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final f in findings) _FindingCard(finding: f),
+        if (totalCount > findings.length)
+          Padding(
+            padding: const EdgeInsets.only(top: Gap.xs, left: Gap.xs),
+            child: Text(
+              '${totalCount - findings.length} more '
+              '${totalCount - findings.length == 1 ? 'finding' : 'findings'} '
+              '— the full clinical report lists them all.',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.inkMuted,
+                height: 1.4,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// The routine-verdict card: green, calm, explicit. An empty deck must still
+/// say something — "nothing needs treatment today" is itself a decision.
+class _AllClearCard extends StatelessWidget {
+  const _AllClearCard();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(Gap.lg),
+    decoration: BoxDecoration(
+      color: AppColors.triageGreenBg,
+      borderRadius: BorderRadius.circular(Gap.radius),
+      border: Border.all(
+        color: AppColors.triageGreen.withValues(alpha: 0.35),
+        width: Gap.hairline,
+      ),
+    ),
+    child: Row(
+      children: [
+        Container(
+          width: 42,
+          height: 42,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.check_circle_rounded,
+            size: 24,
+            color: AppColors.triageGreen,
+          ),
+        ),
+        const SizedBox(width: Gap.md),
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'No concerning findings',
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.triageGreen,
+                ),
+              ),
+              SizedBox(height: 3),
+              Text(
+                'Routine care continues at the next scheduled contact.',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.inkMuted,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// One finding as a card: the severity badge, the IMCI pill, the measured
+/// number against its cut-off. The colour is the finding's own triage band —
+/// the same red/amber/green the protocol prints, never a decorative palette.
+class _FindingCard extends StatelessWidget {
+  const _FindingCard({required this.finding});
+
+  final ClinicalFinding finding;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = triageColours(finding.severity);
+    return Container(
+      margin: const EdgeInsets.only(bottom: Gap.sm),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(Gap.radius),
         border: Border.all(color: AppColors.line, width: Gap.hairline),
         boxShadow: const [AppShadows.card],
       ),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Padding(
+        padding: const EdgeInsets.all(Gap.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // The IMCI colour rail — the one decoration that carries
-            // clinical meaning.
-            Container(
-              width: 5,
-              decoration: BoxDecoration(
-                color: c.fg,
-                borderRadius: const BorderRadius.horizontal(
-                  left: Radius.circular(Gap.radius),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: c.bg,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    triageIcon(finding.severity),
+                    size: 20,
+                    color: c.fg,
+                  ),
+                ),
+                const SizedBox(width: Gap.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        finding.label,
+                        style: const TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.ink,
+                          height: 1.3,
+                        ),
+                      ),
+                      if (finding.protocolSource != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          finding.protocolSource!,
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.4,
+                            color: AppColors.inkMuted,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: Gap.sm),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Gap.sm,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: c.fg,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    // The single-word band (URGENT / PRIORITY / WATCH /
+                    // ROUTINE), never the full sentence label — a pill
+                    // must stay a pill at 308px card width.
+                    finding.severity.name.toUpperCase(),
+                    style: const TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: Gap.sm),
+            Padding(
+              padding: const EdgeInsets.only(left: 50),
+              child: Text(
+                finding.detail,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.inkMuted,
+                  height: 1.45,
                 ),
               ),
             ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(Gap.lg),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            if (finding.measuredValue != null || finding.threshold != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 50, top: Gap.sm),
+                child: Wrap(
+                  spacing: Gap.sm,
+                  runSpacing: Gap.xs,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            level.label.toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.0,
-                              color: c.fg,
-                            ),
-                          ),
-                        ),
-                        ?audio,
-                      ],
-                    ),
-                    const SizedBox(height: Gap.sm),
-                    Text(
-                      classification,
-                      style: const TextStyle(
-                        fontSize: 21,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.ink,
-                        height: 1.25,
-                        letterSpacing: -0.2,
+                    if (finding.measuredValue != null)
+                      _MeasureChip(
+                        label: 'Measured',
+                        value: finding.measuredValue!,
+                        colour: c.fg,
                       ),
-                    ),
-                    const SizedBox(height: Gap.md),
-                    const Divider(
-                      height: 1,
-                      thickness: 1,
-                      color: AppColors.line,
-                    ),
-                    const SizedBox(height: Gap.sm),
-                    Wrap(
-                      spacing: Gap.md,
-                      runSpacing: Gap.xs,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        _MetaItem(dot: dotColour, text: 'Data $score%'),
-                        _MetaItem(text: confidence.label),
-                        if (missingCount > 0)
-                          _MetaItem(text: '$missingCount not measured'),
-                        if (followUpInDays != null)
-                          _MetaItem(
-                            text:
-                                'Review in $followUpInDays '
-                                'day${followUpInDays == 1 ? '' : 's'}',
-                          ),
-                      ],
-                    ),
-                    if (overrideNote != null) ...[
-                      const SizedBox(height: Gap.sm),
-                      overrideNote!,
-                    ],
+                    if (finding.threshold != null)
+                      _MeasureChip(
+                        label: 'Cut-off',
+                        value: finding.threshold!,
+                        colour: AppColors.inkMuted,
+                      ),
                   ],
                 ),
               ),
-            ),
           ],
         ),
       ),
@@ -1508,262 +1956,247 @@ class _VerdictCard extends StatelessWidget {
   }
 }
 
-/// One fact in the verdict's meta line: an optional status dot + a short,
-/// plain-words label. Built as rich text so long labels wrap instead of
-/// overflowing on narrow screens.
-class _MetaItem extends StatelessWidget {
-  const _MetaItem({this.dot, required this.text});
-
-  final Color? dot;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Text.rich(
-    TextSpan(
-      children: [
-        if (dot != null)
-          WidgetSpan(
-            alignment: PlaceholderAlignment.middle,
-            child: Container(
-              width: 7,
-              height: 7,
-              margin: const EdgeInsets.only(right: 5),
-              decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
-            ),
-          ),
-        TextSpan(text: text),
-      ],
-    ),
-    style: const TextStyle(
-      fontSize: 11.5,
-      fontWeight: FontWeight.w700,
-      color: AppColors.inkMuted,
-    ),
-  );
-}
-
-// ---------------------------------------------------- Quiet section scaffolds
-
-/// A section header without a box: an eyebrow label, an optional one-line
-/// subtitle, and the content. The whole screen reads as one clinical chart
-/// separated by hairlines, not a stack of competing cards.
-class _Section extends StatelessWidget {
-  const _Section({
-    required this.title,
-    required this.child,
-    this.icon,
-    this.subtitle,
-    this.trailing,
-    this.accent,
+/// One "measured vs cut-off" chip on a finding card.
+class _MeasureChip extends StatelessWidget {
+  const _MeasureChip({
+    required this.label,
+    required this.value,
+    required this.colour,
   });
 
-  final String title;
-  final String? subtitle;
-  final IconData? icon;
-  final Widget? trailing;
-  final Widget child;
-  final Color? accent;
+  final String label;
+  final String value;
+  final Color colour;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: AppColors.canvas,
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Text.rich(
+      TextSpan(
+        text: '$label ',
+        style: const TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+          color: AppColors.inkMuted,
+        ),
         children: [
-          if (icon != null) ...[
-            Icon(icon, size: 15, color: accent ?? AppColors.inkFaint),
-            const SizedBox(width: Gap.sm),
-          ],
-          Expanded(
-            child: Text(
-              title.toUpperCase(),
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.1,
-                color: AppColors.inkMuted,
-              ),
+          TextSpan(
+            text: value,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: colour,
             ),
           ),
-          ?trailing,
         ],
       ),
-      if (subtitle != null) ...[
-        const SizedBox(height: Gap.xs),
-        Text(
-          subtitle!,
-          style: const TextStyle(
-            fontSize: 12,
-            color: AppColors.inkMuted,
-            height: 1.4,
-          ),
-        ),
-      ],
-      const SizedBox(height: Gap.md),
-      child,
-    ],
+    ),
   );
 }
 
-/// The breathing room between sections: a single hairline with generous
-/// vertical margins.
-class _Hairline extends StatelessWidget {
-  const _Hairline();
+/// The doorway into the care plan: the verdict is read first, the
+/// recommendations open as their own page — never a wall to scroll past.
+class _RecommendationsCta extends StatelessWidget {
+  const _RecommendationsCta({
+    required this.actionsCount,
+    required this.needsReferral,
+    required this.followUpInDays,
+    required this.onOpen,
+  });
 
-  @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.symmetric(vertical: Gap.lg),
-    child: Divider(height: 1, thickness: 1, color: AppColors.line),
-  );
-}
-
-// --------------------------------------------------------------------- Action
-
-class _ActionTile extends StatelessWidget {
-  const _ActionTile(this.action, {this.done = false, this.onToggle});
-
-  final RecommendedAction action;
-  final bool done;
-  final VoidCallback? onToggle;
+  final int actionsCount;
+  final bool needsReferral;
+  final int? followUpInDays;
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
-    final (icon, colour) = action.isReferral
-        ? (Icons.local_hospital_outlined, AppColors.triageRed)
-        : action.isTreatment
-        ? (Icons.medication_outlined, AppColors.triageAmber)
-        : (Icons.chat_bubble_outline_rounded, AppColors.accent);
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Gap.md),
+    final subtitle = [
+      if (actionsCount > 0)
+        '$actionsCount ${actionsCount == 1 ? 'action' : 'actions'} to do now',
+      if (needsReferral) 'a referral to arrange',
+      if (followUpInDays != null)
+        'review in $followUpInDays ${followUpInDays == 1 ? 'day' : 'days'}',
+    ].join(' · ');
+    return Material(
+      color: Colors.transparent,
       child: InkWell(
-        onTap: onToggle,
-        borderRadius: BorderRadius.circular(Gap.radiusSm),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Tick circle — the satisfying "done" micro-interaction (T3).
-            Container(
-              width: 22,
-              height: 22,
-              margin: const EdgeInsets.only(right: Gap.md),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: done ? AppColors.accent : Colors.transparent,
-                border: Border.all(
-                  color: done ? AppColors.accent : AppColors.inkFaint,
-                  width: 1.5,
+        borderRadius: BorderRadius.circular(Gap.radius),
+        onTap: onOpen,
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: AppColors.heroGradient,
+            borderRadius: BorderRadius.circular(Gap.radius),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x3D1B56DB),
+                blurRadius: 26,
+                offset: Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(Gap.lg),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.checklist_rounded,
+                    size: 22,
+                    color: Colors.white,
+                  ),
                 ),
-              ),
-              child: done
-                  ? const Icon(
-                      Icons.check_rounded,
-                      size: 14,
-                      color: Colors.white,
-                    )
-                  : null,
-            ),
-            Icon(icon, size: 18, color: done ? AppColors.inkFaint : colour),
-            const SizedBox(width: Gap.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    action.instruction,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w700,
-                      height: 1.4,
-                      color: done ? AppColors.inkFaint : null,
-                      decoration: done
-                          ? TextDecoration.lineThrough
-                          : TextDecoration.none,
-                    ),
-                  ),
-                  if (action.rationale != null) ...[
-                    const SizedBox(height: Gap.xs),
-                    Text(
-                      action.rationale!,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.inkMuted,
-                        height: 1.4,
+                const SizedBox(width: Gap.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Show recommendations',
+                        style: TextStyle(
+                          fontSize: 16.5,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
-                  ],
-                  if (action.protocolSource != null) ...[
-                    const SizedBox(height: Gap.xs),
-                    Text(
-                      action.protocolSource!,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontStyle: FontStyle.italic,
-                        color: AppColors.inkFaint,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: Gap.xs),
-                  Text(
-                    action.urgency.label,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w800,
-                      color: action.isReferral
-                          ? AppColors.triageRed
-                          : AppColors.inkMuted,
-                    ),
+                      if (subtitle.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white.withValues(alpha: 0.75),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: Gap.sm),
+                const Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 20,
+                  color: Colors.white,
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-// ----------------------------------------------------------- Safety net note
+/// The doorway to the clinical report page: one elegant card naming what the
+/// report holds, and the single button that opens it.
+class _ReportTeaser extends StatelessWidget {
+  const _ReportTeaser({
+    required this.findingsCount,
+    required this.actionsCount,
+    required this.needsReferral,
+    required this.onOpen,
+  });
 
-/// A small amber callout shown when one of the synthesizer's safety nets —
-/// the never-miss escalation or the referral guarantee — has fired. These are
-/// deliberately conspicuous: a guard-rail that fires is exactly the kind of
-/// thing a supervisor wants to see, not something to bury.
-class _SafetyNetNote extends StatelessWidget {
-  const _SafetyNetNote({required this.text});
-
-  final String text;
+  final int findingsCount;
+  final int actionsCount;
+  final bool needsReferral;
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(Gap.md),
+      padding: const EdgeInsets.all(Gap.lg),
       decoration: BoxDecoration(
-        color: AppColors.triageAmberBg,
-        borderRadius: BorderRadius.circular(Gap.radiusSm),
-        border: Border(
-          left: BorderSide(color: AppColors.triageAmber, width: 4),
-        ),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(Gap.radius),
+        border: Border.all(color: AppColors.line, width: Gap.hairline),
+        boxShadow: const [AppShadows.card],
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.shield_outlined,
-            size: 16,
-            color: AppColors.triageAmber,
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: const BoxDecoration(
+                  color: AppColors.primaryLight,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.description_outlined,
+                  size: 20,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: Gap.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'Full clinical report',
+                      style: TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'The evidence behind this verdict',
+                      style: TextStyle(fontSize: 12, color: AppColors.inkMuted),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: Gap.sm),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                color: AppColors.triageAmber,
-                height: 1.4,
+          const SizedBox(height: Gap.md),
+          Wrap(
+            spacing: Gap.sm,
+            runSpacing: Gap.sm,
+            children: [
+              _TeaserStat(
+                label: '$findingsCount finding${findingsCount == 1 ? '' : 's'}',
+              ),
+              _TeaserStat(label: '$actionsCount-step plan'),
+              _TeaserStat(
+                label: needsReferral
+                    ? 'Referral prepared'
+                    : 'No referral needed',
+              ),
+              _TeaserStat(label: 'On-device AI evidence'),
+            ],
+          ),
+          const SizedBox(height: Gap.md),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: onOpen,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, Gap.tapTarget),
+              ),
+              child: const Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: Gap.sm,
+                children: [
+                  Text('Open full clinical report'),
+                  Icon(Icons.arrow_forward_rounded, size: 18),
+                ],
               ),
             ),
           ),
@@ -1771,6 +2204,31 @@ class _SafetyNetNote extends StatelessWidget {
       ),
     );
   }
+}
+
+/// One pill in the report teaser's stat strip.
+class _TeaserStat extends StatelessWidget {
+  const _TeaserStat({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: AppColors.canvas,
+      border: Border.all(color: AppColors.line, width: Gap.hairline),
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Text(
+      label,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: AppColors.inkMuted,
+      ),
+    ),
+  );
 }
 
 // ------------------------------------------------------------------ Override
@@ -1792,7 +2250,7 @@ class _OverrideSection extends StatelessWidget {
   final ValueChanged<TriageLevel?> onOverride;
 
   @override
-  Widget build(BuildContext context) => _Section(
+  Widget build(BuildContext context) => RecSection(
     title: overrideLevel == null
         ? 'Your clinical judgement'
         : 'Overriding the engine',
@@ -1892,456 +2350,6 @@ class _OverrideNote extends StatelessWidget {
   }
 }
 
-// ------------------------------------------------------------------ Nutrition
-
-class _NutritionSection extends StatelessWidget {
-  const _NutritionSection({
-    required this.plan,
-    required this.cost,
-    required this.onCost,
-  });
-
-  final NutritionPlan plan;
-  final CostTier cost;
-  final ValueChanged<CostTier> onCost;
-
-  @override
-  Widget build(BuildContext context) => _Section(
-    title: 'Nutrition',
-    subtitle: plan.pathway.label,
-    icon: Icons.restaurant_outlined,
-    accent: plan.therapeuticFoodRequired
-        ? AppColors.triageRed
-        : AppColors.accent,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(Gap.md),
-          decoration: BoxDecoration(
-            color: plan.therapeuticFoodRequired
-                ? AppColors.triageRedBg
-                : AppColors.triageGreenBg,
-            borderRadius: BorderRadius.circular(Gap.radiusSm),
-          ),
-          child: Text(
-            plan.headline,
-            style: TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w800,
-              height: 1.4,
-              color: plan.therapeuticFoodRequired
-                  ? AppColors.triageRed
-                  : AppColors.triageGreen,
-            ),
-          ),
-        ),
-        const SizedBox(height: Gap.md),
-        Text(
-          plan.seasonNote,
-          style: const TextStyle(
-            fontSize: 12.5,
-            color: AppColors.inkMuted,
-            height: 1.4,
-            fontStyle: FontStyle.italic,
-          ),
-        ),
-        const SizedBox(height: Gap.md),
-        ChoiceChipsField<CostTier>(
-          label: 'What can this household afford this month?',
-          why:
-              'A recommendation the family cannot buy is not a recommendation.',
-          options: const [
-            CostTier.freeOrGathered,
-            CostTier.veryLow,
-            CostTier.low,
-            CostTier.moderate,
-          ],
-          labelOf: (t) => t.label,
-          value: cost,
-          onChanged: (t) => onCost(t ?? CostTier.low),
-        ),
-        if (plan.suggestions.isNotEmpty) ...[
-          const SizedBox(height: Gap.sm),
-          const FieldLabel('Start with these local foods'),
-          for (final s in plan.suggestions) _FoodTile(s),
-        ],
-        if (plan.feedingRules.isNotEmpty) ...[
-          const SizedBox(height: Gap.sm),
-          const FieldLabel('Feeding rules'),
-          for (final rule in plan.feedingRules)
-            Padding(
-              padding: const EdgeInsets.only(bottom: Gap.sm),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(
-                    Icons.check_circle_outline_rounded,
-                    size: 16,
-                    color: AppColors.accent,
-                  ),
-                  const SizedBox(width: Gap.sm),
-                  Expanded(
-                    child: Text(
-                      rule,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        height: 1.4,
-                        color: AppColors.ink,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-        if (plan.reviewInDays != null) ...[
-          const SizedBox(height: Gap.sm),
-          Text(
-            'Nutrition review in ${plan.reviewInDays} '
-            'day${plan.reviewInDays == 1 ? '' : 's'}.',
-            style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w800,
-              color: AppColors.primary,
-            ),
-          ),
-        ],
-      ],
-    ),
-  );
-}
-
-class _FoodTile extends StatelessWidget {
-  const _FoodTile(this.food);
-
-  final FoodSuggestion food;
-
-  /// Pick the bundled illustration that best matches this food. Real Northern
-  /// Ghana foods, per master flow [48] — illustrated cards, not paragraphs.
-  String get _image {
-    final f = food.food.toLowerCase();
-    if (f.contains('egg') && !f.contains('garden')) {
-      return AppImages.foodBoiledEgg;
-    }
-    if (f.contains('fish')) {
-      return AppImages.foodDriedFish;
-    }
-    if (f.contains('groundnut') || f.contains('peanut')) {
-      return AppImages.foodGroundnutPaste;
-    }
-    if (f.contains('sweet potato')) {
-      return AppImages.foodSweetPotato;
-    }
-    if (f.contains('pawpaw') || f.contains('papaya')) {
-      return AppImages.foodPawpaw;
-    }
-    if (f.contains('dawadawa') || f.contains('locust')) {
-      return AppImages.foodDawadawa;
-    }
-    if (f.contains('millet') ||
-        f.contains('sorghum') ||
-        f.contains('porridge') ||
-        f.contains('rice') ||
-        f.contains('maize') ||
-        f.contains('yam') ||
-        f.contains('cassava')) {
-      return AppImages.foodMilletPorridge;
-    }
-    if (f.contains('moringa') ||
-        f.contains('baobab') ||
-        f.contains('kuka') ||
-        f.contains('zogale') ||
-        f.contains('leaf') ||
-        f.contains('leaves') ||
-        f.contains('vegetable') ||
-        f.contains('fruit') ||
-        f.contains('mango') ||
-        f.contains('pumpkin')) {
-      return AppImages.foodMoringaBaobab;
-    }
-    return AppImages.foodCowpeaStew;
-  }
-
-  @override
-  Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(bottom: Gap.sm),
-    padding: const EdgeInsets.all(Gap.md),
-    decoration: BoxDecoration(
-      color: AppColors.canvas,
-      borderRadius: BorderRadius.circular(Gap.radiusSm),
-      border: Border.all(color: AppColors.line),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(Gap.radiusXs),
-              child: SizedBox(
-                width: 52,
-                height: 52,
-                child: AppImage(src: _image),
-              ),
-            ),
-            const SizedBox(width: Gap.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    food.localName != null
-                        ? '${food.food} (${food.localName})'
-                        : food.food,
-                    style: const TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: Gap.xs),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: Gap.sm,
-                      vertical: Gap.xs,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryLight,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      food.householdMeasure,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: Gap.xs),
-        Text(
-          food.reason,
-          style: const TextStyle(
-            fontSize: 12,
-            color: AppColors.inkMuted,
-            height: 1.4,
-          ),
-        ),
-        if (food.preparation != null) ...[
-          const SizedBox(height: Gap.xs),
-          Text(
-            'How: ${food.preparation}',
-            style: const TextStyle(fontSize: 12, height: 1.4),
-          ),
-        ],
-        if (food.caution != null) ...[
-          const SizedBox(height: Gap.xs),
-          Text(
-            'Caution: ${food.caution}',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.triageAmber,
-              fontWeight: FontWeight.w600,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ],
-    ),
-  );
-}
-
-// ---------------------------------------------------------- Early learning [49]
-
-/// Early Learning & Responsive Care tips — master flow [49], a required NEW
-/// screen that closes Nurturing Care domains 3 (responsive caregiving) and 5
-/// (early learning). Two to three simple, age-appropriate things a caregiver
-/// can do today, with no toys and no money — talking, playing, responding.
-class _EarlyLearningSection extends StatelessWidget {
-  const _EarlyLearningSection({required this.person});
-
-  final Person person;
-
-  List<String> get _tips {
-    final months = person.ageInMonths;
-    if (person.effectiveClientType == ClientType.newborn ||
-        (months != null && months < 3)) {
-      return const [
-        'Talk and sing to your baby while feeding and bathing. Your voice is '
-            'their first lesson.',
-        'Hold your baby close and look into their eyes. They learn safety '
-            'from your face.',
-        'When your baby cries, answer quickly. A baby who is answered learns '
-            'to trust the world.',
-      ];
-    }
-    if (months != null && months < 6) {
-      return const [
-        'Smile back when your baby smiles. This back-and-forth builds their '
-            'brain.',
-        'Let them reach for a clean spoon or cup. Grasping is their first '
-            'game.',
-        'Name things as you touch them: "nose", "hand", "water".',
-      ];
-    }
-    if (months != null && months < 12) {
-      return const [
-        'Play peek-a-boo. It teaches that things still exist when they are '
-            'hidden.',
-        'Give safe household objects to explore — a cup, a spoon, a cloth.',
-        'Answer their sounds and babbling as if you are having a real '
-            'conversation.',
-      ];
-    }
-    if (months != null && months < 24) {
-      return const [
-        'Name body parts while bathing: "This is your hand, this is your '
-            'foot".',
-        'Let them try feeding themselves, even if it is messy. Practice '
-            'builds skill.',
-        'Count out loud together as you walk: one, two, three.',
-      ];
-    }
-    return const [
-      'Tell stories and ask "What happens next?" Imagination is learning.',
-      'Let them draw with a stick in the sand, or with chalk on a wall.',
-      'Give small jobs — fetching a spoon, carrying a small bowl. '
-          'Responsibility is learning too.',
-    ];
-  }
-
-  @override
-  Widget build(BuildContext context) => _Section(
-    title: 'Play, talk, respond',
-    subtitle:
-        'A child\u2019s brain grows fastest in the first five years. These '
-        'cost nothing and need no toys \u2014 just you.',
-    icon: Icons.toys_outlined,
-    accent: AppColors.primary,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final tip in _tips)
-          Padding(
-            padding: const EdgeInsets.only(bottom: Gap.sm),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  Icons.tips_and_updates_outlined,
-                  size: 16,
-                  color: AppColors.primary,
-                ),
-                const SizedBox(width: Gap.sm),
-                Expanded(
-                  child: Text(
-                    tip,
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      height: 1.45,
-                      color: AppColors.ink,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-    ),
-  );
-}
-
-// --------------------------------------------------------------- Immunisation
-
-class _ImmunisationSection extends StatelessWidget {
-  const _ImmunisationSection({required this.plan});
-
-  final ImmunisationPlan plan;
-
-  @override
-  Widget build(BuildContext context) => _Section(
-    title: 'Immunisation catch-up',
-    subtitle: plan.summary,
-    icon: Icons.vaccines_outlined,
-    accent: plan.overdue.isEmpty ? AppColors.accent : AppColors.triageAmber,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (plan.giveToday.isNotEmpty) ...[
-          Container(
-            padding: const EdgeInsets.all(Gap.md),
-            decoration: BoxDecoration(
-              color: AppColors.triageAmberBg,
-              borderRadius: BorderRadius.circular(Gap.radiusSm),
-            ),
-            child: Text(
-              'Give today: '
-              '${plan.giveToday.map((d) => d.label).join(', ')}.',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                color: AppColors.triageAmber,
-                height: 1.4,
-              ),
-            ),
-          ),
-          const SizedBox(height: Gap.md),
-        ],
-        for (final item in plan.items)
-          if (item.status == ImmunisationStatus.overdue ||
-              item.status == ImmunisationStatus.dueToday ||
-              item.status == ImmunisationStatus.ageBarred)
-            Padding(
-              padding: const EdgeInsets.only(bottom: Gap.sm),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    item.status == ImmunisationStatus.ageBarred
-                        ? Icons.block_outlined
-                        : Icons.priority_high_rounded,
-                    size: 16,
-                    color: item.status == ImmunisationStatus.ageBarred
-                        ? AppColors.inkFaint
-                        : AppColors.triageAmber,
-                  ),
-                  const SizedBox(width: Gap.sm),
-                  Expanded(
-                    child: Text(
-                      '${item.dose.label}: ${item.detail}',
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        height: 1.4,
-                        color: AppColors.ink,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        if (plan.nextDueLabel != null && plan.nextDueInDays != null) ...[
-          const SizedBox(height: Gap.sm),
-          Text(
-            'Next due: ${plan.nextDueLabel} in about ${plan.nextDueInDays} '
-            'days.',
-            style: const TextStyle(
-              fontSize: 12.5,
-              color: AppColors.inkMuted,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ],
-    ),
-  );
-}
-
 // ------------------------------------------------------------------- Referral
 
 class _ReferralSection extends StatelessWidget {
@@ -2366,7 +2374,7 @@ class _ReferralSection extends StatelessWidget {
   final Set<String> capabilities;
 
   @override
-  Widget build(BuildContext context) => _Section(
+  Widget build(BuildContext context) => RecSection(
     title: refer ? 'Referral' : 'Referral (off)',
     subtitle: refer
         ? 'The receiving facility must be able to do what this case needs.'
@@ -2476,648 +2484,6 @@ class _FacilityTile extends StatelessWidget {
       ),
     ),
   );
-}
-
-/// Pre-referral emergency stabilisation section. Rendered ABOVE the
-/// verdict banner because the steps must be executed *before* transport
-/// is dispatched — the second-delay window is the entire reason this
-/// module exists.
-///
-/// Each protocol carries its own WHO / MOH citation. The citation is
-/// shown on the card so a CHO who is unfamiliar with the dose can verify
-/// it against the published guidance before administering.
-class _PreReferralSection extends StatelessWidget {
-  const _PreReferralSection({required this.plan});
-
-  final CarePlan plan;
-
-  @override
-  Widget build(BuildContext context) {
-    // Red background with a "DO NOW" pill — the only section of the app
-    // that overrides the theme to grab attention. A CHO skimming for what
-    // to do first must see this before anything else.
-    final protocols = plan.preReferralProtocols;
-    return Container(
-      padding: const EdgeInsets.all(Gap.lg),
-      decoration: BoxDecoration(
-        color: AppColors.triageRed,
-        borderRadius: BorderRadius.circular(Gap.radius),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.triageRed.withValues(alpha: 0.25),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: Gap.sm,
-                  vertical: 2,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(Gap.radiusSm),
-                ),
-                child: const Text(
-                  'DO NOW — BEFORE TRANSPORT',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.triageRed,
-                    letterSpacing: 0.6,
-                  ),
-                ),
-              ),
-              const Spacer(),
-              const Icon(
-                Icons.medical_services_outlined,
-                color: Colors.white,
-                size: 22,
-              ),
-            ],
-          ),
-          const SizedBox(height: Gap.md),
-          const Text(
-            'Pre-referral stabilisation',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-              color: Colors.white,
-              height: 1.2,
-            ),
-          ),
-          const SizedBox(height: Gap.xs),
-          Text(
-            '${protocols.length} WHO / GHS protocol'
-            '${protocols.length == 1 ? '' : 's'} activated. '
-            'Initiate before transport is dispatched.',
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.white,
-              height: 1.4,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: Gap.md),
-          for (final p in protocols) ...[
-            _ProtocolCard(
-              protocol: p,
-              reason:
-                  plan.preReferralActivationReasons[p.id] ?? 'See audit log.',
-            ),
-            const SizedBox(height: Gap.md),
-          ],
-          // Decision-support framing — required for clinical-decision
-          // software and a deliberate trust signal: the app does not
-          // pretend to be the clinician.
-          Container(
-            padding: const EdgeInsets.all(Gap.md),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(Gap.radiusSm),
-            ),
-            child: const Text(
-              'DECISION SUPPORT — You are the licensed clinician. Verify the '
-              'dose, route and contraindications against the patient before '
-              'administration. Each card below cites the published guideline.',
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.white,
-                height: 1.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// One pre-referral protocol card, with the headline, citation badge,
-/// urgency note, ordered steps (with dose / when / contraindication per
-/// step), and the protocol-level contraindications.
-class _ProtocolCard extends StatelessWidget {
-  const _ProtocolCard({required this.protocol, required this.reason});
-
-  final StabilizationProtocol protocol;
-  final String reason;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(Gap.md),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(Gap.radius),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(
-                Icons.local_hospital_rounded,
-                color: AppColors.triageRed,
-                size: 20,
-              ),
-              const SizedBox(width: Gap.sm),
-              Expanded(
-                child: Text(
-                  protocol.headline,
-                  style: const TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.ink,
-                    height: 1.3,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: Gap.sm),
-          // Citation badge — the audit-defensible anchor.
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: Gap.sm,
-              vertical: 4,
-            ),
-            decoration: BoxDecoration(
-              color: AppColors.triageRedBg,
-              borderRadius: BorderRadius.circular(Gap.radiusSm),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.menu_book_outlined,
-                  size: 12,
-                  color: AppColors.triageRed,
-                ),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    protocol.citation.shortName,
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.triageRed,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (protocol.urgencyNote != null) ...[
-            const SizedBox(height: Gap.sm),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  Icons.timer_outlined,
-                  size: 14,
-                  color: AppColors.triageAmber,
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    protocol.urgencyNote!,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.ink,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-          if (protocol.contraindications.isNotEmpty) ...[
-            const SizedBox(height: Gap.sm),
-            Container(
-              padding: const EdgeInsets.all(Gap.sm),
-              decoration: BoxDecoration(
-                color: AppColors.triageAmberBg,
-                borderRadius: BorderRadius.circular(Gap.radiusSm),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'CONTRAINDICATIONS',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                      color: AppColors.triageAmber,
-                      letterSpacing: 0.4,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  for (final c in protocol.contraindications)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 1),
-                      child: Text(
-                        '• $c',
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          color: AppColors.ink,
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: Gap.md),
-          const Text(
-            'STEPS',
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w900,
-              color: AppColors.inkMuted,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: Gap.xs),
-          for (final s in protocol.steps)
-            _ProtocolStepTile(step: s, reason: reason),
-        ],
-      ),
-    );
-  }
-}
-
-/// One numbered step in a pre-referral protocol.
-class _ProtocolStepTile extends StatelessWidget {
-  const _ProtocolStepTile({required this.step, required this.reason});
-
-  final ProtocolStep step;
-
-  /// The reason string for the protocol. Shown once at the bottom of
-  /// the steps, so the CHO can see *why* the protocol was activated.
-  final String reason;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Gap.xs),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 22,
-            height: 22,
-            decoration: const BoxDecoration(
-              color: AppColors.triageRed,
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                '${step.order}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: Gap.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  step.action,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.ink,
-                    height: 1.35,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                // Dose, in a clinically-faithful format.
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: Gap.sm,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.canvas,
-                    borderRadius: BorderRadius.circular(Gap.radiusSm),
-                    border: Border.all(color: AppColors.line, width: 0.5),
-                  ),
-                  child: Text(
-                    'DOSE: ${step.dose}',
-                    style: const TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.ink,
-                      height: 1.4,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'WHEN: ${step.whenToDo}',
-                  style: const TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.ink,
-                    height: 1.4,
-                  ),
-                ),
-                Text(
-                  'WHY: ${step.rationale}',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.inkMuted,
-                    height: 1.4,
-                  ),
-                ),
-                if (step.contraindication != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    'CAUTION: ${step.contraindication!}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.triageAmber,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// UNICEF Nurturing Care Framework section. Pillar 3 of the engine
-/// revamp. Renders the five canonical pillars as a single, cohesive
-/// card: Good Health, Adequate Nutrition, Responsive Caregiving,
-/// Opportunities for Early Learning, Security and Safety. Each
-/// action carries a citation, and actions already delivered at this
-/// visit are checked off.
-class _NurturingCareSection extends StatelessWidget {
-  const _NurturingCareSection({required this.assessment});
-
-  final NurturingCareAssessment assessment;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Section(
-      title: 'Nurturing care for early development',
-      subtitle:
-          'WHO / UNICEF / World Bank 2018 Nurturing Care Framework. Five '
-          'pillars, applied to this visit.',
-      icon: Icons.child_care_rounded,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Pillar strip — visual indicator of which pillars have
-          // actions.
-          Row(
-            children: [
-              for (final p in NurturingCarePillar.values) ...[
-                Expanded(
-                  child: _PillarChip(
-                    pillar: p,
-                    summary: assessment.pillarSummaries[p] ?? '',
-                  ),
-                ),
-                if (p != NurturingCarePillar.values.last)
-                  const SizedBox(width: 4),
-              ],
-            ],
-          ),
-          const SizedBox(height: Gap.md),
-          // Actions grouped by pillar.
-          for (final p in NurturingCarePillar.values) ...[
-            ...assessment.actions
-                .where((a) => a.pillar == p)
-                .map(
-                  (a) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: _NurturingCareActionTile(action: a),
-                  ),
-                ),
-          ],
-          const SizedBox(height: Gap.sm),
-          // Citation footer — the audit-defensible anchor.
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(
-                Icons.menu_book_outlined,
-                size: 12,
-                color: AppColors.inkMuted,
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  'Framework: WHO / UNICEF / World Bank 2018, Nurturing '
-                  'care for early childhood development. CC BY-NC-SA 3.0 '
-                  'IGO. Each action cites a WHO/UNICEF/GHS implementing '
-                  'guideline.',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    color: AppColors.inkMuted,
-                    fontStyle: FontStyle.italic,
-                    height: 1.4,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// One pillar's chip, shown in the pillar strip at the top of the
-/// section.
-class _PillarChip extends StatelessWidget {
-  const _PillarChip({required this.pillar, required this.summary});
-
-  final NurturingCarePillar pillar;
-  final String summary;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.canvas,
-        borderRadius: BorderRadius.circular(Gap.radiusSm),
-        border: Border.all(color: AppColors.line, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            pillar.displayName,
-            style: const TextStyle(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w800,
-              color: AppColors.ink,
-              height: 1.2,
-              letterSpacing: 0.2,
-            ),
-          ),
-          const SizedBox(height: 1),
-          Text(
-            summary,
-            style: const TextStyle(
-              fontSize: 8.5,
-              color: AppColors.inkMuted,
-              height: 1.2,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// One action tile within a pillar.
-class _NurturingCareActionTile extends StatelessWidget {
-  const _NurturingCareActionTile({required this.action});
-
-  final NurturingCareAction action;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Checkmark or hollow circle: delivered or pending.
-        Container(
-          width: 18,
-          height: 18,
-          margin: const EdgeInsets.only(top: 1),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: action.deliveredAtVisit
-                ? AppColors.triageGreen
-                : Colors.transparent,
-            border: Border.all(
-              color: action.deliveredAtVisit
-                  ? AppColors.triageGreen
-                  : AppColors.inkMuted,
-              width: 1.5,
-            ),
-          ),
-          child: action.deliveredAtVisit
-              ? const Icon(Icons.check, size: 12, color: Colors.white)
-              : null,
-        ),
-        const SizedBox(width: Gap.sm),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                action.title,
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.ink,
-                  height: 1.3,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                action.counsellingNote,
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  color: AppColors.ink,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Row(
-                children: [
-                  if (action.deliveredAtVisit)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 1,
-                      ),
-                      margin: const EdgeInsets.only(right: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.triageGreenBg,
-                        borderRadius: BorderRadius.circular(Gap.radiusSm),
-                      ),
-                      child: const Text(
-                        'DELIVERED',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.triageGreen,
-                          letterSpacing: 0.4,
-                        ),
-                      ),
-                    ),
-                  if (action.referToService)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 1,
-                      ),
-                      margin: const EdgeInsets.only(right: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.triageAmberBg,
-                        borderRadius: BorderRadius.circular(Gap.radiusSm),
-                      ),
-                      child: const Text(
-                        'REFER',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.triageAmber,
-                          letterSpacing: 0.4,
-                        ),
-                      ),
-                    ),
-                  Flexible(
-                    child: Text(
-                      action.citation.shortName,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontStyle: FontStyle.italic,
-                        color: AppColors.inkMuted,
-                        height: 1.3,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 // ------------------------------------------------------------ AI evidence UI

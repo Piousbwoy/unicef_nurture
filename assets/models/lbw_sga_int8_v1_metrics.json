@@ -1,8 +1,8 @@
 {
   "model_name": "lbw_sga",
-  "model_version": "v1.0-ghana-baseline-public-data-and-ghana-priors",
+  "model_version": "v1.1-ghana-baseline-normalized-serving",
   "version_ladder": {
-    "this": "v1.0-ghana-baseline",
+    "this": "v1.1-ghana-baseline-normalized-serving",
     "next": "v2.0-kintampo-cohort",
     "v3_prospective": "v3.0-prospective-pilot"
   },
@@ -16,21 +16,21 @@
     ],
     "external_validation": null
   },
-  "clinical_note": "v1.0 Ghana baseline. Simulator cohort seeded from 4 peer-reviewed Ghanaian clinical studies (DOIs in `priors_used`); UCI Maternal Health Risk used as held-out external validation set. Calibration via Platt scaling on the internal 20% hold-out; 95% CI derived from per-bin Platt-residual std; drift detection via per-feature z-score against the training distribution.",
+  "clinical_note": "v1.1 normalization-skew fix. Same Ghana-priors simulator cohort as v1.0 (4 citation groups), but the distilled MLP is trained and served on the [0,1] SCHEMA_NORM representation - the exact tensor the app feeds at inference. v1.0 distilled from RAW feature scales, so its input quantization clamped every app input to ~0 (train/serve skew); v1.1's flatbuffer input quantization covers [0,1] (scale=0.003922, zero_point=-128). Calibration via Platt scaling on the internal 20% hold-out; 95% CI from per-bin Platt-residual std; drift detection via per-feature z-score against the normalized training distribution.",
   "validation": {
     "internal": {
-      "holdout_auc": 0.9641,
-      "sensitivity": 0.8929,
-      "specificity": 0.9082,
-      "youden_j": 0.8011,
-      "best_threshold": 0.17,
+      "holdout_auc": 0.9646,
+      "sensitivity": 0.8976,
+      "specificity": 0.9006,
+      "youden_j": 0.7983,
+      "best_threshold": 0.15,
       "n_train": 8000,
       "n_test": 2000,
       "calibration": {
         "method": "platt_scaling",
-        "A": 0.719108,
-        "B": 0.018284,
-        "brier_score": 0.2389,
+        "A": 0.737536,
+        "B": 0.03138,
+        "brier_score": 0.2407,
         "ci_table": [
           {
             "bin_lo": 0.0,
@@ -71,15 +71,15 @@
             "bin_lo": 0.5,
             "bin_hi": 0.6,
             "bin_mid": 0.55,
-            "residual_std": 0.2269,
-            "n": 1603
+            "residual_std": 0.2188,
+            "n": 1598
           },
           {
             "bin_lo": 0.6,
             "bin_hi": 0.7,
             "bin_mid": 0.65,
-            "residual_std": 0.3725,
-            "n": 397
+            "residual_std": 0.364,
+            "n": 402
           },
           {
             "bin_lo": 0.7,
@@ -203,11 +203,11 @@
     "multiple_birth"
   ],
   "input_quantization": {
-    "scale": 0.0078125,
+    "scale": 0.003921569,
     "zero_point": -128
   },
-  "tflite_sha256": "5348f104119718777b3afecd4c1709766e3758724286ffd3c8b7d2268c0c9509",
-  "trained_on": "2026-08-06",
+  "tflite_sha256": "096cbd93b0995b9e41d7c8eca6126a53297cdd753ea8fbc643db32b736ec2d87",
+  "trained_on": "2026-08-18",
   "provenance": {
     "[M1]": {
       "short": "Adokiya 2022, Women & Health",

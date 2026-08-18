@@ -358,6 +358,7 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
         Expanded(
           child: ListView(
             padding: const EdgeInsets.all(Gap.lg),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             children: [
               ProtocolHeader(
                 name: person.fullName,
@@ -458,6 +459,7 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
             controller: _weeks,
             unit: 'wks',
             cutoff: 'Full term is 37–42 weeks',
+            example: 'e.g. 28',
             width: 160,
           ),
         )
@@ -498,12 +500,14 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
                 controller: _systolic,
                 unit: 'mmHg',
                 cutoff: 'High ≥140 · severe ≥160',
+                example: 'e.g. 120',
               ),
               right: MeasureField(
                 label: 'Diastolic BP',
                 controller: _diastolic,
                 unit: 'mmHg',
                 cutoff: 'High ≥90 · severe ≥110',
+                example: 'e.g. 80',
               ),
             ),
             MeasurePair(
@@ -512,12 +516,14 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
                 controller: _hb,
                 unit: 'g/dL',
                 cutoff: 'Anaemia <11 · severe <7',
+                example: 'e.g. 11.5',
               ),
               right: MeasureField(
                 label: 'MUAC',
                 controller: _muac,
                 unit: 'cm',
                 cutoff: 'Undernutrition <23 in pregnancy',
+                example: 'e.g. 24.5',
               ),
             ),
             MeasurePair(
@@ -526,12 +532,14 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
                 controller: _weight,
                 unit: 'kg',
                 decimal: true,
+                example: 'e.g. 62.5',
               ),
               right: MeasureField(
                 label: 'Fundal height',
                 controller: _fundal,
                 unit: 'cm',
                 cutoff: 'Should roughly match the week from ~20 wks',
+                example: 'e.g. 28',
               ),
             ),
             MeasurePair(
@@ -540,6 +548,7 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
                 controller: _fhr,
                 unit: 'bpm',
                 cutoff: 'Normal 120–160',
+                example: 'e.g. 140',
               ),
               right: ChoiceChipsField<int>(
                 label: 'Protein in urine',
@@ -889,6 +898,7 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
             controller: _days,
             unit: 'days',
             cutoff: 'Day 1 and days 2–7 carry most maternal deaths',
+            example: 'e.g. 3',
             width: 160,
           ),
         )
@@ -968,12 +978,14 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
                 controller: _systolic,
                 unit: 'mmHg',
                 cutoff: 'High ≥140 · severe ≥160',
+                example: 'e.g. 120',
               ),
               right: MeasureField(
                 label: 'Diastolic BP',
                 controller: _diastolic,
                 unit: 'mmHg',
                 cutoff: 'High ≥90 · severe ≥110',
+                example: 'e.g. 80',
               ),
             ),
             MeasurePair(
@@ -983,12 +995,14 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
                 unit: '°C',
                 decimal: true,
                 cutoff: 'Fever ≥38.0',
+                example: 'e.g. 36.8',
               ),
               right: MeasureField(
                 label: 'Pulse',
                 controller: _pulse,
                 unit: 'bpm',
                 cutoff: 'Fast >110',
+                example: 'e.g. 80',
               ),
             ),
             MeasurePair(
@@ -997,12 +1011,14 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
                 controller: _hb,
                 unit: 'g/dL',
                 cutoff: 'Anaemia <11 · severe <7',
+                example: 'e.g. 11.5',
               ),
               right: MeasureField(
                 label: 'MUAC',
                 controller: _muac,
                 unit: 'cm',
                 cutoff: 'Undernutrition <23 while breastfeeding',
+                example: 'e.g. 24.5',
               ),
             ),
           ],
@@ -1433,12 +1449,14 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
               controller: _systolic,
               unit: 'mmHg',
               cutoff: 'High ≥140 · severe ≥160',
+              example: 'e.g. 120',
             ),
             right: MeasureField(
               label: 'Diastolic BP',
               controller: _diastolic,
               unit: 'mmHg',
               cutoff: 'High ≥90 · severe ≥110',
+              example: 'e.g. 80',
             ),
           ),
           MeasurePair(
@@ -1448,12 +1466,14 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
               unit: '°C',
               decimal: true,
               cutoff: 'Fever ≥38.0',
+              example: 'e.g. 36.8',
             ),
             right: MeasureField(
               label: 'Haemoglobin',
               controller: _hb,
               unit: 'g/dL',
               cutoff: 'Anaemia <11',
+              example: 'e.g. 11.5',
             ),
           ),
         ],

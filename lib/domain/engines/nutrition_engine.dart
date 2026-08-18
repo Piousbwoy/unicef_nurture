@@ -29,6 +29,7 @@ class FoodSuggestion {
     required this.food,
     required this.reason,
     required this.householdMeasure,
+    required this.group,
     this.localName,
     this.preparation,
     this.caution,
@@ -42,6 +43,10 @@ class FoodSuggestion {
   /// "Two milk tins of millet flour", never "45 grams".
   final String householdMeasure;
 
+  /// The WHO food group this food belongs to — the hook the day-plan
+  /// composer uses to place it at breakfast, lunch or dinner.
+  final FoodGroup group;
+
   final String? localName;
   final String? preparation;
   final String? caution;
@@ -50,9 +55,32 @@ class FoodSuggestion {
     'food': food,
     'reason': reason,
     'household_measure': householdMeasure,
+    'group': group.name,
     'local_name': localName,
     'preparation': preparation,
     'caution': caution,
+  };
+}
+
+/// One slot in a day's plate: a moment, the foods from the chosen
+/// basket that fill it, and the texture / measure note for this age.
+/// A basket of foods is a shopping list; slots make it a day the
+/// caregiver can actually cook.
+class MealSlot {
+  const MealSlot({required this.moment, required this.foods, this.note});
+
+  /// "Breakfast", "Lunch", "Her extra meal"…
+  final String moment;
+
+  /// Food names drawn from the plan's basket.
+  final List<String> foods;
+
+  final String? note;
+
+  Map<String, Object?> toJson() => {
+    'moment': moment,
+    'foods': foods,
+    'note': note,
   };
 }
 
@@ -70,6 +98,9 @@ class NutritionPlan {
     this.therapeuticFoodRequired = false,
     this.reviewInDays,
     this.therapeuticPlan,
+    this.dayPlan = const [],
+    this.dayPlanNote,
+    this.nutrientCoverage = const {},
   });
 
   final NutritionStatus status;
@@ -103,6 +134,21 @@ class NutritionPlan {
   /// citation for the audit log.
   final TherapeuticPlan? therapeuticPlan;
 
+  /// The basket composed into meals: what to cook at each moment of
+  /// the day, in the texture and measure this age can take. Empty when
+  /// food counselling does not apply (SAM — therapeutic food first;
+  /// infants under six months — breast milk only).
+  final List<MealSlot> dayPlan;
+
+  /// The age-band sentence that governs the day plan: texture, cup
+  /// size, frequency. Null when [dayPlan] is empty.
+  final String? dayPlanNote;
+
+  /// The explainability audit for the recommender: for every nutrient
+  /// need this assessment raised, which basket foods answer it. A plan
+  /// that can show its coverage can defend its choices.
+  final Map<String, List<String>> nutrientCoverage;
+
   Map<String, Object?> toJson() => {
     'status': status.name,
     'pathway': pathway.name,
@@ -114,6 +160,9 @@ class NutritionPlan {
     'diversity_gaps_filled': diversityGapsFilled,
     'therapeutic_food_required': therapeuticFoodRequired,
     'review_in_days': reviewInDays,
+    'day_plan': [for (final m in dayPlan) m.toJson()],
+    'day_plan_note': dayPlanNote,
+    'nutrient_coverage': nutrientCoverage,
     if (therapeuticPlan != null)
       'therapeutic_plan': {
         'counselling_headline': therapeuticPlan!.counsellingHeadline,
@@ -173,6 +222,7 @@ abstract final class NutritionEngine {
     bool? appetiteTestPassed,
     bool? hasAnyDangerSign,
     bool isAnaemic = false,
+    bool hasDiarrhoea = false,
     TherapeuticContext? therapeuticContext,
   }) {
     final season = NorthernGhanaSeason.counsellingNote(month);
@@ -244,133 +294,71 @@ abstract final class NutritionEngine {
     }
 
     // -------------------------------------------------------------------
-    // MAM, at-risk and prevention: this is where local foods belong.
+    // MAM, at-risk and prevention: local foods — chosen by what *this*
+    // assessment found, never read off a fixed list. The engine first
+    // derives a weighted nutrient-need profile from the results (wasting
+    // → energy + protein; anaemia or a mother → iron plus the vitamin C
+    // that doubles its uptake; everyone → vitamin A), then scores every
+    // seasonal, affordable, age-right local food against that profile.
+    // Same compound, same month — a different child gets a different
+    // basket, and every food can say why it is there.
     // -------------------------------------------------------------------
-    final suggestions = <FoodSuggestion>[];
-    final seen = <String>{};
-
-    void take(List<LocalFood> foods, String reason) {
-      for (final f in foods) {
-        if (seen.contains(f.name)) continue;
-        seen.add(f.name);
-        suggestions.add(
-          FoodSuggestion(
-            food: f.name,
-            reason: reason,
-            householdMeasure: f.householdMeasure,
-            localName: f.localNames.values.firstOrNull,
-            preparation: f.preparation,
-            caution: f.caution,
-          ),
-        );
-      }
-    }
-
     final effectiveAge = subject == NutritionSubject.child
         ? ageMonths
         : 60; // adults clear every child age gate
 
-    // Energy density first — a wasted child needs calories before variety.
-    if (status == NutritionStatus.moderateAcute ||
-        status == NutritionStatus.atRisk) {
-      take(
-        LocalFoods.recommend(
-          month: month,
-          ageMonths: effectiveAge,
-          nutrient: Nutrient.energy,
-          maxCost: maxCost,
-          limit: 3,
-        ),
-        'Energy-dense and available this month — this is what puts weight back '
-        'on.',
-      );
-      take(
-        LocalFoods.recommend(
-          month: month,
-          ageMonths: effectiveAge,
-          nutrient: Nutrient.protein,
-          maxCost: maxCost,
-          limit: 3,
-        ),
-        'Protein for rebuilding muscle after wasting.',
-      );
-    }
-
-    if (isAnaemic ||
-        subject == NutritionSubject.pregnantWoman ||
-        subject == NutritionSubject.breastfeedingWoman) {
-      // Pillar 2: explicit Northern Ghana iron / protein stack. The
-      // regional therapeutic foods — Bambara beans, Dawadawa, Moringa
-      // (Zogale), and groundnut-fortified millet porridge — are
-      // prioritised in this exact order because the literature on
-      // Northern Ghanaian maternal anaemia (Adokiya 2022, n=420) and
-      // IYCF (Saaka 2015) shows these four are the available, affordable,
-      // culturally-resonant carriers of iron and protein.
-      const northernGhanaStack = [
-        'Moringa leaves',
-        'Dawadawa (locust bean)',
-        'Bambara beans',
-        'Groundnut paste',
-        'Millet',
-      ];
-      final namedFoods = <LocalFood>[];
-      for (final name in northernGhanaStack) {
-        final f = LocalFoods.all.firstWhere(
-          (x) => x.name == name,
-          orElse: () => _emptyLocalFood,
-        );
-        if (f.name.isNotEmpty && f.suitableFor(effectiveAge)) {
-          namedFoods.add(f);
-        }
-      }
-      take(
-        namedFoods,
-        'Regional iron stack. Maternal anaemia reaches 44% in parts of this '
-        'region (Adokiya 2022), and iron tablets alone rarely close the gap. '
-        'Moringa (Zogale) leaves and Dawadawa (Kpalgu) are the two highest-'
-        'iron foods available year-round; Bambara beans (Suma) are the '
-        'regional protein; groundnut-fortified millet porridge is the '
-        'regional complementary food.',
-      );
-      // Then the seasonal iron + vitamin-C fallbacks.
-      take(
-        LocalFoods.recommend(
-          month: month,
-          ageMonths: effectiveAge,
-          nutrient: Nutrient.iron,
-          maxCost: maxCost,
-          limit: 4,
-        ),
-        'Other iron-rich foods in season. Moringa, Dawadawa and Bambara are '
-        'above for a reason — these are the regional anchors.',
-      );
-      take(
-        LocalFoods.recommend(
-          month: month,
-          ageMonths: effectiveAge,
-          nutrient: Nutrient.vitaminC,
-          maxCost: maxCost,
-          limit: 2,
-        ),
-        'Eaten with the iron food, this roughly doubles how much iron the body '
-        'takes up. Baobab fruit (toose) and Dawadawa soup are the regional '
-        'examples.',
-      );
-    }
-
-    take(
-      LocalFoods.recommend(
-        month: month,
-        ageMonths: effectiveAge,
-        nutrient: Nutrient.vitaminA,
-        maxCost: maxCost,
-        limit: 3,
-      ),
-      'Vitamin A protects sight and cuts the risk of dying from measles and '
-      'diarrhoea.',
+    final needs = _nutrientNeeds(
+      status: status,
+      subject: subject,
+      isAnaemic: isAnaemic,
+      hasDiarrhoea: hasDiarrhoea,
     );
+    final ironPriority = needs.any((n) => n.$1 == Nutrient.iron);
 
-    // Fill the specific diversity gaps for the complementary-feeding window.
+    // Candidates: right for the child's age, and either in season inside
+    // the household's cost ceiling — or one of the four regional iron
+    // anchors when iron is the priority. The anchors bypass the season
+    // and cost gates deliberately: the literature (Adokiya 2022, Saaka
+    // 2015) names them the available, affordable, culturally-resonant
+    // carriers of iron in this region, year-round.
+    final candidates = LocalFoods.all.where(
+      (f) =>
+          f.suitableFor(effectiveAge) &&
+          ((ironPriority && _regionalIronAnchors.contains(f.name)) ||
+              (f.availableIn(month) && f.cost.rank <= maxCost.rank)),
+    );
+    final scored = <(LocalFood, double)>[
+      for (final f in candidates) (f, _foodScore(f, needs)),
+    ]..sort((a, b) => b.$2.compareTo(a.$2));
+
+    final suggestions = <FoodSuggestion>[];
+    final chosen = <LocalFood>[];
+    final seen = <String>{};
+    for (final (food, score) in scored) {
+      if (score <= 0 || suggestions.length >= 8) break;
+      seen.add(food.name);
+      chosen.add(food);
+      suggestions.add(
+        FoodSuggestion(
+          food: food.name,
+          reason: _reasonFor(
+            food,
+            needs,
+            subject: subject,
+            isAnaemic: isAnaemic,
+          ),
+          householdMeasure: food.householdMeasure,
+          group: food.group,
+          localName: food.localNames.values.firstOrNull,
+          preparation: food.preparation,
+          caution: food.caution,
+        ),
+      );
+    }
+
+    // Fill the specific diversity gaps for the complementary-feeding
+    // window — the one food per missing group, chosen by the food list
+    // itself, appended after the scored basket.
     final gapsFilled = <String, List<String>>{};
     if (subject == NutritionSubject.child &&
         ageMonths >= 6 &&
@@ -382,18 +370,56 @@ abstract final class NutritionEngine {
         groupsEaten: groupsEatenYesterday,
         maxCost: maxCost,
       );
-      for (final entry in gaps.entries) {
-        gapsFilled[entry.key.label] = entry.value
+      for (final gap in gaps.entries) {
+        gapsFilled[gap.key.label] = gap.value
             .map((f) => f.name)
             .toList(growable: false);
-        take(
-          entry.value.take(1).toList(),
-          'Fills the missing "${entry.key.label}" group — the child ate '
-          '${groupsEatenYesterday.length} of 8 groups yesterday, and 5 is the '
-          'minimum.',
+        if (suggestions.length >= 8) continue;
+        final fill = gap.value.firstWhere(
+          (f) => !seen.contains(f.name),
+          orElse: () => _emptyLocalFood,
+        );
+        if (fill.name.isEmpty) continue;
+        seen.add(fill.name);
+        chosen.add(fill);
+        suggestions.add(
+          FoodSuggestion(
+            food: fill.name,
+            reason: 'Fills the missing "${gap.key.label}" group — the child '
+                'ate ${groupsEatenYesterday.length} of 8 groups yesterday, '
+                'and 5 is the minimum.',
+            householdMeasure: fill.householdMeasure,
+            group: fill.group,
+            localName: fill.localNames.values.firstOrNull,
+            preparation: fill.preparation,
+            caution: fill.caution,
+          ),
         );
       }
     }
+
+    // The explainability audit: for every need this assessment raised,
+    // name the basket foods that answer it.
+    final coverage = <String, List<String>>{};
+    for (final (nutrient, _) in needs) {
+      final covers = [
+        for (final f in chosen)
+          if (f.provides(nutrient)) f.name,
+      ];
+      if (covers.isNotEmpty) coverage[nutrient.label] = covers;
+    }
+
+    // The basket composed into a day: meals, in the texture and measure
+    // this age can take. Under six months the day plan is deliberately
+    // empty — breast milk only is the entire message.
+    final dayPlanNote = _dayPlanNote(subject, ageMonths);
+    final dayPlan = (subject == NutritionSubject.child && ageMonths < 6)
+        ? const <MealSlot>[]
+        : _composeDayPlan(
+            subject: subject,
+            status: status,
+            basket: suggestions,
+          );
 
     return NutritionPlan(
       status: status,
@@ -407,10 +433,14 @@ abstract final class NutritionEngine {
         ageMonths: ageMonths,
         stillBreastfeeding: stillBreastfeeding,
         month: month,
+        hasDiarrhoea: hasDiarrhoea,
       ),
       mealsPerDayTarget: _mealTarget(subject, ageMonths, stillBreastfeeding),
       diversityGapsFilled: gapsFilled,
       therapeuticPlan: therapeuticPlan,
+      dayPlan: dayPlan,
+      dayPlanNote: dayPlanNote,
+      nutrientCoverage: coverage,
       reviewInDays: switch (status) {
         NutritionStatus.severeAcute => 7,
         NutritionStatus.moderateAcute => 14,
@@ -450,6 +480,119 @@ abstract final class NutritionEngine {
     return complicated
         ? NutritionPathway.inpatientTherapeutic
         : NutritionPathway.outpatientTherapeutic;
+  }
+
+  // ------------------------------------------- Result-driven food selection
+
+  /// The four literature-backed carriers of iron and protein in Northern
+  /// Ghana (Adokiya 2022 maternal anaemia, n=420; Saaka 2015 IYCF). They
+  /// carry a scoring bonus and bypass the season / cost gates when iron
+  /// is the priority — the region's year-round anchors.
+  static const Set<String> _regionalIronAnchors = {
+    'Moringa leaves',
+    'Dawadawa (locust bean)',
+    'Bambara beans',
+    'Groundnut paste',
+  };
+
+  /// The nutrient-need profile this assessment's results demand, weighted
+  /// by how badly. This is the hinge of the recommender: the basket a
+  /// family hears is derived from *their* findings — wasting, anaemia,
+  /// the mother's life stage — never from a fixed list.
+  static List<(Nutrient, double)> _nutrientNeeds({
+    required NutritionStatus status,
+    required NutritionSubject subject,
+    required bool isAnaemic,
+    required bool hasDiarrhoea,
+  }) {
+    final needs = <(Nutrient, double)>[];
+    // Wasting: calories before variety.
+    if (status == NutritionStatus.moderateAcute ||
+        status == NutritionStatus.atRisk) {
+      needs.add((Nutrient.energy, 3.0));
+      needs.add((Nutrient.protein, 2.5));
+    }
+    // Anaemia — measured, or carried by pregnancy / lactation, where it
+    // is the region's most common hidden deficit.
+    if (isAnaemic ||
+        subject == NutritionSubject.pregnantWoman ||
+        subject == NutritionSubject.breastfeedingWoman) {
+      needs.add((Nutrient.iron, 3.0));
+      // Vitamin C alongside: it roughly doubles iron uptake, so it is
+      // weighted as part of the iron answer, not a separate topic.
+      needs.add((Nutrient.vitaminC, 2.0));
+      needs.add((Nutrient.protein, 1.5));
+    }
+    // Everyone: vitamin A guards sight and survival.
+    needs.add((Nutrient.vitaminA, 1.0));
+    // Diarrhoea drains zinc faster than any other illness, and zinc is
+    // what shortens the episode and protects the next one (WHO/UNICEF
+    // zinc protocol: 10–14 days alongside continued feeding).
+    if (hasDiarrhoea) {
+      needs.add((Nutrient.zinc, 2.5));
+    }
+    return needs;
+  }
+
+  /// Scores one food against the need profile. A food scores only for
+  /// nutrients it actually provides; the earlier a nutrient ranks in the
+  /// food's own list, the stronger the source it is.
+  static double _foodScore(LocalFood food, List<(Nutrient, double)> needs) {
+    var score = 0.0;
+    for (final (nutrient, weight) in needs) {
+      final index = food.nutrients.indexOf(nutrient);
+      if (index < 0) continue;
+      final strength =
+          (food.nutrients.length - index) / food.nutrients.length;
+      score += weight * strength;
+    }
+    if (_regionalIronAnchors.contains(food.name)) {
+      score += 2.5; // the regional anchors stay visible in the basket
+    }
+    if (food.cost == CostTier.freeOrGathered) {
+      score += 0.4; // free gathered foods win ties in the lean season
+    }
+    return score;
+  }
+
+  /// Why this food, in the voice of the need that earned it a place —
+  /// so the counselling adapts to the assessment instead of repeating a
+  /// stock line.
+  static String _reasonFor(
+    LocalFood food,
+    List<(Nutrient, double)> needs, {
+    required NutritionSubject subject,
+    required bool isAnaemic,
+  }) {
+    (Nutrient, double)? best;
+    for (final need in needs) {
+      if (!food.provides(need.$1)) continue;
+      if (best == null || need.$2 > best.$2) best = need;
+    }
+    return switch (best?.$1) {
+      Nutrient.energy =>
+        'Chosen for this assessment: energy-dense and available this month '
+            '— this is what puts weight back on.',
+      Nutrient.protein =>
+        subject == NutritionSubject.child
+            ? 'Protein for rebuilding muscle after the wasting this '
+                  'assessment found.'
+            : 'Protein — she is feeding two, and this food was picked for '
+                  'her results, not from a fixed list.',
+      Nutrient.iron =>
+        isAnaemic
+            ? 'Iron for the blood — this assessment found anaemia. Give it '
+                  'with a sour fruit or baobab so the body takes up more.'
+            : 'Regional iron anchor. Maternal anaemia reaches 44% in parts '
+                  'of this region (Adokiya 2022), and iron tablets alone '
+                  'rarely close the gap.',
+      Nutrient.vitaminC =>
+        'Eaten with the iron food, this roughly doubles how much iron the '
+            'body takes up.',
+      _ =>
+        'Vitamin A protects sight and cuts the risk of dying from measles '
+            'and diarrhoea.',
+    };
   }
 
   static String _headline(
@@ -499,6 +642,7 @@ abstract final class NutritionEngine {
     required int ageMonths,
     required int month,
     bool? stillBreastfeeding,
+    bool hasDiarrhoea = false,
   }) {
     final rules = <String>[];
 
@@ -581,7 +725,149 @@ abstract final class NutritionEngine {
       );
     }
 
+    if (hasDiarrhoea) {
+      rules.add(
+        subject == NutritionSubject.child
+            ? 'Diarrhoea drains fluids and zinc. Give zinc for 10 days (10 mg '
+                  'a day under 6 months, 20 mg from 6 months), extra fluid '
+                  'after every loose stool, and keep feeding — food rebuilds '
+                  'the gut, starving it makes the episode last longer.'
+            : 'With diarrhoea, take more fluids than usual and keep eating '
+                  'small, regular meals. If there is blood in the stool, '
+                  'fever, or signs of dehydration, seek care the same day.',
+      );
+      if (subject == NutritionSubject.child && stillBreastfeeding != false) {
+        rules.add(
+          'Breastfeed more often during diarrhoea, not less — breast milk is '
+          'the safest fluid and the best medicine the child has right now.',
+        );
+      }
+    }
+
     return rules;
+  }
+
+  // ----------------------------------------------------- The day's plate
+
+  /// The age-band sentence that governs the day plan: texture, cup size,
+  /// frequency — WHO IYCF indicators translated into words a caregiver
+  /// can cook by.
+  static String? _dayPlanNote(NutritionSubject subject, int ageMonths) {
+    if (subject != NutritionSubject.child) {
+      return subject == NutritionSubject.pregnantWoman
+          ? 'Three meals plus one extra meal every day — two extra meals in '
+                'the last three months. She eats first, not last.'
+          : 'Three meals plus two extra meals every day, and drink whenever '
+                'thirsty — milk production costs her 500 calories a day.';
+    }
+    if (ageMonths < 6) {
+      return 'Breast milk only — no food, no water, no porridge yet. Feed on '
+          'demand, day and night.';
+    }
+    if (ageMonths <= 8) {
+      return 'Mash everything until it is thick enough to stay on the spoon. '
+          'Start each feed with 2–3 spoonfuls, building to half a cup.';
+    }
+    if (ageMonths <= 11) {
+      return 'Chop soft or mash. Half a cup per meal, plus one or two '
+          'snacks.';
+    }
+    if (ageMonths <= 23) {
+      return 'Family food, cut small. Three-quarters of a cup per meal, plus '
+          'one or two snacks.';
+    }
+    return 'Family food — serve the child first, from their own bowl.';
+  }
+
+  /// The basket composed into a day. Staples carry breakfast and dinner,
+  /// the body-builders carry lunch, the protectors fill the gaps between.
+  /// Every food comes from the scored basket — the day plan never
+  /// recommends anything the plan has not already justified.
+  static List<MealSlot> _composeDayPlan({
+    required NutritionSubject subject,
+    required NutritionStatus status,
+    required List<FoodSuggestion> basket,
+  }) {
+    if (basket.isEmpty) return const [];
+
+    const proteinGroups = {
+      FoodGroup.pulsesNutsSeeds,
+      FoodGroup.fleshFoods,
+      FoodGroup.eggs,
+      FoodGroup.dairy,
+    };
+    const produceGroups = {
+      FoodGroup.vitaminARichProduce,
+      FoodGroup.otherProduce,
+    };
+
+    /// The first unused food from [groups], else the first unused food at
+    /// all, else the first food — a slot is never left empty while the
+    /// basket still has something to give.
+    String pick(Set<FoodGroup> groups, Set<String> used) {
+      for (final s in basket) {
+        if (groups.contains(s.group) && used.add(s.food)) return s.food;
+      }
+      for (final s in basket) {
+        if (used.add(s.food)) return s.food;
+      }
+      return basket.first.food;
+    }
+
+    final wasting = status == NutritionStatus.moderateAcute ||
+        status == NutritionStatus.atRisk;
+    final fortify = wasting
+        ? 'Stir in one spoon of groundnut paste or red palm oil — it roughly '
+              'doubles the energy in the same bowl.'
+        : null;
+
+    final breakfast = pick({FoodGroup.grainsRootsTubers}, {});
+    final slots = <MealSlot>[
+      MealSlot(moment: 'Breakfast', foods: [breakfast], note: fortify),
+    ];
+
+    if (subject == NutritionSubject.child) {
+      final used = {breakfast};
+      final lunchMain = pick(proteinGroups, used);
+      final lunchVeg = pick(produceGroups, used);
+      slots.add(
+        MealSlot(moment: 'Lunch', foods: [lunchMain, lunchVeg]),
+      );
+      final snack = pick(produceGroups, used);
+      slots.add(
+        MealSlot(
+          moment: 'Snack',
+          foods: [snack],
+          note: wasting ? 'A snack between meals protects the weight gain.' : null,
+        ),
+      );
+      final dinnerStaple = pick({FoodGroup.grainsRootsTubers}, used);
+      final dinnerSide = pick(proteinGroups, used);
+      slots.add(
+        MealSlot(moment: 'Dinner', foods: [dinnerStaple, dinnerSide]),
+      );
+    } else {
+      final used = {breakfast};
+      final lunchMain = pick(proteinGroups, used);
+      final lunchVeg = pick(produceGroups, used);
+      slots.add(
+        MealSlot(moment: 'Lunch', foods: [lunchMain, lunchVeg]),
+      );
+      final dinnerStaple = pick({FoodGroup.grainsRootsTubers}, used);
+      final dinnerSide = pick(proteinGroups, used);
+      slots.add(
+        MealSlot(moment: 'Dinner', foods: [dinnerStaple, dinnerSide]),
+      );
+      slots.add(
+        MealSlot(
+          moment: 'Her extra meal',
+          foods: [pick({...produceGroups, ...proteinGroups}, used)],
+          note: 'The meal she is owed for feeding two — small, but every day.',
+        ),
+      );
+    }
+
+    return slots;
   }
 
   /// Convenience for the assessment screens: attaches the plan's headline and

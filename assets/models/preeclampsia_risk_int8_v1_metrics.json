@@ -1,8 +1,8 @@
 {
   "model_name": "preeclampsia_risk",
-  "model_version": "v1.0-ghana-baseline-public-data-and-ghana-priors",
+  "model_version": "v1.1-ghana-baseline-normalized-serving",
   "version_ladder": {
-    "this": "v1.0-ghana-baseline",
+    "this": "v1.1-ghana-baseline-normalized-serving",
     "next": "v2.0-kintampo-cohort",
     "v3_prospective": "v3.0-prospective-pilot"
   },
@@ -16,7 +16,7 @@
       "[M9]"
     ],
     "external_validation": {
-      "dataset": "UCI Machine Learning Repository: Maternal Health Risk Data Set (Ahmed M. UCI ML Repository, 2018). Public, no PHI. 1,013 rows. 6 features: Age, SystolicBP, DiastolicBP, BS, BodyTemp, HeartRate. Target: low/mid/high risk. Note: Bangladesh-origin, used as held-out external validation set, NOT for training.",
+      "dataset": "UCI Machine Learning Repository: Maternal Health Risk Data Set (Ahmed M., 2018; Bangladesh-origin). Held out; scored through the same SCHEMA_NORM normalization the app applies at inference.",
       "n": 1006,
       "holdout_auc": 0.7365,
       "sensitivity": 0.5279,
@@ -26,7 +26,7 @@
       "calibrated_brier": 0.1846
     }
   },
-  "clinical_note": "v1.0 Ghana baseline. Simulator cohort seeded from 5 peer-reviewed Ghanaian clinical studies (DOIs in `priors_used`); UCI Maternal Health Risk used as held-out external validation set. Calibration via Platt scaling on the internal 20% hold-out; 95% CI derived from per-bin Platt-residual std; drift detection via per-feature z-score against the training distribution.",
+  "clinical_note": "v1.1 normalization-skew fix. Same Ghana-priors simulator cohort as v1.0 (5 citation groups), but the distilled MLP is trained and served on the [0,1] SCHEMA_NORM representation - the exact tensor the app feeds at inference. v1.0 distilled from RAW feature scales, so its input quantization clamped every app input to ~0 (train/serve skew); v1.1's flatbuffer input quantization covers [0,1] (scale=0.003922, zero_point=-128). Calibration via Platt scaling on the internal 20% hold-out; 95% CI from per-bin Platt-residual std; drift detection via per-feature z-score against the normalized training distribution.",
   "validation": {
     "internal": {
       "holdout_auc": 1.0,
@@ -116,7 +116,7 @@
       }
     },
     "external": {
-      "dataset": "UCI Machine Learning Repository: Maternal Health Risk Data Set (Ahmed M. UCI ML Repository, 2018). Public, no PHI. 1,013 rows. 6 features: Age, SystolicBP, DiastolicBP, BS, BodyTemp, HeartRate. Target: low/mid/high risk. Note: Bangladesh-origin, used as held-out external validation set, NOT for training.",
+      "dataset": "UCI Machine Learning Repository: Maternal Health Risk Data Set (Ahmed M., 2018; Bangladesh-origin). Held out; scored through the same SCHEMA_NORM normalization the app applies at inference.",
       "n": 1006,
       "holdout_auc": 0.7365,
       "sensitivity": 0.5279,
@@ -279,11 +279,11 @@
     "prev_caesarean"
   ],
   "input_quantization": {
-    "scale": 0.0078125,
+    "scale": 0.003921569,
     "zero_point": -128
   },
-  "tflite_sha256": "324a379050f0cfb0740bd1c2ab99d35c57665e0edf5f1a9eb504f57e96d08a5f",
-  "trained_on": "2026-08-06",
+  "tflite_sha256": "90c6a8d25de4d0fd88deda045b41ca7da3271a71e9fac0f4ad110adbb70698bf",
+  "trained_on": "2026-08-18",
   "provenance": {
     "[M1]": {
       "short": "Adokiya 2022, Women & Health",

@@ -14,6 +14,9 @@
 ///   * **Every measurement states its cut-off** while it is being typed. The CHO
 ///     sees "SAM below 11.5" next to the MUAC box, so the number means something
 ///     before the engine has run.
+///   * **A box scrolls itself into view when it is tapped.** The keyboard rises
+///     and the field rises with it — a measurement the CHO cannot see while
+///     typing is a measurement that gets guessed.
 library;
 
 import 'package:flutter/material.dart';
@@ -154,7 +157,11 @@ class _SignRow extends StatelessWidget {
 /// [cutoff] is printed under the field permanently — not in a tooltip, not
 /// behind an info icon. The CHO reading "11.4" should see "SAM below 11.5" in
 /// the same glance, because that is the moment the number becomes a decision.
-class MeasureField extends StatelessWidget {
+///
+/// [example] is a plain-language sample value shown as the hint while the box
+/// is empty — "e.g. 120" — so a first-time user always knows what belongs in
+/// the box before she asks.
+class MeasureField extends StatefulWidget {
   const MeasureField({
     super.key,
     required this.label,
@@ -165,6 +172,7 @@ class MeasureField extends StatelessWidget {
     this.decimal = false,
     this.width,
     this.onChanged,
+    this.example,
   });
 
   final String label;
@@ -175,25 +183,63 @@ class MeasureField extends StatelessWidget {
   final bool decimal;
   final double? width;
   final ValueChanged<String>? onChanged;
+  final String? example;
+
+  @override
+  State<MeasureField> createState() => _MeasureFieldState();
+}
+
+class _MeasureFieldState extends State<MeasureField> {
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_scrollIntoView);
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_scrollIntoView);
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  /// Bring the box above the keyboard the moment it gains focus. The short
+  /// delay lets the keyboard animation settle first — scrolling against a
+  /// still-rising keyboard lands the field under it again.
+  void _scrollIntoView() {
+    if (!_focusNode.hasFocus) return;
+    Future<void>.delayed(const Duration(milliseconds: 320), () {
+      if (!mounted || !_focusNode.hasFocus) return;
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+        alignment: 0.25,
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final field = TextField(
-      controller: controller,
-      onChanged: onChanged,
-      keyboardType: decimal
+      controller: widget.controller,
+      focusNode: _focusNode,
+      onChanged: widget.onChanged,
+      keyboardType: widget.decimal
           ? const TextInputType.numberWithOptions(decimal: true)
           : TextInputType.number,
       inputFormatters: [
         FilteringTextInputFormatter.allow(
-          decimal ? RegExp(r'[0-9.]') : RegExp(r'[0-9]'),
+          widget.decimal ? RegExp(r'[0-9.]') : RegExp(r'[0-9]'),
         ),
       ],
       decoration: InputDecoration(
         isDense: true,
-        hintText: '—',
-        suffixText: unit,
-        helperText: cutoff,
+        hintText: widget.example ?? '—',
+        suffixText: widget.unit,
+        helperText: widget.cutoff,
         helperMaxLines: 3,
         helperStyle: const TextStyle(
           fontSize: 11.5,
@@ -208,8 +254,8 @@ class MeasureField extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          FieldLabel(label, why: why),
-          width == null ? field : SizedBox(width: width, child: field),
+          FieldLabel(widget.label, why: widget.why),
+          widget.width == null ? field : SizedBox(width: widget.width, child: field),
         ],
       ),
     );

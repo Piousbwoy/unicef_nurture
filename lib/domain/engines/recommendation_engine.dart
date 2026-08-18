@@ -113,6 +113,8 @@ class CarePlan {
     this.guardrailEscalated = false,
     this.preReferralProtocols = const [],
     this.preReferralActivationReasons = const {},
+    this.patientCohort,
+    this.cohortNote,
   });
 
   /// The governing triage — the worst of everything found, after guard-rails.
@@ -187,6 +189,19 @@ class CarePlan {
   /// default, but available for retrospective review.
   final Map<String, String> preReferralActivationReasons;
 
+  /// The patient group this plan was synthesized for — a newborn, a
+  /// child under five, a pregnant or postpartum mother. The same
+  /// findings demand different words, different watchpoints and a
+  /// different return-immediately list for each group, so the plan
+  /// names its cohort and both the screen and the saved record can
+  /// tailor.
+  final ClientType? patientCohort;
+
+  /// One tailored sentence for [patientCohort]: the protocol the
+  /// assessment ran under and the deterioration pattern the CHO must
+  /// hold in mind for this group. Null on legacy records.
+  final String? cohortNote;
+
   bool get needsReferral => overallTriage.requiresReferral;
 
   /// The plan is persisted verbatim as the assessment's `care_plan_json`, so
@@ -212,6 +227,8 @@ class CarePlan {
     'guardrail_escalated': guardrailEscalated,
     'pre_referral_protocols': [for (final p in preReferralProtocols) p.toMap()],
     'pre_referral_activation_reasons': preReferralActivationReasons,
+    'patient_cohort': patientCohort?.name,
+    'cohort_note': cohortNote,
   };
 
   factory CarePlan.fromJson(Map<String, Object?> j) => CarePlan(
@@ -271,6 +288,8 @@ class CarePlan {
         ((j['pre_referral_activation_reasons'] as Map?) ?? const {}).map(
           (k, v) => MapEntry('$k', v as String),
         ),
+    patientCohort: _clientTypeFromName(j['patient_cohort'] as String?),
+    cohortNote: j['cohort_note'] as String?,
   );
 }
 
@@ -292,6 +311,17 @@ StabilizationProtocol _protocolFromMap(Map<String, Object?> j) {
       // version of the app, opened by an older client, must still load.
       return preEclampsiaProtocol;
   }
+}
+
+/// Resolve a persisted [ClientType] name. Unknown or legacy-absent
+/// names resolve to null — a record saved before cohort tracking
+/// simply renders without the tailored callout.
+ClientType? _clientTypeFromName(String? name) {
+  if (name == null) return null;
+  for (final t in ClientType.values) {
+    if (t.name == name) return t;
+  }
+  return null;
 }
 
 abstract final class RecommendationEngine {
@@ -432,6 +462,19 @@ abstract final class RecommendationEngine {
       );
     }
 
+    // -------------------------------------------- 5½. Cohort adaptation
+    // The same findings are spoken differently to a 3-day-old, a
+    // 3-year-old and a pregnant woman. Name the cohort, attach its
+    // tailored note, and fold in the cohort's own counselling action —
+    // the watchpoints that group is known to deteriorate on.
+    final patientCohort = _primaryCohort(results);
+    final cohortNote = patientCohort == null ? null : _cohortNote(patientCohort);
+    for (final action in _cohortActions(patientCohort)) {
+      if (!_hasAction(allActions, action)) {
+        allActions.add(action);
+      }
+    }
+
     // ------------------------------------------------- 6. Order everything
     final findings = _orderFindings(allFindings);
     final actions = _orderActions(allActions);
@@ -486,6 +529,8 @@ abstract final class RecommendationEngine {
       guardrailEscalated: escalated,
       preReferralProtocols: preRefPlan.protocols,
       preReferralActivationReasons: preRefPlan.activatedBy,
+      patientCohort: patientCohort,
+      cohortNote: cohortNote,
     );
   }
 
@@ -550,6 +595,118 @@ abstract final class RecommendationEngine {
       }
     }
     return hits;
+  }
+
+  // ------------------------------------------------------ Cohort awareness
+
+  /// The cohort the plan speaks to. When several engines ran (rare — a
+  /// mother-and-baby visit), the most acute patient governs, because
+  /// the plan's urgency and its counselling must be safe for *that*
+  /// patient first. Ties keep the first result, which is the primary
+  /// assessment the CHO opened the screen for.
+  static ClientType? _primaryCohort(List<AssessmentResult> results) {
+    if (results.isEmpty) return null;
+    var primary = results.first;
+    for (final r in results.skip(1)) {
+      if (r.triage.severity > primary.triage.severity) primary = r;
+    }
+    return primary.clientType;
+  }
+
+  /// One tailored sentence per cohort: the protocol the assessment ran
+  /// under plus the deterioration pattern the CHO must hold in mind.
+  /// These are the differences a paper protocol flattens away.
+  static String _cohortNote(ClientType cohort) => switch (cohort) {
+    ClientType.newborn =>
+      'Tailored for a young infant (0–2 months), assessed under the WHO '
+          'sick-young-infant protocol. Newborns deteriorate in hours, not '
+          'days — feeding difficulty, fast breathing, fever or coldness to '
+          'touch means return today, not tomorrow.',
+    ClientType.childUnderFive =>
+      'Tailored for a child 2–59 months, assessed under the WHO IMCI '
+          'sick-child protocol. Return immediately if the child stops '
+          'drinking, vomits everything, convulses or becomes unusually '
+          'sleepy.',
+    ClientType.pregnantWoman =>
+      'Tailored for pregnancy (ANC). Severe headache, blurred vision, '
+          'vaginal bleeding, reduced fetal movements or swelling of the '
+          'face and hands mean come today — day or night.',
+    ClientType.postpartumWoman =>
+      'Tailored for the first 42 days after delivery (PNC). Heavy bleeding, '
+          'fever, foul-smelling discharge, or a baby who feeds poorly mean '
+          'come today.',
+    ClientType.womanOfReproductiveAge =>
+      'Tailored for general women’s care. Any new bleeding, pain or fever '
+          'after this visit means return to the clinic.',
+  };
+
+  /// The cohort's own counselling action — the watchpoints that group is
+  /// known to deteriorate on, phrased for the caregiver to repeat back.
+  /// Counselling only: never a treatment, never a referral, so it can
+  /// never outrank what the engines found.
+  static List<RecommendedAction> _cohortActions(ClientType? cohort) {
+    if (cohort == null) return const [];
+    return switch (cohort) {
+      ClientType.newborn => const [
+        RecommendedAction(
+          instruction:
+              'Watch the young infant closely for the next 48 hours — any '
+              'feeding difficulty, fast breathing, fever, coldness to touch '
+              'or reduced movement means return the same day.',
+          urgency: ReferralUrgency.scheduled,
+          rationale:
+              'Young infants compensate poorly and deteriorate fast; the '
+              'WHO young-infant protocol mandates early re-check and '
+              'caregiver watchpoints.',
+          protocolSource: 'WHO IMCI — sick young infant',
+          isCounselling: true,
+        ),
+      ],
+      ClientType.childUnderFive => const [
+        RecommendedAction(
+          instruction:
+              'Before the family leaves, have the caregiver repeat the '
+              'return-immediately signs back to you: not able to drink, '
+              'vomiting everything, convulsions, unusual sleepiness.',
+          urgency: ReferralUrgency.scheduled,
+          rationale:
+              'IMCI counselling step: a caregiver who can name the danger '
+              'signs brings the child back hours earlier.',
+          protocolSource: 'WHO IMCI — sick child counselling',
+          isCounselling: true,
+        ),
+      ],
+      ClientType.pregnantWoman => const [
+        RecommendedAction(
+          instruction:
+              'Agree a same-day return plan for: severe headache, blurred '
+              'vision, vaginal bleeding, reduced fetal movements, or '
+              'swelling of the face and hands.',
+          urgency: ReferralUrgency.scheduled,
+          rationale:
+              'Birth-preparedness and complication-readiness is a core WHO '
+              'ANC component — every contact ends with the danger signs '
+              'named.',
+          protocolSource: 'WHO ANC recommendations',
+          isCounselling: true,
+        ),
+      ],
+      ClientType.postpartumWoman => const [
+        RecommendedAction(
+          instruction:
+              'Counsel on the late postpartum danger signs: heavy bleeding, '
+              'fever, foul-smelling discharge, and a baby who feeds poorly '
+              'or feels too hot or too cold.',
+          urgency: ReferralUrgency.scheduled,
+          rationale:
+              'Most maternal and neonatal deaths in the first week happen '
+              'after discharge; PNC counselling is the safety net.',
+          protocolSource: 'WHO PNC recommendations',
+          isCounselling: true,
+        ),
+      ],
+      ClientType.womanOfReproductiveAge => const [],
+    };
   }
 
   // --------------------------------------------------------- Interactions

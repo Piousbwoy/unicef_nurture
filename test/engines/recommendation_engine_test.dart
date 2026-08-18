@@ -134,8 +134,12 @@ void main() {
       // ActionPhase clinical ordering ensures life-saving prereferral
       // stabilisations (MgSO4, rectal artesunate, antibiotics) execute
       // BEFORE the CHO sits down to write a referral note or arrange transport.
+      // A cohort with no injected counselling action, so this test stays
+      // pinned to phase ordering alone.
       final plan = RecommendationEngine.synthesize(results: [
-        _result(actions: [
+        _result(
+          clientType: ClientType.womanOfReproductiveAge,
+          actions: [
           _action('Counsel on feeding', ReferralUrgency.scheduled, counselling: true),
           _action('Give pre-referral antibiotic', ReferralUrgency.immediate, treatment: true),
           _action('Refer now', ReferralUrgency.immediate, referral: true),

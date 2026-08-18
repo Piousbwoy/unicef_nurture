@@ -84,13 +84,8 @@ AssessmentDraft _draft({
 /// none of them trips a deterministic PSBI trigger (fever >= 37.5,
 /// hypothermia < 35.5, SpO2 < 90, RR >= 60) — any activation below is the
 /// AI rule-in tier acting alone. Passed to [_draft] in every scenario.
-({double temp, int rr, int pulse, int spo2, double bw}) _normalVitals() => (
-  temp: 37.0,
-  rr: 48,
-  pulse: 140,
-  spo2: 97,
-  bw: 3.1,
-);
+({double temp, int rr, int pulse, int spo2, double bw}) _normalVitals() =>
+    (temp: 37.0, rr: 48, pulse: 140, spo2: 97, bw: 3.1);
 
 AssessmentContext _context(int ageDays) => AssessmentContext(
   user: _user(),
@@ -144,6 +139,23 @@ Future<void> _pump(
   await tester.pumpAndSettle();
 }
 
+/// Opens the second page — the full clinical report — where the AI
+/// evidence cards live. The result experience is two pages by design:
+/// the verdict moment first, the documentation behind it. The AI
+/// predictions resolve through real asset-bundle I/O, so the wait loop
+/// runs on the real event loop until the analysis spinner is gone.
+Future<void> _openReport(WidgetTester tester) async {
+  await tester.tap(find.text('Open full clinical report'));
+  await tester.runAsync(() async {
+    for (var i = 0; i < 40; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      await tester.pump();
+      if (!tester.any(find.byType(CircularProgressIndicator))) break;
+    }
+  });
+  await tester.pumpAndSettle();
+}
+
 void main() {
   GoogleFonts.config.allowRuntimeFetching = false;
 
@@ -174,6 +186,9 @@ void main() {
         expect(find.text('Pre-referral stabilisation'), findsOneWidget);
         expect(find.textContaining('AI rule-in candidate'), findsOneWidget);
         expect(find.textContaining('IMCI danger sign'), findsNothing);
+
+        // The AI evidence lives on the full clinical report page.
+        await _openReport(tester);
 
         // The AI finding names the tier and its cut-off. (The label also
         // appears in the verdict banner rationale and the synthesised
@@ -211,13 +226,15 @@ void main() {
 
         // No rule-in, no danger sign -> nothing activates.
         expect(find.text('Pre-referral stabilisation'), findsNothing);
+
+        // The model card lives on the full clinical report page, and it
+        // still surfaces the honest screening number.
+        await _openReport(tester);
         expect(
           find.textContaining('Rule-in candidate: possible severe bacterial'),
           findsNothing,
         );
         expect(find.text('rule-in'), findsNothing);
-
-        // The model card still surfaces the honest screening number.
         expect(find.textContaining('screening tier'), findsOneWidget);
         expect(find.textContaining('Risk 2.0%'), findsOneWidget);
       },
@@ -244,23 +261,23 @@ void main() {
           ),
         );
 
+        // The deterministic GHS rules keep the rule-out coverage: the
+        // protocol activates on the danger sign even with null AI risk.
+        expect(find.text('Pre-referral stabilisation'), findsOneWidget);
+        expect(find.textContaining('IMCI danger sign'), findsOneWidget);
+
+        // The AI evidence lives on the full clinical report page.
+        await _openReport(tester);
+
         // The AI is suppressed: no confident number, no rule-in finding.
         // (More than one model can sit out-of-window for a newborn, so
         // several cards can read n/a at once.)
-        expect(
-          find.textContaining('out of training window'),
-          findsWidgets,
-        );
+        expect(find.textContaining('out of training window'), findsWidgets);
         expect(find.text('rule-in'), findsNothing);
         expect(
           find.textContaining('Rule-in candidate: possible severe bacterial'),
           findsNothing,
         );
-
-        // The deterministic GHS rules keep the rule-out coverage: the
-        // protocol activates on the danger sign even with null AI risk.
-        expect(find.text('Pre-referral stabilisation'), findsOneWidget);
-        expect(find.textContaining('IMCI danger sign'), findsOneWidget);
       },
     );
   });

@@ -54,13 +54,11 @@ Person _person(String id, String name, ClientType type) => Person(
   householdId: _household.id,
   fullName: name,
   clientType: type,
-  dateOfBirth: DateTime.now().subtract(
-    switch (type) {
-      ClientType.newborn => const Duration(days: 2),
-      ClientType.childUnderFive => const Duration(days: 400),
-      _ => const Duration(days: 365 * 27),
-    },
-  ),
+  dateOfBirth: DateTime.now().subtract(switch (type) {
+    ClientType.newborn => const Duration(days: 2),
+    ClientType.childUnderFive => const Duration(days: 400),
+    _ => const Duration(days: 365 * 27),
+  }),
 );
 
 Assessment _assessment(Person p, TriageLevel triage, String classification) =>
@@ -79,7 +77,8 @@ Assessment _assessment(Person p, TriageLevel triage, String classification) =>
         findings: [
           ClinicalFinding(
             label: 'Moderate maternal anaemia',
-            detail: 'Hb 9.0 g/dL is below the 11.0 g/dL threshold for this '
+            detail:
+                'Hb 9.0 g/dL is below the 11.0 g/dL threshold for this '
                 'gestation (WHO ANC 2016).',
             severity: triage,
             protocolSource: 'WHO ANC 2016',
@@ -90,10 +89,12 @@ Assessment _assessment(Person p, TriageLevel triage, String classification) =>
         ],
         actions: [
           RecommendedAction(
-            instruction: 'Start iron-folate 60 mg + folic acid 400 mcg daily '
+            instruction:
+                'Start iron-folate 60 mg + folic acid 400 mcg daily '
                 'and review in 2 weeks',
             urgency: ReferralUrgency.withinTwoDays,
-            rationale: 'Anaemia is a leading driver of maternal mortality in '
+            rationale:
+                'Anaemia is a leading driver of maternal mortality in '
                 'the Northern Region.',
             protocolSource: 'WHO ANC 2016',
             isTreatment: true,
@@ -119,7 +120,8 @@ VulnerabilityScore _score() => const VulnerabilityScore(
   factors: [
     RiskFactor(
       label: 'Moderate maternal anaemia',
-      detail: 'Hb 9.0 g/dL — 44% prevalence in this region. The single '
+      detail:
+          'Hb 9.0 g/dL — 44% prevalence in this region. The single '
           'biggest modifiable contributor to this score.',
       points: 12,
       isModifiable: true,
@@ -128,7 +130,8 @@ VulnerabilityScore _score() => const VulnerabilityScore(
     ),
     RiskFactor(
       label: 'More than 90 minutes from a facility',
-      detail: '120 min walk. A "go now" referral is not advice here; it is a '
+      detail:
+          '120 min walk. A "go now" referral is not advice here; it is a '
           'logistics problem that must be solved while the family is present.',
       points: 8,
       isModifiable: false,
@@ -153,8 +156,11 @@ void main() {
     _phoneSize(tester);
     final mother = _person('p-m', 'Achana', ClientType.pregnantWoman);
     final child = _person('p-c', 'sala', ClientType.childUnderFive);
-    final assessment = _assessment(mother, TriageLevel.priority,
-        'PREGNANCY WITH RISK FACTORS');
+    final assessment = _assessment(
+      mother,
+      TriageLevel.priority,
+      'PREGNANCY WITH RISK FACTORS',
+    );
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -189,23 +195,21 @@ void main() {
             }
             return null;
           }),
-          personProvider.overrideWith((ref, id) async => mother.id == id
-              ? mother
-              : child.id == id
-              ? child
-              : null),
+          personProvider.overrideWith(
+            (ref, id) async => mother.id == id
+                ? mother
+                : child.id == id
+                ? child
+                : null,
+          ),
         ],
-        child: const MaterialApp(
-          home: HouseholdScreen(householdId: 'h-1'),
-        ),
+        child: const MaterialApp(home: HouseholdScreen(householdId: 'h-1')),
       ),
     );
     await tester.pumpAndSettle();
   });
 
-  testWidgets('summary screen has no overflows at phone width', (
-    tester,
-  ) async {
+  testWidgets('summary screen has no overflows at phone width', (tester) async {
     _phoneSize(tester);
     final mother = _person('p-m', 'Achana', ClientType.pregnantWoman);
     final child = _person('p-c', 'sala', ClientType.childUnderFive);
@@ -214,16 +218,22 @@ void main() {
         overrides: [
           currentUserProvider.overrideWithValue(_user()),
           householdProvider.overrideWith((ref, id) async => _household),
-          personProvider.overrideWith((ref, id) async => mother.id == id
-              ? mother
-              : child.id == id
-              ? child
-              : null),
-          latestAssessmentProvider.overrideWith((ref, id) async =>
-              id == mother.id
-              ? _assessment(mother, TriageLevel.priority,
-                  'PREGNANCY WITH RISK FACTORS')
-              : _assessment(child, TriageLevel.routine, 'WELL CHILD')),
+          personProvider.overrideWith(
+            (ref, id) async => mother.id == id
+                ? mother
+                : child.id == id
+                ? child
+                : null,
+          ),
+          latestAssessmentProvider.overrideWith(
+            (ref, id) async => id == mother.id
+                ? _assessment(
+                    mother,
+                    TriageLevel.priority,
+                    'PREGNANCY WITH RISK FACTORS',
+                  )
+                : _assessment(child, TriageLevel.routine, 'WELL CHILD'),
+          ),
           openReferralsProvider.overrideWith(
             (ref) async => [
               Referral(
@@ -232,7 +242,8 @@ void main() {
                 personId: mother.id,
                 assessmentId: 'a-p-m',
                 facilityName: 'Savelugu Municipal District Hospital',
-                reason: 'Moderate anaemia with risk factors — treat and '
+                reason:
+                    'Moderate anaemia with risk factors — treat and '
                     'follow up',
                 urgency: ReferralUrgency.withinTwoDays,
                 issuedBy: 'u-fhw-1',
@@ -252,7 +263,8 @@ void main() {
             ),
             householdId: _household.id,
             assessedIds: [mother.id, child.id],
-            notes: 'Husband away in Kumasi until harvest; grandmother is the '
+            notes:
+                'Husband away in Kumasi until harvest; grandmother is the '
                 'decision-maker and needs the referral explained in Dagbani.',
           ),
         ),
@@ -279,7 +291,8 @@ void main() {
         findings: [
           ClinicalFinding(
             label: 'Moderate maternal anaemia',
-            detail: 'Hb 9.0 g/dL is below the 11.0 g/dL threshold for this '
+            detail:
+                'Hb 9.0 g/dL is below the 11.0 g/dL threshold for this '
                 'gestation (WHO ANC 2016).',
             severity: TriageLevel.priority,
             protocolSource: 'WHO ANC 2016',
@@ -289,10 +302,12 @@ void main() {
         ],
         actions: [
           RecommendedAction(
-            instruction: 'Start iron-folate 60 mg + folic acid 400 mcg daily '
+            instruction:
+                'Start iron-folate 60 mg + folic acid 400 mcg daily '
                 'and review in 2 weeks',
             urgency: ReferralUrgency.withinTwoDays,
-            rationale: 'Anaemia is a leading driver of maternal mortality in '
+            rationale:
+                'Anaemia is a leading driver of maternal mortality in '
                 'the Northern Region.',
             protocolSource: 'WHO ANC 2016',
             isTreatment: true,
@@ -329,6 +344,24 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
+
+    // The result experience is two pages: the verdict moment, then the
+    // full clinical report. Both must be overflow-free at phone width.
+    final cta = find.text('Open full clinical report');
+    await tester.scrollUntilVisible(
+      cta,
+      300,
+      scrollable: find.byType(Scrollable),
+    );
+    // scrollUntilVisible stops once the button peeks into the viewport,
+    // which can leave its centre under the sticky save bar — clear it
+    // fully before tapping.
+    await tester.drag(find.byType(Scrollable), const Offset(0, -300));
+    await tester.pumpAndSettle();
+    await tester.tap(cta);
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(Scrollable), const Offset(0, -1200));
     await tester.pumpAndSettle();
   });
 }

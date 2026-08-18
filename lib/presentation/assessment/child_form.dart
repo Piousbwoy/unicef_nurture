@@ -256,6 +256,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
       Expanded(
         child: ListView(
           padding: const EdgeInsets.all(Gap.lg),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           children: [
             ProtocolHeader(
               name: person.fullName,
@@ -294,6 +295,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
                     label: isYoungInfant ? 'Age in days' : 'Age in months',
                     controller: isYoungInfant ? _ageDays : _ageMonths,
                     unit: isYoungInfant ? 'days' : 'months',
+                    example: isYoungInfant ? 'e.g. 5' : 'e.g. 7',
                     width: 160,
                   ),
                 ),
@@ -403,6 +405,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
             unit: '/min',
             cutoff:
                 'Count for a full 60 seconds while calm. ≥60 0–11mo, ≥50 12–59mo',
+            example: 'e.g. 40',
           ),
           CountField(
             label: 'Count seconds elapsed',
@@ -417,6 +420,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
             unit: '°C',
             decimal: true,
             cutoff: 'Fever ≥37.5 · hypothermia <35.5',
+            example: 'e.g. 36.8',
             width: 180,
           ),
           MeasureField(
@@ -425,6 +429,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
             unit: 'kg',
             decimal: true,
             cutoff: 'Saved to the growth series',
+            example: 'e.g. 4.2',
             width: 180,
           ),
         ],
@@ -700,6 +705,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
               controller: _coughDays,
               unit: 'days',
               cutoff: '14 days or more needs a closer look',
+              example: 'e.g. 3',
               width: 160,
             ),
             DangerSign(
@@ -718,6 +724,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
               unit: '/min',
               cutoff:
                   'Count for a full 60 seconds while calm. ≥60 0–11mo, ≥50 12–59mo',
+              example: 'e.g. 40',
             ),
             CountField(
               label: 'Count seconds elapsed',
@@ -731,6 +738,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
               controller: _spo2,
               unit: '%',
               cutoff: 'Below 90 is a referral',
+              example: 'e.g. 97',
               width: 180,
             ),
             DangerSign(
@@ -786,6 +794,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
               controller: _diarrhoeaDays,
               unit: 'days',
               cutoff: '14 days or more is persistent diarrhoea',
+              example: 'e.g. 2',
               width: 160,
             ),
             DangerSign(
@@ -871,12 +880,14 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
                 unit: '°C',
                 decimal: true,
                 cutoff: 'Fever ≥37.5',
+                example: 'e.g. 36.8',
               ),
               right: MeasureField(
                 label: 'Fever for how long?',
                 controller: _feverDays,
                 unit: 'days',
                 cutoff: '7 days or more needs investigation',
+                example: 'e.g. 2',
               ),
             ),
             DangerSign(
@@ -985,6 +996,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
               controller: _earDays,
               unit: 'days',
               cutoff: '14 days or more is chronic',
+              example: 'e.g. 3',
               width: 160,
             ),
             DangerSign(
@@ -1018,6 +1030,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
                 unit: 'mm',
                 cutoff:
                     'Red <115 mm (SAM) · Yellow 115–124 mm (MAM) · Green ≥125 mm',
+                example: 'e.g. 128',
                 width: 220,
               ),
             ],
@@ -1043,6 +1056,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
                 unit: 'mm',
                 cutoff:
                     'MUAC applies from 6 months — use weight for this child',
+                example: 'e.g. 128',
                 width: 220,
               ),
             MeasurePair(
@@ -1052,12 +1066,14 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
                 unit: 'kg',
                 decimal: true,
                 cutoff: 'Saved to the growth series',
+                example: 'e.g. 8.5',
               ),
               right: MeasureField(
                 label: 'Height / length',
                 controller: _height,
                 unit: 'cm',
                 decimal: true,
+                example: 'e.g. 72',
               ),
             ),
             DangerSign(
