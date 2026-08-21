@@ -22,6 +22,41 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_theme.dart';
 import '../../domain/enums.dart';
 
+/// The safe way to put a coloured accent bar on the left edge of a rounded
+/// box. Flutter cannot paint a [Border] whose sides have different colours
+/// once a `borderRadius` is involved (it throws at paint time, leaving a
+/// blank box), so the accent is rendered as a clipped sibling bar instead —
+/// wrap the card's child in this and keep the outer decoration's border
+/// uniform (or absent).
+class AccentEdge extends StatelessWidget {
+  const AccentEdge({
+    super.key,
+    required this.accent,
+    required this.borderRadius,
+    this.width = 4,
+    required this.child,
+  });
+
+  final Color accent;
+  final BorderRadius borderRadius;
+  final double width;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: borderRadius,
+    child: IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(width: width, color: accent),
+          Expanded(child: child),
+        ],
+      ),
+    ),
+  );
+}
+
 /// Triage colours, resolved in one place so nothing can drift.
 ({Color fg, Color bg}) triageColours(TriageLevel level) => switch (level) {
   TriageLevel.urgent => (fg: AppColors.triageRed, bg: AppColors.triageRedBg),
@@ -134,18 +169,13 @@ class SectionCard extends StatelessWidget {
                   Icon(icon, size: 18, color: accent ?? AppColors.accent),
                   const SizedBox(width: Gap.sm),
                 ],
-                Expanded(
-                  child: Text(title!, style: AppType.title),
-                ),
+                Expanded(child: Text(title!, style: AppType.title)),
                 if (trailing != null) ?trailing,
               ],
             ),
             if (subtitle != null) ...[
               const SizedBox(height: Gap.xs),
-              Text(
-                subtitle!,
-                style: AppType.caption.copyWith(height: 1.55),
-              ),
+              Text(subtitle!, style: AppType.caption.copyWith(height: 1.55)),
             ],
             const SizedBox(height: Gap.lg),
           ],
@@ -188,53 +218,59 @@ class FindingTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: c.bg,
         borderRadius: BorderRadius.circular(Gap.radius),
-        border: Border(left: BorderSide(color: c.fg, width: 3)),
       ),
-      padding: const EdgeInsets.all(Gap.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      child: AccentEdge(
+        accent: c.fg,
+        width: 3,
+        borderRadius: BorderRadius.circular(Gap.radius),
+        child: Padding(
+          padding: const EdgeInsets.all(Gap.md),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(triageIcon(severity), size: 17, color: c.fg),
-              const SizedBox(width: Gap.sm),
-              Expanded(
-                child: Text(
-                  label,
-                  style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14.5,
-                    color: AppColors.ink,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: Gap.xs),
-          Padding(
-            padding: const EdgeInsets.only(left: 25),
-            child: Text(
-              detail,
-              style: AppType.body.copyWith(fontSize: 13.5, height: 1.5),
-            ),
-          ),
-          if (measured != null || threshold != null || source != null)
-            Padding(
-              padding: const EdgeInsets.only(left: 25, top: Gap.sm),
-              child: Wrap(
-                spacing: Gap.sm,
-                runSpacing: Gap.xs,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (measured != null)
-                    _MetaChip(label: 'Measured', value: measured!),
-                  if (threshold != null)
-                    _MetaChip(label: 'Cut-off', value: threshold!),
-                  if (source != null) _SourceChip(source!),
+                  Icon(triageIcon(severity), size: 17, color: c.fg),
+                  const SizedBox(width: Gap.sm),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: GoogleFonts.inter(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14.5,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                  ),
                 ],
               ),
-            ),
-        ],
+              const SizedBox(height: Gap.xs),
+              Padding(
+                padding: const EdgeInsets.only(left: 25),
+                child: Text(
+                  detail,
+                  style: AppType.body.copyWith(fontSize: 13.5, height: 1.5),
+                ),
+              ),
+              if (measured != null || threshold != null || source != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 25, top: Gap.sm),
+                  child: Wrap(
+                    spacing: Gap.sm,
+                    runSpacing: Gap.xs,
+                    children: [
+                      if (measured != null)
+                        _MetaChip(label: 'Measured', value: measured!),
+                      if (threshold != null)
+                        _MetaChip(label: 'Cut-off', value: threshold!),
+                      if (source != null) _SourceChip(source!),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -311,7 +347,10 @@ class ConfidenceChip extends StatelessWidget {
         AppColors.triageGreen,
         Icons.verified_outlined,
       ),
-      RecommendationConfidence.high => (AppColors.accent, Icons.thumb_up_outlined),
+      RecommendationConfidence.high => (
+        AppColors.accent,
+        Icons.thumb_up_outlined,
+      ),
       RecommendationConfidence.moderate => (
         AppColors.triageAmber,
         Icons.help_outline_rounded,
@@ -390,7 +429,9 @@ class SyncBanner extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                isProblem ? Icons.sync_problem_rounded : Icons.cloud_off_rounded,
+                isProblem
+                    ? Icons.sync_problem_rounded
+                    : Icons.cloud_off_rounded,
                 size: 17,
                 color: colour,
               ),
@@ -434,9 +475,7 @@ class ConnectivityPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: 6),
       decoration: BoxDecoration(
-        color: isOnline
-            ? AppColors.triageGreenBg
-            : AppColors.offlineBg,
+        color: isOnline ? AppColors.triageGreenBg : AppColors.offlineBg,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
           color: isOnline
@@ -504,11 +543,7 @@ class EmptyState extends StatelessWidget {
             child: Icon(icon, size: 38, color: Colors.white),
           ),
           const SizedBox(height: Gap.lg),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: AppType.title,
-          ),
+          Text(title, textAlign: TextAlign.center, style: AppType.title),
           const SizedBox(height: Gap.sm),
           Text(
             message,
@@ -789,10 +824,7 @@ class _PressScaleState extends State<PressScale> {
   Widget build(BuildContext context) {
     final radius = widget.radius;
     final clip = radius != null
-        ? ClipRRect(
-            borderRadius: radius,
-            child: _scaledChild(),
-          )
+        ? ClipRRect(borderRadius: radius, child: _scaledChild())
         : _scaledChild();
     return MouseRegion(
       onEnter: (_) {
@@ -848,9 +880,6 @@ class BrandAccent extends StatelessWidget {
       decoration: const BoxDecoration(gradient: AppColors.brandGradient),
     );
     if (radius == null) return line;
-    return ClipRRect(
-      borderRadius: radius!,
-      child: line,
-    );
+    return ClipRRect(borderRadius: radius!, child: line);
   }
 }

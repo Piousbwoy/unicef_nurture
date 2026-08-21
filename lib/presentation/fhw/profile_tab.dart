@@ -108,9 +108,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.triageRed,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.triageRed),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Reset'),
           ),
@@ -245,7 +243,9 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                             ),
                           )
                         : const Icon(Icons.sync_rounded),
-                    label: Text(_draining ? 'Sending\u2026' : 'Send records now'),
+                    label: Text(
+                      _draining ? 'Sending\u2026' : 'Send records now',
+                    ),
                   ),
                   OutlinedButton.icon(
                     onPressed: () => Navigator.of(context).push(
@@ -350,7 +350,8 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
               _SettingsTile(
                 icon: Icons.verified_outlined,
                 title: 'Which checks run on this phone',
-                subtitle: 'Versions and status of the offline risk checks, and the rule charts that back them up.',
+                subtitle:
+                    'Versions and status of the offline risk checks, and the rule charts that back them up.',
                 onTap: () async {
                   await showModalBottomSheet<void>(
                     context: context,
@@ -389,13 +390,15 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
               _SettingsTile(
                 icon: Icons.lock_outline_rounded,
                 title: 'PIN & sign-in',
-                subtitle: 'Forgot your PIN? The district supervisor resets it, so family records stay safe.',
+                subtitle:
+                    'Forgot your PIN? The district supervisor resets it, so family records stay safe.',
                 onTap: null,
               ),
               _SettingsTile(
                 icon: Icons.tablet_mac_rounded,
                 title: 'This device',
-                subtitle: 'Registered ${user.createdAt != null ? DateFormat('d MMM yyyy').format(user.createdAt!) : 'to your zone'} · records stay on this phone until they sync',
+                subtitle:
+                    'Registered ${user.createdAt != null ? DateFormat('d MMM yyyy').format(user.createdAt!) : 'to your zone'} · records stay on this phone until they sync',
                 onTap: null,
               ),
             ],
@@ -533,47 +536,52 @@ class _ConnectivityHero extends StatelessWidget {
     final bg = isOnline ? AppColors.triageGreenBg : AppColors.offlineBg;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(Gap.md),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(Gap.radiusSm),
-        border: Border(left: BorderSide(color: colour, width: 4)),
       ),
-      child: Row(
-        children: [
-          Icon(
-            isOnline ? Icons.wifi_rounded : Icons.wifi_off_rounded,
-            size: 22,
-            color: colour,
-          ),
-          const SizedBox(width: Gap.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isOnline ? 'Online' : 'Offline',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: colour,
-                  ),
+      child: AccentEdge(
+        accent: colour,
+        borderRadius: BorderRadius.circular(Gap.radiusSm),
+        child: Padding(
+          padding: const EdgeInsets.all(Gap.md),
+          child: Row(
+            children: [
+              Icon(
+                isOnline ? Icons.wifi_rounded : Icons.wifi_off_rounded,
+                size: 22,
+                color: colour,
+              ),
+              const SizedBox(width: Gap.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isOnline ? 'Online' : 'Offline',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: colour,
+                      ),
+                    ),
+                    Text(
+                      isOnline
+                          ? 'Connected. Saved records upload automatically.'
+                          : 'No network right now. Records stay safe here and '
+                                'send themselves when signal returns.',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.inkMuted,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  isOnline
-                      ? 'Connected. Saved records upload automatically.'
-                      : 'No network right now. Records stay safe here and '
-                            'send themselves when signal returns.',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.inkMuted,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -741,10 +749,7 @@ class _LanguageAndVoiceSheetState
           ),
           const Divider(),
           const SizedBox(height: Gap.sm),
-          Text(
-            'Read-aloud by language:',
-            style: AppType.eyebrow,
-          ),
+          Text('Read-aloud by language:', style: AppType.eyebrow),
           const SizedBox(height: Gap.sm),
           _VoiceRow(
             langName: 'English',
@@ -805,14 +810,21 @@ class _VoiceRow extends StatelessWidget {
       leading: CircleAvatar(
         radius: 16,
         backgroundColor: AppColors.surface,
-        child: Icon(Icons.record_voice_over, size: 14, color: AppColors.primary),
+        child: Icon(
+          Icons.record_voice_over,
+          size: 14,
+          color: AppColors.primary,
+        ),
       ),
       title: Text(
         langName,
         style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
       ),
       trailing: Container(
-        padding: const EdgeInsets.symmetric(horizontal: Gap.sm, vertical: Gap.xs),
+        padding: const EdgeInsets.symmetric(
+          horizontal: Gap.sm,
+          vertical: Gap.xs,
+        ),
         decoration: BoxDecoration(
           color: pillBg,
           borderRadius: BorderRadius.circular(999),
@@ -868,9 +880,7 @@ class _ModelPackSheet extends ConsumerWidget {
               }
               final list = snap.data!;
               return Column(
-                children: [
-                  for (final s in list) _ModelStatusTile(status: s),
-                ],
+                children: [for (final s in list) _ModelStatusTile(status: s)],
               );
             },
           ),
@@ -898,7 +908,8 @@ class _ModelStatusTile extends StatelessWidget {
     final installed = status.isModelPresent;
     final usable = status.isModelUsable;
     final verified = status.integrityVerified;
-    final mismatch = status.expectedSha256 != null &&
+    final mismatch =
+        status.expectedSha256 != null &&
         status.actualSha256 != null &&
         status.expectedSha256 != status.actualSha256;
     final colour = !installed
@@ -1086,11 +1097,7 @@ class _ModelPackRow extends StatelessWidget {
           Expanded(
             child: Text(
               value,
-              style: TextStyle(
-                fontSize: 11.5,
-                color: valueColor,
-                height: 1.3,
-              ),
+              style: TextStyle(fontSize: 11.5, color: valueColor, height: 1.3),
             ),
           ),
         ],
@@ -1134,6 +1141,7 @@ class _ModelPackMetrics extends StatelessWidget {
         ),
       );
     }
+
     add('AUC', auc);
     add('Sens', sens);
     add('Spec', spec);
@@ -1219,8 +1227,7 @@ class _RecalibrationExportSheet extends StatefulWidget {
       _RecalibrationExportSheetState();
 }
 
-class _RecalibrationExportSheetState
-    extends State<_RecalibrationExportSheet> {
+class _RecalibrationExportSheetState extends State<_RecalibrationExportSheet> {
   RecalibrationStore? _store;
   bool _loaded = false;
   int _pending = 0;
@@ -1329,9 +1336,7 @@ class _RecalibrationExportSheetState
             child: const Text('Keep collecting'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.triageRed,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.triageRed),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Stop collecting'),
           ),
@@ -1380,7 +1385,9 @@ class _RecalibrationExportSheetState
             Row(
               children: [
                 Icon(
-                  armed ? Icons.check_circle_rounded : Icons.pause_circle_outline_rounded,
+                  armed
+                      ? Icons.check_circle_rounded
+                      : Icons.pause_circle_outline_rounded,
                   size: 18,
                   color: armed ? AppColors.triageGreen : AppColors.triageAmber,
                 ),
@@ -1422,10 +1429,7 @@ class _RecalibrationExportSheetState
             ] else ...[
               Text(
                 '$_pending record${_pending == 1 ? '' : 's'} waiting on this phone.',
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppColors.inkMuted,
-                ),
+                style: const TextStyle(fontSize: 13, color: AppColors.inkMuted),
               ),
               const SizedBox(height: Gap.sm),
               Wrap(

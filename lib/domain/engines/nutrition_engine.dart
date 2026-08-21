@@ -101,6 +101,10 @@ class NutritionPlan {
     this.dayPlan = const [],
     this.dayPlanNote,
     this.nutrientCoverage = const {},
+    this.cohortLine,
+    this.escalationSigns = const [],
+    this.hydrationPlan,
+    this.upcomingFoods = const [],
   });
 
   final NutritionStatus status;
@@ -149,6 +153,31 @@ class NutritionPlan {
   /// that can show its coverage can defend its choices.
   final Map<String, List<String>> nutrientCoverage;
 
+  /// One line naming *who* this food plan is for and *what it is built
+  /// around* — a pregnant mother, a breastfeeding mother, a child in the
+  /// complementary-feeding window. The basket is cohort-specific; this
+  /// sentence says so out loud. Null when food counselling is withheld
+  /// (SAM — therapeutic food first).
+  final String? cohortLine;
+
+  /// The "bring back immediately if…" list for this pathway — the
+  /// deterioration signs a caregiver can recognise at home, in plain
+  /// words. A plan without its exit signs is a plan the family can
+  /// quietly fail; this is the safety net stated out loud.
+  final List<String> escalationSigns;
+
+  /// The WHO diarrhoea Plan-A fluid prescription — ORS volume per loose
+  /// stool, mixing, and the signs that mean fluids must move to a
+  /// facility. Null when there is no diarrhoea to manage.
+  final List<String>? hydrationPlan;
+
+  /// The first-foods preview for an infant under six months: the foods
+  /// that will become the starter basket at six months, shown now — with
+  /// their pictures and measures — so the household is ready before the
+  /// day arrives. Empty for everyone else: older children get the live
+  /// basket in [suggestions].
+  final List<FoodSuggestion> upcomingFoods;
+
   Map<String, Object?> toJson() => {
     'status': status.name,
     'pathway': pathway.name,
@@ -163,6 +192,10 @@ class NutritionPlan {
     'day_plan': [for (final m in dayPlan) m.toJson()],
     'day_plan_note': dayPlanNote,
     'nutrient_coverage': nutrientCoverage,
+    'cohort_line': cohortLine,
+    'escalation_signs': escalationSigns,
+    'hydration_plan': hydrationPlan,
+    'upcoming_foods': [for (final s in upcomingFoods) s.toJson()],
     if (therapeuticPlan != null)
       'therapeutic_plan': {
         'counselling_headline': therapeuticPlan!.counsellingHeadline,
@@ -266,6 +299,12 @@ abstract final class NutritionEngine {
         therapeuticPlan: therapeuticPlan,
         reviewInDays: inpatient ? 1 : 7,
         suggestions: const [],
+        escalationSigns: _escalationSigns(
+          pathway: pathway,
+          subject: subject,
+          hasDiarrhoea: hasDiarrhoea,
+        ),
+        hydrationPlan: hasDiarrhoea ? _hydrationPlan(subject) : null,
         feedingRules: [
           if (inpatient)
             'Refer today for inpatient care. Do not send the family home with a '
@@ -312,6 +351,7 @@ abstract final class NutritionEngine {
       subject: subject,
       isAnaemic: isAnaemic,
       hasDiarrhoea: hasDiarrhoea,
+      ageMonths: ageMonths,
     );
     final ironPriority = needs.any((n) => n.$1 == Nutrient.iron);
 
@@ -385,7 +425,8 @@ abstract final class NutritionEngine {
         suggestions.add(
           FoodSuggestion(
             food: fill.name,
-            reason: 'Fills the missing "${gap.key.label}" group — the child '
+            reason:
+                'Fills the missing "${gap.key.label}" group — the child '
                 'ate ${groupsEatenYesterday.length} of 8 groups yesterday, '
                 'and 5 is the minimum.',
             householdMeasure: fill.householdMeasure,
@@ -441,6 +482,14 @@ abstract final class NutritionEngine {
       dayPlan: dayPlan,
       dayPlanNote: dayPlanNote,
       nutrientCoverage: coverage,
+      cohortLine: _cohortLine(subject, ageMonths),
+      upcomingFoods: _firstFoodsPreview(subject, ageMonths),
+      escalationSigns: _escalationSigns(
+        pathway: pathway,
+        subject: subject,
+        hasDiarrhoea: hasDiarrhoea,
+      ),
+      hydrationPlan: hasDiarrhoea ? _hydrationPlan(subject) : null,
       reviewInDays: switch (status) {
         NutritionStatus.severeAcute => 7,
         NutritionStatus.moderateAcute => 14,
@@ -448,6 +497,35 @@ abstract final class NutritionEngine {
         NutritionStatus.normal => 90,
       },
     );
+  }
+
+  /// Under six months, breast milk alone is the entire message — but the
+  /// household should still see what is coming: the starter basket at six
+  /// months, with real foods and real measures, so the first porridge is
+  /// thick and not runny when the day arrives. Empty from six months, when
+  /// the live basket takes over.
+  static List<FoodSuggestion> _firstFoodsPreview(
+    NutritionSubject subject,
+    int ageMonths,
+  ) {
+    if (subject != NutritionSubject.child || ageMonths >= 6) {
+      return const [];
+    }
+    return [
+      for (final f in LocalFoods.all.where((f) => f.minAgeMonths == 6).take(4))
+        FoodSuggestion(
+          food: f.name,
+          reason:
+              'Not yet — from 6 months. One of the safest first foods: '
+              'start thick and in small amounts, while breastfeeding '
+              'continues.',
+          householdMeasure: f.householdMeasure,
+          group: f.group,
+          localName: f.localNames.values.firstOrNull,
+          preparation: f.preparation,
+          caution: f.caution,
+        ),
+    ];
   }
 
   static NutritionPathway _pathway({
@@ -504,6 +582,7 @@ abstract final class NutritionEngine {
     required NutritionSubject subject,
     required bool isAnaemic,
     required bool hasDiarrhoea,
+    required int ageMonths,
   }) {
     final needs = <(Nutrient, double)>[];
     // Wasting: calories before variety.
@@ -523,8 +602,26 @@ abstract final class NutritionEngine {
       needs.add((Nutrient.vitaminC, 2.0));
       needs.add((Nutrient.protein, 1.5));
     }
+    // Pregnancy carries two needs no other cohort has: folate builds the
+    // baby's brain and spine (neural-tube protection), and calcium is the
+    // WHO-named dietary guard against pre-eclampsia and fits.
+    if (subject == NutritionSubject.pregnantWoman) {
+      needs.add((Nutrient.folate, 2.5));
+      needs.add((Nutrient.calcium, 2.0));
+    }
+    // Lactation costs roughly 500 calories a day and draws calcium into
+    // the milk — both must come back through her plate.
+    if (subject == NutritionSubject.breastfeedingWoman) {
+      needs.add((Nutrient.energy, 2.0));
+      needs.add((Nutrient.calcium, 1.5));
+    }
     // Everyone: vitamin A guards sight and survival.
     needs.add((Nutrient.vitaminA, 1.0));
+    // Under-fives are always growing: zinc is the quiet need behind
+    // catch-up growth and the gut's defences.
+    if (subject == NutritionSubject.child && ageMonths <= 59) {
+      needs.add((Nutrient.zinc, 1.2));
+    }
     // Diarrhoea drains zinc faster than any other illness, and zinc is
     // what shortens the episode and protects the next one (WHO/UNICEF
     // zinc protocol: 10–14 days alongside continued feeding).
@@ -542,8 +639,7 @@ abstract final class NutritionEngine {
     for (final (nutrient, weight) in needs) {
       final index = food.nutrients.indexOf(nutrient);
       if (index < 0) continue;
-      final strength =
-          (food.nutrients.length - index) / food.nutrients.length;
+      final strength = (food.nutrients.length - index) / food.nutrients.length;
       score += weight * strength;
     }
     if (_regionalIronAnchors.contains(food.name)) {
@@ -589,6 +685,18 @@ abstract final class NutritionEngine {
       Nutrient.vitaminC =>
         'Eaten with the iron food, this roughly doubles how much iron the '
             'body takes up.',
+      Nutrient.folate =>
+        'Folate builds the baby\'s brain and spine, and protects against '
+            'neural-tube defects — beans, green leaves and sour fruits '
+            'carry it.',
+      Nutrient.calcium =>
+        subject == NutritionSubject.pregnantWoman
+            ? 'Calcium builds the baby\'s bones and guards her against '
+                  'pre-eclampsia and fits — the WHO dietary answer.'
+            : 'Calcium for strong bones and for the milk she is making.',
+      Nutrient.zinc =>
+        'Zinc for catch-up growth and the gut\'s defences — it shortens '
+            'diarrhoea and protects against the next episode.',
       _ =>
         'Vitamin A protects sight and cuts the risk of dying from measles '
             'and diarrhoea.',
@@ -749,6 +857,120 @@ abstract final class NutritionEngine {
 
   // ----------------------------------------------------- The day's plate
 
+  /// Who this basket was built for, in one counsellable line. The foods
+  /// differ by cohort; the line says so before the list appears.
+  static String? _cohortLine(NutritionSubject subject, int ageMonths) {
+    switch (subject) {
+      case NutritionSubject.pregnantWoman:
+        return 'Foods chosen for a pregnant mother: folate to build the '
+            'baby, iron to protect her blood, calcium to guard against '
+            'fits. She eats first, not last.';
+      case NutritionSubject.breastfeedingWoman:
+        return 'Foods chosen for a breastfeeding mother: extra energy, '
+            'protein and calcium — everything she eats becomes milk, and '
+            'milk is the baby\'s whole world.';
+      case NutritionSubject.child:
+        if (ageMonths < 6) {
+          return 'No food yet — for this baby, breast milk alone is the '
+              'entire plan. Everything here protects breastfeeding.';
+        }
+        if (ageMonths <= 23) {
+          return 'Foods chosen for a child in the complementary-feeding '
+              'window: soft, energy-dense, and carrying the iron and zinc '
+              'the growth chart is asking for.';
+        }
+        return 'Family foods, chosen for a child under five: the same pot '
+            'as the household, served first, from their own bowl.';
+    }
+  }
+
+  /// The "bring back immediately if…" list for this pathway. These are
+  /// the deterioration signs a caregiver can recognise without a MUAC
+  /// tape — the safety net stated out loud before the family leaves.
+  /// The signs differ by pathway: a child on RUTF is watched for
+  /// treatment failure, a mother for obstetric danger, a child with
+  /// diarrhoea for dehydration.
+  static List<String> _escalationSigns({
+    required NutritionPathway pathway,
+    required NutritionSubject subject,
+    required bool hasDiarrhoea,
+  }) {
+    final signs = <String>[];
+    switch (subject) {
+      case NutritionSubject.pregnantWoman:
+        signs.addAll([
+          'Any vaginal bleeding, a severe headache, blurred vision, or '
+              'swelling of the face and hands — come the same day.',
+          'Convulsions, or the baby stops moving as usual — come at once.',
+          'She cannot eat or keep food down for a day.',
+        ]);
+      case NutritionSubject.breastfeedingWoman:
+        signs.addAll([
+          'She cannot eat or keep food down for a day.',
+          'Heavy bleeding, fever, or foul-smelling discharge — come the '
+              'same day.',
+          'The breast becomes hot, painful and swollen with fever.',
+        ]);
+      case NutritionSubject.child:
+        if (pathway.needsTherapeuticFood) {
+          signs.addAll([
+            'The child stops eating or drinking, or cannot finish the '
+                'RUTF ration.',
+            'The swelling is new, worse, or spreading.',
+            'Fever, becoming sleepy or hard to wake, or fast/difficult '
+                'breathing.',
+            'No improvement after one week on treatment.',
+          ]);
+        } else {
+          signs.addAll([
+            'The child becomes visibly thinner, or the arm measures less '
+                'at the next check.',
+            'Eating much less than usual for more than two days.',
+            'Fever, becoming sleepy or hard to wake, or fast/difficult '
+                'breathing.',
+          ]);
+        }
+    }
+    if (hasDiarrhoea) {
+      signs.add(
+        subject == NutritionSubject.child
+            ? 'Sunken eyes, drinking poorly or unable to drink, the skin '
+                  'pinch going back very slowly, or blood in the stool — '
+                  'these mean the fluids must move to a clinic, the same day.'
+            : 'Signs of dehydration — dizziness, passing little dark urine, '
+                  'or drinking poorly — or blood in the stool, the same day.',
+      );
+    }
+    return signs;
+  }
+
+  /// WHO diarrhoea Plan A, written as a prescription: how much fluid
+  /// after each loose stool, how to mix it, and what stands in when
+  /// there are no sachets. Fluids given early at home are what keep a
+  /// diarrhoea episode from becoming a drip.
+  static List<String> _hydrationPlan(NutritionSubject subject) {
+    if (subject != NutritionSubject.child) {
+      return const [
+        'Drink more than usual every day while the diarrhoea lasts — '
+            'water, rice water, soups, and oral rehydration solution.',
+        'Mix one ORS sachet in one litre of clean drinking water. Use '
+            'within 24 hours, then mix fresh.',
+        'Keep eating small, regular meals — food rebuilds the gut.',
+      ];
+    }
+    return const [
+      'Give ORS after every loose stool: ¼–½ cup after each stool under '
+          '2 years, ½–1 cup from 2 years up.',
+      'Mix one ORS sachet in one litre of clean drinking water. Use '
+          'within 24 hours, then mix fresh.',
+      'No sachets? Give rice water, or 8 level teaspoons of sugar plus a '
+          'pinch of salt in one litre of clean water — measured '
+          'carefully, every time.',
+      'Keep breastfeeding and keep feeding — food and breast milk '
+          'shorten the episode, starving the gut prolongs it.',
+    ];
+  }
+
   /// The age-band sentence that governs the day plan: texture, cup size,
   /// frequency — WHO IYCF indicators translated into words a caregiver
   /// can cook by.
@@ -814,7 +1036,8 @@ abstract final class NutritionEngine {
       return basket.first.food;
     }
 
-    final wasting = status == NutritionStatus.moderateAcute ||
+    final wasting =
+        status == NutritionStatus.moderateAcute ||
         status == NutritionStatus.atRisk;
     final fortify = wasting
         ? 'Stir in one spoon of groundnut paste or red palm oil — it roughly '
@@ -830,38 +1053,34 @@ abstract final class NutritionEngine {
       final used = {breakfast};
       final lunchMain = pick(proteinGroups, used);
       final lunchVeg = pick(produceGroups, used);
-      slots.add(
-        MealSlot(moment: 'Lunch', foods: [lunchMain, lunchVeg]),
-      );
+      slots.add(MealSlot(moment: 'Lunch', foods: [lunchMain, lunchVeg]));
       final snack = pick(produceGroups, used);
       slots.add(
         MealSlot(
           moment: 'Snack',
           foods: [snack],
-          note: wasting ? 'A snack between meals protects the weight gain.' : null,
+          note: wasting
+              ? 'A snack between meals protects the weight gain.'
+              : null,
         ),
       );
       final dinnerStaple = pick({FoodGroup.grainsRootsTubers}, used);
       final dinnerSide = pick(proteinGroups, used);
-      slots.add(
-        MealSlot(moment: 'Dinner', foods: [dinnerStaple, dinnerSide]),
-      );
+      slots.add(MealSlot(moment: 'Dinner', foods: [dinnerStaple, dinnerSide]));
     } else {
       final used = {breakfast};
       final lunchMain = pick(proteinGroups, used);
       final lunchVeg = pick(produceGroups, used);
-      slots.add(
-        MealSlot(moment: 'Lunch', foods: [lunchMain, lunchVeg]),
-      );
+      slots.add(MealSlot(moment: 'Lunch', foods: [lunchMain, lunchVeg]));
       final dinnerStaple = pick({FoodGroup.grainsRootsTubers}, used);
       final dinnerSide = pick(proteinGroups, used);
-      slots.add(
-        MealSlot(moment: 'Dinner', foods: [dinnerStaple, dinnerSide]),
-      );
+      slots.add(MealSlot(moment: 'Dinner', foods: [dinnerStaple, dinnerSide]));
       slots.add(
         MealSlot(
           moment: 'Her extra meal',
-          foods: [pick({...produceGroups, ...proteinGroups}, used)],
+          foods: [
+            pick({...produceGroups, ...proteinGroups}, used),
+          ],
           note: 'The meal she is owed for feeding two — small, but every day.',
         ),
       );

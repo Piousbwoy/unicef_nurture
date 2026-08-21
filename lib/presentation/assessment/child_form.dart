@@ -133,9 +133,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     return null;
   }
 
-  // --------------------------------------- IMCI danger-sign gating (T2)
-  bool _showOptional = false;
-
+  // --------------------------------------------- IMCI general danger signs
   static const _youngInfantGeneral = {
     'notFeeding', 'noFeed', 'convulsions', 'movesStim', 'noMove', 'indrawing',
     'fontanelle',
@@ -150,10 +148,10 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
       ? _signs.any(_youngInfantGeneral.contains)
       : _signs.any(_childGeneral.contains);
 
-  /// With a general danger sign the child is referred regardless, so the
-  /// detailed symptom chart is optional — collapsed unless the worker asks.
-  bool get _optionalHidden => _hasGeneralDangerSign && !_showOptional;
-
+  /// The chart never collapses: a danger sign makes a referral, but every
+  /// remaining sign and measurement still shapes the model's plan, so the
+  /// worker records the full picture — multiple signs can coexist, and the
+  /// checklist stays fully visible however many are ticked.
   Widget _referralBanner() {
     if (!_hasGeneralDangerSign) return const SizedBox.shrink();
     return Container(
@@ -175,8 +173,9 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
           const SizedBox(width: Gap.sm),
           Expanded(
             child: Text(
-              'General danger sign present — refer today. Record quick '
-              'measurements and save; the detailed chart below is optional.',
+              'General danger sign present — refer today. Still complete '
+              'the chart: every other sign helps the model build the right '
+              'plan.',
               style: TextStyle(
                 color: AppColors.triageRed,
                 fontWeight: FontWeight.w700,
@@ -188,16 +187,6 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
       ),
     );
   }
-
-  Widget _optionalToggle() => Padding(
-    padding: const EdgeInsets.only(bottom: Gap.lg),
-    child: OutlinedButton(
-      onPressed: () => setState(() => _showOptional = !_showOptional),
-      child: Text(
-        _showOptional ? 'Hide optional sections' : 'Show optional sections',
-      ),
-    ),
-  );
 
   @override
   void initState() {
@@ -281,7 +270,6 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
             const SizedBox(height: Gap.lg),
 
             _referralBanner(),
-            if (_hasGeneralDangerSign) _optionalToggle(),
 
             if (person.dateOfBirth == null)
               Padding(
@@ -350,8 +338,9 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
   Widget _youngInfantDangerCard() => SectionCard(
     title: 'Danger signs',
     subtitle:
-        'In a young infant almost every sign here means refer now. Off '
-        'means asked and absent.',
+        'Tick every sign that is present — more than one can be present at '
+        'once, and the list stays open. In a young infant almost every sign '
+        'here means refer now. Off means asked and absent.',
     icon: Icons.warning_amber_rounded,
     accent: AppColors.triageRed,
     child: SignChecklist(
@@ -437,7 +426,6 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     ),
     const SizedBox(height: Gap.lg),
 
-    if (!_optionalHidden) ...[
     SectionCard(
       title: 'Local infection',
       subtitle: 'Check the cord and the skin in good light.',
@@ -637,7 +625,6 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
         ],
       ),
     ),
-    ],
   ];
 
   // -------------------------------------------------------------- Sick child
@@ -665,8 +652,9 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
 
       SectionCard(
         title: 'General danger signs',
-        subtitle: 'Any one of these is a referral, whatever the rest of the '
-            'chart finds.',
+        subtitle: 'Tick every sign that is present — more than one can be '
+            'present at once, and the list stays open. Any one of them is a '
+            'referral, whatever the rest of the chart finds.',
         icon: Icons.warning_amber_rounded,
         accent: AppColors.triageRed,
         child: SignChecklist(
@@ -684,7 +672,6 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
       ),
       const SizedBox(height: Gap.lg),
 
-      if (!_optionalHidden) ...[
       SectionCard(
         title: 'Cough and breathing',
         icon: Icons.air_outlined,
@@ -1226,7 +1213,6 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
           ],
         ),
       ),
-    ],
     ];
   }
 

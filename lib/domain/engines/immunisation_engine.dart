@@ -48,9 +48,7 @@ class VaccineDose {
 
   final String? notes;
 
-  String get label => doseNumber == 0
-      ? antigen
-      : '$antigen $doseNumber';
+  String get label => doseNumber == 0 ? antigen : '$antigen $doseNumber';
 }
 
 /// A single line in the catch-up plan.
@@ -79,6 +77,17 @@ enum ImmunisationStatus {
   final String label;
 }
 
+/// One future catch-up session: the doses that become giveable *together*
+/// [weeksFromNow] weeks from today, honouring due ages, minimum intervals
+/// and age bars. The weighing card records what was done; this is the
+/// plan for what comes next — the part a paper card cannot write.
+class CatchUpSession {
+  const CatchUpSession({required this.weeksFromNow, required this.labels});
+
+  final int weeksFromNow;
+  final List<String> labels;
+}
+
 class ImmunisationPlan {
   const ImmunisationPlan({
     required this.items,
@@ -88,6 +97,7 @@ class ImmunisationPlan {
     required this.isFullyUpToDate,
     this.nextDueInDays,
     this.nextDueLabel,
+    this.catchUp = const [],
   });
 
   final List<ImmunisationItem> items;
@@ -96,6 +106,11 @@ class ImmunisationPlan {
   final List<VaccineDose> giveToday;
 
   final List<ImmunisationItem> overdue;
+
+  /// The forward catch-up schedule: the doses that can be given together
+  /// at each of the next few sessions. Empty when nothing remains after
+  /// today.
+  final List<CatchUpSession> catchUp;
 
   final String summary;
   final bool isFullyUpToDate;
@@ -252,7 +267,8 @@ abstract final class GhanaEpi {
       dueAtWeeks: 78,
       protectsAgainst: 'Measles and rubella',
       minIntervalWeeks: 4,
-      notes: 'At 18 months. The dose most often missed, because the child is '
+      notes:
+          'At 18 months. The dose most often missed, because the child is '
           'past the weighing-card habit.',
     ),
     VaccineDose(
@@ -333,7 +349,8 @@ abstract final class ImmunisationEngine {
 
       // Due or overdue. Check the minimum interval from the previous dose of
       // the same antigen, since giving a catch-up dose too soon wastes it.
-      final previousMissing = dose.doseNumber > 1 &&
+      final previousMissing =
+          dose.doseNumber > 1 &&
           !givenLabels.contains('${dose.antigen} ${dose.doseNumber - 1}');
 
       final weeksLate = ageWeeks - dose.dueAtWeeks;
@@ -372,8 +389,7 @@ abstract final class ImmunisationEngine {
           ImmunisationItem(
             dose: dose,
             status: ImmunisationStatus.dueToday,
-            detail:
-                '${dose.label} is due now. ${dose.protectsAgainst}.',
+            detail: '${dose.label} is due now. ${dose.protectsAgainst}.',
           ),
         );
         giveToday.add(dose);
@@ -387,10 +403,17 @@ abstract final class ImmunisationEngine {
 
     final upToDate = overdue.isEmpty && giveToday.isEmpty;
 
+    final catchUp = _catchUpSessions(
+      ageWeeks: ageWeeks,
+      givenLabels: givenLabels,
+      giveToday: giveToday,
+    );
+
     return ImmunisationPlan(
       items: items,
       giveToday: giveToday,
       overdue: overdue,
+      catchUp: catchUp,
       isFullyUpToDate: upToDate,
       nextDueInDays: nextNotDue == null
           ? null
@@ -421,6 +444,51 @@ abstract final class ImmunisationEngine {
     return '${overdue.length} dose${overdue.length == 1 ? '' : 's'} overdue — '
         'the longest is ${worst.dose.label}, ${worst.weeksOverdue} weeks late. '
         'Give ${giveToday.map((d) => d.label).join(', ')} today.';
+  }
+
+  /// Simulates the next few 4-weekly sessions and returns, for each, the
+  /// doses that become giveable together: due age reached, previous dose
+  /// of the series already given (today or at an earlier session), and
+  /// the age bar not crossed at that week. This is what turns a list of
+  /// overdue doses into a plan the family can follow.
+  static List<CatchUpSession> _catchUpSessions({
+    required int ageWeeks,
+    required Set<String> givenLabels,
+    required List<VaccineDose> giveToday,
+  }) {
+    final given = {...givenLabels, for (final d in giveToday) d.label};
+    var remaining = [
+      for (final d in GhanaEpi.schedule)
+        if (!given.contains(d.label)) d,
+    ];
+    final sessions = <CatchUpSession>[];
+    for (final step in const [4, 8, 12, 16, 20]) {
+      if (remaining.isEmpty) break;
+      final week = ageWeeks + step;
+      final giveable = [
+        for (final d in remaining)
+          if (week >= d.dueAtWeeks &&
+              (d.maxAgeWeeks == null || week <= d.maxAgeWeeks!) &&
+              (d.doseNumber <= 1 ||
+                  given.contains('${d.antigen} ${d.doseNumber - 1}')))
+            d,
+      ];
+      if (giveable.isEmpty) continue;
+      sessions.add(
+        CatchUpSession(
+          weeksFromNow: step,
+          labels: [for (final d in giveable) d.label],
+        ),
+      );
+      for (final d in giveable) {
+        given.add(d.label);
+      }
+      remaining = [
+        for (final d in remaining)
+          if (!given.contains(d.label)) d,
+      ];
+    }
+    return sessions;
   }
 
   static String _weeksLabel(int weeks) {
@@ -480,6 +548,28 @@ abstract final class ImmunisationEngine {
               'the child away to "come back well" is how doses get lost.',
           protocolSource: 'Ghana EPI schedule',
           isTreatment: true,
+        ),
+      );
+    }
+
+    // The forward half of the catch-up plan: what must wait, and how long.
+    // Doses in the same series need at least four weeks between them, so
+    // the plan names each future session instead of saying "vaccinate"
+    // for everything at once.
+    if (plan.catchUp.isNotEmpty) {
+      actions.add(
+        RecommendedAction(
+          instruction:
+              'Catch-up schedule — '
+              '${plan.catchUp.map((s) => 'in ${s.weeksFromNow} weeks: ${s.labels.join(', ')}').join('; ')}. '
+              'Write each date on the card before the family leaves.',
+          urgency: ReferralUrgency.scheduled,
+          rationale:
+              'Doses in the same series need at least four weeks between '
+              'them. A dated card is the difference between a plan and a '
+              'wish.',
+          protocolSource: 'Ghana EPI schedule',
+          isCounselling: true,
         ),
       );
     }

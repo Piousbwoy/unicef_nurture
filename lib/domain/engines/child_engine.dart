@@ -321,7 +321,8 @@ abstract final class ChildEngine {
                 'Give oral amoxicillin dispersible tablets for 5 days, dosed by '
                 'weight, and show the caregiver how to give the first dose now.',
             urgency: ReferralUrgency.sameDay,
-            rationale: 'Pneumonia without chest indrawing is treated at '
+            rationale:
+                'Pneumonia without chest indrawing is treated at '
                 'community level under IMCI/iCCM.',
             protocolSource: _protocol,
             isTreatment: true,
@@ -491,9 +492,9 @@ abstract final class ChildEngine {
         add(
           i.stiffNeck ? 'Fever with stiff neck' : 'Fever with a danger sign',
           '$tempText together with '
-              '${i.stiffNeck ? 'neck stiffness' : 'a general danger sign'}. '
-              'Treat as severe malaria or meningitis. Give the first dose of '
-              'rectal artesunate and refer now.',
+          '${i.stiffNeck ? 'neck stiffness' : 'a general danger sign'}. '
+          'Treat as severe malaria or meningitis. Give the first dose of '
+          'rectal artesunate and refer now.',
           TriageLevel.urgent,
           value: i.temperatureCelsius == null
               ? 'reported'
@@ -558,7 +559,8 @@ abstract final class ChildEngine {
         missing.add('Malaria RDT not done');
         actions.add(
           const RecommendedAction(
-            instruction: 'Do a malaria RDT now, or refer to the nearest CHPS '
+            instruction:
+                'Do a malaria RDT now, or refer to the nearest CHPS '
                 'compound that has test kits today.',
             urgency: ReferralUrgency.sameDay,
             protocolSource: _protocol,
@@ -735,16 +737,15 @@ abstract final class ChildEngine {
 
     // The SAM branch that the design review flagged: pathway, not porridge.
     if (nutrition == NutritionStatus.severeAcute) {
-      final complicated = i.hasAnyGeneralDangerSign ||
+      final complicated =
+          i.hasAnyGeneralDangerSign ||
           i.hasBilateralOedema ||
           i.appetiteTestPassed == false ||
           i.ageInMonths < 6;
       pathway = complicated
           ? NutritionPathway.inpatientTherapeutic
           : NutritionPathway.outpatientTherapeutic;
-      capabilities.add(
-        complicated ? 'therapeuticFeeding' : 'otp',
-      );
+      capabilities.add(complicated ? 'therapeuticFeeding' : 'otp');
       actions.add(
         RecommendedAction(
           instruction: complicated
@@ -875,7 +876,8 @@ abstract final class ChildEngine {
               'actually available — dawadawa, moringa leaves, groundnut paste, '
               'liver, dried fish, cowpea.',
           urgency: ReferralUrgency.scheduled,
-          rationale: 'Iron plus a diet the household can afford, not a diet it '
+          rationale:
+              'Iron plus a diet the household can afford, not a diet it '
               'cannot.',
           protocolSource: _protocol,
           isTreatment: true,
@@ -887,30 +889,12 @@ abstract final class ChildEngine {
     // ---------------------------------------------------------------------
     // 8. IMMUNISATION AND SUPPLEMENTS — checked at every contact
     // ---------------------------------------------------------------------
-    if (i.overdueVaccines.isNotEmpty) {
-      add(
-        'Immunisation overdue',
-        'Overdue: ${i.overdueVaccines.join(', ')}. Give what is due today unless '
-            'the child is being referred for inpatient care, and record the '
-            'catch-up plan.',
-        TriageLevel.priority,
-        weight: 3,
-      );
-      actions.add(
-        RecommendedAction(
-          instruction:
-              'Vaccinate today for ${i.overdueVaccines.join(', ')}. A sick visit '
-              'is a vaccination opportunity — a mild illness is not a '
-              'contraindication.',
-          urgency: ReferralUrgency.sameDay,
-          rationale:
-              'Missed opportunities are a leading cause of under-immunisation in '
-              'rural districts.',
-          protocolSource: 'Ghana EPI schedule',
-          isTreatment: true,
-        ),
-      );
-    } else if (i.immunisationsUpToDate == null) {
+    // The dedicated catch-up engine owns immunisation findings and actions:
+    // it knows what can be given today and what must wait for a minimum
+    // interval, and it writes the forward catch-up schedule. This protocol
+    // must not emit a second, cruder "vaccinate today" list — two vaccine
+    // cards that disagree read as a broken assessment.
+    if (i.overdueVaccines.isEmpty && i.immunisationsUpToDate == null) {
       missing.add('Immunisation card not seen');
     }
 
@@ -999,7 +983,8 @@ abstract final class ChildEngine {
               'Start NHIS registration for this child. Without it, every '
               'referral you write carries a cost the family may not pay.',
           urgency: ReferralUrgency.scheduled,
-          rationale: 'Insurance status is a strong predictor of whether a '
+          rationale:
+              'Insurance status is a strong predictor of whether a '
               'referral is completed.',
           isCounselling: true,
         ),

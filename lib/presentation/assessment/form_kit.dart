@@ -255,7 +255,9 @@ class _MeasureFieldState extends State<MeasureField> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           FieldLabel(widget.label, why: widget.why),
-          widget.width == null ? field : SizedBox(width: widget.width, child: field),
+          widget.width == null
+              ? field
+              : SizedBox(width: widget.width, child: field),
         ],
       ),
     );
@@ -637,43 +639,46 @@ Future<bool> confirmImplausibleMeasurements(
             const SizedBox(height: Gap.md),
             for (final f in flags) ...[
               Container(
-                padding: const EdgeInsets.all(Gap.md),
                 decoration: BoxDecoration(
                   color: AppColors.triageAmberBg,
                   borderRadius: BorderRadius.circular(Gap.radiusSm),
-                  border: Border(
-                    left: BorderSide(color: AppColors.triageAmber, width: 4),
-                  ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${f.kind.label}: ${f.value} ${f.kind.unit}',
-                      style: const TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w800,
-                      ),
+                child: AccentEdge(
+                  accent: AppColors.triageAmber,
+                  borderRadius: BorderRadius.circular(Gap.radiusSm),
+                  child: Padding(
+                    padding: const EdgeInsets.all(Gap.md),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${f.kind.label}: ${f.value} ${f.kind.unit}',
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: Gap.xs),
+                        Text(
+                          f.problem,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.inkMuted,
+                            height: 1.35,
+                          ),
+                        ),
+                        const SizedBox(height: Gap.xs),
+                        Text(
+                          f.advice,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: Gap.xs),
-                    Text(
-                      f.problem,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.inkMuted,
-                        height: 1.35,
-                      ),
-                    ),
-                    const SizedBox(height: Gap.xs),
-                    Text(
-                      f.advice,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
               const SizedBox(height: Gap.sm),

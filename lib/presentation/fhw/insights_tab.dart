@@ -226,9 +226,7 @@ class InsightsTab extends ConsumerWidget {
                     'missed contact — the answers are the data.',
                   )
                 : Column(
-                    children: [
-                      for (final p in list) _BarrierTile(pattern: p),
-                    ],
+                    children: [for (final p in list) _BarrierTile(pattern: p)],
                   ),
           ),
         ),
@@ -316,71 +314,76 @@ class _DecliningTile extends StatelessWidget {
         ),
         child: Container(
           margin: const EdgeInsets.only(bottom: Gap.sm),
-          padding: const EdgeInsets.all(Gap.md),
           decoration: BoxDecoration(
             color: colour.withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(Gap.radiusSm),
-            border: Border(left: BorderSide(color: colour, width: 4)),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+          child: AccentEdge(
+            accent: colour,
+            borderRadius: BorderRadius.circular(Gap.radiusSm),
+            child: Padding(
+              padding: const EdgeInsets.all(Gap.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      child.fullName,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          child.fullName,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        trajectory.trend.label,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                          color: colour,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: Gap.xs),
+                  if (trajectory.muacChangePerMonth != null)
+                    Text(
+                      'MUAC ${trajectory.muacChangePerMonth! > 0 ? '+' : ''}'
+                      '${trajectory.muacChangePerMonth!.toStringAsFixed(1)} cm/month '
+                      '· ${trajectory.pointsUsed} readings',
                       style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                        color: AppColors.inkMuted,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ),
+                  if (trajectory.daysToSamThreshold != null) ...[
+                    const SizedBox(height: Gap.xs),
+                    Text(
+                      'At this rate, below the SAM cut-off in about '
+                      '${trajectory.daysToSamThreshold} days.',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                        color: colour,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: Gap.xs),
                   Text(
-                    trajectory.trend.label,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w800,
-                      color: colour,
+                    trajectory.explanation,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.inkMuted,
+                      height: 1.4,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: Gap.xs),
-              if (trajectory.muacChangePerMonth != null)
-                Text(
-                  'MUAC ${trajectory.muacChangePerMonth! > 0 ? '+' : ''}'
-                  '${trajectory.muacChangePerMonth!.toStringAsFixed(1)} cm/month '
-                  '· ${trajectory.pointsUsed} readings',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.inkMuted,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              if (trajectory.daysToSamThreshold != null) ...[
-                const SizedBox(height: Gap.xs),
-                Text(
-                  'At this rate, below the SAM cut-off in about '
-                  '${trajectory.daysToSamThreshold} days.',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
-                    color: colour,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-              const SizedBox(height: Gap.xs),
-              Text(
-                trajectory.explanation,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.inkMuted,
-                  height: 1.4,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -511,11 +514,7 @@ class _CompletionBody extends StatelessWidget {
             const SizedBox(width: Gap.md),
             StatTile(value: '$arrived', label: 'Arrived'),
             const SizedBox(width: Gap.md),
-            StatTile(
-              value: '$pct%',
-              label: 'Completed',
-              colour: colour,
-            ),
+            StatTile(value: '$pct%', label: 'Completed', colour: colour),
           ],
         ),
         const SizedBox(height: Gap.md),

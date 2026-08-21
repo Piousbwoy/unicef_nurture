@@ -41,6 +41,7 @@ import '../../domain/engines/treatment_response_engine.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
 import '../../domain/enums.dart';
+import '../shared/app_image.dart';
 import '../shared/audio_button.dart';
 import '../shared/recommendation_kit.dart';
 import '../shared/ui.dart';
@@ -102,9 +103,10 @@ class _AssessmentResultScreenState
   bool _showOverride = false;
 
   /// Which page of the result experience is showing: 0 = the verdict
-  /// moment (the decision, nothing else), 1 = the full clinical report
-  /// (the evidence, the referral, the supporting plans). Two pages, so
-  /// the decision is never buried under its own paperwork.
+  /// moment (the decision, nothing else), 1 = the care plan it opens,
+  /// 2 = the tailored nutrition plan, 3 = the full clinical report (the
+  /// evidence behind all of it). Pages, so the decision is never buried
+  /// under its own paperwork.
   int _view = 0;
 
   // ---------------------------------------------------------------- Override
@@ -362,7 +364,8 @@ class _AssessmentResultScreenState
       appetiteTestPassed: draft.inputs['appetite_test'] as bool?,
       hasAnyDangerSign: result.dangerSignsPresent.isNotEmpty,
       isAnaemic: anaemic,
-      hasDiarrhoea: draft.inputs['danger_signs'] is List &&
+      hasDiarrhoea:
+          draft.inputs['danger_signs'] is List &&
           (draft.inputs['danger_signs'] as List).contains('diarrhoea'),
       therapeuticContext: therapeuticContext,
     );
@@ -685,6 +688,17 @@ class _AssessmentResultScreenState
   /// will say.
   TriageLevel get _effectiveTriage => _override ?? _carePlan.overallTriage;
 
+  /// The verdict's causes in words the FHW can repeat to a supervisor:
+  /// each driver named with the measured value that crossed its cut-off,
+  /// falling back to the engine's own reasoning line when no number led.
+  List<String> _causeLines(CarePlan plan) => plan.topDrivers
+      .map(
+        (f) => f.measuredValue == null
+            ? f.detail
+            : '${f.label} — ${f.measuredValue}',
+      )
+      .toList(growable: false);
+
   /// Regional base-rate priors the calibrated probabilities are expressed
   /// on. They mirror the fallback bases in [OfflineInferenceService] (GHS /
   /// Kintampo surveillance) and are what let a calibrated posterior be
@@ -963,8 +977,16 @@ class _AssessmentResultScreenState
               ),
             )
           : AppBar(
-              leading: BackButton(onPressed: () => setState(() => _view = 0)),
-              title: Text(_view == 1 ? 'Care plan' : 'Clinical report'),
+              leading: BackButton(
+                // The nutrition page backs into the care plan that opened
+                // it; everything else backs into the verdict.
+                onPressed: () => setState(() => _view = _view == 2 ? 1 : 0),
+              ),
+              title: Text(switch (_view) {
+                1 => 'Care plan',
+                2 => 'Nutrition plan',
+                _ => 'Clinical report',
+              }),
             ),
       // Three pages, one state: the verdict moment, the care plan it opens,
       // and the full clinical report behind both. The switch animates so each
@@ -996,6 +1018,15 @@ class _AssessmentResultScreenState
                       const SizedBox(height: Gap.lg),
                     ],
 
+                    // -------------------------------------- Danger signs
+                    // A danger sign is the clearest sentence this
+                    // assessment can speak: it leads the page, in red,
+                    // so the urgency is impossible to scroll past.
+                    if (result.dangerSignsPresent.isNotEmpty) ...[
+                      _DangerSignsBanner(signs: result.dangerSignsPresent),
+                      const SizedBox(height: Gap.lg),
+                    ],
+
                     // --------------------------------------- The verdict
                     // The whole assessment as one premium moment: deep
                     // royal hero, IMCI level chip, classification, the
@@ -1008,6 +1039,7 @@ class _AssessmentResultScreenState
                         confidence: plan.confidence,
                         missingCount: plan.missingData.length,
                         followUpInDays: plan.followUpInDays,
+                        causes: _causeLines(plan),
                         audio: AudioButton(
                           text:
                               '${_classificationOf(plan)}. '
@@ -1024,6 +1056,13 @@ class _AssessmentResultScreenState
                               ),
                       ),
                     ),
+                    const SizedBox(height: Gap.md),
+
+                    // ------------------------------- The measured numbers
+                    // The verdict is a conclusion; these are its evidence.
+                    // Every value this visit actually measured sits under
+                    // the verdict with the cut-off it crossed.
+                    _VitalsStrip(findings: plan.findings),
                     const RecHairline(),
 
                     // -------------------------------------- What we found
@@ -1055,18 +1094,101 @@ class _AssessmentResultScreenState
                     ),
                     const SizedBox(height: Gap.md),
 
+                    // ------------------------- The food plan, one tap away
+                    // Nutrition is the half of the decision the family lives
+                    // on, so it gets its own doorway on the verdict page —
+                    // pictured foods leading, impossible to miss.
+                    if (nutrition != null) ...[
+                      _NutritionCta(onOpen: () => setState(() => _view = 2)),
+                      const SizedBox(height: Gap.md),
+                    ],
+
+                    // ---------------------- What to say before they leave
+                    // The verdict translated into the sentence the family
+                    // carries home — plain words, speakable aloud, with
+                    // the return date attached.
+                    _FamilyBrief(
+                      message: plan.caregiverMessage ?? plan.summary,
+                      followUpInDays: plan.followUpInDays,
+                      audio: AudioButton(
+                        text: plan.caregiverMessage ?? plan.summary,
+                        language: input.user.preferredLanguage,
+                        id: 'result_family_brief',
+                        compact: true,
+                      ),
+                    ),
+                    const SizedBox(height: Gap.md),
+
                     // ----------------------------- The report, one tap away
                     _ReportTeaser(
                       findingsCount: plan.findings.length,
                       actionsCount: plan.actions.length,
                       needsReferral: _refer,
-                      onOpen: () => setState(() => _view = 2),
+                      onOpen: () => setState(() => _view = 3),
                     ),
                     const SizedBox(height: Gap.xxl),
                   ],
                 ),
               )
             : _view == 2
+            ? KeyedSubtree(
+                key: const ValueKey('nutrition'),
+                child: ListView(
+                  padding: const EdgeInsets.all(Gap.lg),
+                  children: [
+                    // Who this basket was chosen for, before the food:
+                    // the cohort callout leads the page exactly as it
+                    // leads the care plan.
+                    if (plan.patientCohort != null &&
+                        plan.cohortNote != null) ...[
+                      CohortCallout(
+                        cohort: plan.patientCohort!,
+                        note: plan.cohortNote!,
+                      ),
+                      const SizedBox(height: Gap.lg),
+                    ],
+                    if (nutrition != null)
+                      NutritionRecSection(
+                        plan: nutrition,
+                        cost: _cost,
+                        onCost: (tier) {
+                          setState(() => _cost = tier);
+                        },
+                      )
+                    else
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(Gap.md),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(Gap.radiusSm),
+                          border: Border.all(color: AppColors.line),
+                        ),
+                        child: const Text(
+                          'No tailored food plan for this visit — the model '
+                          'withholds food counselling when it is not safe '
+                          'or not applicable.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.inkMuted,
+                            height: 1.45,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: Gap.lg),
+                    // The evidence stays one tap away here too.
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () => setState(() => _view = 3),
+                        icon: const Icon(Icons.description_outlined, size: 17),
+                        label: const Text('Open full clinical report'),
+                      ),
+                    ),
+                    const SizedBox(height: Gap.xxl),
+                  ],
+                ),
+              )
+            : _view == 3
             ? KeyedSubtree(
                 key: const ValueKey('report'),
                 child: ListView(
@@ -1285,6 +1407,25 @@ class _AssessmentResultScreenState
                                       ],
                                     ),
                                   ),
+                                  // The one line that teaches a nurse to read
+                                  // every card below: what the % means, and
+                                  // who still has the final word.
+                                  const Padding(
+                                    padding: EdgeInsets.only(bottom: Gap.md),
+                                    child: Text(
+                                      'How to read these cards: the risk % is how '
+                                      'often a person like this truly has the '
+                                      'condition. Above the action line the plan '
+                                      'already tells you what to do — and your own '
+                                      'eyes always outrank the number.',
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontStyle: FontStyle.italic,
+                                        color: AppColors.inkMuted,
+                                        height: 1.45,
+                                      ),
+                                    ),
+                                  ),
                                   if (measureNext.isNotEmpty)
                                     _MeasureNextCard(featureNames: measureNext),
                                   for (final e in entries)
@@ -1356,6 +1497,21 @@ class _AssessmentResultScreenState
                       const RecHairline(),
                     ],
 
+                    // ------------------------------------------------------ Nutrition
+                    // The food plan sits directly under the worklist: it is
+                    // the half of the decision the family carries home, and
+                    // it must not hide below the scroll.
+                    if (nutrition != null) ...[
+                      NutritionRecSection(
+                        plan: nutrition,
+                        cost: _cost,
+                        onCost: (tier) {
+                          setState(() => _cost = tier);
+                        },
+                      ),
+                      const RecHairline(),
+                    ],
+
                     // ------------------------------------------------------- Referral
                     _ReferralSection(
                       refer: _refer,
@@ -1388,18 +1544,6 @@ class _AssessmentResultScreenState
                       ),
                     ),
 
-                    // ------------------------------------------------------ Nutrition
-                    if (nutrition != null) ...[
-                      const RecHairline(),
-                      NutritionRecSection(
-                        plan: nutrition,
-                        cost: _cost,
-                        onCost: (tier) {
-                          setState(() => _cost = tier);
-                        },
-                      ),
-                    ],
-
                     // -------------------------------------------------- Early learning
                     // Nurturing Care domains 3 & 5 — responsive caregiving and early
                     // learning. Only for the newborn and child-under-five categories.
@@ -1424,6 +1568,19 @@ class _AssessmentResultScreenState
                     if (immunisation != null) ...[
                       const RecHairline(),
                       ImmunisationRecSection(plan: immunisation),
+                    ],
+
+                    // ---------------- Next: the tailored nutrition plan
+                    // The flow the worker walks: verdict → actions → food.
+                    // One premium CTA carries them from the clinical plan
+                    // to the plate, tailored to this person's concern.
+                    if (nutrition != null) ...[
+                      const SizedBox(height: Gap.lg),
+                      GradientButton(
+                        label: 'Next — see the nutrition plan',
+                        icon: Icons.restaurant_outlined,
+                        onPressed: () => setState(() => _view = 2),
+                      ),
                     ],
 
                     // ------------------------------------------------ Clinical override
@@ -1485,11 +1642,8 @@ class _AssessmentResultScreenState
                     // ------------------------ The evidence, still one tap away
                     Center(
                       child: TextButton.icon(
-                        onPressed: () => setState(() => _view = 2),
-                        icon: const Icon(
-                          Icons.description_outlined,
-                          size: 17,
-                        ),
+                        onPressed: () => setState(() => _view = 3),
+                        icon: const Icon(Icons.description_outlined, size: 17),
                         label: const Text('Open full clinical report'),
                       ),
                     ),
@@ -1524,6 +1678,7 @@ class _VerdictHero extends StatelessWidget {
     required this.score,
     required this.confidence,
     required this.missingCount,
+    this.causes = const [],
     this.followUpInDays,
     this.audio,
     this.overrideNote,
@@ -1534,6 +1689,10 @@ class _VerdictHero extends StatelessWidget {
   final int score;
   final RecommendationConfidence confidence;
   final int missingCount;
+
+  /// Plain-language causes — the driver findings with their measured
+  /// values — so the FHW can say *why*, not just *what*.
+  final List<String> causes;
   final int? followUpInDays;
   final Widget? audio;
   final Widget? overrideNote;
@@ -1611,6 +1770,64 @@ class _VerdictHero extends StatelessWidget {
                 letterSpacing: -0.3,
               ),
             ),
+            if (causes.isNotEmpty) ...[
+              const SizedBox(height: Gap.md),
+              // Why this verdict — the causes in the worker's own words,
+              // so the decision can be repeated at the facility gate.
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(Gap.md),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(Gap.radiusSm),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'WHY THIS VERDICT',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.4,
+                        color: Colors.white.withValues(alpha: 0.6),
+                      ),
+                    ),
+                    const SizedBox(height: Gap.xs),
+                    for (final cause in causes)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              margin: const EdgeInsets.only(top: 6),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white.withValues(alpha: 0.7),
+                              ),
+                            ),
+                            const SizedBox(width: Gap.sm),
+                            Expanded(
+                              child: Text(
+                                cause,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: Gap.lg),
             Divider(
               height: 1,
@@ -2000,6 +2217,253 @@ class _MeasureChip extends StatelessWidget {
 
 /// The doorway into the care plan: the verdict is read first, the
 /// recommendations open as their own page — never a wall to scroll past.
+/// The danger signs this assessment found, stated before anything else.
+/// In IMCI, any one general danger sign reclassifies the child upward —
+/// the banner makes that weight visible in red, with the instruction to
+/// act before the family leaves.
+class _DangerSignsBanner extends StatelessWidget {
+  const _DangerSignsBanner({required this.signs});
+
+  final List<String> signs;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    decoration: BoxDecoration(
+      color: AppColors.triageRedBg,
+      borderRadius: BorderRadius.circular(Gap.radiusSm),
+      boxShadow: const [AppShadows.card],
+    ),
+    child: AccentEdge(
+      accent: AppColors.triageRed,
+      borderRadius: BorderRadius.circular(Gap.radiusSm),
+      child: Padding(
+        padding: const EdgeInsets.all(Gap.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 16,
+                  color: AppColors.triageRed,
+                ),
+                SizedBox(width: Gap.xs),
+                Expanded(
+                  child: Text(
+                    'DANGER SIGNS PRESENT',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.7,
+                      color: AppColors.triageRed,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            for (final sign in signs)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 1),
+                child: Text(
+                  '\u2022 $sign',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.ink,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            const SizedBox(height: Gap.xs),
+            const Text(
+              'Any one of these signs makes this visit urgent — act before '
+              'the family leaves.',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.triageRed,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// The measurements behind the verdict: every value this visit actually
+/// recorded, with the cut-off it was judged against. A nurse defending
+/// the result to a family — or to a referral facility — points here.
+class _VitalsStrip extends StatelessWidget {
+  const _VitalsStrip({required this.findings});
+
+  final List<ClinicalFinding> findings;
+
+  @override
+  Widget build(BuildContext context) {
+    final vitals = findings
+        .where((f) => f.measuredValue != null)
+        .take(6)
+        .toList(growable: false);
+    if (vitals.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(
+              Icons.monitor_heart_outlined,
+              size: 14,
+              color: AppColors.inkMuted,
+            ),
+            SizedBox(width: Gap.xs),
+            Expanded(
+              child: Text(
+                'THE NUMBERS BEHIND THE VERDICT',
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.8,
+                  color: AppColors.inkMuted,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: Gap.xs),
+        Wrap(
+          spacing: Gap.xs,
+          runSpacing: Gap.xs,
+          children: [
+            for (final v in vitals)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceTint,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: AppColors.line,
+                    width: Gap.hairline,
+                  ),
+                ),
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: '${v.label}: ',
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.inkMuted,
+                        ),
+                      ),
+                      TextSpan(
+                        text: v.measuredValue,
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.ink,
+                        ),
+                      ),
+                      if (v.threshold != null)
+                        TextSpan(
+                          text: ' \u00b7 cut-off ${v.threshold}',
+                          style: const TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.inkFaint,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// The verdict translated into the sentence the family carries home —
+/// plain words, speakable aloud in the caregiver's language, with the
+/// return date attached. This is what the nurse says on the way out.
+class _FamilyBrief extends StatelessWidget {
+  const _FamilyBrief({
+    required this.message,
+    required this.followUpInDays,
+    required this.audio,
+  });
+
+  final String message;
+  final int? followUpInDays;
+  final Widget audio;
+
+  @override
+  Widget build(BuildContext context) => KitCard(
+    accent: AppColors.primary,
+    margin: EdgeInsets.zero,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(
+              Icons.family_restroom_outlined,
+              size: 15,
+              color: AppColors.primary,
+            ),
+            const SizedBox(width: Gap.xs),
+            const Expanded(
+              child: Text(
+                'WHAT TO TELL THE FAMILY',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.7,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+            audio,
+          ],
+        ),
+        const SizedBox(height: Gap.xs),
+        Text(
+          message,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppColors.ink,
+            height: 1.5,
+          ),
+        ),
+        if (followUpInDays != null) ...[
+          const SizedBox(height: Gap.xs),
+          Text(
+            'Ask them to come back in $followUpInDays '
+            'day${followUpInDays == 1 ? '' : 's'} — and sooner if '
+            'anything worries them.',
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.inkMuted,
+              fontStyle: FontStyle.italic,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
 class _RecommendationsCta extends StatelessWidget {
   const _RecommendationsCta({
     required this.actionsCount,
@@ -2091,6 +2555,120 @@ class _RecommendationsCta extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The doorway to the tailored food plan: pictured local foods lead, so
+/// the worker sees at a glance that this is the page with the pictures.
+/// One tap from the verdict straight to the plate.
+class _NutritionCta extends StatelessWidget {
+  const _NutritionCta({required this.onOpen});
+
+  final VoidCallback onOpen;
+
+  static const _thumbs = [
+    AppImages.foodMilletPorridge,
+    AppImages.foodBoiledEgg,
+    AppImages.foodGroundnutPaste,
+    AppImages.foodPawpaw,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(Gap.radius),
+        onTap: onOpen,
+        child: Container(
+          padding: const EdgeInsets.all(Gap.lg),
+          decoration: BoxDecoration(
+            color: AppColors.triageGreenBg,
+            borderRadius: BorderRadius.circular(Gap.radius),
+            border: Border.all(color: AppColors.accent, width: 1),
+            boxShadow: const [AppShadows.card],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: const BoxDecoration(
+                      color: AppColors.accent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.restaurant_outlined,
+                      size: 20,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: Gap.md),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Nutrition plan',
+                          style: TextStyle(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.ink,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'The foods for this person — pictured, measured, local',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.inkMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 20,
+                    color: AppColors.accent,
+                  ),
+                ],
+              ),
+              const SizedBox(height: Gap.md),
+              Row(
+                children: [
+                  for (final t in _thumbs) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(Gap.radiusXs),
+                      child: SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: AppImage(src: t),
+                      ),
+                    ),
+                    const SizedBox(width: Gap.xs),
+                  ],
+                  const Expanded(
+                    child: Text(
+                      'Tap to open',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.accent,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -2315,36 +2893,42 @@ class _OverrideNote extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.sm),
       decoration: BoxDecoration(
         color: AppColors.triageAmberBg,
         borderRadius: BorderRadius.circular(Gap.radiusSm),
-        border: Border(
-          left: BorderSide(color: AppColors.triageAmber, width: 4),
-        ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(
-            Icons.gavel_outlined,
-            size: 15,
-            color: AppColors.triageAmber,
+      child: AccentEdge(
+        accent: AppColors.triageAmber,
+        borderRadius: BorderRadius.circular(Gap.radiusSm),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: Gap.md,
+            vertical: Gap.sm,
           ),
-          const SizedBox(width: Gap.sm),
-          Expanded(
-            child: Text(
-              'You overruled the engine (${engine.label}) and set this to '
-              '${chosen.label}. Your name and reason are saved with the record.',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.gavel_outlined,
+                size: 15,
                 color: AppColors.triageAmber,
-                height: 1.4,
               ),
-            ),
+              const SizedBox(width: Gap.sm),
+              Expanded(
+                child: Text(
+                  'You overruled the engine (${engine.label}) and set this to '
+                  '${chosen.label}. Your name and reason are saved with the record.',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.triageAmber,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -2618,57 +3202,63 @@ class _MeasureNextCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: Gap.sm),
-      padding: const EdgeInsets.all(Gap.md),
       decoration: BoxDecoration(
         color: AppColors.surfaceTint,
         borderRadius: BorderRadius.circular(Gap.radiusXs),
-        border: Border(left: BorderSide(color: AppColors.primary, width: 3)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
+      child: AccentEdge(
+        accent: AppColors.primary,
+        width: 3,
+        borderRadius: BorderRadius.circular(Gap.radiusXs),
+        child: Padding(
+          padding: const EdgeInsets.all(Gap.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                Icons.pending_actions_rounded,
-                size: 15,
-                color: AppColors.primary,
-              ),
-              SizedBox(width: Gap.xs),
-              Expanded(
-                child: Text(
-                  'MEASURE THESE NEXT',
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.8,
+              const Row(
+                children: [
+                  Icon(
+                    Icons.pending_actions_rounded,
+                    size: 15,
                     color: AppColors.primary,
                   ),
+                  SizedBox(width: Gap.xs),
+                  Expanded(
+                    child: Text(
+                      'MEASURE THESE NEXT',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: Gap.xs),
+              const Text(
+                'The checks in this section ran without these inputs. Each one '
+                'you measure — now or at the next contact — sharpens the next '
+                'result.',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: AppColors.inkMuted,
+                  height: 1.45,
                 ),
+              ),
+              const SizedBox(height: Gap.sm),
+              Wrap(
+                spacing: Gap.xs,
+                runSpacing: Gap.xs,
+                children: [
+                  for (final f in featureNames)
+                    _FeatureChip(_friendly(f), present: false),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: Gap.xs),
-          const Text(
-            'The checks in this section ran without these inputs. Each one '
-            'you measure — now or at the next contact — sharpens the next '
-            'result.',
-            style: TextStyle(
-              fontSize: 11.5,
-              color: AppColors.inkMuted,
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: Gap.sm),
-          Wrap(
-            spacing: Gap.xs,
-            runSpacing: Gap.xs,
-            children: [
-              for (final f in featureNames)
-                _FeatureChip(_friendly(f), present: false),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -2726,6 +3316,72 @@ class _AiModelCard extends StatelessWidget {
       : p.ruleInThreshold != null
       ? 'screening tier'
       : null;
+
+  /// The condition in plain words — the words the nurse writes on the card.
+  String get _conditionName => switch (p.modelName) {
+    'neonatal_sepsis' => 'severe infection (sepsis)',
+    'child_pneumonia' => 'pneumonia',
+    'preeclampsia_risk' => 'pre-eclampsia',
+    'lbw_sga' => 'a small or low-weight baby',
+    _ => p.modelName,
+  };
+
+  /// The risk translated from a percentage into the frequency a nurse
+  /// repeats to a colleague: "out of 100 like this, about N".
+  String get _frequencyReading {
+    final n = (p.riskProbability! * 100).round();
+    return n <= 0 ? 'less than 1 in 100' : 'about $n in 100';
+  }
+
+  /// The first half of the plain-language reading: how often the
+  /// condition is truly present, and where the number sits against the
+  /// action line.
+  String get _interpretationLine {
+    final freq = _frequencyReading;
+    if (p.ruleInCandidate && p.ruleInThreshold != null) {
+      final cut = (p.ruleInThreshold! * 100).round();
+      return 'Out of 100 patients with findings like this, $freq truly have '
+          '$_conditionName. That is above our $cut% action line, so act '
+          'today:';
+    }
+    final base =
+        'Out of 100 patients with findings like this, $freq truly '
+        'have $_conditionName';
+    return switch (p.classification) {
+      'moderate' => '$base — raised, but below the action line:',
+      'high' => '$base — this is high:',
+      'low' => 'The AI saw no pattern of $_conditionName in these findings:',
+      _ => '$base:',
+    };
+  }
+
+  /// The concrete next step for this tier, per condition — the sentence
+  /// that turns a number into a decision.
+  String get _nextStep {
+    if (p.ruleInCandidate) {
+      return switch (p.modelName) {
+        'neonatal_sepsis' =>
+          'treat as possible severe infection (PSBI): give the pre-referral '
+              'antibiotics on the plan and arrange referral today.',
+        'child_pneumonia' =>
+          'treat as severe pneumonia: give the first antibiotic dose as the '
+              'plan says and arrange referral today.',
+        'preeclampsia_risk' =>
+          'treat as severe pre-eclampsia: arrange urgent referral now — '
+              'eclampsia can start without warning.',
+        'lbw_sga' =>
+          'the baby is likely small or early: watch feeding and warmth '
+              'closely and follow the growth review on the plan.',
+        _ => 'act on the referral the plan has prepared.',
+      };
+    }
+    return switch (p.classification) {
+      'high' => 'arrange a review soon and follow the plan above.',
+      'moderate' => 'do the plan above and re-check at the follow-up visit.',
+      'low' => 'if you spot a danger sign anyway, act on what you saw.',
+      _ => 'follow the plan above.',
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2930,6 +3586,10 @@ class _AiModelCard extends StatelessWidget {
                         ),
                       ],
                       const SizedBox(height: Gap.md),
+                      _interpretation(),
+                      const SizedBox(height: Gap.sm),
+                      _checkedBlock(),
+                      const SizedBox(height: Gap.md),
                       _precisionBlock(),
                     ],
                   ),
@@ -2983,48 +3643,52 @@ class _AiModelCard extends StatelessWidget {
   Widget _suppressedBody() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(Gap.md),
       decoration: BoxDecoration(
         color: AppColors.triageAmberBg,
         borderRadius: BorderRadius.circular(Gap.radiusXs),
-        border: Border(
-          left: BorderSide(color: AppColors.triageAmber, width: 3),
-        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Risk n/a · out of training window',
-            style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w800,
-              color: AppColors.triageAmber,
-            ),
-          ),
-          const SizedBox(height: Gap.xs),
-          Text(
-            'One or more inputs fall outside the range this model was '
-            'trained on, so the AI withholds a number rather than guess. '
-            'The deterministic WHO/GHS rules still apply.',
-            style: TextStyle(
-              fontSize: 11.5,
-              color: AppColors.triageAmber.withValues(alpha: 0.9),
-              height: 1.45,
-            ),
-          ),
-          if (p.driftFeatures.isNotEmpty) ...[
-            const SizedBox(height: Gap.sm),
-            Wrap(
-              spacing: Gap.xs,
-              runSpacing: Gap.xs,
-              children: [
-                for (final f in p.driftFeatures)
-                  _FeatureChip(f, present: false),
+      child: AccentEdge(
+        accent: AppColors.triageAmber,
+        width: 3,
+        borderRadius: BorderRadius.circular(Gap.radiusXs),
+        child: Padding(
+          padding: const EdgeInsets.all(Gap.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Risk n/a · out of training window',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.triageAmber,
+                ),
+              ),
+              const SizedBox(height: Gap.xs),
+              Text(
+                'One or more inputs fall outside the range this model was '
+                'trained on, so the AI withholds a number rather than guess. '
+                'The deterministic WHO/GHS rules still apply.',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: AppColors.triageAmber.withValues(alpha: 0.9),
+                  height: 1.45,
+                ),
+              ),
+              if (p.driftFeatures.isNotEmpty) ...[
+                const SizedBox(height: Gap.sm),
+                Wrap(
+                  spacing: Gap.xs,
+                  runSpacing: Gap.xs,
+                  children: [
+                    for (final f in p.driftFeatures)
+                      _FeatureChip(f, present: false),
+                  ],
+                ),
               ],
-            ),
-          ],
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -3103,6 +3767,123 @@ class _AiModelCard extends StatelessWidget {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// The nurse's reading of the number: what it means in plain words,
+  /// where it sits against the action line, and the one step to take —
+  /// the sentence a nurse can repeat to a supervisor.
+  Widget _interpretation() {
+    final (bg, fg) = _badge;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(Gap.md),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(Gap.radiusXs),
+        border: Border.all(color: fg.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.menu_book_rounded, size: 15, color: fg),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  'WHAT THIS MEANS',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    color: fg,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Gap.xs),
+          Text(
+            '$_interpretationLine $_nextStep',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.ink,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: Gap.xs),
+          Text(
+            p.usingModel
+                ? 'The on-device model produced this number, and the WHO/GHS '
+                      'rules still stand behind it.'
+                : 'The on-device model could not run here, so this number '
+                      'comes from the WHO/GHS protocol rules themselves — '
+                      'the same decision either way.',
+            style: const TextStyle(
+              fontSize: 10.5,
+              fontStyle: FontStyle.italic,
+              color: AppColors.inkMuted,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// What drove the number, visible without expanding: the findings the
+  /// AI checked, so the nurse can judge the score against the patient in
+  /// front of her.
+  Widget _checkedBlock() {
+    if (p.featuresUsed.isEmpty) return const SizedBox.shrink();
+    final top = p.featuresUsed.take(6).toList();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(Gap.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(Gap.radiusXs),
+        border: Border.all(color: AppColors.line, width: Gap.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'WHAT THE AI CHECKED',
+            style: TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+              color: AppColors.inkMuted,
+            ),
+          ),
+          const SizedBox(height: Gap.xs),
+          Wrap(
+            spacing: Gap.xs,
+            runSpacing: Gap.xs,
+            children: [
+              for (final f in top)
+                _FeatureChip(f.replaceAll('_', ' '), present: true),
+            ],
+          ),
+          if (p.featuresUsed.length > top.length) ...[
+            const SizedBox(height: Gap.xs),
+            Text(
+              '+ ${p.featuresUsed.length - top.length} more under '
+              '“Show evidence”',
+              style: const TextStyle(
+                fontSize: 10.5,
+                fontStyle: FontStyle.italic,
+                color: AppColors.inkFaint,
+              ),
+            ),
+          ],
         ],
       ),
     );

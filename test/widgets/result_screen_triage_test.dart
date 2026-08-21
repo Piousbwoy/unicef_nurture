@@ -202,6 +202,17 @@ void main() {
         // The model card shows the rule-in badge + tier label.
         expect(find.text('rule-in'), findsOneWidget);
         expect(find.textContaining('rule-in candidate'), findsWidgets);
+
+        // The nurse-facing reading sits under the number on every model
+        // card: plain words and the one step to take — not just a
+        // statistic. The PSBI card is the one that names the treatment.
+        expect(find.text('WHAT THIS MEANS'), findsWidgets);
+        expect(
+          find.textContaining('treat as possible severe infection (PSBI)'),
+          findsOneWidget,
+        );
+        // And what drove each number is visible without expanding.
+        expect(find.text('WHAT THE AI CHECKED'), findsWidgets);
       },
     );
   });
@@ -237,6 +248,12 @@ void main() {
         expect(find.text('rule-in'), findsNothing);
         expect(find.textContaining('screening tier'), findsOneWidget);
         expect(find.textContaining('Risk 2.0%'), findsOneWidget);
+
+        // Plain words for the nurse even when the AI sees nothing.
+        expect(
+          find.textContaining('saw no pattern of severe infection'),
+          findsOneWidget,
+        );
       },
     );
   });

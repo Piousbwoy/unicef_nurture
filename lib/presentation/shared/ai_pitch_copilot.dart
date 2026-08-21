@@ -199,7 +199,9 @@ class _AiPitchCopilotPanelState extends State<AiPitchCopilotPanel>
   Future<void> _initTts() async {
     try {
       await _tts.setLanguage('en-US');
-      await _tts.setSpeechRate(0.50); // Measured, articulate executive pacing (~6 minutes total)
+      await _tts.setSpeechRate(
+        0.50,
+      ); // Measured, articulate executive pacing (~6 minutes total)
       await _tts.setVolume(1.0);
       await _tts.setPitch(1.15); // Warmer, clear feminine tone
 
@@ -337,12 +339,8 @@ class _AiPitchCopilotPanelState extends State<AiPitchCopilotPanel>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
-              border: Border(
-                bottom: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  width: 1,
-                ),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(26),
               ),
             ),
             child: Row(
@@ -385,7 +383,9 @@ class _AiPitchCopilotPanelState extends State<AiPitchCopilotPanel>
                               color: Colors.amber.withValues(alpha: 0.20),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: Colors.amberAccent.withValues(alpha: 0.6),
+                                color: Colors.amberAccent.withValues(
+                                  alpha: 0.6,
+                                ),
                               ),
                             ),
                             child: Text(
@@ -619,7 +619,9 @@ class _AiPitchCopilotPanelState extends State<AiPitchCopilotPanel>
                           color: AppColors.primaryLight.withValues(alpha: 0.18),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: AppColors.primaryGlow.withValues(alpha: 0.35),
+                            color: AppColors.primaryGlow.withValues(
+                              alpha: 0.35,
+                            ),
                           ),
                         ),
                         child: Icon(
@@ -755,6 +757,11 @@ class _AiPitchCopilotPanelState extends State<AiPitchCopilotPanel>
             ),
           ),
 
+          // The seam between header and footer: Flutter cannot paint a
+          // one-sided border alongside a borderRadius, so the hairline is
+          // drawn as its own sliver instead.
+          Container(height: 1, color: Colors.white.withValues(alpha: 0.12)),
+
           // ── Footer Navigation ───────────────────────────────────────
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
@@ -762,12 +769,6 @@ class _AiPitchCopilotPanelState extends State<AiPitchCopilotPanel>
               color: const Color(0xFF131926),
               borderRadius: const BorderRadius.vertical(
                 bottom: Radius.circular(26),
-              ),
-              border: Border(
-                top: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  width: 1,
-                ),
               ),
             ),
             child: Row(

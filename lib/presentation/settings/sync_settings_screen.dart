@@ -24,8 +24,7 @@ class SyncSettingsScreen extends ConsumerStatefulWidget {
   const SyncSettingsScreen({super.key});
 
   @override
-  ConsumerState<SyncSettingsScreen> createState() =>
-      _SyncSettingsScreenState();
+  ConsumerState<SyncSettingsScreen> createState() => _SyncSettingsScreenState();
 }
 
 class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
@@ -120,29 +119,32 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
       final request = await client
           .getUrl(Uri.parse(url))
           .timeout(const Duration(seconds: 10));
-      final response = await request
-          .close()
-          .timeout(const Duration(seconds: 12));
+      final response = await request.close().timeout(
+        const Duration(seconds: 12),
+      );
       final code = response.statusCode;
       await response.drain<void>();
       if (!mounted) return;
       setState(() {
         _testOk = true;
-        _testMessage = 'Reached the server (HTTP $code). '
+        _testMessage =
+            'Reached the server (HTTP $code). '
             'Records will upload to this address.';
       });
     } on TimeoutException {
       if (!mounted) return;
       setState(() {
         _testOk = false;
-        _testMessage = 'The server did not answer in time. Check the address '
+        _testMessage =
+            'The server did not answer in time. Check the address '
             'and the network, then try again.';
       });
     } on SocketException catch (e) {
       if (!mounted) return;
       setState(() {
         _testOk = false;
-        _testMessage = 'Could not reach that address: ${e.message}. '
+        _testMessage =
+            'Could not reach that address: ${e.message}. '
             'Check it is spelled correctly.';
       });
     } catch (e) {
@@ -267,7 +269,8 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
                     children: [
                       const FieldLabel(
                         'Server address',
-                        why: 'Records are posted to this address over a secure '
+                        why:
+                            'Records are posted to this address over a secure '
                             'connection.',
                       ),
                       TextField(
@@ -287,7 +290,8 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
                       const SizedBox(height: Gap.md),
                       const FieldLabel(
                         'Access token (optional)',
-                        why: 'If the server needs a key, paste it here. It is '
+                        why:
+                            'If the server needs a key, paste it here. It is '
                             'stored only on this phone.',
                       ),
                       TextField(
@@ -308,9 +312,8 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
                                   : Icons.visibility_off_outlined,
                               size: 18,
                             ),
-                            onPressed: () => setState(
-                              () => _obscureToken = !_obscureToken,
-                            ),
+                            onPressed: () =>
+                                setState(() => _obscureToken = !_obscureToken),
                           ),
                         ),
                       ),
@@ -353,30 +356,30 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
                         const SizedBox(height: Gap.md),
                         Container(
                           width: double.infinity,
-                          padding: const EdgeInsets.all(Gap.md),
                           decoration: BoxDecoration(
                             color: (_testOk ?? false)
                                 ? AppColors.triageGreenBg
                                 : AppColors.triageRedBg,
                             borderRadius: BorderRadius.circular(Gap.radiusSm),
-                            border: Border(
-                              left: BorderSide(
-                                color: (_testOk ?? false)
-                                    ? AppColors.triageGreen
-                                    : AppColors.triageRed,
-                                width: 4,
-                              ),
-                            ),
                           ),
-                          child: Text(
-                            _testMessage!,
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w700,
-                              height: 1.4,
-                              color: (_testOk ?? false)
-                                  ? AppColors.triageGreen
-                                  : AppColors.triageRed,
+                          child: AccentEdge(
+                            accent: (_testOk ?? false)
+                                ? AppColors.triageGreen
+                                : AppColors.triageRed,
+                            borderRadius: BorderRadius.circular(Gap.radiusSm),
+                            child: Padding(
+                              padding: const EdgeInsets.all(Gap.md),
+                              child: Text(
+                                _testMessage!,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.4,
+                                  color: (_testOk ?? false)
+                                      ? AppColors.triageGreen
+                                      : AppColors.triageRed,
+                                ),
+                              ),
                             ),
                           ),
                         ),

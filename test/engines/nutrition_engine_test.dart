@@ -148,4 +148,116 @@ void main() {
       }
     });
   });
+
+  group('NutritionEngine — the safety net', () {
+    test('every plan carries escalation signs the family can recognise', () {
+      final child = NutritionEngine.plan(
+        subject: NutritionSubject.child,
+        status: NutritionStatus.moderateAcute,
+        month: 8,
+        ageMonths: 14,
+      );
+      final mother = NutritionEngine.plan(
+        subject: NutritionSubject.pregnantWoman,
+        status: NutritionStatus.normal,
+        month: 8,
+      );
+      final sam = NutritionEngine.plan(
+        subject: NutritionSubject.child,
+        status: NutritionStatus.severeAcute,
+        month: 8,
+        ageMonths: 20,
+        appetiteTestPassed: true,
+        hasAnyDangerSign: false,
+      );
+
+      expect(child.escalationSigns, isNotEmpty);
+      expect(mother.escalationSigns, isNotEmpty);
+      expect(sam.escalationSigns, isNotEmpty);
+    });
+
+    test('SAM escalation watches for treatment failure on RUTF', () {
+      final plan = NutritionEngine.plan(
+        subject: NutritionSubject.child,
+        status: NutritionStatus.severeAcute,
+        month: 8,
+        ageMonths: 20,
+        appetiteTestPassed: true,
+        hasAnyDangerSign: false,
+      );
+
+      expect(
+        plan.escalationSigns.any((s) => s.contains('RUTF')),
+        isTrue,
+        reason: 'a child on treatment must be watched for treatment failure',
+      );
+    });
+
+    test('a pregnant mother is warned about obstetric danger signs', () {
+      final plan = NutritionEngine.plan(
+        subject: NutritionSubject.pregnantWoman,
+        status: NutritionStatus.normal,
+        month: 8,
+      );
+
+      expect(
+        plan.escalationSigns.any((s) => s.toLowerCase().contains('bleeding')),
+        isTrue,
+      );
+    });
+
+    test('diarrhoea unlocks the WHO Plan-A hydration prescription', () {
+      final wet = NutritionEngine.plan(
+        subject: NutritionSubject.child,
+        status: NutritionStatus.normal,
+        month: 8,
+        ageMonths: 14,
+        hasDiarrhoea: true,
+      );
+      final dry = NutritionEngine.plan(
+        subject: NutritionSubject.child,
+        status: NutritionStatus.normal,
+        month: 8,
+        ageMonths: 14,
+        hasDiarrhoea: false,
+      );
+
+      expect(wet.hydrationPlan, isNotNull);
+      expect(
+        wet.hydrationPlan!.any((l) => l.contains('ORS')),
+        isTrue,
+        reason: 'the prescription must name ORS and how much to give',
+      );
+      // Dehydration escalates to clinic-level signs on the same list.
+      expect(wet.escalationSigns.any((s) => s.contains('skin pinch')), isTrue);
+      expect(dry.hydrationPlan, isNull);
+    });
+
+    test('a young infant sees the first-foods preview, not a live basket', () {
+      final plan = NutritionEngine.plan(
+        subject: NutritionSubject.child,
+        status: NutritionStatus.normal,
+        month: 3,
+        ageMonths: 4,
+        stillBreastfeeding: true,
+      );
+
+      // Breast milk alone is the message now; the pictured starter basket
+      // is what the household is getting ready for.
+      expect(plan.suggestions, isEmpty);
+      expect(plan.upcomingFoods, isNotEmpty);
+    });
+
+    test('from six months the live basket replaces the preview', () {
+      final plan = NutritionEngine.plan(
+        subject: NutritionSubject.child,
+        status: NutritionStatus.moderateAcute,
+        month: 9,
+        ageMonths: 14,
+      );
+
+      expect(plan.upcomingFoods, isEmpty);
+      expect(plan.suggestions, isNotEmpty);
+    });
+  });
 }

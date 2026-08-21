@@ -28,7 +28,8 @@ void main() {
     });
 
     test('a child with everything due for age is fully up to date', () {
-      const ageInDays = 300; // ~43 weeks: past the 14-week set, before MR at 9 months.
+      const ageInDays =
+          300; // ~43 weeks: past the 14-week set, before MR at 9 months.
       final ageWeeks = ageInDays ~/ 7;
       final due = GhanaEpi.schedule
           .where(
@@ -39,7 +40,10 @@ void main() {
           .map((d) => d.label)
           .toSet();
 
-      final plan = ImmunisationEngine.plan(ageInDays: ageInDays, givenLabels: due);
+      final plan = ImmunisationEngine.plan(
+        ageInDays: ageInDays,
+        givenLabels: due,
+      );
 
       expect(plan.isFullyUpToDate, isTrue);
       expect(plan.giveToday, isEmpty);
@@ -65,7 +69,46 @@ void main() {
     test('the schedule covers the full Ghana EPI antigens', () {
       final antigens = GhanaEpi.schedule.map((d) => d.antigen).toSet();
 
-      expect(antigens, containsAll(['BCG', 'OPV', 'Penta', 'PCV', 'Rota', 'MR']));
+      expect(
+        antigens,
+        containsAll(['BCG', 'OPV', 'Penta', 'PCV', 'Rota', 'MR']),
+      );
+    });
+
+    test('the catch-up schedule spaces series doses across sessions', () {
+      // 40 weeks, nothing given: today's session starts every series, and
+      // the follow-on doses wait their minimum intervals.
+      final plan = ImmunisationEngine.plan(ageInDays: 280, givenLabels: {});
+
+      expect(plan.catchUp, isNotEmpty);
+      final first = plan.catchUp.first.labels;
+      expect(first, containsAll(['Penta 2', 'OPV 2', 'PCV 2']));
+      expect(first, isNot(contains('Penta 3')));
+
+      final later = plan.catchUp.expand((s) => s.labels).toList();
+      expect(later, contains('Penta 3'));
+      // Rotavirus is age-barred at 40 weeks: it appears nowhere.
+      expect(later, isNot(contains('Rota 1')));
+    });
+
+    test('a fully up-to-date child has no catch-up sessions', () {
+      const ageInDays = 300;
+      final ageWeeks = ageInDays ~/ 7;
+      final due = GhanaEpi.schedule
+          .where(
+            (d) =>
+                d.dueAtWeeks <= ageWeeks &&
+                (d.maxAgeWeeks == null || ageWeeks <= d.maxAgeWeeks!),
+          )
+          .map((d) => d.label)
+          .toSet();
+
+      final plan = ImmunisationEngine.plan(
+        ageInDays: ageInDays,
+        givenLabels: due,
+      );
+
+      expect(plan.catchUp, isEmpty);
     });
   });
 }

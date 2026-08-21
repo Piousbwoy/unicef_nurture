@@ -285,9 +285,7 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
 
   String _epdsCaption(int q, int v) => _epdsCaptions[q][v];
 
-  // --------------------------------------- Danger-sign gating (T2)
-  bool _showOptional = false;
-
+  // --------------------------------------------- Danger-sign screening
   static const _maternalGeneral = {
     'bleeding', 'headache', 'vision', 'convulsions', 'abdoPain', 'reducedFM',
     'noFM', 'leaking', 'fever', 'swelling', 'breathing', 'urination',
@@ -298,10 +296,10 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
   /// Any one of these maternal danger signs is a referral today.
   bool get _hasGeneralDangerSign => _signs.any(_maternalGeneral.contains);
 
-  /// With a danger sign present she is referred regardless, so the remaining
-  /// history/coverage sections are optional — collapsed unless expanded.
-  bool get _optionalHidden => _hasGeneralDangerSign && !_showOptional;
-
+  /// The chart never collapses: a danger sign makes a referral, but every
+  /// remaining sign and history item still shapes the model's plan, so the
+  /// worker records the full picture — multiple signs can coexist, and the
+  /// checklist stays fully visible however many are ticked.
   Widget _referralBanner() {
     if (!_hasGeneralDangerSign) return const SizedBox.shrink();
     return Container(
@@ -323,8 +321,9 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
           const SizedBox(width: Gap.sm),
           Expanded(
             child: Text(
-              'Maternal danger sign present — refer today. Record quick '
-              'measurements and save; the rest of the chart is optional.',
+              'Maternal danger sign present — refer today. Still complete '
+              'the chart: every other sign helps the model build the right '
+              'plan.',
               style: TextStyle(
                 color: AppColors.triageRed,
                 fontWeight: FontWeight.w700,
@@ -336,16 +335,6 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
       ),
     );
   }
-
-  Widget _optionalToggle() => Padding(
-    padding: const EdgeInsets.only(bottom: Gap.lg),
-    child: OutlinedButton(
-      onPressed: () => setState(() => _showOptional = !_showOptional),
-      child: Text(
-        _showOptional ? 'Hide optional sections' : 'Show optional sections',
-      ),
-    ),
-  );
 
   @override
   Widget build(BuildContext context) {
@@ -388,7 +377,6 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
               const SizedBox(height: Gap.lg),
 
               _referralBanner(),
-              if (_hasGeneralDangerSign) _optionalToggle(),
 
               if (isGeneralWoman) ...[
                 SectionCard(
@@ -567,8 +555,10 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
 
       SectionCard(
         title: 'Danger signs',
-        subtitle: 'Any one of these is a referral today. Off means asked and '
-            'absent — do not tick off what was not asked.',
+        subtitle: 'Tick every sign that is present — more than one can be '
+            'present at once, and the list stays open. Any one of them is a '
+            'referral today. Off means asked and absent — do not tick off '
+            'what was not asked.',
         icon: Icons.warning_amber_rounded,
         accent: AppColors.triageRed,
         child: SignChecklist(
@@ -594,7 +584,6 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
       ),
       const SizedBox(height: Gap.lg),
 
-      if (!_optionalHidden) ...[
       SectionCard(
         title: 'History the chart needs',
         subtitle: 'Two things the registration form does not ask, because they '
@@ -873,7 +862,6 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
           ],
         ),
       ),
-    ],
     ];
   }
 
