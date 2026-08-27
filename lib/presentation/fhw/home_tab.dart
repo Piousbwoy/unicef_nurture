@@ -618,8 +618,8 @@ class _TopThreeCard extends StatelessWidget {
           const SizedBox(height: Gap.sm),
           OutlinedButton.icon(
             onPressed: onOpenQueue,
-            icon: const Icon(Icons.people_alt_outlined),
-            label: const Text('Open the full queue'),
+            icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+            label: const Text('Open the full visits list'),
           ),
         ],
       ),

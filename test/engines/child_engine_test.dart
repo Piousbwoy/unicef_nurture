@@ -38,19 +38,22 @@ void main() {
       expect(result.dangerSignsPresent, isNotEmpty);
     });
 
-    test('cough with fast breathing at 8 months is pneumonia (50+ threshold)', () {
-      final result = ChildEngine.assess(
-        const ChildInput(
-          ageInMonths: 8,
-          cough: true,
-          coughDurationDays: 3,
-          respiratoryRate: 52,
-        ),
-      );
+    test(
+      'cough with fast breathing at 8 months is pneumonia (50+ threshold)',
+      () {
+        final result = ChildEngine.assess(
+          const ChildInput(
+            ageInMonths: 8,
+            cough: true,
+            coughDurationDays: 3,
+            respiratoryRate: 52,
+          ),
+        );
 
-      expect(result.triage.isAtLeastPriority, isTrue);
-      expect(result.classification.toLowerCase(), contains('pneumonia'));
-    });
+        expect(result.triage.isAtLeastPriority, isTrue);
+        expect(result.classification.toLowerCase(), contains('pneumonia'));
+      },
+    );
 
     test('38/min at 14 months is NOT fast breathing (threshold 40)', () {
       final result = ChildEngine.assess(
@@ -110,11 +113,7 @@ void main() {
 
     test('fever with stiff neck is meningitis until proven otherwise', () {
       final result = ChildEngine.assess(
-        const ChildInput(
-          ageInMonths: 24,
-          feverReported: true,
-          stiffNeck: true,
-        ),
+        const ChildInput(ageInMonths: 24, feverReported: true, stiffNeck: true),
       );
 
       expect(result.triage, TriageLevel.urgent);
@@ -178,6 +177,25 @@ void main() {
       );
 
       expect(result.triage.isAtLeastPriority, isTrue);
+    });
+
+    test('a young infant without MUAC still carries a nutrition status', () {
+      // MUAC does not apply under six months; the food plan (breastfeeding
+      // rules plus the first-foods preview) must still render, so the
+      // status defaults to normal instead of vanishing.
+      final result = ChildEngine.assess(const ChildInput(ageInMonths: 4));
+
+      expect(result.nutritionStatus, NutritionStatus.normal);
+    });
+
+    test('an unmeasured MUAC is declared, and the food plan still renders', () {
+      final result = ChildEngine.assess(const ChildInput(ageInMonths: 24));
+
+      expect(result.nutritionStatus, NutritionStatus.normal);
+      expect(
+        result.missingData,
+        contains('MUAC not measured — malnutrition cannot be ruled out'),
+      );
     });
   });
 }

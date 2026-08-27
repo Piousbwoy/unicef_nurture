@@ -632,10 +632,13 @@ class FieldLabel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              label.toUpperCase(),
-              style: AppType.eyebrow.copyWith(color: AppColors.ink),
+            Expanded(
+              child: Text(
+                label.toUpperCase(),
+                style: AppType.eyebrow.copyWith(color: AppColors.ink),
+              ),
             ),
             if (required)
               const Text(

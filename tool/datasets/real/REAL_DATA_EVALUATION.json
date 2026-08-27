@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-08",
+  "generated": "2026-08-24",
   "policy": "Real-data model replaces shipped v1.0 ONLY if 5-fold OOF AUC >= 0.65; deterministic WHO/GHS rules remain the runtime fallback.",
   "models": {
     "neonatal_sepsis": {

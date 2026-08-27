@@ -274,7 +274,9 @@ abstract final class AncEngine {
 
     if (i.vaginalBleeding) {
       final late = i.gestationalWeeks >= 28;
-      classifications.add(late ? 'ANTEPARTUM HAEMORRHAGE' : 'BLEEDING IN PREGNANCY');
+      classifications.add(
+        late ? 'ANTEPARTUM HAEMORRHAGE' : 'BLEEDING IN PREGNANCY',
+      );
       add(
         'Vaginal bleeding',
         late
@@ -341,9 +343,7 @@ abstract final class AncEngine {
     if (i.leakingFluid) {
       final preterm = i.gestationalWeeks < 37;
       add(
-        preterm
-            ? 'Waters broken before 37 weeks'
-            : 'Waters broken at term',
+        preterm ? 'Waters broken before 37 weeks' : 'Waters broken at term',
         preterm
             ? 'Preterm rupture of membranes at ${i.gestationalWeeks} weeks risks '
                   'infection and preterm birth. She needs antibiotics and '
@@ -488,6 +488,12 @@ abstract final class AncEngine {
       missing.add('Maternal MUAC not measured');
     }
 
+    // The food plan must never vanish with the tape: an unmeasured MUAC is
+    // already declared in the missing-data list, and pregnancy counselling
+    // foods are preventive — hiding them would remove the nutrition section
+    // from the screen entirely.
+    nutrition ??= NutritionStatus.normal;
+
     // ---------------------------------------------------------------------
     // 4. STANDING OBSTETRIC RISK — history that does not change with symptoms
     // ---------------------------------------------------------------------
@@ -548,7 +554,7 @@ abstract final class AncEngine {
             ? 'Previous stillbirth'
             : 'Two or more previous pregnancy losses',
         'A previous loss is the single strongest predictor of another. Increase '
-            'contact frequency and plan a facility delivery.',
+        'contact frequency and plan a facility delivery.',
         TriageLevel.priority,
         value: i.previousStillbirth
             ? 'stillbirth'
@@ -574,9 +580,9 @@ abstract final class AncEngine {
       add(
         i.plurality.label,
         'A multiple pregnancy raises the risk of preterm birth, anaemia, '
-            'pre-eclampsia and bleeding after delivery. Facility delivery with '
-            'newborn care is essential, and two or more babies will need warmth '
-            'and feeding support immediately.',
+        'pre-eclampsia and bleeding after delivery. Facility delivery with '
+        'newborn care is essential, and two or more babies will need warmth '
+        'and feeding support immediately.',
         TriageLevel.priority,
         weight: 7,
       );
@@ -901,13 +907,14 @@ abstract final class AncEngine {
           i.gestationalWeeks > 0,
         ].where((m) => m).length,
         keyInputCount: 4,
-        observedDangerSign: i.convulsions || i.vaginalBleeding || i.hasSevereHypertension,
+        observedDangerSign:
+            i.convulsions || i.vaginalBleeding || i.hasSevereHypertension,
       ),
       protocolSource: _protocol,
       nutritionStatus: nutrition,
       nutritionPathway: nutrition == NutritionStatus.normal
           ? NutritionPathway.preventiveCounselling
-          : (nutrition == null ? null : NutritionPathway.supplementaryFeeding),
+          : NutritionPathway.supplementaryFeeding,
       dangerSignsPresent: dangerSigns,
       missingData: missing,
       referralCapabilitiesNeeded: capabilities,

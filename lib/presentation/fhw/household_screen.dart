@@ -117,6 +117,8 @@ class _Body extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.all(Gap.lg),
         children: [
+          _EdgeConnectivityPill(),
+          const SizedBox(height: Gap.md),
           _Identity(household),
           const SizedBox(height: Gap.lg),
 
@@ -238,8 +240,7 @@ class _Body extends ConsumerWidget {
               // history, not triage.
               final recent = list
                   .where(
-                    (c) =>
-                        DateTime.now().difference(c.checkedAt).inDays <= 14,
+                    (c) => DateTime.now().difference(c.checkedAt).inDays <= 14,
                   )
                   .take(4)
                   .toList(growable: false);
@@ -274,21 +275,20 @@ class _Body extends ConsumerWidget {
               for (final c in list) {
                 latestByChild.putIfAbsent(c.personId, () => c);
               }
-              final recent = latestByChild.values
-                  .where(
-                    (c) =>
-                        DateTime.now().difference(c.checkedAt).inDays <= 30,
-                  )
-                  .toList(growable: false)
-                ..sort((a, b) {
-                  final flagA =
-                      a.verdict == MilestoneVerdict.flag ? 0 : 1;
-                  final flagB =
-                      b.verdict == MilestoneVerdict.flag ? 0 : 1;
-                  final byFlag = flagA.compareTo(flagB);
-                  if (byFlag != 0) return byFlag;
-                  return b.checkedAt.compareTo(a.checkedAt);
-                });
+              final recent =
+                  latestByChild.values
+                      .where(
+                        (c) =>
+                            DateTime.now().difference(c.checkedAt).inDays <= 30,
+                      )
+                      .toList(growable: false)
+                    ..sort((a, b) {
+                      final flagA = a.verdict == MilestoneVerdict.flag ? 0 : 1;
+                      final flagB = b.verdict == MilestoneVerdict.flag ? 0 : 1;
+                      final byFlag = flagA.compareTo(flagB);
+                      if (byFlag != 0) return byFlag;
+                      return b.checkedAt.compareTo(a.checkedAt);
+                    });
               final show = recent.take(4).toList(growable: false);
               if (show.isEmpty) return const SizedBox.shrink();
               return Padding(
@@ -336,9 +336,9 @@ class _FamilyReportTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final person = ref.watch(personProvider(check.personId));
-    final days = DateTime.now().dateOnly.difference(
-      check.checkedAt.dateOnly,
-    ).inDays;
+    final days = DateTime.now().dateOnly
+        .difference(check.checkedAt.dateOnly)
+        .inDays;
     final when = switch (days) {
       <= 0 => 'today',
       1 => 'yesterday',
@@ -354,10 +354,7 @@ class _FamilyReportTile extends ConsumerWidget {
             margin: const EdgeInsets.only(top: 5),
             width: 9,
             height: 9,
-            decoration: BoxDecoration(
-              color: _colour,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: _colour, shape: BoxShape.circle),
           ),
           const SizedBox(width: Gap.md),
           Expanded(
@@ -429,9 +426,9 @@ class _MilestoneReportTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final person = ref.watch(personProvider(check.personId));
-    final days = DateTime.now().dateOnly.difference(
-      check.checkedAt.dateOnly,
-    ).inDays;
+    final days = DateTime.now().dateOnly
+        .difference(check.checkedAt.dateOnly)
+        .inDays;
     final when = switch (days) {
       <= 0 => 'today',
       1 => 'yesterday',
@@ -447,10 +444,7 @@ class _MilestoneReportTile extends ConsumerWidget {
             margin: const EdgeInsets.only(top: 5),
             width: 9,
             height: 9,
-            decoration: BoxDecoration(
-              color: _colour,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: _colour, shape: BoxShape.circle),
           ),
           const SizedBox(width: Gap.md),
           Expanded(
@@ -630,10 +624,7 @@ class _Fact extends StatelessWidget {
         runSpacing: 2,
         children: [
           Icon(icon, size: 14, color: colour),
-          Text(
-            '$label: ',
-            style: TextStyle(fontSize: 12, color: colour),
-          ),
+          Text('$label: ', style: TextStyle(fontSize: 12, color: colour)),
           Text(
             value,
             style: TextStyle(
@@ -746,7 +737,8 @@ class _RiskCard extends StatelessWidget {
                     Icons.build_circle_outlined,
                     AppColors.primary,
                   ),
-                  for (final f in score.modifiable) _FactorTile(f, actionable: true),
+                  for (final f in score.modifiable)
+                    _FactorTile(f, actionable: true),
                   const SizedBox(height: Gap.lg),
                 ],
 
@@ -1010,9 +1002,7 @@ class _Members extends StatelessWidget {
               ],
             ),
           )
-        : Column(
-            children: [for (final p in members) _MemberTile(p)],
-          ),
+        : Column(children: [for (final p in members) _MemberTile(p)]),
   );
 }
 
@@ -1109,10 +1099,7 @@ class _MemberTile extends ConsumerWidget {
                     padding: EdgeInsets.only(top: Gap.sm),
                     child: Text(
                       'Never assessed on this device.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.inkFaint,
-                      ),
+                      style: TextStyle(fontSize: 12, color: AppColors.inkFaint),
                     ),
                   )
                 : Padding(
@@ -1120,10 +1107,7 @@ class _MemberTile extends ConsumerWidget {
                     child: Row(
                       children: [
                         Flexible(
-                          child: TriageBadge(
-                            a.effectiveTriage,
-                            compact: true,
-                          ),
+                          child: TriageBadge(a.effectiveTriage, compact: true),
                         ),
                         const SizedBox(width: Gap.sm),
                         Expanded(
@@ -1215,8 +1199,8 @@ class _GrowthLine extends ConsumerWidget {
                       Text(
                         'Growth: ${r.trend.label}'
                         '${r.daysToSamThreshold == null ? '' : ' — severe '
-                              'malnutrition in about ${r.daysToSamThreshold} '
-                              'days at this rate'}',
+                                  'malnutrition in about ${r.daysToSamThreshold} '
+                                  'days at this rate'}',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -1303,8 +1287,7 @@ class _Actions extends ConsumerWidget {
                   if (!context.mounted) return;
                   await Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) =>
-                          RollCallScreen(householdId: household.id),
+                      builder: (_) => RollCallScreen(householdId: household.id),
                     ),
                   );
                   if (!context.mounted) return;
@@ -1319,4 +1302,79 @@ class _Actions extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// The sync state, honestly: the real outbox counts from the on-device
+/// sync engine, never a simulated queue. Amber while records wait on
+/// this phone, green once they have reached the district office, red
+/// when an urgent record is still unsent. Deliberately static — a
+/// status line should not pulse, and the screen must still settle for
+/// the overflow tests.
+class _EdgeConnectivityPill extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final summary = ref.watch(syncStatusProvider).valueOrNull;
+    final online = ref.watch(connectivityProvider).valueOrNull ?? false;
+
+    // Still loading or unavailable: state the privacy promise, not a
+    // guessed number.
+    if (summary == null) {
+      return _pill(
+        icon: Icons.lock_rounded,
+        accent: AppColors.inkMuted,
+        text: 'Records stay on this phone until they sync',
+      );
+    }
+    if (summary.isClean) {
+      return _pill(
+        icon: online ? Icons.cloud_done_rounded : Icons.verified_rounded,
+        accent: AppColors.triageGreen,
+        text: online ? summary.label : 'All records safe on this phone',
+      );
+    }
+    if (summary.criticalPending > 0) {
+      return _pill(
+        icon: Icons.priority_high_rounded,
+        accent: AppColors.triageRed,
+        text: summary.label,
+      );
+    }
+    return _pill(
+      icon: Icons.cloud_off_rounded,
+      accent: AppColors.triageAmber,
+      text: summary.label,
+    );
+  }
+
+  Widget _pill({
+    required IconData icon,
+    required Color accent,
+    required String text,
+  }) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.sm),
+    decoration: BoxDecoration(
+      color: accent.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(Gap.radius),
+      border: Border.all(color: accent.withValues(alpha: 0.3)),
+    ),
+    child: Row(
+      children: [
+        Icon(icon, size: 16, color: accent),
+        const SizedBox(width: Gap.sm),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: accent,
+              letterSpacing: 0.2,
+              height: 1.3,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }

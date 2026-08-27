@@ -431,7 +431,7 @@ def _platt_fixed(y_true, p_in, n_bins: int = 10, prior_shift: float = 0.0):
     `prior_shift` re-anchors the scale to a target population prior
     (Bayes: logit(P) += logit(pi_t) - logit(pi_c)); discrimination (AUC)
     is unaffected - only the absolute probability scale moves.
-    Returns (A, B, p_cal, brier, ci_table, brier_cohort_scale).
+    Returns (A, B, p_cal, brier, ci_table, brier_cohort_scale, conformal_q95).
     """
     eps = 1e-7
     p_clip = np.clip(p_in, eps, 1 - eps)
@@ -447,6 +447,12 @@ def _platt_fixed(y_true, p_in, n_bins: int = 10, prior_shift: float = 0.0):
     brier = float(brier_score_loss(y_true, p_cal))
 
     residuals = p_cal - y_true
+    # Conformal-style 95% coverage margin: the 95th percentile of the
+    # absolute calibrated residuals on these OUT-OF-FOLD predictions
+    # (data the calibration never trained on). [p - q, p + q] then covers
+    # the true label for >= 95% of patients like the fold pool. Exported
+    # so the Dart runtime can show an interval it did not invent.
+    conformal_q95 = float(np.quantile(np.abs(residuals), 0.95))
     bin_edges = np.linspace(0.0, 1.0, n_bins + 1)
     ci_table = []
     for i in range(n_bins):
@@ -469,7 +475,7 @@ def _platt_fixed(y_true, p_in, n_bins: int = 10, prior_shift: float = 0.0):
             "residual_std": None if res_std is None else round(res_std, 4),
             "n": n_in,
         })
-    return A, B, p_cal, brier, ci_table, brier0
+    return A, B, p_cal, brier, ci_table, brier0, conformal_q95
 
 
 # ---------------------------------------------------------------------------
@@ -580,7 +586,7 @@ def _train_real(name, X_raw, y, features, desc, meta,
                     "express P(sepsis) at the Ghana CHPS prior used by the "
                     "deterministic fallback. Discrimination (AUC) unchanged.",
         }
-    A, B, p_cal, brier, ci_table, brier0 = _platt_fixed(
+    A, B, p_cal, brier, ci_table, brier0, conformal_q95 = _platt_fixed(
         y, oof, prior_shift=(prior_adj["logit_shift"] if prior_adj else 0.0))
     if prior_adj is not None:
         # Youden operating point on the deployed (re-anchored) scale. The
@@ -708,6 +714,12 @@ def _train_real(name, X_raw, y, features, desc, meta,
                     "A": round(A, 6),
                     "B": round(B, 6),
                     "brier_score": round(brier, 4),
+                    "conformal_q95": round(conformal_q95, 4),
+                    "conformal_note": "95th percentile of |p_cal - y| on "
+                                      "out-of-fold predictions; "
+                                      "[p - q, p + q] covers the true label "
+                                      "for >= 95% of patients like the fold "
+                                      "pool (exchangeability assumed).",
                     "ci_table": ci_table,
                     **({"prior_adjustment": prior_adj,
                         "brier_score_cohort_scale": round(brier0, 4)}

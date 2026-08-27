@@ -72,6 +72,7 @@ class OfflineRiskPrediction {
     this.driftDetected = false,
     this.driftFeatures = const <String>[],
     this.confidenceInterval95,
+    this.conformalQ95,
     this.ruleInCandidate = false,
     this.ruleInThreshold,
     this.featureValues = const <String, double>{},
@@ -115,6 +116,14 @@ class OfflineRiskPrediction {
   /// both in [0, 1]. Null when no CI table was bundled (older model packs).
   final ({double low, double high})? confidenceInterval95;
 
+  /// Conformal-style 95% coverage margin, loaded from the model pack's
+  /// metrics JSON (`calibration.conformal_q95`): the 95th percentile of
+  /// |p_cal − y| on OUT-OF-FOLD predictions the calibration never trained
+  /// on. `[p − q, p + q]` covers the true label for ≥95% of patients like
+  /// the fold pool — exchangeability assumed, which is exactly what the
+  /// drift gate polices. Null when the bundled pack predates the export.
+  final double? conformalQ95;
+
   /// Two-tier triage: true when [riskProbability] is at or above
   /// [ruleInThreshold] — the "rule-in candidate" tier. Only the AI can
   /// raise this flag; below the threshold the model is in the screening
@@ -153,6 +162,7 @@ class OfflineRiskPrediction {
       'ci95_low': confidenceInterval95!.low,
       'ci95_high': confidenceInterval95!.high,
     },
+    if (conformalQ95 != null) 'conformal_q95': conformalQ95,
   };
 }
 
@@ -297,6 +307,267 @@ class OfflineFeatureBag {
   final bool? generalDangerSign;
   final bool? hivExposedOrInfected;
   final bool? multipleBirth;
+
+  static const Object _unset = Object();
+
+  /// Field-by-field copy used by [withoutFeature]. An argument left at
+  /// [_unset] keeps the current value; an explicit null clears it.
+  OfflineFeatureBag _copy({
+    Object? ageDays = _unset,
+    Object? gestationalWeeksAtBirth = _unset,
+    Object? heartRatePerMin = _unset,
+    Object? respiratoryRatePerMin = _unset,
+    Object? temperatureCelsius = _unset,
+    Object? oxygenSaturationPerCent = _unset,
+    Object? systolicBloodPressureMmhg = _unset,
+    Object? diastolicBloodPressureMmhg = _unset,
+    Object? maternalMuacMm = _unset,
+    Object? maternalBmi = _unset,
+    Object? haemoglobinGDl = _unset,
+    Object? urineProtein0To4 = _unset,
+    Object? urineKetones0To3 = _unset,
+    Object? urineBlood0To3 = _unset,
+    Object? urineGlucose0To4 = _unset,
+    Object? previousPregnancyLosses = _unset,
+    Object? prevCaesareanSection = _unset,
+    Object? maternalAgeYears = _unset,
+    Object? gravida = _unset,
+    Object? parity = _unset,
+    Object? weightGainKgThisPregnancy = _unset,
+    Object? oedemaHandsOrFace = _unset,
+    Object? epigastricPain = _unset,
+    Object? headacheSevere = _unset,
+    Object? blurredVision = _unset,
+    Object? briskReflexes = _unset,
+    Object? oliguria = _unset,
+    Object? weightGainOver1kgPerWeek = _unset,
+    Object? birthWeightKg = _unset,
+    Object? birthLengthCm = _unset,
+    Object? apgar5Minute = _unset,
+    Object? historyOfConvulsions = _unset,
+    Object? severeChestIndrawing = _unset,
+    Object? nasalFlaring = _unset,
+    Object? grunting = _unset,
+    Object? bulgingFontanelle = _unset,
+    Object? jaundiceBefore24h = _unset,
+    Object? feedingDifficulty = _unset,
+    Object? abdominalDistension = _unset,
+    Object? cordRednessBeyondBase = _unset,
+    Object? cordPus = _unset,
+    Object? skinPustules = _unset,
+    Object? lethargicOrUnconscious = _unset,
+    Object? bleedingFromAnySite = _unset,
+    Object? coughPresent = _unset,
+    Object? chestIndrawing = _unset,
+    Object? stridorCalm = _unset,
+    Object? generalDangerSign = _unset,
+    Object? hivExposedOrInfected = _unset,
+    Object? multipleBirth = _unset,
+  }) => OfflineFeatureBag(
+    ageDays: identical(ageDays, _unset) ? this.ageDays : ageDays as int?,
+    gestationalWeeksAtBirth: identical(gestationalWeeksAtBirth, _unset)
+        ? this.gestationalWeeksAtBirth
+        : gestationalWeeksAtBirth as int?,
+    heartRatePerMin: identical(heartRatePerMin, _unset)
+        ? this.heartRatePerMin
+        : heartRatePerMin as int?,
+    respiratoryRatePerMin: identical(respiratoryRatePerMin, _unset)
+        ? this.respiratoryRatePerMin
+        : respiratoryRatePerMin as int?,
+    temperatureCelsius: identical(temperatureCelsius, _unset)
+        ? this.temperatureCelsius
+        : temperatureCelsius as double?,
+    oxygenSaturationPerCent: identical(oxygenSaturationPerCent, _unset)
+        ? this.oxygenSaturationPerCent
+        : oxygenSaturationPerCent as int?,
+    systolicBloodPressureMmhg: identical(systolicBloodPressureMmhg, _unset)
+        ? this.systolicBloodPressureMmhg
+        : systolicBloodPressureMmhg as int?,
+    diastolicBloodPressureMmhg: identical(diastolicBloodPressureMmhg, _unset)
+        ? this.diastolicBloodPressureMmhg
+        : diastolicBloodPressureMmhg as int?,
+    maternalMuacMm: identical(maternalMuacMm, _unset)
+        ? this.maternalMuacMm
+        : maternalMuacMm as int?,
+    maternalBmi: identical(maternalBmi, _unset)
+        ? this.maternalBmi
+        : maternalBmi as double?,
+    haemoglobinGDl: identical(haemoglobinGDl, _unset)
+        ? this.haemoglobinGDl
+        : haemoglobinGDl as double?,
+    urineProtein0To4: identical(urineProtein0To4, _unset)
+        ? this.urineProtein0To4
+        : urineProtein0To4 as int?,
+    urineKetones0To3: identical(urineKetones0To3, _unset)
+        ? this.urineKetones0To3
+        : urineKetones0To3 as int?,
+    urineBlood0To3: identical(urineBlood0To3, _unset)
+        ? this.urineBlood0To3
+        : urineBlood0To3 as int?,
+    urineGlucose0To4: identical(urineGlucose0To4, _unset)
+        ? this.urineGlucose0To4
+        : urineGlucose0To4 as int?,
+    previousPregnancyLosses: identical(previousPregnancyLosses, _unset)
+        ? this.previousPregnancyLosses
+        : previousPregnancyLosses as int?,
+    prevCaesareanSection: identical(prevCaesareanSection, _unset)
+        ? this.prevCaesareanSection
+        : prevCaesareanSection as bool?,
+    maternalAgeYears: identical(maternalAgeYears, _unset)
+        ? this.maternalAgeYears
+        : maternalAgeYears as int?,
+    gravida: identical(gravida, _unset) ? this.gravida : gravida as int?,
+    parity: identical(parity, _unset) ? this.parity : parity as int?,
+    weightGainKgThisPregnancy: identical(weightGainKgThisPregnancy, _unset)
+        ? this.weightGainKgThisPregnancy
+        : weightGainKgThisPregnancy as double?,
+    oedemaHandsOrFace: identical(oedemaHandsOrFace, _unset)
+        ? this.oedemaHandsOrFace
+        : oedemaHandsOrFace as bool?,
+    epigastricPain: identical(epigastricPain, _unset)
+        ? this.epigastricPain
+        : epigastricPain as bool?,
+    headacheSevere: identical(headacheSevere, _unset)
+        ? this.headacheSevere
+        : headacheSevere as bool?,
+    blurredVision: identical(blurredVision, _unset)
+        ? this.blurredVision
+        : blurredVision as bool?,
+    briskReflexes: identical(briskReflexes, _unset)
+        ? this.briskReflexes
+        : briskReflexes as bool?,
+    oliguria: identical(oliguria, _unset) ? this.oliguria : oliguria as bool?,
+    weightGainOver1kgPerWeek: identical(weightGainOver1kgPerWeek, _unset)
+        ? this.weightGainOver1kgPerWeek
+        : weightGainOver1kgPerWeek as bool?,
+    birthWeightKg: identical(birthWeightKg, _unset)
+        ? this.birthWeightKg
+        : birthWeightKg as double?,
+    birthLengthCm: identical(birthLengthCm, _unset)
+        ? this.birthLengthCm
+        : birthLengthCm as double?,
+    apgar5Minute: identical(apgar5Minute, _unset)
+        ? this.apgar5Minute
+        : apgar5Minute as int?,
+    historyOfConvulsions: identical(historyOfConvulsions, _unset)
+        ? this.historyOfConvulsions
+        : historyOfConvulsions as bool?,
+    severeChestIndrawing: identical(severeChestIndrawing, _unset)
+        ? this.severeChestIndrawing
+        : severeChestIndrawing as bool?,
+    nasalFlaring: identical(nasalFlaring, _unset)
+        ? this.nasalFlaring
+        : nasalFlaring as bool?,
+    grunting: identical(grunting, _unset) ? this.grunting : grunting as bool?,
+    bulgingFontanelle: identical(bulgingFontanelle, _unset)
+        ? this.bulgingFontanelle
+        : bulgingFontanelle as bool?,
+    jaundiceBefore24h: identical(jaundiceBefore24h, _unset)
+        ? this.jaundiceBefore24h
+        : jaundiceBefore24h as bool?,
+    feedingDifficulty: identical(feedingDifficulty, _unset)
+        ? this.feedingDifficulty
+        : feedingDifficulty as bool?,
+    abdominalDistension: identical(abdominalDistension, _unset)
+        ? this.abdominalDistension
+        : abdominalDistension as bool?,
+    cordRednessBeyondBase: identical(cordRednessBeyondBase, _unset)
+        ? this.cordRednessBeyondBase
+        : cordRednessBeyondBase as bool?,
+    cordPus: identical(cordPus, _unset) ? this.cordPus : cordPus as bool?,
+    skinPustules: identical(skinPustules, _unset)
+        ? this.skinPustules
+        : skinPustules as bool?,
+    lethargicOrUnconscious: identical(lethargicOrUnconscious, _unset)
+        ? this.lethargicOrUnconscious
+        : lethargicOrUnconscious as bool?,
+    bleedingFromAnySite: identical(bleedingFromAnySite, _unset)
+        ? this.bleedingFromAnySite
+        : bleedingFromAnySite as bool?,
+    coughPresent: identical(coughPresent, _unset)
+        ? this.coughPresent
+        : coughPresent as bool?,
+    chestIndrawing: identical(chestIndrawing, _unset)
+        ? this.chestIndrawing
+        : chestIndrawing as bool?,
+    stridorCalm: identical(stridorCalm, _unset)
+        ? this.stridorCalm
+        : stridorCalm as bool?,
+    generalDangerSign: identical(generalDangerSign, _unset)
+        ? this.generalDangerSign
+        : generalDangerSign as bool?,
+    hivExposedOrInfected: identical(hivExposedOrInfected, _unset)
+        ? this.hivExposedOrInfected
+        : hivExposedOrInfected as bool?,
+    multipleBirth: identical(multipleBirth, _unset)
+        ? this.multipleBirth
+        : multipleBirth as bool?,
+  );
+
+  /// A copy of this bag with the feature named by [featureKey] removed,
+  /// exactly as if that measurement had never been taken. Keys match the
+  /// model input schemas in [_inputSchemaFor] plus the deterministic
+  /// fallback rule names; composite keys clear every underlying field.
+  /// Unknown keys return the bag unchanged. This powers the honest
+  /// leave-one-out counterfactual: the prediction is re-run, never faked.
+  OfflineFeatureBag withoutFeature(String featureKey) => switch (featureKey) {
+    'age_days' => _copy(ageDays: null),
+    'temperature_celsius' ||
+    'temperature_abnormality' => _copy(temperatureCelsius: null),
+    'respiratory_rate_per_min' ||
+    'respiratory_rate_per_min_age_cutoff' => _copy(respiratoryRatePerMin: null),
+    'heart_rate_per_min' => _copy(heartRatePerMin: null),
+    'oxygen_saturation_per_cent' ||
+    'oxygen_saturation' => _copy(oxygenSaturationPerCent: null),
+    'systolic_bp' || 'diastolic_bp' || 'blood_pressure' => _copy(
+      systolicBloodPressureMmhg: null,
+      diastolicBloodPressureMmhg: null,
+    ),
+    'maternal_muac_mm' || 'maternal_muac' => _copy(maternalMuacMm: null),
+    'maternal_bmi' => _copy(maternalBmi: null),
+    'haemoglobin' => _copy(haemoglobinGDl: null),
+    'urine_protein' => _copy(urineProtein0To4: null),
+    'previous_losses' => _copy(previousPregnancyLosses: null),
+    'prev_caesarean' => _copy(prevCaesareanSection: null),
+    'maternal_age' => _copy(maternalAgeYears: null),
+    'gravida' => _copy(gravida: null),
+    'parity' => _copy(parity: null),
+    'weight_gain_kg_this_pregnancy' => _copy(weightGainKgThisPregnancy: null),
+    'oedema_hands_or_face' => _copy(oedemaHandsOrFace: null),
+    'epigastric_pain' => _copy(epigastricPain: null),
+    'headache_severe' => _copy(headacheSevere: null),
+    'blurred_vision' => _copy(blurredVision: null),
+    'brisk_reflexes' => _copy(briskReflexes: null),
+    'oliguria' => _copy(oliguria: null),
+    'weight_gain_over_1kg_per_week' => _copy(weightGainOver1kgPerWeek: null),
+    'birth_weight_kg' || 'low_birth_weight' => _copy(birthWeightKg: null),
+    'preterm' => _copy(gestationalWeeksAtBirth: null),
+    'apgar_5_minute' || 'apgar5_low' => _copy(apgar5Minute: null),
+    'history_of_convulsions' => _copy(historyOfConvulsions: null),
+    'severe_chest_indrawing' => _copy(severeChestIndrawing: null),
+    'nasal_flaring_grunting' => _copy(nasalFlaring: null, grunting: null),
+    'nasal_flaring' => _copy(nasalFlaring: null),
+    'grunting' => _copy(grunting: null),
+    'bulging_fontanelle' => _copy(bulgingFontanelle: null),
+    'jaundice_before_24h' => _copy(jaundiceBefore24h: null),
+    'feeding_difficulty' => _copy(feedingDifficulty: null),
+    'abdominal_distension' => _copy(abdominalDistension: null),
+    'cord_infection' => _copy(cordRednessBeyondBase: null, cordPus: null),
+    'cord_redness_beyond_base' => _copy(cordRednessBeyondBase: null),
+    'cord_pus' => _copy(cordPus: null),
+    'skin_pustules' => _copy(skinPustules: null),
+    'lethargic_unconscious' ||
+    'lethargic_or_unconscious' => _copy(lethargicOrUnconscious: null),
+    'bleeding' || 'bleeding_from_any_site' => _copy(bleedingFromAnySite: null),
+    'cough_present' => _copy(coughPresent: null),
+    'chest_indrawing' => _copy(chestIndrawing: null),
+    'stridor_calm' => _copy(stridorCalm: null),
+    'general_danger_sign' => _copy(generalDangerSign: null),
+    'hiv_exposed' ||
+    'hiv_exposed_or_infected' => _copy(hivExposedOrInfected: null),
+    'multiple_birth' => _copy(multipleBirth: null),
+    _ => this,
+  };
 }
 
 class OfflineInferenceService {
@@ -346,6 +617,10 @@ class OfflineInferenceService {
   // Per-bin Platt-residual std, used to derive a 95% CI at inference.
   // `_ciTables[name] = List<{bin_lo, bin_hi, bin_mid, residual_std, n}>`.
   final Map<String, List<Map<String, Object?>>> _ciTables = {};
+  // Conformal-style 95% coverage margin per model, loaded from
+  // `calibration.conformal_q95` in the metrics JSON (95th percentile of
+  // absolute out-of-fold calibrated residuals).
+  final Map<String, double> _conformalQ = {};
   // Drift z-score threshold, loaded from `drift_baseline.z_threshold`.
   // Defaults to 3.5 if not bundled.
   final Map<String, double> _driftZThreshold = {};
@@ -493,6 +768,8 @@ class OfflineInferenceService {
               for (final b in ci.whereType<Map>()) Map<String, Object?>.from(b),
             ];
           }
+          final cq = _asDouble(cal['conformal_q95']);
+          if (cq != null) _conformalQ[name] = cq;
         }
       }
       final ext = val['external'];
@@ -637,9 +914,8 @@ class OfflineInferenceService {
     // the (drift-checked) probability clears the rule-in threshold. The
     // deterministic WHO/GHS rules keep the rule-out coverage below it.
     final ruleInThreshold = _ruleInThreshold(name);
-    final ruleIn = ruleInThreshold != null &&
-        finalP != null &&
-        finalP >= ruleInThreshold;
+    final ruleIn =
+        ruleInThreshold != null && finalP != null && finalP >= ruleInThreshold;
 
     return OfflineRiskPrediction(
       modelName: name,
@@ -654,6 +930,7 @@ class OfflineInferenceService {
       driftDetected: drift.drift,
       driftFeatures: drift.features,
       confidenceInterval95: ci,
+      conformalQ95: _conformalQ[name],
       ruleInCandidate: ruleIn,
       ruleInThreshold: ruleInThreshold,
       featureValues: featureValues,
@@ -807,6 +1084,27 @@ class OfflineInferenceService {
       tensor: tensor,
       stopwatch: stopwatch,
     );
+  }
+
+  /// Leave-one-out counterfactual: re-runs the named predictor with exactly
+  /// one measured feature removed, as if it had never been taken. The model's
+  /// own zero-imputation (or the rule layer's missing-handling) applies to
+  /// the absent input, so the returned prediction is a genuine re-inference
+  /// on this phone — never an illustration. Powers the "what moves this
+  /// number" card on the verdict page.
+  Future<OfflineRiskPrediction> predictWithout({
+    required String modelName,
+    required OfflineFeatureBag bag,
+    required String removedFeature,
+  }) {
+    final reduced = bag.withoutFeature(removedFeature);
+    return switch (modelName) {
+      'neonatal_sepsis' => neonatalSepsisRisk(reduced),
+      'child_pneumonia' => childPneumoniaRisk(reduced),
+      'preeclampsia_risk' => preeclampsiaRisk(reduced),
+      'lbw_sga' => lbwSgaRisk(reduced),
+      _ => throw StateError('Unknown model: $modelName'),
+    };
   }
 
   /// Convenience: runs all four predictors on the same [bag] and returns a

@@ -27,6 +27,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 /// A TextField located by its hint text; the registration and sign-in
 /// screens carry no keys, and their hints are the stable copy.
 Finder _fieldByHint(String hint) => find.byWidgetPredicate(
@@ -64,7 +65,9 @@ Future<void> _pumpApp(WidgetTester tester) {
 Future<void> _leaveSplash(WidgetTester tester) async {
   await tester.pump(); // Build the splash.
   await tester.pump(const Duration(milliseconds: 300)); // First paint.
-  await tester.tapAt(tester.getCenter(find.byType(Scaffold))); // Tap to continue.
+  await tester.tapAt(
+    tester.getCenter(find.byType(Scaffold)),
+  ); // Tap to continue.
   await tester.pump(const Duration(milliseconds: 100)); // Flush session reads.
   await tester.pump(const Duration(milliseconds: 100)); // Flush the navigation.
   await tester.pump(const Duration(milliseconds: 600)); // Settle the fade.
@@ -88,6 +91,7 @@ Future<void> _pickFromDropdown(
   await tester.tap(find.text(value).last);
   await tester.pumpAndSettle();
 }
+
 /// Waits, on the real clock, for [finder] to match. Needed wherever the
 /// SQLite FFI worker is in the loop: that isolate never runs under FakeAsync.
 Future<void> _untilVisible(WidgetTester tester, Finder finder) =>
@@ -233,7 +237,13 @@ void main() {
       await _untilVisible(tester, find.byType(CaregiverHome));
 
       expect(find.byType(CaregiverHome), findsOneWidget);
-      const caregiverTabs = ['Family', 'Check', 'Grow & Play', 'Care plan', 'Help'];
+      const caregiverTabs = [
+        'Family',
+        'Check',
+        'Grow & Play',
+        'Care plan',
+        'Help',
+      ];
       for (final label in caregiverTabs) {
         expect(find.text(label), findsWidgets, reason: 'tab $label');
       }
@@ -285,19 +295,22 @@ void main() {
       await tester.tap(find.text('Awah').last);
       await tester.pumpAndSettle();
       expect(find.text('What have you noticed?'), findsWidgets);
-      final noCount = find.text('NO').evaluate().length;
-      expect(noCount, 8);
-      for (var i = 0; i < noCount; i++) {
-        await tester.ensureVisible(find.text('NO').at(i));
-        await tester.tap(find.text('NO').at(i));
-        await tester.pump();
+      // The check is a conversation now: one sign at a time, walking on by
+      // itself after each answer.
+      for (var i = 0; i < 8; i++) {
+        await _untilVisible(tester, find.text('NO'));
+        expect(find.text('NO'), findsOneWidget);
+        await tester.tap(find.text('NO'));
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pumpAndSettle();
       }
-      await tester.pumpAndSettle();
       expect(find.textContaining('signs answered'), findsOneWidget);
       await tester.ensureVisible(find.text('What should I do?'));
       await tester.tap(find.text('What should I do?'));
       await tester.pumpAndSettle();
       expect(find.text('Continue routine care'), findsOneWidget);
+      // Even a green verdict leaves the family with something to do.
+      expect(find.text('Keep doing these'), findsOneWidget);
       await tester.ensureVisible(find.text('Continue Routine Care'));
       await tester.tap(find.text('Continue Routine Care'));
       await tester.pumpAndSettle();
@@ -305,6 +318,43 @@ void main() {
       await tester.tap(find.text('Back to home'));
       await tester.pumpAndSettle();
       expect(find.text('Is someone unwell?'), findsWidgets);
+
+      // Second run, this time with a danger sign: the result must be a
+      // plan, not just "go" — tickable steps and the family's own words
+      // for the nurse, then the scannable clinic pass.
+      await tester.ensureVisible(find.text('Check the danger signs'));
+      await tester.tap(find.text('Check the danger signs'));
+      await tester.pumpAndSettle();
+      await _untilVisible(tester, find.text('Awah'));
+      await tester.tap(find.text('Awah').last);
+      await tester.pumpAndSettle();
+      await _untilVisible(tester, find.text('YES'));
+      await tester.tap(find.text('YES'));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
+      for (var i = 0; i < 7; i++) {
+        await _untilVisible(tester, find.text('NO'));
+        await tester.tap(find.text('NO'));
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pumpAndSettle();
+      }
+      await tester.ensureVisible(find.text('What should I do?'));
+      await tester.tap(find.text('What should I do?'));
+      await tester.pumpAndSettle();
+      expect(find.text('Go to the health facility now'), findsOneWidget);
+      expect(find.text('Do these now — even on the way'), findsOneWidget);
+      expect(find.textContaining('YOUR WORDS FOR THE NURSE'), findsOneWidget);
+      expect(find.textContaining('What I noticed:'), findsOneWidget);
+      await tester.ensureVisible(find.text('Go to Clinic Now'));
+      await tester.tap(find.text('Go to Clinic Now'));
+      await tester.pumpAndSettle();
+      expect(find.text('SCAN AT CLINIC'), findsOneWidget);
+      await tester.ensureVisible(find.text('I have arrived'));
+      await tester.tap(find.text('I have arrived'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Back to home'));
+      await tester.tap(find.text('Back to home'));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.text('Grow & Play'));
       await tester.pumpAndSettle();
@@ -314,7 +364,7 @@ void main() {
 
       await tester.tap(find.text('Care plan'));
       await tester.pumpAndSettle();
-      expect(find.text('Vaccine days'), findsWidgets);
+      expect(find.text('Digital Yellow Card'), findsWidgets);
       expect(find.textContaining('doses may be overdue'), findsWidgets);
 
       await tester.tap(find.text('Help'));
@@ -328,10 +378,7 @@ void main() {
       await _untilVisible(tester, find.byType(SignInScreen));
 
       await tester.enterText(_fieldByHint('024 000 0000'), '0244123456');
-      await tester.enterText(
-        _fieldByHint('Enter your 4-digit PIN'),
-        '2468',
-      );
+      await tester.enterText(_fieldByHint('Enter your 4-digit PIN'), '2468');
       await tester.ensureVisible(find.text('Sign in'));
       await tester.tap(find.text('Sign in'));
       await tester.pump(const Duration(milliseconds: 200));
@@ -341,6 +388,14 @@ void main() {
       await _untilVisible(tester, find.textContaining('The Test family'));
       expect(find.textContaining('The Test family'), findsWidgets);
       expect(find.text('Awah'), findsWidgets);
+
+      // Drain the voice chain: VoiceService polls the TTS engine in
+      // 250 ms steps, and the auto-played questions leave those timers
+      // in flight. Advance fake time until every chain has finished so
+      // the teardown sees no pending timers.
+      for (var i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 500));
+      }
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();

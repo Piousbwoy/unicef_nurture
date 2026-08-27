@@ -33,6 +33,22 @@ void main() {
       expect(result.clientType, ClientType.pregnantWoman);
     });
 
+    test(
+      'no MUAC still yields a nutrition status so the food plan renders',
+      () {
+        final result = AncEngine.assess(
+          const PregnancyInput(
+            gestationalWeeks: 24,
+            systolic: 110,
+            diastolic: 70,
+          ),
+        );
+
+        expect(result.nutritionStatus, NutritionStatus.normal);
+        expect(result.missingData, contains('Maternal MUAC not measured'));
+      },
+    );
+
     test('convulsions are an obstetric emergency — refer now', () {
       final result = AncEngine.assess(
         const PregnancyInput(gestationalWeeks: 34, convulsions: true),
@@ -43,20 +59,23 @@ void main() {
       expect(result.dangerSignsPresent, isNotEmpty);
     });
 
-    test('severe hypertension with headache is pre-eclampsia until proven otherwise', () {
-      final result = AncEngine.assess(
-        const PregnancyInput(
-          gestationalWeeks: 32,
-          systolic: 170,
-          diastolic: 115,
-          severeHeadache: true,
-          blurredVision: true,
-        ),
-      );
+    test(
+      'severe hypertension with headache is pre-eclampsia until proven otherwise',
+      () {
+        final result = AncEngine.assess(
+          const PregnancyInput(
+            gestationalWeeks: 32,
+            systolic: 170,
+            diastolic: 115,
+            severeHeadache: true,
+            blurredVision: true,
+          ),
+        );
 
-      expect(result.triage, TriageLevel.urgent);
-      expect(result.needsReferral, isTrue);
-    });
+        expect(result.triage, TriageLevel.urgent);
+        expect(result.needsReferral, isTrue);
+      },
+    );
 
     test('vaginal bleeding in the third trimester is urgent', () {
       final result = AncEngine.assess(
@@ -76,10 +95,7 @@ void main() {
 
     test('reduced foetal movement escalates above routine', () {
       final result = AncEngine.assess(
-        const PregnancyInput(
-          gestationalWeeks: 38,
-          reducedFoetalMovement: true,
-        ),
+        const PregnancyInput(gestationalWeeks: 38, reducedFoetalMovement: true),
       );
 
       expect(result.triage.isAtLeastPriority, isTrue);
@@ -91,7 +107,10 @@ void main() {
       );
 
       expect(result.missingData, isNotEmpty);
-      expect(result.confidence, isNot(RecommendationConfidence.protocolCertain));
+      expect(
+        result.confidence,
+        isNot(RecommendationConfidence.protocolCertain),
+      );
     });
 
     test('every finding carries its protocol source', () {

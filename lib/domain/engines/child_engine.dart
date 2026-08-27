@@ -735,6 +735,14 @@ abstract final class ChildEngine {
       missing.add('MUAC not measured — malnutrition cannot be ruled out');
     }
 
+    // The food plan must never vanish with the tape: counselling foods are
+    // preventive, and an unmeasured MUAC is already declared in the
+    // missing-data list. Without a status the whole nutrition section —
+    // the half of the decision the family carries home — would silently
+    // disappear from the screen (young infants, whose MUAC is not yet
+    // applicable, lost it entirely).
+    nutrition ??= NutritionStatus.normal;
+
     // The SAM branch that the design review flagged: pathway, not porridge.
     if (nutrition == NutritionStatus.severeAcute) {
       final complicated =
@@ -771,7 +779,7 @@ abstract final class ChildEngine {
       }
     } else if (nutrition == NutritionStatus.moderateAcute) {
       pathway = NutritionPathway.supplementaryFeeding;
-    } else if (nutrition != null) {
+    } else {
       pathway = NutritionPathway.preventiveCounselling;
     }
 

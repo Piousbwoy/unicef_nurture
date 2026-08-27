@@ -217,7 +217,8 @@ abstract final class PncEngine {
               'available, keep her flat and warm, and move now. Send someone '
               'ahead to warn the facility that she is bleeding.',
           urgency: ReferralUrgency.immediate,
-          rationale: 'Uterine massage and a uterotonic buy the time needed to '
+          rationale:
+              'Uterine massage and a uterotonic buy the time needed to '
               'reach the facility.',
           protocolSource: _protocol,
           isTreatment: true,
@@ -363,7 +364,7 @@ abstract final class PncEngine {
       add(
         i.severeHeadache ? 'Severe headache' : 'Blurred vision',
         'With any raised blood pressure this is a warning of an impending fit. '
-            'With normal pressure it still needs assessment today.',
+        'With normal pressure it still needs assessment today.',
         i.hasHypertension ? TriageLevel.urgent : TriageLevel.priority,
         weight: i.hasHypertension ? 9 : 5,
       );
@@ -603,6 +604,8 @@ abstract final class PncEngine {
         cutoff: '< 23 cm',
         weight: 5,
       );
+    } else {
+      missing.add('Maternal MUAC not measured');
     }
 
     // ---------------------------------------------------------------------
@@ -786,18 +789,23 @@ abstract final class PncEngine {
           i.muacCm != null,
         ].where((m) => m).length,
         keyInputCount: 4,
-        observedDangerSign: i.heavyBleeding || i.convulsions || i.thoughtsOfSelfHarm,
+        observedDangerSign:
+            i.heavyBleeding || i.convulsions || i.thoughtsOfSelfHarm,
       ),
       protocolSource: _protocol,
+      // The food plan must never vanish with the tape: an unmeasured MUAC
+      // is declared in the missing-data list, and lactation counselling
+      // foods are preventive — hiding them would remove the nutrition
+      // section from the screen entirely.
       nutritionStatus: i.muacCm == null
-          ? null
+          ? NutritionStatus.normal
           : (i.muacCm! < 21
                 ? NutritionStatus.severeAcute
                 : (i.muacCm! < 23
                       ? NutritionStatus.moderateAcute
                       : NutritionStatus.normal)),
       nutritionPathway: i.muacCm == null
-          ? null
+          ? NutritionPathway.preventiveCounselling
           : (i.muacCm! < 23
                 ? NutritionPathway.supplementaryFeeding
                 : NutritionPathway.preventiveCounselling),

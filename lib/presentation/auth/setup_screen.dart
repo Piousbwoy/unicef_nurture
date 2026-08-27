@@ -334,7 +334,7 @@ class _RoleCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: Gap.sm),
-                        const _RoleChevron(),
+                        _RoleChevron(onTap: () => onPick(role)),
                       ],
                     ),
                   ),
@@ -409,7 +409,9 @@ class _RoleImage extends StatelessWidget {
 
 /// The "tap to continue" affordance on the right of a role card.
 class _RoleChevron extends StatefulWidget {
-  const _RoleChevron();
+  const _RoleChevron({this.onTap});
+
+  final VoidCallback? onTap;
 
   @override
   State<_RoleChevron> createState() => _RoleChevronState();
@@ -421,6 +423,7 @@ class _RoleChevronState extends State<_RoleChevron> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      onTap: widget.onTap,
       onTapDown: (_) => setState(() => _down = true),
       onTapUp: (_) => setState(() => _down = false),
       onTapCancel: () => setState(() => _down = false),

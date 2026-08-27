@@ -105,6 +105,7 @@ class ClinicalFinding {
     this.threshold,
     this.weight = 0,
     this.isDangerSign = false,
+    this.aiGenerated = false,
   });
 
   /// Short name, e.g. "Severe acute malnutrition".
@@ -133,6 +134,13 @@ class ClinicalFinding {
   /// label happens to be worded.
   final bool isDangerSign;
 
+  /// True when the finding carries an on-device model's number rather than
+  /// a deterministic rule. The verdict page renders the model's number once
+  /// — in the decision brief — and withholds these from the findings deck so
+  /// the same risk is never shown twice; the full clinical report still
+  /// lists everything.
+  final bool aiGenerated;
+
   Map<String, Object?> toJson() => {
     'label': label,
     'detail': detail,
@@ -142,18 +150,21 @@ class ClinicalFinding {
     'threshold': threshold,
     'weight': weight,
     'is_danger_sign': isDangerSign,
+    'ai_generated': aiGenerated,
   };
 
   factory ClinicalFinding.fromJson(Map<String, Object?> j) => ClinicalFinding(
     label: j['label'] as String,
     detail: j['detail'] as String,
-    severity: enumByNameOrNull(TriageLevel.values, j['severity']) ??
+    severity:
+        enumByNameOrNull(TriageLevel.values, j['severity']) ??
         TriageLevel.routine,
     protocolSource: j['protocol_source'] as String?,
     measuredValue: j['measured_value'] as String?,
     threshold: j['threshold'] as String?,
     weight: (j['weight'] as num?)?.toDouble() ?? 0,
     isDangerSign: j['is_danger_sign'] == true,
+    aiGenerated: j['ai_generated'] == true,
   );
 }
 
@@ -226,17 +237,19 @@ class RecommendedAction {
     'is_prereferral_treatment': isPrereferralTreatment,
   };
 
-  factory RecommendedAction.fromJson(Map<String, Object?> j) => RecommendedAction(
-    instruction: j['instruction'] as String,
-    urgency: enumByNameOrNull(ReferralUrgency.values, j['urgency']) ??
-        ReferralUrgency.scheduled,
-    rationale: j['rationale'] as String?,
-    protocolSource: j['protocol_source'] as String?,
-    isReferral: j['is_referral'] == true,
-    isTreatment: j['is_treatment'] == true,
-    isCounselling: j['is_counselling'] == true,
-    isPrereferralTreatment: j['is_prereferral_treatment'] == true,
-  );
+  factory RecommendedAction.fromJson(Map<String, Object?> j) =>
+      RecommendedAction(
+        instruction: j['instruction'] as String,
+        urgency:
+            enumByNameOrNull(ReferralUrgency.values, j['urgency']) ??
+            ReferralUrgency.scheduled,
+        rationale: j['rationale'] as String?,
+        protocolSource: j['protocol_source'] as String?,
+        isReferral: j['is_referral'] == true,
+        isTreatment: j['is_treatment'] == true,
+        isCounselling: j['is_counselling'] == true,
+        isPrereferralTreatment: j['is_prereferral_treatment'] == true,
+      );
 }
 
 /// A single 0–100 confidence score shared by every protocol engine.
@@ -353,15 +366,19 @@ class AssessmentResult {
 
   factory AssessmentResult.fromJson(Map<String, Object?> j) => AssessmentResult(
     clientType: ClientType.fromStoredName(j['client_type']),
-    triage: enumByNameOrNull(TriageLevel.values, j['triage']) ??
+    triage:
+        enumByNameOrNull(TriageLevel.values, j['triage']) ??
         TriageLevel.routine,
     classification: j['classification'] as String,
     findings: ((j['findings'] as List?) ?? [])
-        .map((f) => ClinicalFinding.fromJson(Map<String, Object?>.from(f as Map)))
+        .map(
+          (f) => ClinicalFinding.fromJson(Map<String, Object?>.from(f as Map)),
+        )
         .toList(),
     actions: ((j['actions'] as List?) ?? [])
         .map(
-          (a) => RecommendedAction.fromJson(Map<String, Object?>.from(a as Map)),
+          (a) =>
+              RecommendedAction.fromJson(Map<String, Object?>.from(a as Map)),
         )
         .toList(),
     confidence: RecommendationConfidence.values.firstWhere(
@@ -370,7 +387,10 @@ class AssessmentResult {
     ),
     confidenceScore: (j['confidence_score'] as num?)?.toInt(),
     protocolSource: j['protocol_source'] as String?,
-    nutritionStatus: enumByNameOrNull(NutritionStatus.values, j['nutrition_status']),
+    nutritionStatus: enumByNameOrNull(
+      NutritionStatus.values,
+      j['nutrition_status'],
+    ),
     nutritionPathway: enumByNameOrNull(
       NutritionPathway.values,
       j['nutrition_pathway'],
@@ -381,9 +401,10 @@ class AssessmentResult {
     missingData: ((j['missing_data'] as List?) ?? [])
         .map((e) => e as String)
         .toList(),
-    referralCapabilitiesNeeded: ((j['referral_capabilities_needed'] as List?) ?? [])
-        .map((e) => e as String)
-        .toSet(),
+    referralCapabilitiesNeeded:
+        ((j['referral_capabilities_needed'] as List?) ?? [])
+            .map((e) => e as String)
+            .toSet(),
     followUpInDays: (j['follow_up_in_days'] as num?)?.toInt(),
     caregiverMessage: j['caregiver_message'] as String?,
   );
@@ -478,7 +499,10 @@ class Assessment {
       Map<String, Object?>.from(jsonDecode(m['result_json'] as String) as Map),
     ),
     carePlanJson: m['care_plan_json'] as String?,
-    overriddenTriage: enumByNameOrNull(TriageLevel.values, m['overridden_triage']),
+    overriddenTriage: enumByNameOrNull(
+      TriageLevel.values,
+      m['overridden_triage'],
+    ),
     overrideReason: m['override_reason'] as String?,
     overrideBy: m['override_by'] as String?,
     syncState: SyncState.values.firstWhere(
@@ -600,7 +624,8 @@ class Referral {
     assessmentId: m['assessment_id'] as String,
     facilityName: m['facility_name'] as String,
     reason: m['reason'] as String,
-    urgency: enumByNameOrNull(ReferralUrgency.values, m['urgency']) ??
+    urgency:
+        enumByNameOrNull(ReferralUrgency.values, m['urgency']) ??
         ReferralUrgency.scheduled,
     issuedBy: m['issued_by'] as String,
     issuedAt: DateTime.parse(m['issued_at'] as String),
@@ -608,7 +633,9 @@ class Referral {
       (s) => s.name == m['status'],
       orElse: () => ReferralStatus.issued,
     ),
-    statusUpdatedAt: DateTime.tryParse((m['status_updated_at'] as String?) ?? ''),
+    statusUpdatedAt: DateTime.tryParse(
+      (m['status_updated_at'] as String?) ?? '',
+    ),
     clinicalSummary: m['clinical_summary'] as String?,
     arrivalConfirmedBy: m['arrival_confirmed_by'] as String?,
     outcomeNotes: m['outcome_notes'] as String?,
@@ -744,10 +771,11 @@ class ScheduledContact {
 
   bool get isDone => completedAt != null;
 
-  int get daysUntilDue =>
-      DateTime(dueDate.year, dueDate.month, dueDate.day)
-          .difference(DateTime.now().dateOnly)
-          .inDays;
+  int get daysUntilDue => DateTime(
+    dueDate.year,
+    dueDate.month,
+    dueDate.day,
+  ).difference(DateTime.now().dateOnly).inDays;
 
   bool get isOverdue => !isDone && daysUntilDue < 0;
   bool get isDueToday => !isDone && daysUntilDue == 0;
@@ -853,10 +881,8 @@ class HomeCheck {
     checkedAt: DateTime.parse(m['checked_at'] as String),
   );
 
-  static List<String> _splitSigns(String? raw) => (raw ?? '')
-      .split('|')
-      .where((s) => s.isNotEmpty)
-      .toList(growable: false);
+  static List<String> _splitSigns(String? raw) =>
+      (raw ?? '').split('|').where((s) => s.isNotEmpty).toList(growable: false);
 }
 
 /// One milestone check: the family's report of what their child can do, in
@@ -939,8 +965,6 @@ class MilestoneCheck {
     checkedAt: DateTime.parse(m['checked_at'] as String),
   );
 
-  static List<String> _splitList(String? raw) => (raw ?? '')
-      .split('|')
-      .where((s) => s.isNotEmpty)
-      .toList(growable: false);
+  static List<String> _splitList(String? raw) =>
+      (raw ?? '').split('|').where((s) => s.isNotEmpty).toList(growable: false);
 }

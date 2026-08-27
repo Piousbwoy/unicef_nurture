@@ -28,6 +28,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../assessment/emergency_tunnel.dart';
 import 'assess_tab.dart';
 import 'day_plan_tab.dart';
 import 'home_tab.dart';
@@ -44,13 +45,7 @@ class FhwHome extends ConsumerStatefulWidget {
 class _FhwHomeState extends ConsumerState<FhwHome> {
   int _tab = 0;
 
-  static const _titles = [
-    'Today',
-    'Queue',
-    'Assess',
-    'Referrals',
-    'Profile',
-  ];
+  static const _titles = ['Today', 'Visits', 'Assess', 'Referrals', 'Profile'];
 
   @override
   Widget build(BuildContext context) {
@@ -98,6 +93,28 @@ class _FhwHomeState extends ConsumerState<FhwHome> {
           const ProfileTab(),
         ],
       ),
+      // The emergency tunnel: one red button on every tab, because the
+      // convulsing child never arrives while the CHO is on the "right"
+      // screen. It asks for no patient, no household, no network — six
+      // questions and a verdict. Choosing "full assessment" lands the CHO
+      // on the Assess tab.
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          final continueToAssess = await Navigator.of(context).push<bool>(
+            MaterialPageRoute(builder: (_) => const EmergencyTunnelScreen()),
+          );
+          if (continueToAssess == true && mounted) {
+            setState(() => _tab = 2);
+          }
+        },
+        backgroundColor: AppColors.triageRed,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.warning_amber_rounded),
+        label: const Text(
+          'Emergency',
+          style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0.4),
+        ),
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _tab,
         onTap: (i) => setState(() => _tab = i),
@@ -110,7 +127,7 @@ class _FhwHomeState extends ConsumerState<FhwHome> {
           BottomNavigationBarItem(
             icon: Icon(Icons.people_outlined),
             activeIcon: Icon(Icons.people_rounded),
-            label: 'Queue',
+            label: 'Visits',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.medical_services_outlined),

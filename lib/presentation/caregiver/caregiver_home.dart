@@ -34,6 +34,7 @@
 /// advice in, and the sign-out.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -41,6 +42,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
@@ -53,6 +55,7 @@ import '../../data/repositories/care_repository.dart';
 import '../../domain/engines/immunisation_engine.dart';
 import '../../domain/engines/nurturing_care_engine.dart';
 import '../../domain/engines/recommendation_engine.dart';
+import '../../domain/engines/trajectory_engine.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
 import '../../domain/enums.dart';
@@ -87,7 +90,7 @@ extension on _SignAnswer {
 /// [40-C] → [44-C]. They live inside one route so a caregiver never sees a
 /// back stack: only forward, one calm step at a time, with the app bar back
 /// arrow walking the stages in reverse.
-enum _Stage { pick, questions, result, tellChw, watchFor }
+enum _Stage { pick, questions, result, clinicPass, watchFor }
 
 /// The three outcomes the triage can end in.
 enum _TriageVerdict { urgent, caution, fine }
@@ -165,7 +168,10 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
           children: [
             Text('My family', style: AppType.title),
             const SizedBox(height: 2),
-            Text(user.community, style: AppType.caption.copyWith(fontSize: 11.5)),
+            Text(
+              user.community,
+              style: AppType.caption.copyWith(fontSize: 11.5),
+            ),
           ],
         ),
       ),
@@ -408,9 +414,7 @@ class _AddMemberButton extends StatelessWidget {
     onPressed: () => _openAddMember(context, householdId),
     icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
     label: const Text('Add a family member'),
-    style: OutlinedButton.styleFrom(
-      minimumSize: const Size(0, Gap.tapTarget),
-    ),
+    style: OutlinedButton.styleFrom(minimumSize: const Size(0, Gap.tapTarget)),
   );
 }
 
@@ -696,7 +700,7 @@ class _CarePlanTab extends ConsumerWidget {
       padding: const EdgeInsets.all(Gap.lg),
       children: [
         _FamilyCarePlanSection(householdId: householdId),
-        _VaccineScheduleCard(householdId: householdId),
+        _CarePlanTimelineCard(householdId: householdId),
         const SizedBox(height: Gap.md),
         _ContactsSection(householdId: householdId),
         const SizedBox(height: Gap.md),
@@ -779,12 +783,8 @@ class _MemberCarePlanCard extends ConsumerWidget {
   }
 }
 
-/// One card per child, derived from age alone. The wording is the whole
-/// honesty contract: "due by age" is what the schedule says; the child's
-/// vaccine card is what actually happened. Either way, the card tells a
-/// mother whether a trip to the clinic belongs in her week.
-class _VaccineScheduleCard extends ConsumerWidget {
-  const _VaccineScheduleCard({required this.householdId});
+class _CarePlanTimelineCard extends ConsumerWidget {
+  const _CarePlanTimelineCard({required this.householdId});
   final String householdId;
 
   @override
@@ -799,16 +799,16 @@ class _VaccineScheduleCard extends ConsumerWidget {
         if (children.isEmpty) return const SizedBox.shrink();
 
         return SectionCard(
-          title: 'Vaccine days',
+          title: 'Digital Yellow Card',
           subtitle:
-              'From each child\u2019s age, the app works out what the Ghana '
-              'vaccine schedule expects. Open the child\u2019s vaccine card '
-              'to see what is already marked — then bring both to the '
-              'clinic.',
-          icon: Icons.vaccines_rounded,
+              'The Ghana vaccine schedule as a timeline from each child\u2019s '
+              'age. If the paper yellow card is behind what you see here, '
+              'doses may be overdue — bring both to the clinic.',
+          icon: Icons.timeline_rounded,
           child: Column(
             children: [
-              for (final child in children) _VaccineChildTile(child: child),
+              for (final child in children)
+                _CarePlanChildTimeline(child: child),
             ],
           ),
         );
@@ -818,103 +818,331 @@ class _VaccineScheduleCard extends ConsumerWidget {
   }
 }
 
-class _VaccineChildTile extends StatelessWidget {
-  const _VaccineChildTile({required this.child});
+class _CarePlanChildTimeline extends StatelessWidget {
+  const _CarePlanChildTimeline({required this.child});
 
   final Person child;
 
   @override
   Widget build(BuildContext context) {
-    // No dose history on the caregiver's side, deliberately: the paper card
-    // holds it. So the plan runs with an empty set, and every line reads as
-    // "due by age", never as a false claim of what was missed.
+    // The timeline is drawn from the national schedule; the honesty banner
+    // is drawn from the same engine the health worker sees — one source of
+    // truth, two honest views of it.
+    final timelinePoints = _buildTimelinePoints(child.ageInDays!);
     final plan = ImmunisationEngine.plan(
       ageInDays: child.ageInDays!,
       givenLabels: const {},
     );
 
-    final (colour, headline, line) = plan.overdue.isNotEmpty
-        ? (
-            AppColors.triageRed,
-            'Check the card — doses may be overdue',
-            '${plan.overdueLabels.join(', ')} fall due at ${child.ageLabel}. '
-                'If they are not on the card yet, go to the clinic this week.',
-          )
-        : plan.giveToday.isNotEmpty
-        ? (
-            AppColors.triageAmber,
-            'Due by age now',
-            '${plan.giveToday.map((d) => d.label).join(', ')} — if the card '
-                'does not have them yet, this is a good week for the clinic.',
-          )
-        : (
-            AppColors.triageGreen,
-            'Nothing falls due yet',
-            plan.nextDueLabel == null
-                ? 'The schedule is complete for ${child.fullName}\u2019s age.'
-                : 'Next by age: ${plan.nextDueLabel}. Keep the card safe.',
-          );
+    // Find the currently active point (the one due now or next)
+    final activeIndex = timelinePoints.indexWhere((p) => p.isCurrentOrNext);
+    final displayPoints = timelinePoints
+        .take(activeIndex == -1 ? timelinePoints.length : activeIndex + 2)
+        .toList();
 
     return Container(
-      margin: const EdgeInsets.only(bottom: Gap.sm),
-      padding: const EdgeInsets.all(Gap.md),
+      margin: const EdgeInsets.only(bottom: Gap.lg),
       decoration: BoxDecoration(
-        color: AppColors.canvas,
-        borderRadius: BorderRadius.circular(Gap.radiusSm),
-        border: Border.all(color: AppColors.line),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(Gap.radius),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.ink.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  child.fullName,
-                  style: const TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w700,
+          // Header
+          Container(
+            padding: const EdgeInsets.all(Gap.md),
+            decoration: const BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(Gap.radius),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(Gap.xs),
+                  decoration: const BoxDecoration(
+                    color: Colors.white24,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.child_care_rounded,
+                    color: Colors.white,
+                    size: 20,
                   ),
                 ),
+                const SizedBox(width: Gap.sm),
+                Expanded(
+                  child: Text(
+                    child.fullName,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Gap.sm,
+                    vertical: Gap.xs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(Gap.radius),
+                  ),
+                  child: Text(
+                    child.ageLabel,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Honesty banner: the timeline shows what the schedule expects;
+          // this line shows what that means for this child today, in the
+          // same words the health worker's screen uses.
+          if (plan.overdue.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: Gap.md,
+                vertical: Gap.sm,
               ),
-              Text(
-                child.ageLabel,
+              color: AppColors.triageRedBg,
+              child: Text(
+                'Check the card — ${plan.overdueLabels.join(', ')}: doses may '
+                'be overdue. If they are not on the card yet, go to the '
+                'clinic this week.',
                 style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.inkMuted,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.triageRed,
+                  height: 1.4,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: Gap.xs),
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(color: colour, shape: BoxShape.circle),
+            )
+          else if (plan.giveToday.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: Gap.md,
+                vertical: Gap.sm,
               ),
-              const SizedBox(width: Gap.xs),
-              Expanded(
-                child: Text(
-                  headline,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                    color: colour,
+              color: AppColors.triageAmberBg,
+              child: Text(
+                'Due by age now: ${plan.giveToday.map((d) => d.label).join(', ')} '
+                '— a good week for the clinic if the card does not have them yet.',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.triageAmber,
+                  height: 1.4,
+                ),
+              ),
+            ),
+
+          // Timeline
+          Padding(
+            padding: const EdgeInsets.all(Gap.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (int i = 0; i < displayPoints.length; i++)
+                  _TimelinePointView(
+                    point: displayPoints[i],
+                    isLast: i == displayPoints.length - 1,
                   ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: Gap.xs),
-          Text(
-            line,
-            style: const TextStyle(
-              fontSize: 12.5,
-              color: AppColors.inkMuted,
-              height: 1.4,
+        ],
+      ),
+    );
+  }
+
+  List<_TimelinePoint> _buildTimelinePoints(int ageDays) {
+    final ageWeeks = ageDays ~/ 7;
+
+    // One source of truth: group the national schedule by due week, so this
+    // timeline can never drift from what the clinic expects.
+    final byWeek = <int, List<String>>{};
+    for (final dose in GhanaEpi.schedule) {
+      byWeek.putIfAbsent(dose.dueAtWeeks, () => []).add(dose.label);
+    }
+    // A few non-vaccine anchors that belong on a mother's timeline.
+    const careNotes = <int, String>{
+      0: 'First bath after 24 hours',
+      26: 'Start thick mashed foods',
+      78: 'Deworming and vitamin A',
+    };
+    String labelFor(int weeks) => weeks == 0
+        ? 'Birth'
+        : weeks < 20
+        ? '$weeks weeks'
+        : '${(weeks / 4.33).round()} months';
+
+    final weeks = byWeek.keys.toList()..sort();
+    final points = <_TimelinePoint>[
+      for (final week in weeks)
+        _TimelinePoint(
+          ageLabel: labelFor(week),
+          events: [
+            byWeek[week]!.join(', '),
+            if (careNotes[week] != null) careNotes[week]!,
+          ],
+          dueDays: week * 7,
+        ),
+    ];
+
+    // Evaluate status against the child's age, with a two-week window
+    // either side of each due date reading as "now".
+    for (final p in points) {
+      final dueWeeks = p.dueDays ~/ 7;
+      if (ageWeeks >= dueWeeks + 2) {
+        p.status = _TimelineStatus.past;
+      } else if (ageWeeks >= dueWeeks - 2) {
+        p.status = _TimelineStatus.current;
+      } else {
+        p.status = _TimelineStatus.future;
+      }
+    }
+
+    // If no point is 'current', highlight the next upcoming one.
+    if (!points.any((p) => p.status == _TimelineStatus.current)) {
+      final nextIdx = points.indexWhere(
+        (p) => p.status == _TimelineStatus.future,
+      );
+      if (nextIdx != -1) {
+        points[nextIdx].status = _TimelineStatus.current;
+      }
+    }
+
+    return points;
+  }
+}
+
+enum _TimelineStatus { past, current, future }
+
+class _TimelinePoint {
+  _TimelinePoint({
+    required this.ageLabel,
+    required this.events,
+    required this.dueDays,
+  });
+
+  final String ageLabel;
+  final List<String> events;
+  final int dueDays;
+  _TimelineStatus status = _TimelineStatus.future;
+
+  bool get isCurrentOrNext =>
+      status == _TimelineStatus.current || status == _TimelineStatus.future;
+}
+
+class _TimelinePointView extends StatelessWidget {
+  const _TimelinePointView({required this.point, required this.isLast});
+
+  final _TimelinePoint point;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    final isPast = point.status == _TimelineStatus.past;
+    final isCurrent = point.status == _TimelineStatus.current;
+
+    final dotColor = isCurrent
+        ? AppColors.primary
+        : (isPast ? AppColors.line : Colors.grey.shade300);
+    final lineColor = isCurrent || isPast
+        ? AppColors.line
+        : Colors.grey.shade200;
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Line & Dot Column
+          SizedBox(
+            width: 32,
+            child: Column(
+              children: [
+                Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: isPast ? Colors.transparent : dotColor,
+                    border: Border.all(color: dotColor, width: isPast ? 2 : 0),
+                    shape: BoxShape.circle,
+                  ),
+                  child: isPast
+                      ? const Icon(
+                          Icons.check,
+                          size: 10,
+                          color: AppColors.inkMuted,
+                        )
+                      : null,
+                ),
+                if (!isLast)
+                  Expanded(child: Container(width: 2, color: lineColor)),
+              ],
+            ),
+          ),
+
+          // Content Column
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: Gap.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    point.ageLabel,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: isCurrent ? FontWeight.w800 : FontWeight.w600,
+                      color: isPast
+                          ? AppColors.inkMuted
+                          : (isCurrent
+                                ? AppColors.primary
+                                : Colors.grey.shade400),
+                    ),
+                  ),
+                  const SizedBox(height: Gap.xs),
+                  ...point.events.map(
+                    (e) => Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Text(
+                        '• $e',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: isCurrent
+                              ? FontWeight.w600
+                              : FontWeight.w400,
+                          color: isPast
+                              ? AppColors.inkMuted
+                              : (isCurrent
+                                    ? AppColors.ink
+                                    : Colors.grey.shade400),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -987,8 +1215,7 @@ class _HelpTab extends ConsumerWidget {
               OutlinedButton.icon(
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) =>
-                        _AudioGuideScreen(householdId: householdId),
+                    builder: (_) => _AudioGuideScreen(householdId: householdId),
                   ),
                 ),
                 icon: const Icon(Icons.play_circle_outline_rounded),
@@ -1132,7 +1359,11 @@ class _EmergencyPlanCard extends StatelessWidget {
             ),
             child: const Row(
               children: [
-                Icon(Icons.work_history_rounded, color: AppColors.primary, size: 20),
+                Icon(
+                  Icons.work_history_rounded,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
                 SizedBox(width: Gap.sm),
                 Expanded(
                   child: Text(
@@ -1239,9 +1470,7 @@ class _AddMemberSheetState extends ConsumerState<_AddMemberSheet> {
       _error = null;
     });
 
-    final days = _dob == null
-        ? null
-        : DateTime.now().difference(_dob!).inDays;
+    final days = _dob == null ? null : DateTime.now().difference(_dob!).inDays;
     final person = Person(
       id: _uuid.v4(),
       householdId: widget.householdId,
@@ -1364,7 +1593,10 @@ class _AddMemberSheetState extends ConsumerState<_AddMemberSheet> {
                 children: [
                   const Text(
                     'Boy or girl?',
-                    style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(width: Gap.sm),
                   for (final s in Sex.values)
@@ -1447,6 +1679,31 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
   /// must never write a second row.
   bool _checkSaved = false;
 
+  /// The check runs as a conversation — one sign at a time. This is which
+  /// question the caregiver is on.
+  int _qIndex = 0;
+
+  /// A calm acknowledgement shown for a beat after each answer, before the
+  /// conversation walks on to the next sign.
+  String? _ack;
+  Timer? _ackTimer;
+
+  /// Steps the family has ticked off on the "do these now" card.
+  final Set<String> _doneSteps = {};
+
+  String get _language =>
+      ref.read(currentUserProvider)?.preferredLanguage ?? 'English';
+
+  List<String> get _chosenYes => _signs
+      .where((s) => _answers[s.$1] == _SignAnswer.yes)
+      .map((s) => s.$2)
+      .toList(growable: false);
+
+  List<String> get _chosenUnsure => _signs
+      .where((s) => _answers[s.$1] == _SignAnswer.unsure)
+      .map((s) => s.$2)
+      .toList(growable: false);
+
   static const _newbornSigns = [
     ('feed', 'Not breastfeeding or feeding well'),
     ('fast', 'Breathing fast or grunting'),
@@ -1491,16 +1748,53 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
 
   _TriageVerdict _verdict() {
     final yes = _answers.values.where((a) => a == _SignAnswer.yes).length;
-    final unsure =
-        _answers.values.where((a) => a == _SignAnswer.unsure).length;
+    final unsure = _answers.values.where((a) => a == _SignAnswer.unsure).length;
     if (yes > 0) return _TriageVerdict.urgent;
     if (unsure >= 2) return _TriageVerdict.caution;
     return _TriageVerdict.fine;
   }
 
-  void _set(String key, _SignAnswer value) => setState(() {
-    _answers[key] = value;
-  });
+  /// One answer in the conversation. The acknowledgement is the warmth —
+  /// a mother who says YES to a frightening sign is thanked, not alarmed,
+  /// and then the check walks on to the next sign by itself.
+  void _answer(String key, _SignAnswer value) {
+    _ackTimer?.cancel();
+    setState(() {
+      _answers[key] = value;
+      _ack = switch (value) {
+        _SignAnswer.yes =>
+          'Thank you for telling me. I have noted it — you did right to check.',
+        _SignAnswer.no => 'Good. That is what we hope to hear.',
+        _SignAnswer.unsure => 'That is okay. The nurse will look at this one.',
+        _SignAnswer.unset => null,
+      };
+    });
+    _ackTimer = Timer(const Duration(milliseconds: 800), () {
+      if (!mounted) return;
+      setState(() {
+        _ack = null;
+        if (_qIndex < _signs.length - 1) _qIndex += 1;
+      });
+      _playQuestion(_signs[_qIndex].$1, _language, quiet: true);
+    });
+  }
+
+  /// Jump straight to one question — the progress segments double as a
+  /// review strip, so a caregiver can revisit any answer.
+  void _showQuestion(int index) {
+    _ackTimer?.cancel();
+    setState(() {
+      _qIndex = index;
+      _ack = null;
+    });
+    _playQuestion(_signs[index].$1, _language, quiet: true);
+  }
+
+  @override
+  void dispose() {
+    _ackTimer?.cancel();
+    super.dispose();
+  }
 
   /// Keeps the family's report on this device. Deliberately fire-and-forget:
   /// a save hiccup must never stand between a mother and the advice "go to
@@ -1576,15 +1870,13 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
                   icon: const Icon(Icons.arrow_back_rounded),
                   onPressed: _back,
                 ),
-          title: Text(
-            switch (_stage) {
-              _Stage.pick => 'Who are you checking?',
-              _Stage.questions => 'What have you noticed?',
-              _Stage.result => 'What to do now',
-              _Stage.tellChw => 'Tell your CHW',
-              _Stage.watchFor => 'Watch for these at home',
-            },
-          ),
+          title: Text(switch (_stage) {
+            _Stage.pick => 'Who are you checking?',
+            _Stage.questions => 'What have you noticed?',
+            _Stage.result => 'What to do now',
+            _Stage.clinicPass => 'Clinic pass',
+            _Stage.watchFor => 'Watch for these at home',
+          }),
         ),
         body: members.when(
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -1593,7 +1885,7 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
             _Stage.pick => _buildPersonPicker(list),
             _Stage.questions => _buildChecklist(),
             _Stage.result => _buildResult(household.valueOrNull),
-            _Stage.tellChw => _buildTellChw(),
+            _Stage.clinicPass => _buildClinicPass(),
             _Stage.watchFor => _buildWatchFor(),
           },
         ),
@@ -1602,10 +1894,18 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
   }
 
   void _back() => setState(() {
+    // Inside the conversation the back arrow revisits the previous question;
+    // only at the first question does it leave the check.
+    if (_stage == _Stage.questions && _qIndex > 0) {
+      _qIndex -= 1;
+      _ack = null;
+      _ackTimer?.cancel();
+      return;
+    }
     _stage = switch (_stage) {
       _Stage.questions => _Stage.pick,
       _Stage.result => _Stage.questions,
-      _Stage.tellChw || _Stage.watchFor => _Stage.result,
+      _Stage.clinicPass || _Stage.watchFor => _Stage.result,
       _Stage.pick => _Stage.pick,
     };
   });
@@ -1615,6 +1915,9 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
     _person = null;
     _answers.clear();
     _checkSaved = false;
+    _qIndex = 0;
+    _ack = null;
+    _doneSteps.clear();
   });
 
   /// [44-C] → [13b]: stop any audio, leave the check, and let the dashboard
@@ -1664,27 +1967,41 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
         for (final p in list)
           _PersonCard(
             person: p,
-            onTap: () => setState(() {
-              _person = p;
-              _answers.clear();
-              _stage = _Stage.questions;
-            }),
+            onTap: () {
+              setState(() {
+                _person = p;
+                _answers.clear();
+                _qIndex = 0;
+                _stage = _Stage.questions;
+              });
+              // Voice-first: the first question is heard the moment the
+              // conversation opens.
+              final firstKey = switch (p.effectiveClientType) {
+                ClientType.newborn => _newbornSigns,
+                ClientType.childUnderFive => _childSigns,
+                _ => _motherSigns,
+              }[0].$1;
+              _playQuestion(firstKey, _language, quiet: true);
+            },
           ),
       ],
     );
   }
 
-  /// [41-C] The Quick Home Check — one adaptive screen, voice-first: every
-  /// question carries a speaker that plays it aloud *before* the caregiver
-  /// answers. That is what makes it genuinely voice-first, not just
-  /// voice-output-at-the-end.
+  /// [41-C] The Quick Home Check, as a conversation: one sign at a time,
+  /// heard aloud before it is answered, with three enormous answers and a
+  /// calm acknowledgement after each. A scrolling clinical list asks a
+  /// non-reading caregiver to hold eight questions in mind at once; a
+  /// conversation asks for exactly one. The progress segments double as a
+  /// review strip — tap any of them to revisit that answer.
   Widget _buildChecklist() {
     final person = _person!;
-    final language =
-        ref.read(currentUserProvider)?.preferredLanguage ?? 'English';
-    final answered =
-        _signs.where((s) => _answers[s.$1] != _SignAnswer.unset).length;
+    final answered = _signs
+        .where((s) => _answers[s.$1] != _SignAnswer.unset)
+        .length;
     final allAnswered = answered == _signs.length;
+    final index = _qIndex.clamp(0, _signs.length - 1);
+    final (key, label) = _signs[index];
 
     return Column(
       children: [
@@ -1692,52 +2009,76 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
           child: ListView(
             padding: const EdgeInsets.all(Gap.lg),
             children: [
-              Container(
-                padding: const EdgeInsets.all(Gap.md),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
-                  borderRadius: BorderRadius.circular(Gap.radiusSm),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.volume_up_rounded,
-                      color: AppColors.primary,
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'About ${person.fullName}',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                    const SizedBox(width: Gap.sm),
+                  ),
+                  Text(
+                    'Question ${index + 1} of ${_signs.length}',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.inkMuted,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: Gap.md),
+              // The review strip: one segment per sign, coloured by the
+              // answer it received, tap-any to revisit.
+              Row(
+                children: [
+                  for (var i = 0; i < _signs.length; i++) ...[
+                    if (i > 0) const SizedBox(width: Gap.xs),
                     Expanded(
-                      child: Text(
-                        'Tap the speaker beside each question to hear it in '
-                        '$language before you answer.',
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
-                          height: 1.35,
+                      child: GestureDetector(
+                        onTap: () => _showQuestion(i),
+                        child: Container(
+                          height: i == index ? 10 : 7,
+                          decoration: BoxDecoration(
+                            color:
+                                (_answers[_signs[i].$1] ?? _SignAnswer.unset) ==
+                                    _SignAnswer.unset
+                                ? i == index
+                                      ? AppColors.primary
+                                      : AppColors.line
+                                : (_answers[_signs[i].$1] ?? _SignAnswer.unset)
+                                      .colour,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
                         ),
                       ),
                     ),
                   ],
-                ),
+                ],
               ),
-              const SizedBox(height: Gap.md),
-              Text(
-                'About ${person.fullName} — tap YES, NO, or NOT SURE for each '
-                'sign.',
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppColors.inkMuted,
-                  height: 1.4,
+              const SizedBox(height: Gap.lg),
+              AnimatedSwitcher(
+                duration: AppMotion.fast,
+                transitionBuilder: (child, anim) => SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0.08, 0),
+                    end: Offset.zero,
+                  ).animate(anim),
+                  child: FadeTransition(opacity: anim, child: child),
                 ),
-              ),
-              const SizedBox(height: Gap.md),
-              for (final (key, label) in _signs)
-                _SignQuestionTile(
+                child: _SignQuestionCard(
+                  key: ValueKey(key),
                   question: label,
+                  icon: _iconForSign(key),
                   answer: _answers[key] ?? _SignAnswer.unset,
-                  onChanged: (v) => _set(key, v),
-                  onPlay: () => _playQuestion(key, language),
+                  ack: _ack,
+                  onChanged: (v) => _answer(key, v),
+                  onPlay: () => _playQuestion(key, _language),
                 ),
+              ),
               const SizedBox(height: Gap.md),
               const Text(
                 'These questions are about what anyone can see. They do not '
@@ -1757,9 +2098,7 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600,
-                  color: allAnswered
-                      ? AppColors.primary
-                      : AppColors.inkMuted,
+                  color: allAnswered ? AppColors.primary : AppColors.inkMuted,
                 ),
               ),
               const SizedBox(height: Gap.sm),
@@ -1778,6 +2117,31 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
       ],
     );
   }
+
+  /// A small pictogram per sign, so the question reads even before the
+  /// audio finishes. Icons are decoration — the words and the voice carry
+  /// the meaning.
+  IconData _iconForSign(String key) => switch (key) {
+    'feed' => Icons.child_care_outlined,
+    'drink' => Icons.local_drink_outlined,
+    'fast' => Icons.speed_outlined,
+    'breath' => Icons.air_outlined,
+    'fits' => Icons.flash_on_outlined,
+    'sleepy' => Icons.bedtime_outlined,
+    'temp' => Icons.device_thermostat_outlined,
+    'yellow' => Icons.brightness_6_outlined,
+    'cord' => Icons.healing_outlined,
+    'vomit' => Icons.sick_outlined,
+    'blood' => Icons.water_drop_outlined,
+    'thin' => Icons.monitor_weight_outlined,
+    'fever' => Icons.local_fire_department_outlined,
+    'bleed' => Icons.bloodtype_outlined,
+    'head' => Icons.visibility_off_outlined,
+    'pain' => Icons.health_and_safety_outlined,
+    'smell' => Icons.wind_power_outlined,
+    'move' => Icons.pregnant_woman_outlined,
+    _ => Icons.help_outline_rounded,
+  };
 
   Widget _buildResult(Household? household) {
     final verdict = _verdict();
@@ -1943,6 +2307,20 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
         ),
         const SizedBox(height: Gap.md),
 
+        // ------------------------- Do these now
+        // The verdict is a decision; this card is the plan around it. A
+        // family told "go now" still has to pack, find a ride and remember
+        // the book — the app walks them through it, tick by tick.
+        _DoThisNowCard(
+          verdict: verdict,
+          person: person,
+          done: _doneSteps,
+          onToggle: (id) => setState(() {
+            if (!_doneSteps.remove(id)) _doneSteps.add(id);
+          }),
+        ),
+        const SizedBox(height: Gap.md),
+
         // ------------------------- Three big action buttons
         // Master flow [42-C]: red and amber both route through "Tell your
         // CHW" [43-C]; green goes straight to the home-watch card [44-C].
@@ -1953,12 +2331,25 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
           onPrimary: () => setState(() {
             _stage = verdict == _TriageVerdict.fine
                 ? _Stage.watchFor
-                : _Stage.tellChw;
+                : _Stage.clinicPass;
           }),
           onHearAloud: () => _playVerdict(verdict),
           onCheckAnother: _restart,
         ),
         const SizedBox(height: Gap.md),
+
+        // ------------------------- Your words for the nurse
+        // "Go to the clinic" is only half a recommendation; this is the
+        // other half — the sentence she will actually say at the gate,
+        // built from her own answers, playable aloud and copyable.
+        if (verdict != _TriageVerdict.fine) ...[
+          _TellTheNurseCard(
+            message: _nurseWords(person),
+            onPlay: _playWords,
+            onCopy: () => _copyWords(_nurseWords(person)),
+          ),
+          const SizedBox(height: Gap.md),
+        ],
 
         // ------------------------- Feeding today
         // The check ends with what the family CAN do, not only what is
@@ -1998,66 +2389,182 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
     _TriageVerdict.fine => Icons.check_circle_rounded,
   };
 
-  /// [43-C] Tell your CHW. A caregiver never dispatches a clinical referral —
-  /// that authority stays with the FHW. What she gets instead is her own
-  /// words, pre-filled from what she just answered, sendable from her own
-  /// phone — or a plain prompt to walk to the compound.
-  Widget _buildTellChw() {
-    final user = ref.read(currentUserProvider);
+  /// [43-C] Clinic Pass. A digital ticket the mother shows the nurse.
+  /// Generates a high-contrast QR code containing the triage data,
+  /// bypassing the need for SMS credit or network connectivity.
+  Widget _buildClinicPass() {
     final person = _person!;
-    final message = _chwMessage(user, person, _verdict());
+    final verdict = _verdict();
+    final isUrgent = verdict == _TriageVerdict.urgent;
+
+    // A dense JSON payload for the QR code — the nurse sees exactly what
+    // the family reported, with no SMS credit and no network.
+    final payload = {
+      'p': person.id,
+      'n': person.fullName,
+      'a': person.ageInDays,
+      'v': verdict.name,
+      'y': _chosenYes,
+      'u': _chosenUnsure,
+      't': DateTime.now().toIso8601String(),
+    };
+    final qrData = jsonEncode(payload);
 
     return ListView(
       padding: const EdgeInsets.all(Gap.lg),
       children: [
-        SectionCard(
-          title: 'Message for your CHW',
-          subtitle:
-              'Filled in from what you just answered. Read it before you '
-              'send — they are your words, not the app\u2019s.',
-          icon: Icons.mark_chat_read_rounded,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(Gap.md),
-            decoration: BoxDecoration(
-              color: AppColors.canvas,
-              borderRadius: BorderRadius.circular(Gap.radiusSm),
-              border: Border.all(color: AppColors.line),
+        Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back_rounded),
+              onPressed: () => setState(() => _stage = _Stage.result),
             ),
-            child: Text(
-              message,
-              style: const TextStyle(fontSize: 13.5, height: 1.55),
+            const SizedBox(width: Gap.sm),
+            const Text(
+              'Clinic Pass',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: AppColors.ink,
+              ),
             ),
-          ),
+          ],
         ),
         const SizedBox(height: Gap.md),
         const Text(
-          'Send it from your own phone, or walk to the CHPS compound and '
-          'show this screen. You are only telling the nurse what you saw — '
-          'she decides what happens next.',
+          'Show this screen to the nurse when you arrive at the CHPS compound. '
+          'She will scan it to see exactly what you reported.',
           style: TextStyle(
-            fontSize: 12.5,
+            fontSize: 14,
             color: AppColors.inkMuted,
             height: 1.45,
           ),
         ),
-        const SizedBox(height: Gap.lg),
+        const SizedBox(height: Gap.xl),
+
+        // The Ticket
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(Gap.radius),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.ink.withValues(alpha: 0.08),
+                blurRadius: 24,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              // Ticket Header (Colored by triage)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  vertical: Gap.md,
+                  horizontal: Gap.lg,
+                ),
+                decoration: BoxDecoration(
+                  color: isUrgent ? AppColors.triageRed : AppColors.triageAmber,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(Gap.radius),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      isUrgent ? 'URGENT EVALUATION' : 'ROUTINE CHECK',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: Gap.xs),
+                    Text(
+                      person.fullName.toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Ticket Body (QR + Text)
+              Padding(
+                padding: const EdgeInsets.all(Gap.xl),
+                child: Column(
+                  children: [
+                    QrImageView(
+                      data: qrData,
+                      version: QrVersions.auto,
+                      size: 200.0,
+                      backgroundColor: Colors.white,
+                      eyeStyle: const QrEyeStyle(
+                        eyeShape: QrEyeShape.square,
+                        color: AppColors.ink,
+                      ),
+                      dataModuleStyle: const QrDataModuleStyle(
+                        dataModuleShape: QrDataModuleShape.square,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                    const SizedBox(height: Gap.lg),
+                    const Text(
+                      'SCAN AT CLINIC',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.inkMuted,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                    const SizedBox(height: Gap.xl),
+
+                    // Human readable summary
+                    if (_chosenYes.isNotEmpty) ...[
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Primary signs:',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.inkMuted,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: Gap.xs),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          _chosenYes.join('\\n'),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.ink,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: Gap.xxl),
+
         GradientButton(
-          label: 'Open your SMS app',
-          icon: Icons.sms_outlined,
-          onPressed: () => _sendSms(message),
-        ),
-        const SizedBox(height: Gap.sm),
-        OutlinedButton.icon(
-          onPressed: () => _copyMessage(message),
-          icon: const Icon(Icons.copy_rounded),
-          label: const Text('Copy the message'),
-        ),
-        const SizedBox(height: Gap.sm),
-        FilledButton.icon(
+          label: 'I have arrived',
+          icon: Icons.check_circle_outline_rounded,
           onPressed: () => setState(() => _stage = _Stage.watchFor),
-          icon: const Icon(Icons.directions_walk_rounded),
-          label: const Text('I will go in person'),
         ),
       ],
     );
@@ -2106,9 +2613,7 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
                   Expanded(
                     child: Text(
                       'Come back immediately if\u2026',
-                      style: AppType.title.copyWith(
-                        color: AppColors.triageRed,
-                      ),
+                      style: AppType.title.copyWith(color: AppColors.triageRed),
                     ),
                   ),
                 ],
@@ -2178,60 +2683,18 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
     );
   }
 
-  /// The caregiver's own words for the CHW, assembled from her answers.
-  /// Never a placeholder — every line comes from something she tapped.
-  String _chwMessage(AppUser? user, Person person, _TriageVerdict verdict) {
-    final yes = _signs
-        .where((s) => _answers[s.$1] == _SignAnswer.yes)
-        .map((s) => s.$2)
-        .toList(growable: false);
-    final unsure = _signs
-        .where((s) => _answers[s.$1] == _SignAnswer.unsure)
-        .map((s) => s.$2)
-        .toList(growable: false);
-
-    final lines = <String>[
-      'CareBridge AI - message for the CHW',
-      if (user != null) 'From: ${user.fullName}',
-      'About: ${person.fullName} (${person.ageLabel})',
-      if (yes.isNotEmpty) 'Signs I noticed: ${yes.join('; ')}',
-      if (unsure.isNotEmpty) 'Not sure about: ${unsure.join('; ')}',
-      'Advice the app gave: ${verdict.headline}.',
-    ];
-    return lines.join('\n');
-  }
-
-  /// Hands the message to the phone's SMS app. If this device cannot open
-  /// one — a tablet, the web preview — the message is copied instead, so it
-  /// is never lost.
-  Future<void> _sendSms(String message) async {
-    final uri = Uri.parse('sms:?body=${Uri.encodeComponent(message)}');
-    try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri);
-        return;
-      }
-    } catch (_) {
-      // Fall through to the clipboard.
-    }
-    if (!mounted) return;
-    _copyMessage(message);
-  }
-
-  void _copyMessage(String message) {
-    Clipboard.setData(ClipboardData(text: message));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Message copied. Paste it into any message app.'),
-      ),
-    );
-  }
-
   /// One question, heard aloud. Falls back to system TTS, then the Hausa
   /// bridge, then the on-screen text — care never waits on an MP3.
-  Future<void> _playQuestion(String key, String language) async {
+  Future<void> _playQuestion(
+    String key,
+    String language, {
+    // Auto-played questions fail silently — a missing recording must not
+    // snack-bar the caregiver eight times in a row. Manual taps still get
+    // the honest fallback note.
+    bool quiet = false,
+  }) async {
     final outcome = await AudioGuide.playQuestion(key, language);
-    if (!mounted) return;
+    if (!mounted || quiet) return;
     if (outcome.source == VoiceSource.readAloud) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -2267,6 +2730,48 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
         ),
       );
     }
+  }
+
+  /// The caregiver's own words for the nurse, assembled from what she just
+  /// tapped — so the gate conversation starts with her observation, not with
+  /// a queue number. Never a placeholder: every line is something she said.
+  String _nurseWords(Person person) {
+    final parts = <String>[
+      'Please look at ${person.fullName} (${person.ageLabel}) first.',
+      if (_chosenYes.isNotEmpty)
+        'What I noticed: ${_chosenYes.map((s) => s.toLowerCase()).join('; ')}.',
+      if (_chosenUnsure.isNotEmpty)
+        'I was not sure about: '
+            '${_chosenUnsure.map((s) => s.toLowerCase()).join('; ')}.',
+      'I will say when each sign started.',
+    ];
+    return parts.join(' ');
+  }
+
+  Future<void> _playWords() async {
+    final outcome = await VoiceService.speakText(
+      id: 'caregiver_nurse_words',
+      text: _nurseWords(_person!),
+      language: _language,
+    );
+    if (!mounted) return;
+    if (outcome.source == VoiceSource.readAloud) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'The $_language voice is not on this phone yet. The words are on '
+            'the screen — read them aloud, or ask someone to.',
+          ),
+        ),
+      );
+    }
+  }
+
+  void _copyWords(String message) {
+    Clipboard.setData(ClipboardData(text: message));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Copied. Paste it into any message app.')),
+    );
   }
 }
 
@@ -2350,16 +2855,24 @@ class _PersonCard extends StatelessWidget {
   }
 }
 
-class _SignQuestionTile extends StatelessWidget {
-  const _SignQuestionTile({
+/// One question of the conversation: a pictogram, the question in large
+/// type, a prominent "hear it aloud" button and three enormous answers.
+/// Everything a non-reading caregiver needs is a single thumb-reach away.
+class _SignQuestionCard extends StatelessWidget {
+  const _SignQuestionCard({
+    super.key,
     required this.question,
+    required this.icon,
     required this.answer,
+    required this.ack,
     required this.onChanged,
     required this.onPlay,
   });
 
   final String question;
+  final IconData icon;
   final _SignAnswer answer;
+  final String? ack;
   final ValueChanged<_SignAnswer> onChanged;
 
   /// Voice-first, master flow [41-C]: hear the question before answering it.
@@ -2367,97 +2880,108 @@ class _SignQuestionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Gap.sm),
-      child: Container(
-        padding: const EdgeInsets.all(Gap.md),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(Gap.radiusSm),
-          border: Border.all(
-            color: answer == _SignAnswer.unset
-                ? AppColors.line
-                : answer.colour,
-            width: answer == _SignAnswer.unset ? 1 : 1.6,
-          ),
+    return Container(
+      padding: const EdgeInsets.all(Gap.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(Gap.radius),
+        border: Border.all(
+          color: answer == _SignAnswer.unset ? AppColors.line : answer.colour,
+          width: answer == _SignAnswer.unset ? 1 : 1.6,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: const BoxDecoration(
+                  color: AppColors.primaryLight,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 30, color: AppColors.primary),
+              ),
+              const SizedBox(width: Gap.md),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: Gap.xs),
                   child: Text(
                     question,
                     style: const TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 17.5,
+                      fontWeight: FontWeight.w800,
                       height: 1.3,
                     ),
                   ),
                 ),
-                // The speaker is not a decoration — it is the first thing a
-                // non-reading caregiver should touch.
-                SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: IconButton(
-                    tooltip: 'Hear this question aloud',
-                    padding: EdgeInsets.zero,
-                    iconSize: 26,
-                    onPressed: onPlay,
-                    icon: const Icon(
-                      Icons.volume_up_rounded,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: Gap.md),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              side: const BorderSide(color: AppColors.primary, width: 1.2),
+              minimumSize: const Size.fromHeight(46),
             ),
-            const SizedBox(height: Gap.sm),
-            Row(
-              children: [
-                Expanded(
-                  child: _AnswerChip(
-                    label: 'YES',
-                    icon: Icons.check_rounded,
-                    selected: answer == _SignAnswer.yes,
-                    colour: AppColors.triageRed,
-                    onTap: () => onChanged(_SignAnswer.yes),
-                  ),
-                ),
-                const SizedBox(width: Gap.xs),
-                Expanded(
-                  child: _AnswerChip(
-                    label: 'NO',
-                    icon: Icons.close_rounded,
-                    selected: answer == _SignAnswer.no,
-                    colour: AppColors.triageGreen,
-                    onTap: () => onChanged(_SignAnswer.no),
-                  ),
-                ),
-                const SizedBox(width: Gap.xs),
-                Expanded(
-                  child: _AnswerChip(
-                    label: 'NOT SURE',
-                    icon: Icons.help_rounded,
-                    selected: answer == _SignAnswer.unsure,
-                    colour: AppColors.triageAmber,
-                    onTap: () => onChanged(_SignAnswer.unsure),
-                  ),
-                ),
-              ],
+            onPressed: onPlay,
+            icon: const Icon(Icons.volume_up_rounded, size: 20),
+            label: const Text(
+              'Hear it aloud',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+          ),
+          const SizedBox(height: Gap.md),
+          _BigAnswer(
+            label: 'YES',
+            icon: Icons.check_rounded,
+            selected: answer == _SignAnswer.yes,
+            colour: AppColors.triageRed,
+            onTap: () => onChanged(_SignAnswer.yes),
+          ),
+          const SizedBox(height: Gap.sm),
+          _BigAnswer(
+            label: 'NO',
+            icon: Icons.close_rounded,
+            selected: answer == _SignAnswer.no,
+            colour: AppColors.triageGreen,
+            onTap: () => onChanged(_SignAnswer.no),
+          ),
+          const SizedBox(height: Gap.sm),
+          _BigAnswer(
+            label: 'NOT SURE',
+            icon: Icons.help_rounded,
+            selected: answer == _SignAnswer.unsure,
+            colour: AppColors.triageAmber,
+            onTap: () => onChanged(_SignAnswer.unsure),
+          ),
+          if (ack != null) ...[
+            const SizedBox(height: Gap.md),
+            Text(
+              ack!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontStyle: FontStyle.italic,
+                color: AppColors.inkMuted,
+                height: 1.4,
+              ),
             ),
           ],
-        ),
+        ],
       ),
     );
   }
 }
 
-class _AnswerChip extends StatelessWidget {
-  const _AnswerChip({
+/// A full-width, 56px answer — big enough for a thumb, a worried thumb
+/// especially.
+class _BigAnswer extends StatelessWidget {
+  const _BigAnswer({
     required this.label,
     required this.icon,
     required this.selected,
@@ -2475,27 +2999,25 @@ class _AnswerChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: selected ? colour : colour.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(Gap.radiusSm),
       child: InkWell(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(Gap.radiusSm),
         onTap: onTap,
         child: Container(
-          height: 46,
+          height: 56,
           alignment: Alignment.center,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 15, color: selected ? Colors.white : colour),
-              const SizedBox(width: 4),
-              Flexible(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w800,
-                    color: selected ? Colors.white : colour,
-                    letterSpacing: 0.4,
-                  ),
+              Icon(icon, size: 18, color: selected ? Colors.white : colour),
+              const SizedBox(width: Gap.sm),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.6,
+                  color: selected ? Colors.white : colour,
                 ),
               ),
             ],
@@ -2608,9 +3130,313 @@ class _ActionButton extends StatelessWidget {
             icon: Icon(icon, size: 20),
             label: Text(
               label,
-              style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                fontSize: 15.5,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           );
+  }
+}
+
+/// The plan around the verdict: concrete, tickable steps a family can do
+/// right now — pack the book, find a ride, keep breastfeeding — because
+/// "go to the clinic" without the steps between the door and the gate is
+/// only half a recommendation.
+class _DoThisNowCard extends StatelessWidget {
+  const _DoThisNowCard({
+    required this.verdict,
+    required this.person,
+    required this.done,
+    required this.onToggle,
+  });
+
+  final _TriageVerdict verdict;
+  final Person person;
+  final Set<String> done;
+  final ValueChanged<String> onToggle;
+
+  String get _title => switch (verdict) {
+    _TriageVerdict.urgent => 'Do these now — even on the way',
+    _TriageVerdict.caution => 'Do these today',
+    _TriageVerdict.fine => 'Keep doing these',
+  };
+
+  List<(String, IconData, String)> _steps(Person person) {
+    final first = person.fullName.split(' ').first;
+    final mother =
+        person.effectiveClientType != ClientType.newborn &&
+        person.effectiveClientType != ClientType.childUnderFive;
+    return switch (verdict) {
+      _TriageVerdict.urgent => [
+        (
+          'book',
+          Icons.menu_book_outlined,
+          'Carry the health record book — the nurse will ask for it.',
+        ),
+        (
+          'ride',
+          Icons.two_wheeler_outlined,
+          'Arrange a ride now. A neighbour\u2019s motorbike is fine — do not '
+              'wait for a better one.',
+        ),
+        (
+          'feed',
+          Icons.local_drink_outlined,
+          mother
+              ? 'If she can swallow, give sips of water or fluids. If not, '
+                    'do not force anything by mouth.'
+              : 'If $first can swallow, keep breastfeeding or give sips of '
+                    'fluid. If not, do not force anything by mouth.',
+        ),
+        (
+          'company',
+          Icons.group_outlined,
+          'Go with someone if you can — a second person helps to carry and '
+              'to explain.',
+        ),
+        (
+          'words',
+          Icons.record_voice_over_outlined,
+          'At the gate, say what you noticed and when it started — or show '
+              'the clinic pass below.',
+        ),
+      ],
+      _TriageVerdict.caution => [
+        (
+          'see',
+          Icons.medical_services_outlined,
+          'Show $first to your CHW or the clinic within a day or two — do '
+              'not wait for the next scheduled visit.',
+        ),
+        (
+          'watch',
+          Icons.visibility_outlined,
+          'Watch morning and evening. If any danger sign appears, go to the '
+              'facility the same day.',
+        ),
+        (
+          'feed',
+          Icons.local_drink_outlined,
+          'Keep feeding and drinking as normal — small amounts, often.',
+        ),
+        (
+          'note',
+          Icons.edit_note_outlined,
+          'Remember when each sign started — the nurse will ask.',
+        ),
+      ],
+      _TriageVerdict.fine => [
+        (
+          'feed',
+          Icons.restaurant_outlined,
+          mother
+              ? 'Rest when the baby rests, and eat one extra meal a day.'
+              : 'Keep feeding as you are — breastmilk, thick porridge and '
+                    'family foods.',
+        ),
+        (
+          'check',
+          Icons.refresh_rounded,
+          'Check again tomorrow, or any time something worries you.',
+        ),
+        (
+          'play',
+          Icons.sports_handball_outlined,
+          mother
+              ? 'Talk, sing and cuddle the baby every day — a child who is '
+                    'played with, learns.'
+              : 'Play and talk with $first every day — a child who is '
+                    'played with, learns.',
+        ),
+      ],
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final steps = _steps(person);
+    final doneCount = steps.where((s) => done.contains(s.$1)).length;
+    final colour = verdict.colour;
+    return Container(
+      padding: const EdgeInsets.all(Gap.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(Gap.radius),
+        border: Border.all(color: colour.withValues(alpha: 0.35), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(Gap.xs + 2),
+                decoration: BoxDecoration(
+                  color: colour.withValues(alpha: 0.14),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.checklist_rounded, size: 20, color: colour),
+              ),
+              const SizedBox(width: Gap.sm),
+              Expanded(
+                child: Text(
+                  _title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w800,
+                    color: colour,
+                  ),
+                ),
+              ),
+              Text(
+                '$doneCount of ${steps.length} done',
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.inkMuted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Gap.sm),
+          for (final (id, icon, text) in steps)
+            InkWell(
+              onTap: () => onToggle(id),
+              borderRadius: BorderRadius.circular(Gap.radiusXs),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: Gap.xs + 2),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      done.contains(id) ? Icons.check_circle_rounded : icon,
+                      size: 20,
+                      color: done.contains(id)
+                          ? AppColors.triageGreen
+                          : AppColors.inkMuted,
+                    ),
+                    const SizedBox(width: Gap.sm),
+                    Expanded(
+                      child: Text(
+                        text,
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.45,
+                          color: done.contains(id)
+                              ? AppColors.inkMuted
+                              : AppColors.ink,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (doneCount == steps.length)
+            const Padding(
+              padding: EdgeInsets.only(top: Gap.xs),
+              child: Text(
+                'Well done — you are doing everything right.',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.triageGreen,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The caregiver's own observation, composed into the sentence she will say
+/// at the gate — playable aloud so the words travel even if her confidence
+/// does not, and copyable for any message app.
+class _TellTheNurseCard extends StatelessWidget {
+  const _TellTheNurseCard({
+    required this.message,
+    required this.onPlay,
+    required this.onCopy,
+  });
+
+  final String message;
+  final VoidCallback onPlay;
+  final VoidCallback onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(Gap.md),
+      decoration: BoxDecoration(
+        color: AppColors.primaryLight,
+        borderRadius: BorderRadius.circular(Gap.radius),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.record_voice_over_outlined,
+                size: 20,
+                color: AppColors.primary,
+              ),
+              SizedBox(width: Gap.sm),
+              Expanded(
+                child: Text(
+                  'YOUR WORDS FOR THE NURSE',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Gap.sm),
+          Text(
+            message,
+            style: const TextStyle(
+              fontSize: 13.5,
+              height: 1.5,
+              color: AppColors.ink,
+            ),
+          ),
+          const SizedBox(height: Gap.sm),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    minimumSize: const Size.fromHeight(44),
+                  ),
+                  onPressed: onPlay,
+                  icon: const Icon(Icons.volume_up_rounded, size: 18),
+                  label: const Text('Hear it aloud'),
+                ),
+              ),
+              const SizedBox(width: Gap.sm),
+              Expanded(
+                child: TextButton.icon(
+                  onPressed: onCopy,
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                  label: const Text('Copy the words'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -2700,8 +3526,7 @@ class _FamilyFeedingCard extends StatelessWidget {
       image: AppImages.foodMilletPorridge,
       name: 'Millet porridge',
       local: 'Za',
-      reason:
-          'Warm porridge keeps your strength up and helps your milk flow.',
+      reason: 'Warm porridge keeps your strength up and helps your milk flow.',
     ),
     (
       image: AppImages.foodCowpeaStew,
@@ -2959,8 +3784,10 @@ class _SignsCard extends StatelessWidget {
                   margin: const EdgeInsets.only(top: 6),
                   width: 9,
                   height: 9,
-                  decoration:
-                      BoxDecoration(color: colour, shape: BoxShape.circle),
+                  decoration: BoxDecoration(
+                    color: colour,
+                    shape: BoxShape.circle,
+                  ),
                 ),
                 const SizedBox(width: Gap.sm),
                 Expanded(
@@ -3073,7 +3900,7 @@ class _ReferralTile extends ConsumerWidget {
           const SizedBox(height: Gap.xs),
           Text(
             'Go to: ${referral.facilityName} · ${referral.urgency.label} · '
-                '${referral.status.label}',
+            '${referral.status.label}',
             style: const TextStyle(
               fontSize: 12.5,
               color: AppColors.inkMuted,
@@ -3109,9 +3936,7 @@ class _ContactsSection extends ConsumerWidget {
               'Arriving on the day saves a second trip.',
           icon: Icons.event_available_rounded,
           child: Column(
-            children: [
-              for (final c in list) _ContactTile(contact: c),
-            ],
+            children: [for (final c in list) _ContactTile(contact: c)],
           ),
         );
       },
@@ -3169,9 +3994,7 @@ class _ContactTile extends ConsumerWidget {
                   '${_dueLabel(contact.daysUntilDue)}',
                   style: TextStyle(
                     fontSize: 12.5,
-                    color: overdue
-                        ? AppColors.triageAmber
-                        : AppColors.inkMuted,
+                    color: overdue ? AppColors.triageAmber : AppColors.inkMuted,
                     fontWeight: overdue ? FontWeight.w700 : FontWeight.w500,
                   ),
                 ),
@@ -3508,7 +4331,8 @@ class _AudioGuideScreenState extends ConsumerState<_AudioGuideScreen> {
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
     final household = ref.watch(householdProvider(widget.householdId));
-    final region = household.valueOrNull?.region ?? user?.region ?? 'Northern Region';
+    final region =
+        household.valueOrNull?.region ?? user?.region ?? 'Northern Region';
     final languages = NorthernGhana.languagesOf(region);
     final language = _language ?? user?.preferredLanguage ?? 'English';
 
@@ -3597,8 +4421,10 @@ class _AudioGuideScreenState extends ConsumerState<_AudioGuideScreen> {
     }
     final outcome = await AudioGuide.play(topic, language);
     if (!mounted) return;
-    setState(() => _playing =
-        outcome.source == VoiceSource.readAloud ? null : topic.id);
+    setState(
+      () =>
+          _playing = outcome.source == VoiceSource.readAloud ? null : topic.id,
+    );
     if (outcome.source == VoiceSource.readAloud) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -3694,6 +4520,8 @@ class _GrowChildTile extends StatelessWidget {
             ),
           ),
           const SizedBox(height: Gap.sm),
+          _GrowthStoryStrip(child: child),
+          const SizedBox(height: Gap.sm),
           OutlinedButton.icon(
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(
@@ -3712,6 +4540,172 @@ class _GrowChildTile extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// The same trajectory the health worker sees on the verdict screen,
+/// translated into family words — one engine, two honest voices. The
+/// numbers come from the measurements the health worker recorded; when
+/// there are not enough of them, the strip says so instead of guessing.
+/// A voice button reads it aloud, because this screen must work for eyes
+/// that do not read.
+class _GrowthStoryStrip extends ConsumerWidget {
+  const _GrowthStoryStrip({required this.child});
+
+  final Person child;
+
+  String get _first => child.fullName.split(' ').first;
+
+  String _gainDetail(TrajectoryResult t) {
+    final parts = <String>[];
+    final w = t.weightChangePerMonth;
+    if (w != null && w > 0) {
+      parts.add('about ${(w * 1000).round()} g heavier each month');
+    }
+    final m = t.muacChangePerMonth;
+    if (m != null && m > 0) {
+      parts.add('about ${m.toStringAsFixed(1)} cm more around the arm');
+    }
+    if (parts.isEmpty) {
+      return 'Keep up the feeding and the play — it is working.';
+    }
+    return 'Gaining ${parts.join(' and ')}. Keep up the feeding and the play.';
+  }
+
+  Future<void> _speak(WidgetRef ref, String text) async {
+    final user = ref.read(currentUserProvider);
+    await VoiceService.speakText(
+      id: 'caregiver_growth_story_${child.id}',
+      text: text,
+      language: user?.preferredLanguage ?? 'English',
+    );
+  }
+
+  Widget _strip({
+    required IconData icon,
+    required Color accent,
+    required String headline,
+    required String detail,
+    required WidgetRef ref,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(Gap.md),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(Gap.radiusSm),
+        border: Border.all(color: accent.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: accent),
+          const SizedBox(width: Gap.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  headline,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                    color: accent,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  detail,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.inkMuted,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: Gap.xs),
+                Text(
+                  'Measured by the health worker — you see the same story '
+                  'they see.',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: AppColors.inkFaint,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Hear this',
+            onPressed: () => _speak(ref, '$headline $detail'),
+            icon: Icon(Icons.volume_up_rounded, color: accent, size: 22),
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ref
+        .watch(trajectoryProvider(child.id))
+        .when(
+          loading: () => const SizedBox.shrink(),
+          error: (_, _) => const SizedBox.shrink(),
+          data: (t) {
+            if (t.trend == GrowthTrend.insufficientData) {
+              return _strip(
+                icon: Icons.hourglass_bottom_rounded,
+                accent: AppColors.inkMuted,
+                headline:
+                    'The growth story starts after the second measurement.',
+                detail:
+                    'Once $_first is measured at least twice, this space will '
+                    'show which way they are going.',
+                ref: ref,
+              );
+            }
+            final (accent, icon, headline, detail) = switch (t.trend) {
+              GrowthTrend.rising => (
+                AppColors.triageGreen,
+                Icons.trending_up_rounded,
+                '$_first is growing well.',
+                _gainDetail(t),
+              ),
+              GrowthTrend.flat => (
+                AppColors.triageAmber,
+                Icons.trending_flat_rounded,
+                '$_first has not been gaining between visits.',
+                'A young child who is not gaining needs to be seen — go to the '
+                    'clinic this week.',
+              ),
+              GrowthTrend.falling => (
+                AppColors.triageRed,
+                Icons.trending_down_rounded,
+                '$_first is getting thinner between visits.',
+                t.daysToSamThreshold != null
+                    ? 'At this pace the danger line is about '
+                          '${(t.daysToSamThreshold! / 7).round().clamp(1, 52)} '
+                          'weeks away. Go to the clinic today if you can.'
+                    : 'Go to the clinic this week — earlier is better.',
+              ),
+              GrowthTrend.insufficientData => (
+                AppColors.inkMuted,
+                Icons.hourglass_bottom_rounded,
+                '',
+                '',
+              ),
+            };
+            return _strip(
+              icon: icon,
+              accent: accent,
+              headline: headline,
+              detail: detail,
+              ref: ref,
+            );
+          },
+        );
   }
 }
 
@@ -3738,6 +4732,28 @@ class _MilestoneScreenState extends ConsumerState<_MilestoneScreen> {
   final Map<String, bool> _answers = {};
   bool _saved = false;
   bool _showResult = false;
+
+  /// The child's last check BEFORE this run — read in [initState], before
+  /// saving, so the result screen can celebrate what changed. Null on a
+  /// first check, where there is nothing to compare yet.
+  MilestoneCheck? _previous;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(_loadPrevious);
+  }
+
+  Future<void> _loadPrevious() async {
+    try {
+      final prev = await ref.read(
+        latestMilestoneCheckProvider(widget.personId).future,
+      );
+      if (mounted) setState(() => _previous = prev);
+    } catch (_) {
+      // No history to compare: the progress memory simply never renders.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3775,8 +4791,9 @@ class _MilestoneScreenState extends ConsumerState<_MilestoneScreen> {
   }
 
   Widget _buildQuestions(Person person, NcAgeBand band) {
-    final answered =
-        band.milestones.where((m) => _answers.containsKey(m.id)).length;
+    final answered = band.milestones
+        .where((m) => _answers.containsKey(m.id))
+        .length;
     final allAnswered = answered == band.milestones.length;
 
     return Column(
@@ -3796,11 +4813,12 @@ class _MilestoneScreenState extends ConsumerState<_MilestoneScreen> {
                 ),
               ),
               const SizedBox(height: Gap.md),
-              for (final m in band.milestones) _MilestoneQuestionTile(
-                milestone: m,
-                answer: _answers[m.id],
-                onChanged: (v) => setState(() => _answers[m.id] = v),
-              ),
+              for (final m in band.milestones)
+                _MilestoneQuestionTile(
+                  milestone: m,
+                  answer: _answers[m.id],
+                  onChanged: (v) => setState(() => _answers[m.id] = v),
+                ),
               const SizedBox(height: Gap.md),
               const Text(
                 'This is your report, not a diagnosis. The health worker '
@@ -3820,9 +4838,7 @@ class _MilestoneScreenState extends ConsumerState<_MilestoneScreen> {
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600,
-                  color: allAnswered
-                      ? AppColors.primary
-                      : AppColors.inkMuted,
+                  color: allAnswered ? AppColors.primary : AppColors.inkMuted,
                 ),
               ),
               const SizedBox(height: Gap.sm),
@@ -3872,7 +4888,8 @@ class _MilestoneScreenState extends ConsumerState<_MilestoneScreen> {
                     switch (verdict) {
                       MilestoneVerdict.onTrack => Icons.emoji_events_rounded,
                       MilestoneVerdict.watch => Icons.visibility_rounded,
-                      MilestoneVerdict.flag => Icons.medical_information_rounded,
+                      MilestoneVerdict.flag =>
+                        Icons.medical_information_rounded,
                     },
                     color: verdict.colour,
                     size: 28,
@@ -3891,27 +4908,37 @@ class _MilestoneScreenState extends ConsumerState<_MilestoneScreen> {
                 ],
               ),
               const SizedBox(height: Gap.sm),
-              Text(
-                switch (verdict) {
-                  MilestoneVerdict.onTrack =>
-                    '${person.fullName.split(' ').first} is doing what children '
-                        'this age usually do. Keep playing — play is how the '
-                        'brain grows.',
-                  MilestoneVerdict.watch =>
-                    'Some things are still coming. Play the ideas below every '
-                        'day and check again in a few weeks. Every child has '
-                        'their own pace.',
-                  MilestoneVerdict.flag =>
-                    'Show ${person.fullName.split(' ').first} to the health '
-                        'worker at the next contact. This is not a diagnosis '
-                        '— it means these are worth a proper look.',
-                },
-                style: const TextStyle(fontSize: 14, height: 1.45),
-              ),
+              Text(switch (verdict) {
+                MilestoneVerdict.onTrack =>
+                  '${person.fullName.split(' ').first} is doing what children '
+                      'this age usually do. Keep playing — play is how the '
+                      'brain grows.',
+                MilestoneVerdict.watch =>
+                  'Some things are still coming. Play the ideas below every '
+                      'day and check again in a few weeks. Every child has '
+                      'their own pace.',
+                MilestoneVerdict.flag =>
+                  'Show ${person.fullName.split(' ').first} to the health '
+                      'worker at the next contact. This is not a diagnosis '
+                      '— it means these are worth a proper look.',
+              }, style: const TextStyle(fontSize: 14, height: 1.45)),
             ],
           ),
         ),
         const SizedBox(height: Gap.md),
+
+        // The nurturing-care closed loop, family side: the app remembers
+        // the last check and shows what changed since. Compared strictly
+        // from two checks this family recorded — nothing invented.
+        if (_previous != null) ...[
+          _ProgressMemoryCard(
+            firstName: person.fullName.split(' ').first,
+            previous: _previous!,
+            band: band,
+            answers: _answers,
+          ),
+          const SizedBox(height: Gap.md),
+        ],
 
         if (notYet.isNotEmpty)
           SectionCard(
@@ -4056,6 +5083,113 @@ class _MilestoneScreenState extends ConsumerState<_MilestoneScreen> {
   }
 }
 
+/// "Look how far they've come." Every milestone check is saved, so the
+/// second time a family runs one, the app can compare — the questions the
+/// child could not do last time and now can. It is the nurturing-care
+/// closed loop seen from the family's side, and it is built only from the
+/// family's own recorded checks: if nothing improved, the card says so
+/// gently instead of inventing progress.
+class _ProgressMemoryCard extends StatelessWidget {
+  const _ProgressMemoryCard({
+    required this.firstName,
+    required this.previous,
+    required this.band,
+    required this.answers,
+  });
+
+  final String firstName;
+  final MilestoneCheck previous;
+  final NcAgeBand band;
+  final Map<String, bool> answers;
+
+  @override
+  Widget build(BuildContext context) {
+    // Compare last run's "not yet" against this run's answers. Only
+    // questions that still exist in the current band can be compared —
+    // the band changes as the child grows.
+    final questionToId = {for (final m in band.milestones) m.question: m.id};
+    final newly = <String>[];
+    final stillPracticing = <String>[];
+    for (final q in previous.notYet) {
+      final id = questionToId[q];
+      if (id == null) continue;
+      if (answers[id] == true) {
+        newly.add(q);
+      } else if (answers[id] == false) {
+        stillPracticing.add(q);
+      }
+    }
+    final when = DateFormat('d MMM').format(previous.checkedAt);
+
+    return SectionCard(
+      title: 'Look how far they\u2019ve come',
+      icon: Icons.stars_rounded,
+      accent: AppColors.triageGreen,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (newly.isNotEmpty) ...[
+            Text(
+              'Since the check on $when, $firstName learned:',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: Gap.xs),
+            for (final q in newly)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Gap.xs),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.check_circle_rounded,
+                      color: AppColors.triageGreen,
+                    ),
+                    const SizedBox(width: Gap.xs),
+                    Expanded(
+                      child: Text(
+                        q,
+                        style: const TextStyle(fontSize: 14.5, height: 1.4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (stillPracticing.isNotEmpty) ...[
+              const SizedBox(height: Gap.xs),
+              Text(
+                'Still practicing: ${stillPracticing.join(' · ')}. Every '
+                'child has their own pace.',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.inkMuted,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ] else if (previous.notYet.isNotEmpty) ...[
+            Text(
+              'The check on $when found ${previous.notYet.length} things '
+              'still coming. They are still practicing — play the ideas '
+              'below and check again in a few weeks. If you are worried, '
+              'show the health worker.',
+              style: const TextStyle(fontSize: 14, height: 1.45),
+            ),
+          ] else ...[
+            Text(
+              'Last time ($when) everything was a yes. Keep playing — play '
+              'is how the brain grows.',
+              style: const TextStyle(fontSize: 14, height: 1.45),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _MilestoneQuestionTile extends StatelessWidget {
   const _MilestoneQuestionTile({
     required this.milestone,
@@ -4186,14 +5320,6 @@ class _AnswerButton extends StatelessWidget {
   }
 }
 
-extension on MilestoneVerdict {
-  Color get colour => switch (this) {
-    MilestoneVerdict.onTrack => AppColors.triageGreen,
-    MilestoneVerdict.watch => AppColors.triageAmber,
-    MilestoneVerdict.flag => AppColors.triageRed,
-  };
-}
-
 // ------------------------------------------------------------ Language sheet
 
 /// The caregiver's language picker. The region decides the list; picking a
@@ -4245,14 +5371,13 @@ class _GuidanceLanguageSheet extends ConsumerWidget {
                   lang,
                   style: TextStyle(
                     fontSize: 15,
-                    fontWeight:
-                        lang == current ? FontWeight.w800 : FontWeight.w500,
+                    fontWeight: lang == current
+                        ? FontWeight.w800
+                        : FontWeight.w500,
                   ),
                 ),
                 onTap: () async {
-                  await ref
-                      .read(sessionProvider.notifier)
-                      .updateLanguage(lang);
+                  await ref.read(sessionProvider.notifier).updateLanguage(lang);
                   if (context.mounted) Navigator.of(context).pop();
                 },
               ),
@@ -4262,4 +5387,3 @@ class _GuidanceLanguageSheet extends ConsumerWidget {
     );
   }
 }
-

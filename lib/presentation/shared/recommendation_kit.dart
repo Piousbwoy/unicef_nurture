@@ -99,6 +99,196 @@ class RecSection extends StatelessWidget {
   );
 }
 
+/// A premium collapsible version of RecSection for secondary care plan info.
+class CollapsibleRecSection extends StatefulWidget {
+  const CollapsibleRecSection({
+    super.key,
+    required this.title,
+    required this.child,
+    this.icon,
+    this.subtitle,
+    this.trailing,
+    this.accent,
+    this.initiallyExpanded = false,
+  });
+
+  final String title;
+  final String? subtitle;
+  final IconData? icon;
+  final Widget? trailing;
+  final Widget child;
+  final Color? accent;
+  final bool initiallyExpanded;
+
+  @override
+  State<CollapsibleRecSection> createState() => _CollapsibleRecSectionState();
+}
+
+class _CollapsibleRecSectionState extends State<CollapsibleRecSection>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _heightFactor;
+  late final Animation<double> _rotation;
+  bool _isExpanded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _isExpanded = widget.initiallyExpanded;
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _heightFactor = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutQuart,
+    );
+    _rotation = Tween<double>(begin: 0.0, end: 0.5).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutBack,
+      ),
+    );
+
+    if (_isExpanded) {
+      _controller.value = 1.0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    setState(() {
+      _isExpanded = !_isExpanded;
+      if (_isExpanded) {
+        _controller.forward();
+      } else {
+        _controller.reverse();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = widget.accent ?? AppColors.primary;
+    final isHoveredOrActive = _isExpanded;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+      decoration: BoxDecoration(
+        color: isHoveredOrActive ? AppColors.surfaceTint.withValues(alpha: 0.3) : Colors.white,
+        borderRadius: BorderRadius.circular(Gap.radius),
+        border: Border.all(
+          color: isHoveredOrActive ? accent.withValues(alpha: 0.3) : AppColors.line,
+          width: isHoveredOrActive ? 1.5 : Gap.hairline,
+        ),
+        boxShadow: isHoveredOrActive
+            ? [
+                BoxShadow(
+                  color: accent.withValues(alpha: 0.05),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                )
+              ]
+            : const [AppShadows.card],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(Gap.radius),
+        child: Column(
+          children: [
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: _handleTap,
+                highlightColor: accent.withValues(alpha: 0.05),
+                splashColor: accent.withValues(alpha: 0.1),
+                child: Padding(
+                  padding: const EdgeInsets.all(Gap.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          if (widget.icon != null) ...[
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: accent.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(Gap.radiusXs),
+                              ),
+                              child: Icon(widget.icon, size: 16, color: accent),
+                            ),
+                            const SizedBox(width: Gap.sm),
+                          ],
+                          Expanded(
+                            child: Text(
+                              widget.title.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.1,
+                                color: isHoveredOrActive ? accent : AppColors.inkMuted,
+                              ),
+                            ),
+                          ),
+                          if (widget.trailing != null) ...[
+                            widget.trailing!,
+                            const SizedBox(width: Gap.sm),
+                          ],
+                          RotationTransition(
+                            turns: _rotation,
+                            child: Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              color: isHoveredOrActive ? accent : AppColors.inkFaint,
+                              size: 20,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (widget.subtitle != null) ...[
+                        const SizedBox(height: Gap.xs),
+                        Padding(
+                          padding: EdgeInsets.only(
+                              left: widget.icon != null ? (16.0 + 12.0 + Gap.sm) : 0),
+                          child: Text(
+                            widget.subtitle!,
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              color: AppColors.inkMuted,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            SizeTransition(
+              sizeFactor: _heightFactor,
+              child: Container(
+                decoration: const BoxDecoration(
+                  border: Border(
+                    top: BorderSide(color: AppColors.line, width: Gap.hairline),
+                  ),
+                ),
+                padding: const EdgeInsets.all(Gap.md),
+                child: widget.child,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// The breathing room between sections: a single hairline with generous
 /// vertical margins.
 class RecHairline extends StatelessWidget {
@@ -663,21 +853,17 @@ class NutritionRecSection extends StatelessWidget {
     required this.plan,
     required this.cost,
     required this.onCost,
+    this.collapsible = false,
   });
 
   final NutritionPlan plan;
   final CostTier cost;
   final ValueChanged<CostTier> onCost;
+  final bool collapsible;
 
   @override
-  Widget build(BuildContext context) => RecSection(
-    title: 'Nutrition',
-    subtitle: plan.pathway.label,
-    icon: Icons.restaurant_outlined,
-    accent: plan.therapeuticFoodRequired
-        ? AppColors.triageRed
-        : AppColors.accent,
-    child: Column(
+  Widget build(BuildContext context) {
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
@@ -967,8 +1153,25 @@ class NutritionRecSection extends StatelessWidget {
           ),
         ],
       ],
-    ),
-  );
+    );
+
+    if (collapsible) {
+      return CollapsibleRecSection(
+        title: 'Nutrition',
+        subtitle: plan.pathway.label,
+        icon: Icons.restaurant_outlined,
+        accent: plan.therapeuticFoodRequired ? AppColors.triageRed : AppColors.primary,
+        child: content,
+      );
+    }
+    return RecSection(
+      title: 'Nutrition',
+      subtitle: plan.pathway.label,
+      icon: Icons.restaurant_outlined,
+      accent: plan.therapeuticFoodRequired ? AppColors.triageRed : AppColors.primary,
+      child: content,
+    );
+  }
 }
 
 /// The basket composed into a day — one card, one row per meal. The
@@ -1514,9 +1717,10 @@ class _GapLine extends StatelessWidget {
 /// (early learning). Two to three simple, age-appropriate things a caregiver
 /// can do today, with no toys and no money — talking, playing, responding.
 class EarlyLearningRecSection extends StatelessWidget {
-  const EarlyLearningRecSection({super.key, required this.person});
+  const EarlyLearningRecSection({super.key, required this.person, this.collapsible = false});
 
   final Person person;
+  final bool collapsible;
 
   List<String> get _tips {
     final months = person.ageInMonths;
@@ -1567,14 +1771,8 @@ class EarlyLearningRecSection extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => RecSection(
-    title: 'Play, talk, respond',
-    subtitle:
-        'A child\u2019s brain grows fastest in the first five years. These '
-        'cost nothing and need no toys \u2014 just you.',
-    icon: Icons.toys_outlined,
-    accent: AppColors.primary,
-    child: Column(
+  Widget build(BuildContext context) {
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final tip in _tips)
@@ -1603,8 +1801,29 @@ class EarlyLearningRecSection extends StatelessWidget {
             ),
           ),
       ],
-    ),
-  );
+    );
+
+    if (collapsible) {
+      return CollapsibleRecSection(
+        title: 'Play, talk, respond',
+        subtitle:
+            'A child’s brain grows fastest in the first five years. These '
+            'cost nothing and need no toys — just you.',
+        icon: Icons.toys_outlined,
+        accent: AppColors.primary,
+        child: content,
+      );
+    }
+    return RecSection(
+      title: 'Play, talk, respond',
+      subtitle:
+          'A child’s brain grows fastest in the first five years. These '
+          'cost nothing and need no toys — just you.',
+      icon: Icons.toys_outlined,
+      accent: AppColors.primary,
+      child: content,
+    );
+  }
 }
 
 // --------------------------------------------------------------- Immunisation
@@ -1616,9 +1835,10 @@ class EarlyLearningRecSection extends StatelessWidget {
 /// under-immunised, so every dose carries its disease and every gap its
 /// age limit.
 class ImmunisationRecSection extends StatelessWidget {
-  const ImmunisationRecSection({super.key, required this.plan});
+  const ImmunisationRecSection({super.key, required this.plan, this.collapsible = false});
 
   final ImmunisationPlan plan;
+  final bool collapsible;
 
   /// Action-first ordering: overdue leads, then due, then upcoming, then
   /// already given; age-barred doses sit last as a do-not-give record.
@@ -1643,16 +1863,8 @@ class ImmunisationRecSection extends StatelessWidget {
         .length;
     final upToDate = plan.isFullyUpToDate;
 
-    return RecSection(
-      title: 'Immunisation',
-      subtitle:
-          'Vaccines teach this child\u2019s body to defeat disease before '
-          'it strikes. Below is today\u2019s reading of the Ghana EPI '
-          'schedule for this child.',
-      icon: Icons.vaccines_outlined,
-      accent: upToDate ? AppColors.triageGreen : AppColors.triageAmber,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // The hero: one glance says whether this child is protected.
           Container(
@@ -1849,7 +2061,29 @@ class ImmunisationRecSection extends StatelessWidget {
             ),
           ],
         ],
-      ),
+      );
+      
+    if (collapsible) {
+      return CollapsibleRecSection(
+        title: 'Immunisation',
+        subtitle:
+            'Vaccines teach this child\u2019s body to defeat disease before '
+            'it strikes. Below is today\u2019s reading of the Ghana EPI '
+            'schedule for this child.',
+        icon: Icons.vaccines_outlined,
+        accent: upToDate ? AppColors.triageGreen : AppColors.triageAmber,
+        child: content,
+      );
+    }
+    return RecSection(
+      title: 'Immunisation',
+      subtitle:
+          'Vaccines teach this child\u2019s body to defeat disease before '
+          'it strikes. Below is today\u2019s reading of the Ghana EPI '
+          'schedule for this child.',
+      icon: Icons.vaccines_outlined,
+      accent: upToDate ? AppColors.triageGreen : AppColors.triageAmber,
+      child: content,
     );
   }
 }
@@ -2426,10 +2660,12 @@ class NurturingCareRecSection extends StatelessWidget {
     super.key,
     required this.assessment,
     this.audience = RecAudience.healthWorker,
+    this.collapsible = false,
   });
 
   final NurturingCareAssessment assessment;
   final RecAudience audience;
+  final bool collapsible;
 
   /// Each pillar's card styling plus the one line that says why the
   /// pillar matters — the framework in words a CHPS team can use.
@@ -2480,58 +2716,71 @@ class NurturingCareRecSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RecSection(
-      title: 'Nurturing care for early development',
-      subtitle: audience == RecAudience.caregiver
-          ? 'Five everyday things that help a young child grow strong.'
-          : 'WHO / UNICEF / World Bank 2018 Nurturing Care Framework — '
-                'five pillars, each with its job for this visit.',
-      icon: Icons.child_care_rounded,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (final p in NurturingCarePillar.values)
-            if (assessment.actions.any((a) => a.pillar == p))
-              _PillarCard(
-                pillar: p,
-                style: _styleOf(p),
-                summary: assessment.pillarSummaries[p] ?? '',
-                actions: assessment.actions
-                    .where((a) => a.pillar == p)
-                    .toList(growable: false),
-                audience: audience,
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final p in NurturingCarePillar.values)
+          if (assessment.actions.any((a) => a.pillar == p))
+            _PillarCard(
+              pillar: p,
+              style: _styleOf(p),
+              summary: assessment.pillarSummaries[p] ?? '',
+              actions: assessment.actions
+                  .where((a) => a.pillar == p)
+                  .toList(growable: false),
+              audience: audience,
+            ),
+        if (audience == RecAudience.healthWorker) ...[
+          const SizedBox(height: Gap.sm),
+          // Citation footer — the audit-defensible anchor.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.menu_book_outlined,
+                size: 12,
+                color: AppColors.inkMuted,
               ),
-          if (audience == RecAudience.healthWorker) ...[
-            const SizedBox(height: Gap.sm),
-            // Citation footer — the audit-defensible anchor.
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  Icons.menu_book_outlined,
-                  size: 12,
-                  color: AppColors.inkMuted,
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    'Framework: WHO / UNICEF / World Bank 2018, Nurturing '
-                    'care for early childhood development. CC BY-NC-SA 3.0 '
-                    'IGO. Each action cites a WHO/UNICEF/GHS implementing '
-                    'guideline.',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      color: AppColors.inkMuted,
-                      fontStyle: FontStyle.italic,
-                      height: 1.4,
-                    ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  'Framework: WHO / UNICEF / World Bank 2018, Nurturing '
+                  'care for early childhood development. CC BY-NC-SA 3.0 '
+                  'IGO. Each action cites a WHO/UNICEF/GHS implementing '
+                  'guideline.',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: AppColors.inkMuted,
+                    fontStyle: FontStyle.italic,
+                    height: 1.4,
                   ),
                 ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ],
-      ),
+      ],
+    );
+
+    final title = 'Nurturing care for early development';
+    final subtitle = audience == RecAudience.caregiver
+        ? 'Five everyday things that help a young child grow strong.'
+        : 'WHO / UNICEF / World Bank 2018 Nurturing Care Framework — '
+              'five pillars, each with its job for this visit.';
+    
+    if (collapsible) {
+      return CollapsibleRecSection(
+        title: title,
+        subtitle: subtitle,
+        icon: Icons.child_care_rounded,
+        child: content,
+      );
+    }
+    return RecSection(
+      title: title,
+      subtitle: subtitle,
+      icon: Icons.child_care_rounded,
+      child: content,
     );
   }
 }

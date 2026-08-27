@@ -67,6 +67,8 @@
         "A": 2.013769,
         "B": -5.826344,
         "brier_score": 0.4108,
+        "conformal_q95": 0.9955,
+        "conformal_note": "95th percentile of |p_cal - y| on out-of-fold predictions; [p - q, p + q] covers the true label for >= 95% of patients like the fold pool (exchangeability assumed).",
         "ci_table": [
           {
             "bin_lo": 0.0,
@@ -334,7 +336,7 @@
     "zero_point": -128
   },
   "tflite_sha256": "b40ce5c43958b16bf6508887f49d79e7de7c0e6b8c4fd68ffabefb8a8d2b0fff",
-  "trained_on": "2026-08-08",
+  "trained_on": "2026-08-24",
   "provenance": {
     "mbarara_neonatal_sepsis_cases.csv": {
       "sha256": "a8f31d980c35ad28",
