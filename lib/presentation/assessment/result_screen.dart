@@ -22,6 +22,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../app/providers.dart';
+import '../../core/i18n/dagbani_speech.dart';
 import '../../core/ml/offline_inference_service.dart';
 import '../../core/ml/recalibration_export.dart';
 import '../../core/ml/recalibration_store.dart';
@@ -764,6 +765,12 @@ class _AssessmentResultScreenState
   /// will say.
   TriageLevel get _effectiveTriage => _override ?? _carePlan.overallTriage;
 
+  /// The Dagbani clip for the triage that governs this result — the level's
+  /// family message. The clinical headline and rationale stay in English for
+  /// the CHO; what the speaker buttons play the family is the sentence they
+  /// must act on, in the language they speak.
+  DagbaniClip? get _levelClip => DagbaniSpeech.levelClip(_effectiveTriage.name);
+
   /// Regional base-rate priors the calibrated probabilities are expressed
   /// on. They mirror the fallback bases in [OfflineInferenceService] (GHS /
   /// Kintampo surveillance) and are what let a calibrated posterior be
@@ -1118,6 +1125,13 @@ class _AssessmentResultScreenState
                               '${plan.triageRationale}',
                           language: input.user.preferredLanguage,
                           id: 'result_verdict',
+                          // Dagbani: the level's family message, not the
+                          // clinical classification — the mother hears the
+                          // sentence she can act on.
+                          dagbaniClips: _levelClip == null
+                              ? null
+                              : [_levelClip!.id],
+                          dagbaniScript: _levelClip?.dagbani,
                           compact: true,
                         ),
                         overrideNote: _override == null
@@ -1236,6 +1250,10 @@ class _AssessmentResultScreenState
                           text: plan.caregiverMessage ?? plan.summary,
                           language: input.user.preferredLanguage,
                           id: 'result_family_brief',
+                          dagbaniClips: _levelClip == null
+                              ? null
+                              : [_levelClip!.id],
+                          dagbaniScript: _levelClip?.dagbani,
                           compact: true,
                         ),
                       ),

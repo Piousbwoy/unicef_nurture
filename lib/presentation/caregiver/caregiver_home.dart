@@ -49,6 +49,7 @@ import 'package:uuid/uuid.dart';
 import '../../app/providers.dart';
 import '../../core/audio/audio_guide.dart';
 import '../../core/audio/voice_service.dart';
+import '../../core/i18n/dagbani_speech.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/reference/northern_ghana.dart';
 import '../../data/repositories/care_repository.dart';
@@ -1704,6 +1705,29 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
       .map((s) => s.$2)
       .toList(growable: false);
 
+  /// The question-key group of the current check — `newborn`, `child` or
+  /// `mother`. The full key (`newborn.feed`) is what [DagbaniStrings] and
+  /// the Dagbani voice bank are keyed by; bare sign keys collide (`vomit`
+  /// exists in all three groups).
+  String get _signGroup => switch (_person?.effectiveClientType) {
+    ClientType.newborn => 'newborn',
+    ClientType.childUnderFive => 'child',
+    _ => 'mother',
+  };
+
+  /// The full question keys (`newborn.feed`) the family answered yes to —
+  /// the keys the voice bank's statement clips are named by.
+  List<String> get _chosenYesKeys => _signs
+      .where((s) => _answers[s.$1] == _SignAnswer.yes)
+      .map((s) => '$_signGroup.${s.$1}')
+      .toList(growable: false);
+
+  /// The full question keys the family was not sure about.
+  List<String> get _chosenUnsureKeys => _signs
+      .where((s) => _answers[s.$1] == _SignAnswer.unsure)
+      .map((s) => '$_signGroup.${s.$1}')
+      .toList(growable: false);
+
   static const _newbornSigns = [
     ('feed', 'Not breastfeeding or feeding well'),
     ('fast', 'Breathing fast or grunting'),
@@ -2693,7 +2717,9 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
     // the honest fallback note.
     bool quiet = false,
   }) async {
-    final outcome = await AudioGuide.playQuestion(key, language);
+    // The id must carry the group (`q_newborn.feed`) so it matches the
+    // DagbaniStrings keys and the bundled voice-bank file names.
+    final outcome = await AudioGuide.playQuestion('$_signGroup.$key', language);
     if (!mounted || quiet) return;
     if (outcome.source == VoiceSource.readAloud) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2714,10 +2740,13 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
   Future<void> _playVerdict(_TriageVerdict verdict) async {
     final user = ref.read(currentUserProvider);
     final language = user?.preferredLanguage ?? 'English';
+    final clip = DagbaniSpeech.caregiverVerdictClip(verdict.name);
     final outcome = await VoiceService.speakText(
       id: 'caregiver_verdict_${verdict.name}',
       text: '${verdict.headline}. ${verdict.advice}',
       language: language,
+      dagbaniClips: clip == null ? null : [clip.id],
+      dagbaniScript: clip?.dagbani,
     );
     if (!mounted) return;
     if (outcome.source == VoiceSource.readAloud) {
@@ -2749,10 +2778,19 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
   }
 
   Future<void> _playWords() async {
+    // In Dagbani the report is composed from the voice bank: the intro, one
+    // statement clip per chosen sign (the sign drafts are statements — the
+    // question clips are reused), the unsure preamble, the close.
+    final clips = DagbaniSpeech.clipsForNurseWords(
+      yesKeys: _chosenYesKeys,
+      unsureKeys: _chosenUnsureKeys,
+    );
     final outcome = await VoiceService.speakText(
       id: 'caregiver_nurse_words',
       text: _nurseWords(_person!),
       language: _language,
+      dagbaniClips: clips,
+      dagbaniScript: DagbaniSpeech.scriptForClips(clips),
     );
     if (!mounted) return;
     if (outcome.source == VoiceSource.readAloud) {

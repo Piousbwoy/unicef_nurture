@@ -24,6 +24,8 @@ class AudioButton extends StatefulWidget {
     required this.language,
     this.id,
     this.compact = false,
+    this.dagbaniClips,
+    this.dagbaniScript,
   });
 
   /// The script to speak. This is the same plain-language text the app
@@ -38,6 +40,16 @@ class AudioButton extends StatefulWidget {
   /// the audio system cannot fall back to a studio recording — only TTS
   /// and the read-aloud path are available.
   final String? id;
+
+  /// Ordered Dagbani bank clips that compose the spoken message (see
+  /// [VoiceRequest.dagbaniClips]). When set, the Dagbani chain plays the
+  /// sequence — all-or-nothing — before falling back.
+  final List<String>? dagbaniClips;
+
+  /// The Dagbani words the clips speak, shown in the script sheet so a
+  /// composed message (a level message, the words for the nurse) can be
+  /// read in the language it was heard in.
+  final String? dagbaniScript;
 
   /// When true, draws the smaller variant used in cramped card rows.
   final bool compact;
@@ -62,6 +74,8 @@ class _AudioButtonState extends State<AudioButton> {
         id: widget.id ?? 'inline_${widget.text.hashCode}',
         preferredLanguage: widget.language,
         preferredScript: widget.text,
+        dagbaniClips: widget.dagbaniClips,
+        dagbaniScript: widget.dagbaniScript,
       ),
     );
     if (!mounted) return;
@@ -87,10 +101,7 @@ class _AudioButtonState extends State<AudioButton> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (_) => _ScriptSheet(
-        outcome: outcome,
-        resolved: resolved,
-      ),
+      builder: (_) => _ScriptSheet(outcome: outcome, resolved: resolved),
     );
   }
 
@@ -98,6 +109,17 @@ class _AudioButtonState extends State<AudioButton> {
   _ResolvedScript _resolveScript(VoiceOutcome outcome) {
     final id = outcome.request.id;
     final language = outcome.request.preferredLanguage;
+
+    // A composed message carries its own Dagbani text — what the clips
+    // speak is not derivable from the id alone.
+    final spoken = outcome.request.dagbaniScript;
+    if (spoken != null && language == 'Dagbani') {
+      return _ResolvedScript(
+        english: outcome.request.preferredScript,
+        dagbani: spoken,
+        spokenIsDagbani: true,
+      );
+    }
 
     // Triage question — id starts with 'q_'.
     if (id.startsWith('q_')) {
@@ -129,7 +151,10 @@ class _AudioButtonState extends State<AudioButton> {
     }
 
     // No Dagbani draft — show whatever the caller passed in.
-    return _ResolvedScript(english: outcome.request.preferredScript, dagbani: null);
+    return _ResolvedScript(
+      english: outcome.request.preferredScript,
+      dagbani: null,
+    );
   }
 
   @override
@@ -147,14 +172,17 @@ class _AudioButtonState extends State<AudioButton> {
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: _toggle,
-            onLongPress: () => _showScriptSheet(VoiceOutcome(
-              source: _lastSource ?? VoiceSource.readAloud,
-              request: VoiceRequest(
-                id: widget.id ?? 'inline',
-                preferredLanguage: widget.language,
-                preferredScript: widget.text,
+            onLongPress: () => _showScriptSheet(
+              VoiceOutcome(
+                source: _lastSource ?? VoiceSource.readAloud,
+                request: VoiceRequest(
+                  id: widget.id ?? 'inline',
+                  preferredLanguage: widget.language,
+                  preferredScript: widget.text,
+                  dagbaniScript: widget.dagbaniScript,
+                ),
               ),
-            )),
+            ),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 220),
               width: size,
@@ -167,9 +195,7 @@ class _AudioButtonState extends State<AudioButton> {
                     : const [AppShadows.card],
               ),
               child: Icon(
-                _playing
-                    ? Icons.stop_rounded
-                    : Icons.volume_up_rounded,
+                _playing ? Icons.stop_rounded : Icons.volume_up_rounded,
                 size: iconSize,
                 color: _playing ? Colors.white : colour,
               ),
@@ -190,24 +216,27 @@ class _SourcePill extends StatelessWidget {
   final VoiceSource source;
 
   Color get _bg => switch (source) {
-    VoiceSource.studio       => AppColors.triageGreenBg,
-    VoiceSource.systemTts    => AppColors.primaryLight,
+    VoiceSource.studio => AppColors.triageGreenBg,
+    VoiceSource.synthesized => AppColors.primaryLight,
+    VoiceSource.systemTts => AppColors.primaryLight,
     VoiceSource.linguaFranca => AppColors.triageAmberBg,
-    VoiceSource.readAloud    => AppColors.canvas,
+    VoiceSource.readAloud => AppColors.canvas,
   };
 
   Color get _fg => switch (source) {
-    VoiceSource.studio       => AppColors.triageGreen,
-    VoiceSource.systemTts    => AppColors.primaryDeep,
+    VoiceSource.studio => AppColors.triageGreen,
+    VoiceSource.synthesized => AppColors.primaryDeep,
+    VoiceSource.systemTts => AppColors.primaryDeep,
     VoiceSource.linguaFranca => AppColors.triageAmber,
-    VoiceSource.readAloud    => AppColors.inkFaint,
+    VoiceSource.readAloud => AppColors.inkFaint,
   };
 
   IconData get _icon => switch (source) {
-    VoiceSource.studio       => Icons.mic_rounded,
-    VoiceSource.systemTts    => Icons.record_voice_over_rounded,
+    VoiceSource.studio => Icons.mic_rounded,
+    VoiceSource.synthesized => Icons.graphic_eq_rounded,
+    VoiceSource.systemTts => Icons.record_voice_over_rounded,
     VoiceSource.linguaFranca => Icons.translate_rounded,
-    VoiceSource.readAloud    => Icons.menu_book_rounded,
+    VoiceSource.readAloud => Icons.menu_book_rounded,
   };
 
   @override
@@ -243,10 +272,16 @@ class _ResolvedScript {
     required this.english,
     this.dagbani,
     this.verified = false,
+    this.spokenIsDagbani = false,
   });
   final String english;
   final String? dagbani;
   final bool verified;
+
+  /// True when the clips speak the Dagbani carried in [dagbani] — the
+  /// sheet leads with those words, because the sheet is titled "The spoken
+  /// message" and that is what was heard.
+  final bool spokenIsDagbani;
 }
 
 class _ScriptSheet extends StatelessWidget {
@@ -261,7 +296,9 @@ class _ScriptSheet extends StatelessWidget {
     // The audio pill still tells the truth about what the phone actually
     // played.
     final showDagbani = resolved.dagbani != null;
-    final displayText = showDagbani && resolved.verified
+    final displayText = resolved.spokenIsDagbani
+        ? resolved.dagbani!
+        : showDagbani && resolved.verified
         ? resolved.dagbani!
         : resolved.english;
 
@@ -276,34 +313,34 @@ class _ScriptSheet extends StatelessWidget {
               children: [
                 const Icon(Icons.volume_up_rounded, color: AppColors.primary),
                 const SizedBox(width: 8),
-                Text(
-                  'The spoken message',
-                  style: AppType.title,
-                ),
+                Text('The spoken message', style: AppType.title),
               ],
             ),
             const SizedBox(height: 4),
             _SourcePill(source: outcome.source),
             if (showDagbani) ...[
               const SizedBox(height: 6),
-              _LangBadge(
-                language: 'Dagbani',
-                verified: resolved.verified,
-              ),
+              _LangBadge(language: 'Dagbani', verified: resolved.verified),
             ],
             const SizedBox(height: Gap.md),
             Text(
               outcome.source == VoiceSource.readAloud
                   ? 'There is no voice on this phone for this language yet. '
-                      'The words are below — read them aloud, or ask '
-                      'someone to.'
+                        'The words are below — read them aloud, or ask '
+                        'someone to.'
+                  : outcome.source == VoiceSource.synthesized
+                  ? 'This is a Dagbani voice built into the app — '
+                        'synthesized offline from Meta\'s open MMS model '
+                        'speaking draft words. A human recording would '
+                        'sound warmer; a Dagbani speaker should listen '
+                        'and sign off.'
                   : outcome.source == VoiceSource.linguaFranca
                   ? 'This phone cannot speak ${outcome.request.preferredLanguage} '
-                      'yet, so the message is in ${outcome.request.bridgeLanguage}, '
-                      'which is the trade language across Northern Ghana.'
+                        'yet, so the message is in ${outcome.request.bridgeLanguage}, '
+                        'which is the trade language across Northern Ghana.'
                   : outcome.source == VoiceSource.systemTts
                   ? 'This phone is speaking in its own voice. A real '
-                      'human recording would sound warmer.'
+                        'human recording would sound warmer.'
                   : 'This is the studio recording.',
               style: const TextStyle(
                 fontSize: 12.5,
@@ -331,7 +368,8 @@ class _ScriptSheet extends StatelessWidget {
                       color: AppColors.ink,
                     ),
                   ),
-                  if (showDagbani && resolved.verified) ...[
+                  if (showDagbani &&
+                      (resolved.verified || resolved.spokenIsDagbani)) ...[
                     const SizedBox(height: 8),
                     Text(
                       'English: ${resolved.english}',

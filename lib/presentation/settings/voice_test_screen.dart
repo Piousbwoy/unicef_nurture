@@ -31,9 +31,10 @@ class _VoiceTestScreenState extends ConsumerState<VoiceTestScreen> {
   final Map<String, VoiceSource> _lastResults = {};
 
   static const _testPhrases = <String, String>{
-    'English': 'If your child cannot drink or breastfeed, go to the health '
+    'English':
+        'If your child cannot drink or breastfeed, go to the health '
         'facility at once.',
-    'Hausa':   'Idan yaranku ba ta iya sha ko nono, je asibitin yanzu.',
+    'Hausa': 'Idan yaranku ba ta iya sha ko nono, je asibitin yanzu.',
     'Dagbani': 'Ni bini maa ti niŋ ka o nui tana, yi tiŋ bɛ ni kpeeni pam.',
   };
 
@@ -93,7 +94,8 @@ class _VoiceTestScreenState extends ConsumerState<VoiceTestScreen> {
           // ---------------------------------------------------- Intro
           SectionCard(
             title: 'What can this phone speak?',
-            subtitle: 'Tap a language below to hear exactly what this phone '
+            subtitle:
+                'Tap a language below to hear exactly what this phone '
                 'will say in it. The pill under each button names the voice '
                 'that actually played — this app never pretends.',
             icon: Icons.record_voice_over_rounded,
@@ -109,18 +111,9 @@ class _VoiceTestScreenState extends ConsumerState<VoiceTestScreen> {
                       colour: AppColors.triageGreen,
                       label: 'Real voice',
                     ),
-                    _LegendDot(
-                      colour: AppColors.primary,
-                      label: 'Phone voice',
-                    ),
-                    _LegendDot(
-                      colour: AppColors.triageAmber,
-                      label: 'Bridge',
-                    ),
-                    _LegendDot(
-                      colour: AppColors.inkFaint,
-                      label: 'Read aloud',
-                    ),
+                    _LegendDot(colour: AppColors.primary, label: 'Phone voice'),
+                    _LegendDot(colour: AppColors.triageAmber, label: 'Bridge'),
+                    _LegendDot(colour: AppColors.inkFaint, label: 'Read aloud'),
                   ],
                 ),
               ],
@@ -131,16 +124,13 @@ class _VoiceTestScreenState extends ConsumerState<VoiceTestScreen> {
           // ---------------------------------------------------- Live test
           SectionCard(
             title: 'Try a language',
-            subtitle: 'Tap a language to hear what this phone says. The pill '
+            subtitle:
+                'Tap a language to hear what this phone says. The pill '
                 'under the button tells you which voice was used.',
             icon: Icons.translate_rounded,
             child: Column(
               children: [
-                for (final language in const [
-                  'Dagbani',
-                  'Hausa',
-                  'English',
-                ])
+                for (final language in const ['Dagbani', 'Hausa', 'English'])
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: Gap.xs),
                     child: _LanguageTestRow(
@@ -159,7 +149,8 @@ class _VoiceTestScreenState extends ConsumerState<VoiceTestScreen> {
           // ---------------------------------------------------- Coverage matrix
           SectionCard(
             title: 'Languages CareBridge supports',
-            subtitle: 'The truth about the languages this phone can and '
+            subtitle:
+                'The truth about the languages this phone can and '
                 'cannot speak today. Where a voice is missing, the app shows '
                 'the words instead.',
             icon: Icons.language_rounded,
@@ -168,10 +159,7 @@ class _VoiceTestScreenState extends ConsumerState<VoiceTestScreen> {
                     padding: EdgeInsets.all(Gap.md),
                     child: Center(child: CircularProgressIndicator()),
                   )
-                : _CoverageMatrix(
-                    availableTts: _availableTts,
-                    error: _error,
-                  ),
+                : _CoverageMatrix(availableTts: _availableTts, error: _error),
           ),
           const SizedBox(height: Gap.xl),
         ],
@@ -224,7 +212,9 @@ class _LanguageTestRow extends StatelessWidget {
                       const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 1),
+                          horizontal: 6,
+                          vertical: 1,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.primaryLight,
                           borderRadius: BorderRadius.circular(999),
@@ -278,10 +268,11 @@ class _ResultPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colour = switch (source) {
-      VoiceSource.studio       => AppColors.triageGreen,
-      VoiceSource.systemTts    => AppColors.primaryDeep,
+      VoiceSource.studio => AppColors.triageGreen,
+      VoiceSource.synthesized => AppColors.primaryDeep,
+      VoiceSource.systemTts => AppColors.primaryDeep,
       VoiceSource.linguaFranca => AppColors.triageAmber,
-      VoiceSource.readAloud    => AppColors.inkFaint,
+      VoiceSource.readAloud => AppColors.inkFaint,
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -363,17 +354,23 @@ class _CoverageMatrix extends StatelessWidget {
         _CoverageRow(
           language: 'English',
           source: _has('en') ? VoiceSource.systemTts : VoiceSource.readAloud,
-          notes: _has('en') ? 'Built into Android & iOS' : 'No engine on this device',
+          notes: _has('en')
+              ? 'Built into Android & iOS'
+              : 'No engine on this device',
         ),
         _CoverageRow(
           language: 'Hausa',
           source: _has('ha') ? VoiceSource.systemTts : VoiceSource.readAloud,
-          notes: _has('ha') ? 'Google TTS supports ha-NG' : 'Install a Hausa voice pack',
+          notes: _has('ha')
+              ? 'Google TTS supports ha-NG'
+              : 'Install a Hausa voice pack',
         ),
         _CoverageRow(
           language: 'Dagbani',
-          source: VoiceSource.linguaFranca,
-          notes: 'No Dagbani TTS yet. Bridge to Hausa.',
+          source: VoiceSource.synthesized,
+          notes:
+              'On-device voice bank built in (Meta MMS). Draft voice — '
+              'human sign-off pending.',
         ),
         _CoverageRow(
           language: 'Likpakpaln',
@@ -401,17 +398,19 @@ class _CoverageRow extends StatelessWidget {
   final String notes;
 
   Color get _colour => switch (source) {
-    VoiceSource.studio       => AppColors.triageGreen,
-    VoiceSource.systemTts    => AppColors.primaryDeep,
+    VoiceSource.studio => AppColors.triageGreen,
+    VoiceSource.synthesized => AppColors.primaryDeep,
+    VoiceSource.systemTts => AppColors.primaryDeep,
     VoiceSource.linguaFranca => AppColors.triageAmber,
-    VoiceSource.readAloud    => AppColors.inkFaint,
+    VoiceSource.readAloud => AppColors.inkFaint,
   };
 
   IconData get _icon => switch (source) {
-    VoiceSource.studio       => Icons.mic_rounded,
-    VoiceSource.systemTts    => Icons.record_voice_over_rounded,
+    VoiceSource.studio => Icons.mic_rounded,
+    VoiceSource.synthesized => Icons.graphic_eq_rounded,
+    VoiceSource.systemTts => Icons.record_voice_over_rounded,
     VoiceSource.linguaFranca => Icons.translate_rounded,
-    VoiceSource.readAloud    => Icons.menu_book_rounded,
+    VoiceSource.readAloud => Icons.menu_book_rounded,
   };
 
   @override

@@ -1,0 +1,173 @@
+{
+  "generated": "2026-08-27",
+  "model_mirror": "IanKobby/mms-tts-dag-ghana",
+  "upstream": "facebook/mms-tts-dag",
+  "sampling_rate": 16000,
+  "total_bytes": 9510028,
+  "clips": {
+    "child_danger_signs": {
+      "seconds": 19.98,
+      "bytes": 639404
+    },
+    "newborn_danger_signs": {
+      "seconds": 29.1,
+      "bytes": 931244
+    },
+    "mother_danger_signs": {
+      "seconds": 26.01,
+      "bytes": 832428
+    },
+    "feeding": {
+      "seconds": 25.4,
+      "bytes": 812972
+    },
+    "referral": {
+      "seconds": 35.87,
+      "bytes": 1147820
+    },
+    "q_newborn.feed": {
+      "seconds": 3.15,
+      "bytes": 100780
+    },
+    "q_newborn.fast": {
+      "seconds": 4.41,
+      "bytes": 141228
+    },
+    "q_newborn.fits": {
+      "seconds": 2.78,
+      "bytes": 89004
+    },
+    "q_newborn.sleepy": {
+      "seconds": 3.93,
+      "bytes": 125868
+    },
+    "q_newborn.temp": {
+      "seconds": 4.3,
+      "bytes": 137644
+    },
+    "q_newborn.yellow": {
+      "seconds": 4.46,
+      "bytes": 142764
+    },
+    "q_newborn.cord": {
+      "seconds": 4.41,
+      "bytes": 141228
+    },
+    "q_newborn.vomit": {
+      "seconds": 3.37,
+      "bytes": 107948
+    },
+    "q_child.drink": {
+      "seconds": 4.7,
+      "bytes": 150444
+    },
+    "q_child.vomit": {
+      "seconds": 2.56,
+      "bytes": 81836
+    },
+    "q_child.fits": {
+      "seconds": 1.95,
+      "bytes": 62380
+    },
+    "q_child.sleepy": {
+      "seconds": 3.56,
+      "bytes": 114092
+    },
+    "q_child.breath": {
+      "seconds": 4.04,
+      "bytes": 129452
+    },
+    "q_child.blood": {
+      "seconds": 2.3,
+      "bytes": 73644
+    },
+    "q_child.thin": {
+      "seconds": 4.92,
+      "bytes": 157612
+    },
+    "q_child.fever": {
+      "seconds": 3.72,
+      "bytes": 119212
+    },
+    "q_mother.bleed": {
+      "seconds": 2.08,
+      "bytes": 66476
+    },
+    "q_mother.head": {
+      "seconds": 4.24,
+      "bytes": 135596
+    },
+    "q_mother.fever": {
+      "seconds": 1.95,
+      "bytes": 62380
+    },
+    "q_mother.pain": {
+      "seconds": 2.49,
+      "bytes": 79788
+    },
+    "q_mother.fits": {
+      "seconds": 1.84,
+      "bytes": 58796
+    },
+    "q_mother.smell": {
+      "seconds": 2.04,
+      "bytes": 65452
+    },
+    "q_mother.move": {
+      "seconds": 4.62,
+      "bytes": 147884
+    },
+    "q_mother.vomit": {
+      "seconds": 2.7,
+      "bytes": 86444
+    },
+    "level_urgent": {
+      "seconds": 5.84,
+      "bytes": 186796
+    },
+    "level_priority": {
+      "seconds": 9.26,
+      "bytes": 296364
+    },
+    "level_watch": {
+      "seconds": 9.66,
+      "bytes": 309164
+    },
+    "level_routine": {
+      "seconds": 5.71,
+      "bytes": 182700
+    },
+    "caregiver_verdict_urgent": {
+      "seconds": 13.16,
+      "bytes": 421292
+    },
+    "caregiver_verdict_caution": {
+      "seconds": 10.36,
+      "bytes": 331692
+    },
+    "caregiver_verdict_fine": {
+      "seconds": 10.11,
+      "bytes": 323500
+    },
+    "nurse_intro": {
+      "seconds": 2.8,
+      "bytes": 89516
+    },
+    "nurse_unsure": {
+      "seconds": 2.14,
+      "bytes": 68524
+    },
+    "nurse_close": {
+      "seconds": 3.74,
+      "bytes": 119724
+    },
+    "setup_preview_Dagbani": {
+      "seconds": 2.17,
+      "bytes": 69548
+    },
+    "voice_test_Dagbani": {
+      "seconds": 5.29,
+      "bytes": 169388
+    }
+  }
+}

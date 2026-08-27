@@ -16,6 +16,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../core/i18n/dagbani_speech.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/reference/local_foods.dart';
 import '../../domain/engines/immunisation_engine.dart';
@@ -143,12 +144,10 @@ class _CollapsibleRecSectionState extends State<CollapsibleRecSection>
       parent: _controller,
       curve: Curves.easeOutQuart,
     );
-    _rotation = Tween<double>(begin: 0.0, end: 0.5).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeOutBack,
-      ),
-    );
+    _rotation = Tween<double>(
+      begin: 0.0,
+      end: 0.5,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
 
     if (_isExpanded) {
       _controller.value = 1.0;
@@ -181,10 +180,14 @@ class _CollapsibleRecSectionState extends State<CollapsibleRecSection>
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOut,
       decoration: BoxDecoration(
-        color: isHoveredOrActive ? AppColors.surfaceTint.withValues(alpha: 0.3) : Colors.white,
+        color: isHoveredOrActive
+            ? AppColors.surfaceTint.withValues(alpha: 0.3)
+            : Colors.white,
         borderRadius: BorderRadius.circular(Gap.radius),
         border: Border.all(
-          color: isHoveredOrActive ? accent.withValues(alpha: 0.3) : AppColors.line,
+          color: isHoveredOrActive
+              ? accent.withValues(alpha: 0.3)
+              : AppColors.line,
           width: isHoveredOrActive ? 1.5 : Gap.hairline,
         ),
         boxShadow: isHoveredOrActive
@@ -193,7 +196,7 @@ class _CollapsibleRecSectionState extends State<CollapsibleRecSection>
                   color: accent.withValues(alpha: 0.05),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
-                )
+                ),
               ]
             : const [AppShadows.card],
       ),
@@ -219,7 +222,9 @@ class _CollapsibleRecSectionState extends State<CollapsibleRecSection>
                               padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(
                                 color: accent.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(Gap.radiusXs),
+                                borderRadius: BorderRadius.circular(
+                                  Gap.radiusXs,
+                                ),
                               ),
                               child: Icon(widget.icon, size: 16, color: accent),
                             ),
@@ -232,7 +237,9 @@ class _CollapsibleRecSectionState extends State<CollapsibleRecSection>
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: 1.1,
-                                color: isHoveredOrActive ? accent : AppColors.inkMuted,
+                                color: isHoveredOrActive
+                                    ? accent
+                                    : AppColors.inkMuted,
                               ),
                             ),
                           ),
@@ -244,7 +251,9 @@ class _CollapsibleRecSectionState extends State<CollapsibleRecSection>
                             turns: _rotation,
                             child: Icon(
                               Icons.keyboard_arrow_down_rounded,
-                              color: isHoveredOrActive ? accent : AppColors.inkFaint,
+                              color: isHoveredOrActive
+                                  ? accent
+                                  : AppColors.inkFaint,
                               size: 20,
                             ),
                           ),
@@ -254,7 +263,10 @@ class _CollapsibleRecSectionState extends State<CollapsibleRecSection>
                         const SizedBox(height: Gap.xs),
                         Padding(
                           padding: EdgeInsets.only(
-                              left: widget.icon != null ? (16.0 + 12.0 + Gap.sm) : 0),
+                            left: widget.icon != null
+                                ? (16.0 + 12.0 + Gap.sm)
+                                : 0,
+                          ),
                           child: Text(
                             widget.subtitle!,
                             style: const TextStyle(
@@ -1160,7 +1172,9 @@ class NutritionRecSection extends StatelessWidget {
         title: 'Nutrition',
         subtitle: plan.pathway.label,
         icon: Icons.restaurant_outlined,
-        accent: plan.therapeuticFoodRequired ? AppColors.triageRed : AppColors.primary,
+        accent: plan.therapeuticFoodRequired
+            ? AppColors.triageRed
+            : AppColors.primary,
         child: content,
       );
     }
@@ -1168,7 +1182,9 @@ class NutritionRecSection extends StatelessWidget {
       title: 'Nutrition',
       subtitle: plan.pathway.label,
       icon: Icons.restaurant_outlined,
-      accent: plan.therapeuticFoodRequired ? AppColors.triageRed : AppColors.primary,
+      accent: plan.therapeuticFoodRequired
+          ? AppColors.triageRed
+          : AppColors.primary,
       child: content,
     );
   }
@@ -1717,7 +1733,11 @@ class _GapLine extends StatelessWidget {
 /// (early learning). Two to three simple, age-appropriate things a caregiver
 /// can do today, with no toys and no money — talking, playing, responding.
 class EarlyLearningRecSection extends StatelessWidget {
-  const EarlyLearningRecSection({super.key, required this.person, this.collapsible = false});
+  const EarlyLearningRecSection({
+    super.key,
+    required this.person,
+    this.collapsible = false,
+  });
 
   final Person person;
   final bool collapsible;
@@ -1835,7 +1855,11 @@ class EarlyLearningRecSection extends StatelessWidget {
 /// under-immunised, so every dose carries its disease and every gap its
 /// age limit.
 class ImmunisationRecSection extends StatelessWidget {
-  const ImmunisationRecSection({super.key, required this.plan, this.collapsible = false});
+  const ImmunisationRecSection({
+    super.key,
+    required this.plan,
+    this.collapsible = false,
+  });
 
   final ImmunisationPlan plan;
   final bool collapsible;
@@ -1865,204 +1889,202 @@ class ImmunisationRecSection extends StatelessWidget {
 
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // The hero: one glance says whether this child is protected.
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: upToDate
-                  ? AppColors.triageGreenBg
-                  : AppColors.triageAmberBg,
-              borderRadius: BorderRadius.circular(Gap.radiusSm),
-              boxShadow: const [AppShadows.card],
-            ),
-            child: AccentEdge(
-              accent: upToDate ? AppColors.triageGreen : AppColors.triageAmber,
-              borderRadius: BorderRadius.circular(Gap.radiusSm),
-              child: Padding(
-                padding: const EdgeInsets.all(Gap.md),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Icon(
-                      upToDate
-                          ? Icons.verified_user_rounded
-                          : Icons.warning_amber_rounded,
-                      size: 28,
-                      color: upToDate
-                          ? AppColors.triageGreen
-                          : AppColors.triageAmber,
-                    ),
-                    const SizedBox(width: Gap.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            upToDate
-                                ? 'Fully protected'
-                                : '$waiting dose${waiting == 1 ? '' : 's'} '
-                                      'waiting for this child',
-                            style: TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w900,
-                              color: upToDate
-                                  ? AppColors.triageGreen
-                                  : AppColors.triageAmber,
-                            ),
+      children: [
+        // The hero: one glance says whether this child is protected.
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: upToDate ? AppColors.triageGreenBg : AppColors.triageAmberBg,
+            borderRadius: BorderRadius.circular(Gap.radiusSm),
+            boxShadow: const [AppShadows.card],
+          ),
+          child: AccentEdge(
+            accent: upToDate ? AppColors.triageGreen : AppColors.triageAmber,
+            borderRadius: BorderRadius.circular(Gap.radiusSm),
+            child: Padding(
+              padding: const EdgeInsets.all(Gap.md),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Icon(
+                    upToDate
+                        ? Icons.verified_user_rounded
+                        : Icons.warning_amber_rounded,
+                    size: 28,
+                    color: upToDate
+                        ? AppColors.triageGreen
+                        : AppColors.triageAmber,
+                  ),
+                  const SizedBox(width: Gap.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          upToDate
+                              ? 'Fully protected'
+                              : '$waiting dose${waiting == 1 ? '' : 's'} '
+                                    'waiting for this child',
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w900,
+                            color: upToDate
+                                ? AppColors.triageGreen
+                                : AppColors.triageAmber,
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            plan.summary,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.inkMuted,
-                              height: 1.4,
-                            ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          plan.summary,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.inkMuted,
+                            height: 1.4,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
+        ),
+        const SizedBox(height: Gap.md),
+        // What to draw up in this very session.
+        if (plan.giveToday.isNotEmpty) ...[
+          KitCard(
+            accent: AppColors.primary,
+            margin: EdgeInsets.zero,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'GIVE TODAY — IN THIS SAME SESSION',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.6,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: Gap.xs),
+                for (final d in plan.giveToday)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.vaccines_outlined,
+                          size: 14,
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(width: Gap.xs),
+                        Expanded(
+                          child: Text(
+                            '${d.label} — guards against '
+                            '${d.protectsAgainst}',
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
           const SizedBox(height: Gap.md),
-          // What to draw up in this very session.
-          if (plan.giveToday.isNotEmpty) ...[
-            KitCard(
-              accent: AppColors.primary,
-              margin: EdgeInsets.zero,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'GIVE TODAY — IN THIS SAME SESSION',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.6,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(height: Gap.xs),
-                  for (final d in plan.giveToday)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(
-                            Icons.vaccines_outlined,
-                            size: 14,
-                            color: AppColors.primary,
-                          ),
-                          const SizedBox(width: Gap.xs),
-                          Expanded(
-                            child: Text(
-                              '${d.label} — guards against '
-                              '${d.protectsAgainst}',
-                              style: const TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.ink,
-                                height: 1.4,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: Gap.md),
-          ],
-          // The forward plan: what must wait, and how long. The session
-          // list turns a wall of overdue doses into dates on the card.
-          if (plan.catchUp.isNotEmpty) ...[
-            KitCard(
-              accent: AppColors.accent,
-              margin: EdgeInsets.zero,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'THEN — THE CATCH-UP SCHEDULE',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.6,
-                      color: AppColors.accent,
-                    ),
-                  ),
-                  const SizedBox(height: Gap.xs),
-                  for (final s in plan.catchUp)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(
-                            width: 84,
-                            child: Text(
-                              'IN ${s.weeksFromNow} WEEKS',
-                              style: const TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w900,
-                                color: AppColors.inkMuted,
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              s.labels.join(', '),
-                              style: const TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.ink,
-                                height: 1.4,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  const SizedBox(height: Gap.xs),
-                  const Text(
-                    'Doses in the same series need at least 4 weeks between '
-                    'them — write each date on the card.',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.inkFaint,
-                      fontStyle: FontStyle.italic,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: Gap.md),
-          ],
-          for (final item in items) _ImmunisationTile(item: item),
-          if (plan.nextDueLabel != null && plan.nextDueInDays != null) ...[
-            const SizedBox(height: Gap.xs),
-            Text(
-              'Next due: ${plan.nextDueLabel} in about '
-              '${plan.nextDueInDays} days — note it on the card before '
-              'the family leaves.',
-              style: const TextStyle(
-                fontSize: 12.5,
-                color: AppColors.inkMuted,
-                fontWeight: FontWeight.w700,
-                height: 1.4,
-              ),
-            ),
-          ],
         ],
-      );
-      
+        // The forward plan: what must wait, and how long. The session
+        // list turns a wall of overdue doses into dates on the card.
+        if (plan.catchUp.isNotEmpty) ...[
+          KitCard(
+            accent: AppColors.accent,
+            margin: EdgeInsets.zero,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'THEN — THE CATCH-UP SCHEDULE',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.6,
+                    color: AppColors.accent,
+                  ),
+                ),
+                const SizedBox(height: Gap.xs),
+                for (final s in plan.catchUp)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 84,
+                          child: Text(
+                            'IN ${s.weeksFromNow} WEEKS',
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.inkMuted,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            s.labels.join(', '),
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: Gap.xs),
+                const Text(
+                  'Doses in the same series need at least 4 weeks between '
+                  'them — write each date on the card.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.inkFaint,
+                    fontStyle: FontStyle.italic,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: Gap.md),
+        ],
+        for (final item in items) _ImmunisationTile(item: item),
+        if (plan.nextDueLabel != null && plan.nextDueInDays != null) ...[
+          const SizedBox(height: Gap.xs),
+          Text(
+            'Next due: ${plan.nextDueLabel} in about '
+            '${plan.nextDueInDays} days — note it on the card before '
+            'the family leaves.',
+            style: const TextStyle(
+              fontSize: 12.5,
+              color: AppColors.inkMuted,
+              fontWeight: FontWeight.w700,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ],
+    );
+
     if (collapsible) {
       return CollapsibleRecSection(
         title: 'Immunisation',
@@ -2767,7 +2789,7 @@ class NurturingCareRecSection extends StatelessWidget {
         ? 'Five everyday things that help a young child grow strong.'
         : 'WHO / UNICEF / World Bank 2018 Nurturing Care Framework — '
               'five pillars, each with its job for this visit.';
-    
+
     if (collapsible) {
       return CollapsibleRecSection(
         title: title,
@@ -3036,6 +3058,9 @@ class FamilyCarePlanCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final message = plan.caregiverMessage ?? plan.summary;
     final colour = _colour;
+    // In Dagbani the family message is heard as the triage level's family
+    // sentence — the actionable content — from the on-device voice bank.
+    final levelClip = DagbaniSpeech.levelClip(plan.overallTriage.name);
 
     return Container(
       padding: const EdgeInsets.all(Gap.lg),
@@ -3112,7 +3137,14 @@ class FamilyCarePlanCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: Gap.sm),
-              AudioButton(compact: true, text: message, language: language),
+              AudioButton(
+                compact: true,
+                text: message,
+                language: language,
+                id: 'plan_family_brief',
+                dagbaniClips: levelClip == null ? null : [levelClip.id],
+                dagbaniScript: levelClip?.dagbani,
+              ),
             ],
           ),
           if (plan.dangerSigns.isNotEmpty) ...[

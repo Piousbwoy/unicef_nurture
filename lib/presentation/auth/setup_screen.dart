@@ -70,9 +70,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   @override
   Widget build(BuildContext context) {
     if (_role == null) {
-      return _RoleChoice(
-        onPick: (r) => _pickRole(context, r),
-      );
+      return _RoleChoice(onPick: (r) => _pickRole(context, r));
     }
     return _RegistrationForm(
       role: _role!,
@@ -113,7 +111,12 @@ class _RoleChoice extends ConsumerWidget {
             Expanded(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.md, Gap.lg, Gap.lg),
+                padding: const EdgeInsets.fromLTRB(
+                  Gap.lg,
+                  Gap.md,
+                  Gap.lg,
+                  Gap.lg,
+                ),
                 child: Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 490),
@@ -632,7 +635,9 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
     if (text.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Clipboard is empty. Copy a family code or SMS first.')),
+        const SnackBar(
+          content: Text('Clipboard is empty. Copy a family code or SMS first.'),
+        ),
       );
       return;
     }
@@ -649,7 +654,9 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('⚡ Pasted digital QR pass! Household seeded in local SQLite.'),
+            content: Text(
+              '⚡ Pasted digital QR pass! Household seeded in local SQLite.',
+            ),
             backgroundColor: AppColors.triageGreen,
             behavior: SnackBarBehavior.floating,
           ),
@@ -734,18 +741,21 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
             .read(careRepositoryProvider)
             .createOwnHousehold(user, ownHousehold);
       }
-      final success = await ref.read(sessionProvider.notifier).register(
-        user: user,
-        pin: _pin.text,
-        linkedHouseholdId: household?.id ?? ownHousehold?.id,
-      );
+      final success = await ref
+          .read(sessionProvider.notifier)
+          .register(
+            user: user,
+            pin: _pin.text,
+            linkedHouseholdId: household?.id ?? ownHousehold?.id,
+          );
       if (!mounted) return;
       if (!success) {
         final session = ref.read(sessionProvider);
         final errorMsg = session is SessionSignedOut ? session.message : null;
         setState(() {
           _busy = false;
-          _error = errorMsg ?? 'Could not complete registration. Please try again.';
+          _error =
+              errorMsg ?? 'Could not complete registration. Please try again.';
           _step = _privacyStep;
         });
         return;
@@ -842,94 +852,94 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
     if (_isFhw) {
       return switch (_step) {
         0 => _PersonalDetailsStep(
-            name: _name,
-            phone: _phone,
-            pin: _pin,
-            pinConfirm: _pinConfirm,
-            language: _language,
-            region: _region,
-            isFhw: true,
-            relationship: _relationship,
-            onLanguageChanged: (v) => setState(() => _language = v),
-            onRelationshipChanged: (v) => setState(() => _relationship = v),
-          ),
-        1 => _RegionStep(
-            region: _region,
-            onChanged: (v) => setState(() {
-              _region = v;
-              _district = null;
-              _community = null;
-            }),
-          ),
-        2 => _DistrictStep(
-            region: _region,
-            district: _district,
-            onChanged: (v) => setState(() {
-              _district = v;
-              _community = null;
-            }),
-          ),
-        3 => _CommunityStep(
-            region: _region,
-            district: _district,
-            community: _community,
-            zone: _zone,
-            facility: _facility,
-            staffId: _staffId,
-            onCommunityChanged: (v) => setState(() => _community = v),
-          ),
-        _ => const SizedBox.shrink(),
-      };
-    }
-
-    return switch (_step) {
-      0 => _PersonalDetailsStep(
           name: _name,
           phone: _phone,
           pin: _pin,
           pinConfirm: _pinConfirm,
           language: _language,
           region: _region,
-          isFhw: false,
+          isFhw: true,
           relationship: _relationship,
           onLanguageChanged: (v) => setState(() => _language = v),
           onRelationshipChanged: (v) => setState(() => _relationship = v),
         ),
-      1 => _FamilyStep(
-          code: _familyCode,
-          household: _linkedHousehold,
-          checking: _checkingCode,
-          onCheck: _lookUpCode,
-          onPaste: _pasteCode,
-          selfCreate: _selfCreate,
-          familyName: _familyName,
-          landmark: _landmark,
+        1 => _RegionStep(
           region: _region,
-          district: _district,
-          community: _community,
-          onSelfCreateChanged: (v) => setState(() {
-            _selfCreate = v;
-            if (v) {
-              _linkedHousehold = null;
-              _district ??= null;
-            }
-          }),
-          onRegionChanged: (v) => setState(() {
+          onChanged: (v) => setState(() {
             _region = v;
             _district = null;
             _community = null;
           }),
-          onDistrictChanged: (v) => setState(() {
+        ),
+        2 => _DistrictStep(
+          region: _region,
+          district: _district,
+          onChanged: (v) => setState(() {
             _district = v;
             _community = null;
           }),
-          onCommunityChanged: (v) => setState(() => _community = v),
-          onChanged: (_) {
-            if (_linkedHousehold != null) {
-              setState(() => _linkedHousehold = null);
-            }
-          },
         ),
+        3 => _CommunityStep(
+          region: _region,
+          district: _district,
+          community: _community,
+          zone: _zone,
+          facility: _facility,
+          staffId: _staffId,
+          onCommunityChanged: (v) => setState(() => _community = v),
+        ),
+        _ => const SizedBox.shrink(),
+      };
+    }
+
+    return switch (_step) {
+      0 => _PersonalDetailsStep(
+        name: _name,
+        phone: _phone,
+        pin: _pin,
+        pinConfirm: _pinConfirm,
+        language: _language,
+        region: _region,
+        isFhw: false,
+        relationship: _relationship,
+        onLanguageChanged: (v) => setState(() => _language = v),
+        onRelationshipChanged: (v) => setState(() => _relationship = v),
+      ),
+      1 => _FamilyStep(
+        code: _familyCode,
+        household: _linkedHousehold,
+        checking: _checkingCode,
+        onCheck: _lookUpCode,
+        onPaste: _pasteCode,
+        selfCreate: _selfCreate,
+        familyName: _familyName,
+        landmark: _landmark,
+        region: _region,
+        district: _district,
+        community: _community,
+        onSelfCreateChanged: (v) => setState(() {
+          _selfCreate = v;
+          if (v) {
+            _linkedHousehold = null;
+            _district ??= null;
+          }
+        }),
+        onRegionChanged: (v) => setState(() {
+          _region = v;
+          _district = null;
+          _community = null;
+        }),
+        onDistrictChanged: (v) => setState(() {
+          _district = v;
+          _community = null;
+        }),
+        onCommunityChanged: (v) => setState(() => _community = v),
+        onChanged: (_) {
+          if (_linkedHousehold != null) {
+            setState(() => _linkedHousehold = null);
+          }
+        },
+      ),
       _ => const SizedBox.shrink(),
     };
   }
@@ -1034,7 +1044,8 @@ class _PersonalDetailsStep extends StatelessWidget {
             const FieldLabel(
               'Your relationship to the family',
               required: true,
-              why: 'Shown to the health worker so they know who is checking in.',
+              why:
+                  'Shown to the health worker so they know who is checking in.',
             ),
             DropdownButtonFormField<String>(
               value: _relationships.contains(relationship)
@@ -1054,7 +1065,8 @@ class _PersonalDetailsStep extends StatelessWidget {
           ],
           const FieldLabel(
             'Language for guidance',
-            why: 'Spoken advice will be played in this language. Tap the '
+            why:
+                'Spoken advice will be played in this language. Tap the '
                 'speaker to hear a sample.',
           ),
           Row(
@@ -1062,8 +1074,9 @@ class _PersonalDetailsStep extends StatelessWidget {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value:
-                      languages.contains(language) ? language : languages.first,
+                  value: languages.contains(language)
+                      ? language
+                      : languages.first,
                   isExpanded: true,
                   items: [
                     for (final l in languages)
@@ -1083,6 +1096,12 @@ class _PersonalDetailsStep extends StatelessWidget {
                 text: _sampleScriptFor(language),
                 language: language,
                 id: 'setup_preview_$language',
+                // The preview exists so a new user hears their language
+                // before committing; the sheet shows the Dagbani words the
+                // clip speaks, not the gated English display text.
+                dagbaniScript: language == 'Dagbani'
+                    ? DagbaniStrings.verdictUrgent.dagbani
+                    : null,
                 compact: true,
               ),
             ],
@@ -1278,9 +1297,7 @@ class _CommunityStep extends StatelessWidget {
           const FieldLabel('Staff ID'),
           TextField(
             controller: staffId,
-            decoration: const InputDecoration(
-              hintText: 'e.g. GHS-NR-04821',
-            ),
+            decoration: const InputDecoration(hintText: 'e.g. GHS-NR-04821'),
           ),
         ],
       ),
@@ -1363,12 +1380,20 @@ class _FamilyStep extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.phonelink_ring_outlined, color: AppColors.primary, size: 22),
+                    const Icon(
+                      Icons.phonelink_ring_outlined,
+                      color: AppColors.primary,
+                      size: 22,
+                    ),
                     const SizedBox(width: Gap.sm),
                     const Expanded(
                       child: Text(
                         'With the health worker right now?',
-                        style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.primary, fontSize: 13.5),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                          fontSize: 13.5,
+                        ),
                       ),
                     ),
                   ],
@@ -1376,7 +1401,11 @@ class _FamilyStep extends StatelessWidget {
                 const SizedBox(height: Gap.xs),
                 const Text(
                   'They can read the code out for you to type below, or send it by SMS. If it arrived as a message, paste it — no network needed.',
-                  style: TextStyle(color: AppColors.inkMuted, fontSize: 12, height: 1.3),
+                  style: TextStyle(
+                    color: AppColors.inkMuted,
+                    fontSize: 12,
+                    height: 1.3,
+                  ),
                 ),
                 const SizedBox(height: Gap.md),
                 OutlinedButton.icon(
@@ -1471,9 +1500,7 @@ class _FamilyStep extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(Gap.md),
             decoration: BoxDecoration(
-              color: selfCreate
-                  ? AppColors.primaryLight
-                  : AppColors.surface,
+              color: selfCreate ? AppColors.primaryLight : AppColors.surface,
               borderRadius: BorderRadius.circular(Gap.radius),
               border: Border.all(
                 color: selfCreate ? AppColors.primary : AppColors.line,
@@ -1486,9 +1513,7 @@ class _FamilyStep extends StatelessWidget {
                   selfCreate
                       ? Icons.check_circle_rounded
                       : Icons.radio_button_unchecked_rounded,
-                  color: selfCreate
-                      ? AppColors.primary
-                      : AppColors.inkFaint,
+                  color: selfCreate ? AppColors.primary : AppColors.inkFaint,
                   size: 22,
                 ),
                 const SizedBox(width: Gap.sm),
@@ -1579,7 +1604,8 @@ class _FamilyStep extends StatelessWidget {
           const SizedBox(height: Gap.lg),
           const FieldLabel(
             'How to find your home',
-            why: 'No addresses here — “behind the mosque” is how the health '
+            why:
+                'No addresses here — “behind the mosque” is how the health '
                 'worker finds you.',
           ),
           TextField(
@@ -1726,10 +1752,7 @@ class _PrivacyPoint extends StatelessWidget {
             children: [
               Text(title, style: AppType.label.copyWith(fontSize: 14)),
               const SizedBox(height: Gap.xs),
-              Text(
-                body,
-                style: AppType.caption.copyWith(height: 1.5),
-              ),
+              Text(body, style: AppType.caption.copyWith(height: 1.5)),
             ],
           ),
         ),
@@ -1805,9 +1828,9 @@ class _SuccessStepState extends State<_SuccessStep>
       Text(
         widget.isFhw
             ? 'You can now register households, run assessments, and start '
-              'follow-ups in your CHPS zone.'
+                  'follow-ups in your CHPS zone.'
             : 'You can now see your own family, check danger signs, and hear '
-              'guidance in your language.',
+                  'guidance in your language.',
         textAlign: TextAlign.center,
         style: AppType.body.copyWith(color: AppColors.inkMuted),
       ),
@@ -1890,14 +1913,22 @@ class FamilyCodeSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.xs),
+            padding: const EdgeInsets.symmetric(
+              horizontal: Gap.md,
+              vertical: Gap.xs,
+            ),
             decoration: BoxDecoration(
               color: AppColors.primaryLight,
               borderRadius: BorderRadius.circular(20),
             ),
             child: const Text(
               'FAMILY CODE',
-              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: AppColors.primary, letterSpacing: 0.8),
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
+                color: AppColors.primary,
+                letterSpacing: 0.8,
+              ),
             ),
           ),
           const SizedBox(height: Gap.sm),
@@ -1924,7 +1955,11 @@ class FamilyCodeSheet extends StatelessWidget {
               borderRadius: BorderRadius.circular(Gap.radius),
               border: Border.all(color: AppColors.lineStrong, width: 2),
               boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
               ],
             ),
             child: QrImageView(
@@ -1944,11 +1979,19 @@ class FamilyCodeSheet extends StatelessWidget {
           const SizedBox(height: Gap.lg),
           const Text(
             'READ IT OUT, OR SEND IT BY SMS',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.inkMuted, letterSpacing: 1.2),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: AppColors.inkMuted,
+              letterSpacing: 1.2,
+            ),
           ),
           const SizedBox(height: Gap.xs),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: Gap.lg, vertical: Gap.md),
+            padding: const EdgeInsets.symmetric(
+              horizontal: Gap.lg,
+              vertical: Gap.md,
+            ),
             decoration: BoxDecoration(
               color: AppColors.primaryLight,
               borderRadius: BorderRadius.circular(Gap.radius),
@@ -1970,12 +2013,18 @@ class FamilyCodeSheet extends StatelessWidget {
                 const SizedBox(width: Gap.sm),
                 IconButton(
                   tooltip: 'Copy to send by SMS or WhatsApp',
-                  icon: const Icon(Icons.copy_rounded, color: AppColors.primary, size: 24),
+                  icon: const Icon(
+                    Icons.copy_rounded,
+                    color: AppColors.primary,
+                    size: 24,
+                  ),
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: shortCode));
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Code $shortCode copied — send it by SMS or WhatsApp.'),
+                        content: Text(
+                          'Code $shortCode copied — send it by SMS or WhatsApp.',
+                        ),
                         behavior: SnackBarBehavior.floating,
                         backgroundColor: AppColors.primary,
                       ),
