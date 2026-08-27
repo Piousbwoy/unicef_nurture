@@ -29,13 +29,13 @@ sign-off, and the voice itself is a machine voice. The UI shows a
 ## Regeneration
 
 ```
-python tool\generate_dagbani_speech.py
+python tool\generate_dagbani_speech.py dagbani_mms
 ```
 
 Requires `torch`, `transformers`, `soundfile`. The phrase list in the
-script mirrors `dagbani_speech.dart` (the clip map) and
+script mirrors `speech_bank.dart` (the clip map) and
 `dagbani_strings.dart` (the wording) — if a draft changes there,
-regenerate here. `test/unit/dagbani_speech_test.dart` fails when a clip
+regenerate here. `test/speech_bank_test.dart` fails when a clip
 id and a bank file drift apart.
 
 ## The honest chain

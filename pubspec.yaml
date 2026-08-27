@@ -71,6 +71,8 @@ flutter:
   assets:
     - assets/audio/
     - assets/audio/dagbani_mms/
+    - assets/audio/hausa_mms/
+    - assets/audio/twi_mms/
     - assets/images/
     - assets/fonts/
     - assets/models/

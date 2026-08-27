@@ -16,7 +16,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../core/i18n/dagbani_speech.dart';
+import '../../core/i18n/speech_bank.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/reference/local_foods.dart';
 import '../../domain/engines/immunisation_engine.dart';
@@ -3058,9 +3058,10 @@ class FamilyCarePlanCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final message = plan.caregiverMessage ?? plan.summary;
     final colour = _colour;
-    // In Dagbani the family message is heard as the triage level's family
-    // sentence — the actionable content — from the on-device voice bank.
-    final levelClip = DagbaniSpeech.levelClip(plan.overallTriage.name);
+    // In a bank language (Dagbani, Hausa, Twi) the family message is heard
+    // as the triage level's family sentence — the actionable content — from
+    // the on-device voice bank.
+    final levelClip = SpeechBank.levelClip(plan.overallTriage.name);
 
     return Container(
       padding: const EdgeInsets.all(Gap.lg),
@@ -3142,8 +3143,7 @@ class FamilyCarePlanCard extends StatelessWidget {
                 text: message,
                 language: language,
                 id: 'plan_family_brief',
-                dagbaniClips: levelClip == null ? null : [levelClip.id],
-                dagbaniScript: levelClip?.dagbani,
+                bankClips: levelClip == null ? null : [levelClip.id],
               ),
             ],
           ),

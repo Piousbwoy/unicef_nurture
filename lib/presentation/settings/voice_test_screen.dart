@@ -1,6 +1,6 @@
 /// "What can this phone speak?" — the diagnostic the CHO opens when they
-/// want to know whether their device can handle Dagbani, Hausa, English, or
-/// nothing at all.
+/// want to know whether their device can handle Dagbani, Hausa, Twi,
+/// English, or nothing at all.
 ///
 /// The screen never claims more than the engine delivers. The four outcomes
 /// ([VoiceSource]) are shown in the same colours the audio button uses, so
@@ -36,6 +36,9 @@ class _VoiceTestScreenState extends ConsumerState<VoiceTestScreen> {
         'facility at once.',
     'Hausa': 'Idan yaranku ba ta iya sha ko nono, je asibitin yanzu.',
     'Dagbani': 'Ni bini maa ti niŋ ka o nui tana, yi tiŋ bɛ ni kpeeni pam.',
+    'Twi':
+        'Sɛ akwadaa ntumi nnom nsuo anaasɛ nono a, kɔ ayaresabea '
+        'ntɛm ara.',
   };
 
   @override
@@ -130,7 +133,12 @@ class _VoiceTestScreenState extends ConsumerState<VoiceTestScreen> {
             icon: Icons.translate_rounded,
             child: Column(
               children: [
-                for (final language in const ['Dagbani', 'Hausa', 'English'])
+                for (final language in const [
+                  'Dagbani',
+                  'Hausa',
+                  'Twi',
+                  'English',
+                ])
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: Gap.xs),
                     child: _LanguageTestRow(
@@ -243,7 +251,7 @@ class _LanguageTestRow extends StatelessWidget {
                 ),
                 if (lastSource != null) ...[
                   const SizedBox(height: 6),
-                  _ResultPill(source: lastSource!),
+                  _ResultPill(source: lastSource!, language: language),
                 ],
               ],
             ),
@@ -262,8 +270,9 @@ class _LanguageTestRow extends StatelessWidget {
 }
 
 class _ResultPill extends StatelessWidget {
-  const _ResultPill({required this.source});
+  const _ResultPill({required this.source, required this.language});
   final VoiceSource source;
+  final String language;
 
   @override
   Widget build(BuildContext context) {
@@ -290,7 +299,7 @@ class _ResultPill extends StatelessWidget {
           ),
           const SizedBox(width: 5),
           Text(
-            source.label,
+            source.labelFor(language),
             style: TextStyle(
               fontSize: 10.5,
               fontWeight: FontWeight.w700,
@@ -360,10 +369,19 @@ class _CoverageMatrix extends StatelessWidget {
         ),
         _CoverageRow(
           language: 'Hausa',
-          source: _has('ha') ? VoiceSource.systemTts : VoiceSource.readAloud,
+          source: VoiceSource.synthesized,
           notes: _has('ha')
-              ? 'Google TTS supports ha-NG'
-              : 'Install a Hausa voice pack',
+              ? 'On-device voice bank built in (Meta MMS), plus the '
+                    'phone\'s own Hausa voice as backup.'
+              : 'On-device voice bank built in (Meta MMS). Draft voice — '
+                    'human sign-off pending.',
+        ),
+        _CoverageRow(
+          language: 'Twi',
+          source: VoiceSource.synthesized,
+          notes:
+              'On-device voice bank built in (Meta MMS). Draft voice — '
+              'human sign-off pending.',
         ),
         _CoverageRow(
           language: 'Dagbani',

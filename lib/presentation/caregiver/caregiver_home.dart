@@ -49,7 +49,7 @@ import 'package:uuid/uuid.dart';
 import '../../app/providers.dart';
 import '../../core/audio/audio_guide.dart';
 import '../../core/audio/voice_service.dart';
-import '../../core/i18n/dagbani_speech.dart';
+import '../../core/i18n/speech_bank.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/reference/northern_ghana.dart';
 import '../../data/repositories/care_repository.dart';
@@ -2735,18 +2735,18 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
 
   /// The result exactly as the screen shows it — headline and advice — heard
   /// aloud in the caregiver's chosen language. The voice chain is the same
-  /// one every other button uses: verified recording, then the phone's own
-  /// voice, then the Hausa bridge, then the words on screen.
+  /// one every other button uses: verified recording, then the on-device
+  /// bank (Dagbani, Hausa, Twi), then the phone's own voice, then the Hausa
+  /// bridge, then the words on screen.
   Future<void> _playVerdict(_TriageVerdict verdict) async {
     final user = ref.read(currentUserProvider);
     final language = user?.preferredLanguage ?? 'English';
-    final clip = DagbaniSpeech.caregiverVerdictClip(verdict.name);
+    final clip = SpeechBank.caregiverVerdictClip(verdict.name);
     final outcome = await VoiceService.speakText(
       id: 'caregiver_verdict_${verdict.name}',
       text: '${verdict.headline}. ${verdict.advice}',
       language: language,
-      dagbaniClips: clip == null ? null : [clip.id],
-      dagbaniScript: clip?.dagbani,
+      bankClips: clip == null ? null : [clip.id],
     );
     if (!mounted) return;
     if (outcome.source == VoiceSource.readAloud) {
@@ -2778,10 +2778,12 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
   }
 
   Future<void> _playWords() async {
-    // In Dagbani the report is composed from the voice bank: the intro, one
-    // statement clip per chosen sign (the sign drafts are statements — the
-    // question clips are reused), the unsure preamble, the close.
-    final clips = DagbaniSpeech.clipsForNurseWords(
+    // In a bank language the report is composed from the voice bank: the
+    // intro, one statement clip per chosen sign (the sign drafts are
+    // statements — the question clips are reused), the unsure preamble,
+    // the close. The ids are language-neutral; the folder follows the
+    // user's language.
+    final clips = SpeechBank.clipsForNurseWords(
       yesKeys: _chosenYesKeys,
       unsureKeys: _chosenUnsureKeys,
     );
@@ -2789,8 +2791,7 @@ class _TriageScreenState extends ConsumerState<_TriageScreen> {
       id: 'caregiver_nurse_words',
       text: _nurseWords(_person!),
       language: _language,
-      dagbaniClips: clips,
-      dagbaniScript: DagbaniSpeech.scriptForClips(clips),
+      bankClips: clips,
     );
     if (!mounted) return;
     if (outcome.source == VoiceSource.readAloud) {

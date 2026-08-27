@@ -1097,11 +1097,8 @@ class _PersonalDetailsStep extends StatelessWidget {
                 language: language,
                 id: 'setup_preview_$language',
                 // The preview exists so a new user hears their language
-                // before committing; the sheet shows the Dagbani words the
-                // clip speaks, not the gated English display text.
-                dagbaniScript: language == 'Dagbani'
-                    ? DagbaniStrings.verdictUrgent.dagbani
-                    : null,
+                // before committing; the bank languages play their own
+                // clip and the sheet shows the words actually spoken.
                 compact: true,
               ),
             ],

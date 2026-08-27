@@ -7,11 +7,12 @@
 ///
 ///   1. **Studio recording** — a real voice, the gold standard. Files land in
 ///      `assets/audio/<topic>_<language>.mp3` and are picked up by name.
-///   2. **Synthesized Dagbani, on-device** — for Dagbani requests, clips in
-///      `assets/audio/dagbani_mms/<id>.wav` generated offline from Meta's
-///      open MMS Dagbani TTS model (see `tool/generate_dagbani_speech.py`).
-///      They are synthetic voices speaking draft translations, so the UI
-///      labels them exactly that way — never as a human recording.
+///   2. **Synthesized bank, on-device** — for Dagbani, Hausa and Twi
+///      requests, clips in `assets/audio/<lang>_mms/<id>.wav` generated
+///      offline from Meta's open MMS TTS models (see
+///      `tool/generate_dagbani_speech.py` and [SpeechBank]). They are
+///      synthetic voices speaking draft translations, so the UI labels them
+///      exactly that way — never as a human recording.
 ///   3. **System TTS in the requested language** — works for English, sometimes
 ///      for Hausa. The phone speaks the script in its own voice.
 ///   4. **Hausa bridge** — when the phone cannot speak Dagbani but *can* speak
@@ -32,6 +33,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
+import '../i18n/speech_bank.dart';
 import 'audio_guide.dart';
 
 /// Which voice is actually playing. Drives the small pill on the audio card.
@@ -55,21 +57,19 @@ enum VoiceSource {
 }
 
 extension VoiceSourceLabel on VoiceSource {
-  String get label => switch (this) {
+  /// The honest label for a playing voice, naming the language the bank
+  /// speaks when the synthesized voice fires. [language] only matters for
+  /// [VoiceSource.synthesized]; every other source ignores it.
+  String labelFor(String language) => switch (this) {
     VoiceSource.studio => 'Studio recording',
-    VoiceSource.synthesized => 'Dagbani voice • on-device',
+    VoiceSource.synthesized => '$language voice • on-device',
     VoiceSource.systemTts => 'Phone voice',
     VoiceSource.linguaFranca => 'Hausa bridge',
     VoiceSource.readAloud => 'Read the words',
   };
 
-  String get pill => switch (this) {
-    VoiceSource.studio => '▸ Studio recording',
-    VoiceSource.synthesized => '▸ Dagbani voice • on-device',
-    VoiceSource.systemTts => '▸ Phone voice',
-    VoiceSource.linguaFranca => '▸ Hausa bridge',
-    VoiceSource.readAloud => '▸ Read the words aloud',
-  };
+  /// The pill variant with the play glyph.
+  String pillFor(String language) => '▸ ${labelFor(language)}';
 }
 
 /// Languages that are Ghanaian but have no working TTS. Any of these triggers
@@ -124,8 +124,7 @@ class VoiceRequest {
     required this.preferredScript,
     this.bridgeScript,
     this.bridgeLanguage = 'Hausa',
-    this.dagbaniClips,
-    this.dagbaniScript,
+    this.bankClips,
   });
 
   /// Stable id for asset lookup, e.g. `child_danger_signs`.
@@ -144,22 +143,28 @@ class VoiceRequest {
   /// The language used when the bridge fires. Default: Hausa.
   final String bridgeLanguage;
 
-  /// Ordered Dagbani bank clips that compose the spoken message, e.g.
-  /// `['nurse_intro', 'q_newborn.feed', 'nurse_close']`. When set, step 2
-  /// plays the whole sequence (all-or-nothing) before falling back. When
-  /// null, step 2 tries the single clip named [id].
-  final List<String>? dagbaniClips;
-
-  /// The Dagbani words the clips speak, for the script sheet — composed
-  /// messages carry their text here because no single id resolves it.
-  final String? dagbaniScript;
+  /// Ordered speech-bank clips that compose the spoken message, e.g.
+  /// `['nurse_intro', 'q_newborn.feed', 'nurse_close']`. The ids are
+  /// language-neutral; the bank folder follows [preferredLanguage]. When
+  /// set, step 2 plays the whole sequence (all-or-nothing) before falling
+  /// back. When null, step 2 tries the single clip named [id].
+  final List<String>? bankClips;
 }
 
 class VoiceOutcome {
-  const VoiceOutcome({required this.source, required this.request});
+  const VoiceOutcome({
+    required this.source,
+    required this.request,
+    this.spokenScript,
+  });
 
   final VoiceSource source;
   final VoiceRequest request;
+
+  /// The words the user actually heard, in their language — set only when
+  /// the speech bank played. The script sheet leads with this, so what is
+  /// on screen matches what came out of the speaker.
+  final String? spokenScript;
 }
 
 abstract final class VoiceService {
@@ -200,15 +205,27 @@ abstract final class VoiceService {
       return VoiceOutcome(source: VoiceSource.studio, request: request);
     }
 
-    // 2. Try the bundled Dagbani voice bank (Meta MMS, generated offline).
-    //    Real Dagbani words a grandmother can follow — labelled honestly as
-    //    a machine voice, because that is what it is. Composed requests
-    //    play a whole clip sequence; either way the request must be fully
-    //    covered or the chain moves on — a half-spoken message is a lie the
-    //    app cannot afford.
-    if (_isDagbani(request.preferredLanguage)) {
-      if (await _playDagbaniBank(request.dagbaniClips ?? [request.id])) {
-        return VoiceOutcome(source: VoiceSource.synthesized, request: request);
+    // 2. Try the bundled speech bank (Meta MMS, generated offline) for the
+    //    languages we carry clips for — Dagbani, Hausa and Twi today. Real
+    //    words in the user's language a grandmother can follow — labelled
+    //    honestly as a machine voice, because that is what it is. The bank
+    //    deliberately runs *before* system TTS: a phone that "has" Hausa
+    //    would otherwise speak the English display text in a Hausa accent.
+    //    Composed requests play a whole clip sequence; either way the
+    //    request must be fully covered or the chain moves on — a
+    //    half-spoken message is a lie the app cannot afford.
+    final bank = SpeechBank.folderFor(request.preferredLanguage);
+    if (bank != null) {
+      final clips = request.bankClips ?? [request.id];
+      if (await _playBankClips(bank, clips)) {
+        return VoiceOutcome(
+          source: VoiceSource.synthesized,
+          request: request,
+          spokenScript: SpeechBank.scriptFor(
+            language: request.preferredLanguage,
+            ids: clips,
+          ),
+        );
       }
     }
 
@@ -242,22 +259,20 @@ abstract final class VoiceService {
   }
 
   /// Plays a script that is not a registered [AudioTopic] — used by the
-  /// "Read it to me" feature on arbitrary text cards. Composed Dagbani
-  /// messages pass their clip sequence and spoken text through.
+  /// "Read it to me" feature on arbitrary text cards. Composed bank
+  /// messages pass their clip sequence through.
   static Future<VoiceOutcome> speakText({
     required String id,
     required String text,
     required String language,
-    List<String>? dagbaniClips,
-    String? dagbaniScript,
+    List<String>? bankClips,
   }) {
     return speak(
       VoiceRequest(
         id: id,
         preferredLanguage: language,
         preferredScript: text,
-        dagbaniClips: dagbaniClips,
-        dagbaniScript: dagbaniScript,
+        bankClips: bankClips,
       ),
     );
   }
@@ -368,13 +383,17 @@ abstract final class VoiceService {
     return true;
   }
 
-  /// Plays the Dagbani bank clips in order. Single-clip requests (topics,
-  /// questions, the language preview) are the common case; composed
-  /// requests — the level messages, the words for the nurse — play one
-  /// clip after another. Returns true when playback actually started.
-  static Future<bool> _playDagbaniBank(List<String> clipIds) async {
+  /// Plays the bank clips of one language folder in order. Single-clip
+  /// requests (topics, questions, the language preview) are the common
+  /// case; composed requests — the level messages, the words for the nurse
+  /// — play one clip after another. Returns true when playback actually
+  /// started.
+  static Future<bool> _playBankClips(
+    String folder,
+    List<String> clipIds,
+  ) async {
     if (clipIds.isEmpty) return false;
-    final paths = [for (final id in clipIds) 'audio/dagbani_mms/$id.wav'];
+    final paths = [for (final id in clipIds) 'audio/$folder/$id.wav'];
     for (final path in paths) {
       if (!await _assetIsBundled(path)) return false;
     }
@@ -400,10 +419,6 @@ abstract final class VoiceService {
       .first
       .toLowerCase()
       .replaceAll(RegExp(r'[^a-z0-9]'), '');
-
-  /// Dagbani in any of the spellings the app stores for it.
-  static bool _isDagbani(String language) =>
-      language.toLowerCase().startsWith('dag');
 
   /// True when an asset MP3 for [topic] in [language] is on the phone. Used
   /// to decide which pill to show in the audio card without playing.

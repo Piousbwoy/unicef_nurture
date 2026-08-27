@@ -24,8 +24,7 @@ class AudioButton extends StatefulWidget {
     required this.language,
     this.id,
     this.compact = false,
-    this.dagbaniClips,
-    this.dagbaniScript,
+    this.bankClips,
   });
 
   /// The script to speak. This is the same plain-language text the app
@@ -41,15 +40,11 @@ class AudioButton extends StatefulWidget {
   /// and the read-aloud path are available.
   final String? id;
 
-  /// Ordered Dagbani bank clips that compose the spoken message (see
-  /// [VoiceRequest.dagbaniClips]). When set, the Dagbani chain plays the
-  /// sequence — all-or-nothing — before falling back.
-  final List<String>? dagbaniClips;
-
-  /// The Dagbani words the clips speak, shown in the script sheet so a
-  /// composed message (a level message, the words for the nurse) can be
-  /// read in the language it was heard in.
-  final String? dagbaniScript;
+  /// Ordered speech-bank clips that compose the spoken message (see
+  /// [VoiceRequest.bankClips]). When the user's language has an on-device
+  /// bank (Dagbani, Hausa, Twi), the chain plays the sequence —
+  /// all-or-nothing — before falling back.
+  final List<String>? bankClips;
 
   /// When true, draws the smaller variant used in cramped card rows.
   final bool compact;
@@ -74,8 +69,7 @@ class _AudioButtonState extends State<AudioButton> {
         id: widget.id ?? 'inline_${widget.text.hashCode}',
         preferredLanguage: widget.language,
         preferredScript: widget.text,
-        dagbaniClips: widget.dagbaniClips,
-        dagbaniScript: widget.dagbaniScript,
+        bankClips: widget.bankClips,
       ),
     );
     if (!mounted) return;
@@ -110,30 +104,35 @@ class _AudioButtonState extends State<AudioButton> {
     final id = outcome.request.id;
     final language = outcome.request.preferredLanguage;
 
-    // A composed message carries its own Dagbani text — what the clips
-    // speak is not derivable from the id alone.
-    final spoken = outcome.request.dagbaniScript;
-    if (spoken != null && language == 'Dagbani') {
+    // The bank playback reports exactly what was heard, in the user's
+    // language — the sheet leads with it so the screen matches the
+    // speaker, whatever the language.
+    final spoken = outcome.spokenScript;
+    if (spoken != null) {
       return _ResolvedScript(
         english: outcome.request.preferredScript,
-        dagbani: spoken,
-        spokenIsDagbani: true,
+        spoken: spoken,
+        spokenLanguage: language,
+        spokenIsAudible: true,
       );
     }
 
-    // Triage question — id starts with 'q_'.
+    // Triage question — id starts with 'q_'. Before anything plays (long
+    // press), a Dagbani draft still previews in the user's language, with
+    // the verified badge honest about its status.
     if (id.startsWith('q_')) {
       final key = id.substring(2); // child.drink
       final s = DagbaniStrings.forQuestionKey(key);
       if (s != null && language == 'Dagbani') {
         return _ResolvedScript(
           english: s.english,
-          dagbani: s.dagbani,
+          spoken: s.dagbani,
+          spokenLanguage: 'Dagbani',
           verified: s.verified,
         );
       }
       if (s != null) {
-        return _ResolvedScript(english: s.english, dagbani: null);
+        return _ResolvedScript(english: s.english);
       }
     }
 
@@ -142,19 +141,17 @@ class _AudioButtonState extends State<AudioButton> {
     if (s != null && language == 'Dagbani') {
       return _ResolvedScript(
         english: s.english,
-        dagbani: s.dagbani,
+        spoken: s.dagbani,
+        spokenLanguage: 'Dagbani',
         verified: s.verified,
       );
     }
     if (s != null) {
-      return _ResolvedScript(english: s.english, dagbani: null);
+      return _ResolvedScript(english: s.english);
     }
 
-    // No Dagbani draft — show whatever the caller passed in.
-    return _ResolvedScript(
-      english: outcome.request.preferredScript,
-      dagbani: null,
-    );
+    // No draft — show whatever the caller passed in.
+    return _ResolvedScript(english: outcome.request.preferredScript);
   }
 
   @override
@@ -179,7 +176,6 @@ class _AudioButtonState extends State<AudioButton> {
                   id: widget.id ?? 'inline',
                   preferredLanguage: widget.language,
                   preferredScript: widget.text,
-                  dagbaniScript: widget.dagbaniScript,
                 ),
               ),
             ),
@@ -204,7 +200,7 @@ class _AudioButtonState extends State<AudioButton> {
         ),
         if (_lastSource != null) ...[
           const SizedBox(height: 4),
-          _SourcePill(source: _lastSource!),
+          _SourcePill(source: _lastSource!, language: widget.language),
         ],
       ],
     );
@@ -212,8 +208,11 @@ class _AudioButtonState extends State<AudioButton> {
 }
 
 class _SourcePill extends StatelessWidget {
-  const _SourcePill({required this.source});
+  const _SourcePill({required this.source, required this.language});
   final VoiceSource source;
+
+  /// The language the bank speaks — only used for the synthesized label.
+  final String language;
 
   Color get _bg => switch (source) {
     VoiceSource.studio => AppColors.triageGreenBg,
@@ -253,7 +252,7 @@ class _SourcePill extends StatelessWidget {
           Icon(_icon, size: 11, color: _fg),
           const SizedBox(width: 4),
           Text(
-            source.label,
+            source.labelFor(language),
             style: TextStyle(
               fontSize: 10.5,
               fontWeight: FontWeight.w700,
@@ -270,18 +269,24 @@ class _SourcePill extends StatelessWidget {
 class _ResolvedScript {
   const _ResolvedScript({
     required this.english,
-    this.dagbani,
+    this.spoken,
+    this.spokenLanguage,
     this.verified = false,
-    this.spokenIsDagbani = false,
+    this.spokenIsAudible = false,
   });
   final String english;
-  final String? dagbani;
+
+  /// The words in the user's language — what the clips speak (bank
+  /// playback) or the draft a preview shows.
+  final String? spoken;
+  final String? spokenLanguage;
   final bool verified;
 
-  /// True when the clips speak the Dagbani carried in [dagbani] — the
-  /// sheet leads with those words, because the sheet is titled "The spoken
-  /// message" and that is what was heard.
-  final bool spokenIsDagbani;
+  /// True when the bank actually played [spoken] — the sheet leads with
+  /// those words, because the sheet is titled "The spoken message" and
+  /// that is what was heard. Draft previews only surface their words when
+  /// a speaker has signed off.
+  final bool spokenIsAudible;
 }
 
 class _ScriptSheet extends StatelessWidget {
@@ -291,16 +296,13 @@ class _ScriptSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // When the user has picked Dagbani and a draft exists, the on-screen
-    // script is in Dagbani (or English with a draft badge if unverified).
-    // The audio pill still tells the truth about what the phone actually
-    // played.
-    final showDagbani = resolved.dagbani != null;
-    final displayText = resolved.spokenIsDagbani
-        ? resolved.dagbani!
-        : showDagbani && resolved.verified
-        ? resolved.dagbani!
-        : resolved.english;
+    // The sheet leads with the words that were heard — in the user's
+    // language when the bank played — and always shows the English card
+    // text below it. The pill tells the truth about which voice played.
+    final hasSpoken = resolved.spoken != null;
+    final showSpoken =
+        resolved.spokenIsAudible || (hasSpoken && resolved.verified);
+    final displayText = showSpoken ? resolved.spoken! : resolved.english;
 
     return SafeArea(
       child: Padding(
@@ -317,10 +319,16 @@ class _ScriptSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 4),
-            _SourcePill(source: outcome.source),
-            if (showDagbani) ...[
+            _SourcePill(
+              source: outcome.source,
+              language: outcome.request.preferredLanguage,
+            ),
+            if (hasSpoken) ...[
               const SizedBox(height: 6),
-              _LangBadge(language: 'Dagbani', verified: resolved.verified),
+              _LangBadge(
+                language: resolved.spokenLanguage!,
+                verified: resolved.verified,
+              ),
             ],
             const SizedBox(height: Gap.md),
             Text(
@@ -329,11 +337,11 @@ class _ScriptSheet extends StatelessWidget {
                         'The words are below — read them aloud, or ask '
                         'someone to.'
                   : outcome.source == VoiceSource.synthesized
-                  ? 'This is a Dagbani voice built into the app — '
-                        'synthesized offline from Meta\'s open MMS model '
-                        'speaking draft words. A human recording would '
-                        'sound warmer; a Dagbani speaker should listen '
-                        'and sign off.'
+                  ? 'This is a ${outcome.request.preferredLanguage} voice '
+                        'built into the app — synthesized offline from '
+                        'Meta\'s open MMS model speaking draft words. A '
+                        'human recording would sound warmer; a native '
+                        'speaker should listen and sign off.'
                   : outcome.source == VoiceSource.linguaFranca
                   ? 'This phone cannot speak ${outcome.request.preferredLanguage} '
                         'yet, so the message is in ${outcome.request.bridgeLanguage}, '
@@ -368,8 +376,8 @@ class _ScriptSheet extends StatelessWidget {
                       color: AppColors.ink,
                     ),
                   ),
-                  if (showDagbani &&
-                      (resolved.verified || resolved.spokenIsDagbani)) ...[
+                  if (hasSpoken &&
+                      (resolved.verified || resolved.spokenIsAudible)) ...[
                     const SizedBox(height: 8),
                     Text(
                       'English: ${resolved.english}',
