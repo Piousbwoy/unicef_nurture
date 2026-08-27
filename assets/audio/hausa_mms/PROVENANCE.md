@@ -27,6 +27,28 @@ exactly this.
 | Generator | `tool/generate_dagbani_speech.py hausa_mms` (see `manifest.json` for per-clip data) |
 | Generated | 2026-08-27 |
 
+## Verification (2026-08-27, `tool/eval_voices.py`)
+
+Machine verification against the official Meta release — no human earing
+required:
+
+- **Weights are byte-identical to the official checkpoint.** The sha256 of
+  `laztopaz/mms-tts-hau-custom`'s `model.safetensors` equals the official
+  `facebook/mms-tts-hau` (now public): `8a68b8c658853a92fd50…`. The bank
+  speaks with Meta's canonical Hausa voice, not a degraded copy.
+- **Language ID** (`facebook/mms-lid-2048`) classifies the bank's
+  `child_danger_signs` clip as Hausa with p=1.0 and `q_child.fits` with
+  p=0.999 — the model hears real Hausa, not English words in an accent.
+- **ASR round-trip** (`facebook/mms-1b-all`, `hau` adapter) recovers an
+  average 0.929 of the script across four clips — identical to fresh
+  synthesis from the official weights ("yaron na tonsiya", "ku tafi
+  asibiti yanzu karku jira har gobe").
+- **Community fine-tunes were auditioned and rejected.** Every expressive
+  candidate failed the language check (one classified as Norwegian,
+  nno:0.282); the only candidates that passed were LID-identical to the
+  official voice, so swapping them buys nothing. The canonical voice
+  stays until a native speaker records real audio.
+
 ## Why the bank runs before the phone's own Hausa voice
 
 A phone that "has" a Hausa TTS voice would speak the English *display*

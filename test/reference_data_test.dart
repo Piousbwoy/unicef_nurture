@@ -43,16 +43,20 @@ void main() {
       expect(NorthernGhana.communitiesOf(region, 'No Such District'), isEmpty);
     });
 
-    test('language lists always include the trade and official languages', () {
+    test('every guidance picker offers exactly the four spoken languages', () {
       for (final region in NorthernGhana.regionNames) {
-        final langs = NorthernGhana.languagesOf(region);
-        expect(langs, contains('English'), reason: region);
-        expect(langs, contains('Hausa'), reason: region);
+        expect(
+          NorthernGhana.languagesOf(region),
+          ['Dagbani', 'Hausa', 'Twi', 'English'],
+          reason: region,
+        );
       }
     });
 
-    test('Dagbani leads in the Northern Region', () {
-      expect(NorthernGhana.languagesOf('Northern Region').first, 'Dagbani');
+    test('Dagbani leads every guidance picker', () {
+      for (final region in NorthernGhana.regionNames) {
+        expect(NorthernGhana.languagesOf(region).first, 'Dagbani');
+      }
     });
   });
 }

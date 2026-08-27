@@ -29,6 +29,27 @@ voice • on-device" pill and the script sheet says exactly this.
 | Generator | `tool/generate_dagbani_speech.py twi_mms` (see `manifest.json` for per-clip data) |
 | Generated | 2026-08-27 |
 
+## Verification (2026-08-27, `tool/eval_voices.py`)
+
+Machine verification of the checkpoint chain:
+
+- **Weights are byte-identical to an independent upload.** The sha256 of
+  `IanKobby/mms-tts-twi-ghana`'s `model.safetensors` equals that of
+  `rnjema-unima/mms-tts-twi-baseline`: `e93643449acf79071e0b…`. The
+  official `facebook/mms-tts-twi` repo is access-gated, so two agreeing
+  independent copies of the same checkpoint are the strongest available
+  identity signal — the bank uses canonical MMS Twi weights, not a
+  third-party remix.
+- **Language ID** (`facebook/mms-lid-2048`) classifies the bank's
+  `child_danger_signs` clip as Akan (`aka`, the macrolanguage that
+  includes Twi; LID-2048 has no separate `twi` label) with p=1.0 — the
+  model hears real Twi, not English words in an accent.
+- **Community fine-tunes were auditioned and rejected.** All scored
+  identically to the baseline (no expressiveness upside), and Hausa
+  fine-tunes from the same community demonstrably drift out of language
+  entirely. The canonical voice stays until a native speaker records
+  real audio.
+
 ## Regeneration
 
 ```

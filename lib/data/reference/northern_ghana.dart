@@ -37,7 +37,9 @@ class GhRegion {
   final String capital;
   final List<GhDistrict> districts;
 
-  /// Languages in rough order of prevalence. Drives the audio-guidance picker.
+  /// Languages in rough order of prevalence. Kept as a regional record —
+  /// the guidance picker is fixed to the four spoken languages (see
+  /// [NorthernGhana.guidanceLanguages]).
   final List<String> languages;
 }
 
@@ -81,13 +83,20 @@ abstract final class NorthernGhana {
   static List<String> communitiesOf(String regionName, String districtName) =>
       districtByName(regionName, districtName)?.communities ?? const [];
 
-  /// Languages available for audio guidance in a given region, always with
-  /// English and Hausa appended — Hausa is the common trade language across
-  /// northern markets and zongo communities.
-  static List<String> languagesOf(String regionName) {
-    final langs = regionByName(regionName)?.languages ?? const <String>[];
-    return {...langs, 'Hausa', 'English'}.toList(growable: false);
-  }
+  /// The languages CareBridge speaks, in picker order: the three
+  /// on-device bank voices plus the universal English fallback.
+  static const guidanceLanguages = <String>[
+    'Dagbani',
+    'Hausa',
+    'Twi',
+    'English',
+  ];
+
+  /// Languages available for audio guidance. The same four everywhere:
+  /// Dagbani, Hausa, Twi and English. Region prevalence no longer widens
+  /// the list — offering Likpakpaln or Nanuni would promise a voice the
+  /// app cannot play, and the audio button must never overpromise.
+  static List<String> languagesOf(String regionName) => guidanceLanguages;
 
   static int get totalDistricts =>
       regions.fold(0, (sum, r) => sum + r.districts.length);
