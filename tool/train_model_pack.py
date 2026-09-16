@@ -36,6 +36,12 @@ Version ladder (committed in this file)
 
 from __future__ import annotations
 
+# The historical implementation below is archival, not a release command.
+if __name__ == "__main__":
+    from evaluate_research_models import main as evaluate_main
+    evaluate_main()
+    raise SystemExit(0)
+
 import csv
 import hashlib
 import io
@@ -586,7 +592,7 @@ def _platt_calibrate_with_residuals(y_true, p_in, n_bins: int = 10):
     lr.fit(z, y_true)
     A = float(lr.coef_[0][0])
     B = float(lr.intercept_[0])
-    p_cal = 1.0 / (1.0 + np.exp(-(A * p_clip + B)))
+    p_cal = 1.0 / (1.0 + np.exp(-(A * np.log(p_clip / (1 - p_clip)) + B)))
     brier = float(brier_score_loss(y_true, p_cal))
 
     # Per-bin residual std for CI
@@ -688,7 +694,7 @@ def _train_and_convert(
         # Calibrate the external probabilities with the SAME Platt params
         eps = 1e-7
         p_ext_clip = np.clip(y_prob_ext, eps, 1 - eps)
-        p_ext_cal = 1.0 / (1.0 + np.exp(-(A * p_ext_clip + B)))
+        p_ext_cal = 1.0 / (1.0 + np.exp(-(A * np.log(p_ext_clip / (1 - p_ext_clip)) + B)))
         ext_brier = float(brier_score_loss(external_y, p_ext_cal))
         ext_block = {
             "dataset": external_desc or "external held-out set",
@@ -773,6 +779,12 @@ def _train_and_convert(
 # ---------------------------------------------------------------------------
 
 def main():
+    from evaluate_research_models import main as evaluate_main
+    return evaluate_main()
+
+
+def _archived_main():
+    raise RuntimeError("Legacy asset promotion is disabled; use evaluate_research_models.py")
     if not _HAS_TF:
         sys.exit("TensorFlow is required. pip install tensorflow==2.15.*")
     if not _HAS_SK:

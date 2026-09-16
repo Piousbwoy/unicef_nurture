@@ -158,7 +158,9 @@ class SessionController {
       }
       return SessionSignedOut(
         lastPhone: phone,
-        message: result.failure!.message,
+        // Prefer the specific reason (e.g. what the server answered during
+        // cloud recovery) over the generic failure label.
+        message: result.detail ?? result.failure!.message,
       );
     }
 

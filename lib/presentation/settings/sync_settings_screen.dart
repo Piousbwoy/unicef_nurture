@@ -9,15 +9,15 @@
 /// address that was mistyped.
 library;
 
-import 'dart:async';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/local/preferences_store.dart';
+import '../../data/sync/http_client.dart';
+import '../../data/sync/pull_service.dart';
+import '../../data/sync/server_auth_client.dart';
 import '../shared/ui.dart';
 
 class SyncSettingsScreen extends ConsumerStatefulWidget {
@@ -44,6 +44,20 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
   String? _testMessage;
   bool? _testOk;
 
+  // ------------------------------------- Delta pull (records coming down)
+  bool _pulling = false;
+
+  /// Outcome of the last "Pull now" press — rendered exactly as reported.
+  String? _pullMessage;
+  bool? _pullOk;
+
+  /// What this account last received from the server on this device.
+  String? _lastPullLine;
+
+  /// Who the server says owns this device's credential, or an honest
+  /// explanation of why that cannot be confirmed right now.
+  String? _serverIdentity;
+
   @override
   void initState() {
     super.initState();
@@ -61,14 +75,79 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
   Future<void> _load() async {
     final url = await PreferencesStore.syncApiUrl();
     final token = await PreferencesStore.syncApiToken();
+
+    // The last-pull line comes from the same provider the sync banner reads,
+    // so the two can never disagree about what the engine actually did.
+    String? pullLine;
+    try {
+      pullLine = await ref.read(lastPullProvider.future);
+    } catch (_) {
+      pullLine = null; // honesty over polish: fall back to "never pulled"
+    }
+
     if (!mounted) return;
     setState(() {
       _savedUrl = (url == null || url.isEmpty) ? null : url;
       _urlController.text = _savedUrl ?? '';
       _tokenController.text = token ?? '';
+      _lastPullLine = pullLine;
       _loading = false;
     });
+
+    // The identity probe needs the network — run it after first paint so a
+    // slow server never holds the screen hostage.
+    await _loadServerIdentity();
   }
+
+  /// Asks the server who owns this device's credential, and shows the answer
+  /// — or the precise reason there is no answer — exactly as it is. No
+  /// guessed names, no fabricated sessions.
+  Future<void> _loadServerIdentity() async {
+    if (!_configured) {
+      // Demonstration mode never talks to a server; the "Current mode" card
+      // already explains what that means, so no identity line is shown.
+      if (mounted) setState(() => _serverIdentity = null);
+      return;
+    }
+    Map<String, dynamic>? profile;
+    try {
+      profile = await ServerAuthClient.currentUserProfile();
+    } catch (_) {
+      profile = null; // the probe already swallows its own errors
+    }
+    if (!mounted) return;
+    if (profile != null) {
+      // Resolve the fields where promotion holds — inside the setState
+      // closure the analyzer can no longer see that profile is non-null.
+      final name = profile['full_name'];
+      final role = profile['role'];
+      final who = name is String && name.isNotEmpty ? name : 'unknown name';
+      setState(() {
+        _serverIdentity =
+            'Signed in to the server as $who (${_roleLabel(role)}).';
+      });
+      return;
+    }
+    // Null means either no credential at all, or one the server could not
+    // confirm (offline, expired, revoked). Those are different claims and
+    // get different sentences.
+    final hasCredential = await ServerAuthClient.pickAuthorization() != null;
+    if (!mounted) return;
+    setState(() {
+      _serverIdentity = hasCredential
+          ? 'Could not confirm the server sign-in just now — the server may '
+                'be offline or the saved session may have expired. Pulling '
+                'retries on its own.'
+          : 'No server session on this device. Sign in or register while '
+                'connected to establish one.';
+    });
+  }
+
+  String _roleLabel(Object? role) => switch (role) {
+        'fhw' => 'frontline health worker',
+        'caregiver' => 'caregiver',
+        _ => role is String && role.isNotEmpty ? role : 'team member',
+      };
 
   bool get _configured => _savedUrl != null;
 
@@ -112,40 +191,36 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
     });
 
     // A lightweight reachability probe — a GET to the server root. It proves
-    // the phone can reach the host without sending any patient data.
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 10);
+    // the phone can reach the host without sending any patient data, and the
+    // reply body names the service so the operator can confirm it really is
+    // the district server answering, not some other machine on that port.
     try {
-      final request = await client
-          .getUrl(Uri.parse(url))
-          .timeout(const Duration(seconds: 10));
-      final response = await request.close().timeout(
-        const Duration(seconds: 12),
+      final reply = await PlatformHttpClient.get(
+        Uri.parse(url),
+        timeout: const Duration(seconds: 10),
       );
-      final code = response.statusCode;
-      await response.drain<void>();
+      final identity = reply.jsonBody;
+      final service = identity?['service'];
+      final version = identity?['version'];
+      final who = service is String && service.isNotEmpty
+          ? (version == null ? ' — $service' : ' — $service v$version')
+          : '';
       if (!mounted) return;
       setState(() {
         _testOk = true;
         _testMessage =
-            'Reached the server (HTTP $code). '
+            'Reached the server (HTTP ${reply.statusCode})$who. '
             'Records will upload to this address.';
       });
-    } on TimeoutException {
+    } on HttpFailure catch (e) {
       if (!mounted) return;
       setState(() {
         _testOk = false;
-        _testMessage =
-            'The server did not answer in time. Check the address '
-            'and the network, then try again.';
-      });
-    } on SocketException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _testOk = false;
-        _testMessage =
-            'Could not reach that address: ${e.message}. '
-            'Check it is spelled correctly.';
+        _testMessage = e.kind == HttpFailureKind.timeout
+            ? 'The server did not answer in time. Check the address '
+                'and the network, then try again.'
+            : 'Could not reach that address: ${e.message}. '
+                'Check it is spelled correctly.';
       });
     } catch (e) {
       if (!mounted) return;
@@ -154,9 +229,58 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
         _testMessage = 'Could not connect: $e';
       });
     } finally {
-      client.close();
       if (mounted) setState(() => _testing = false);
     }
+  }
+
+  /// Manual delta pull. Always honest: the message is built from the
+  /// [PullReport] the engine returns, including the "nothing configured to
+  /// pull from" case, which is exactly what demonstration mode is.
+  Future<void> _pullNow() async {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _pulling = true;
+      _pullMessage = null;
+      _pullOk = null;
+    });
+
+    // runPull never throws — every outcome comes back as a report.
+    final report = await ref.read(pullNowProvider)();
+
+    // The pull advanced the watermark; re-read the exact line the banner
+    // shows so settings and banner can never disagree.
+    String? line;
+    try {
+      line = await ref.read(lastPullProvider.future);
+    } catch (_) {
+      line = _lastPullLine;
+    }
+    if (!mounted) return;
+    setState(() {
+      _pulling = false;
+      _pullOk = report.isSuccess;
+      _lastPullLine = line ?? _lastPullLine;
+      _pullMessage = switch (report.status) {
+        PullStatus.success =>
+          'Pulled ${report.pages} page${report.pages == 1 ? '' : 's'}: '
+              '${report.rowsApplied} new or updated record'
+              '${report.rowsApplied == 1 ? '' : 's'} merged, '
+              '${report.rowsSkipped} already up to date here.',
+        PullStatus.notConfigured =>
+          'No district server is configured, so there is nothing to pull '
+              'from. Records stay on this phone.',
+        PullStatus.unauthorized =>
+          'The server did not accept the sign-in on this device. Sign in or '
+              'register again while connected, then pull.',
+        PullStatus.unavailable =>
+          'The server could not be reached just now. Pulling retries by '
+              'itself when the app starts or the network returns.',
+      };
+    });
+
+    // A pull that worked proves the session works — refresh the identity
+    // line, which may have failed earlier while offline.
+    if (report.isSuccess) await _loadServerIdentity();
   }
 
   Future<void> _save() async {
@@ -354,34 +478,69 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
                       ),
                       if (_testMessage != null) ...[
                         const SizedBox(height: Gap.md),
-                        Container(
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: (_testOk ?? false)
-                                ? AppColors.triageGreenBg
-                                : AppColors.triageRedBg,
-                            borderRadius: BorderRadius.circular(Gap.radiusSm),
-                          ),
-                          child: AccentEdge(
-                            accent: (_testOk ?? false)
-                                ? AppColors.triageGreen
-                                : AppColors.triageRed,
-                            borderRadius: BorderRadius.circular(Gap.radiusSm),
-                            child: Padding(
-                              padding: const EdgeInsets.all(Gap.md),
-                              child: Text(
-                                _testMessage!,
-                                style: TextStyle(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w700,
-                                  height: 1.4,
-                                  color: (_testOk ?? false)
-                                      ? AppColors.triageGreen
-                                      : AppColors.triageRed,
+                        _HonestResult(
+                          message: _testMessage!,
+                          ok: _testOk ?? false,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: Gap.lg),
+
+                // ------------------------------------- Records from others
+                SectionCard(
+                  title: 'Records from other devices',
+                  subtitle:
+                      'Pulling brings down the records other devices have '
+                      'shared for your area, so a family can visit any nurse '
+                      'and be recognised with their history intact.',
+                  icon: Icons.cloud_download_outlined,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _lastPullLine ??
+                            'This account has not pulled from the server on '
+                                'this device yet.',
+                        style: AppType.caption.copyWith(height: 1.5),
+                      ),
+                      if (_serverIdentity != null) ...[
+                        const SizedBox(height: Gap.sm),
+                        Text(
+                          _serverIdentity!,
+                          style: AppType.caption.copyWith(height: 1.5),
+                        ),
+                      ],
+                      const SizedBox(height: Gap.md),
+                      OutlinedButton.icon(
+                        onPressed: (!_configured || _pulling)
+                            ? null
+                            : _pullNow,
+                        icon: _pulling
+                            ? const SizedBox(
+                                height: 15,
+                                width: 15,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
                                 ),
-                              ),
-                            ),
-                          ),
+                              )
+                            : const Icon(Icons.refresh_rounded, size: 18),
+                        label: Text(_pulling ? 'Pulling…' : 'Pull now'),
+                      ),
+                      if (!_configured) ...[
+                        const SizedBox(height: Gap.sm),
+                        Text(
+                          'Configure a district server above to enable '
+                              'pulling.',
+                          style: AppType.caption.copyWith(height: 1.5),
+                        ),
+                      ],
+                      if (_pullMessage != null) ...[
+                        const SizedBox(height: Gap.md),
+                        _HonestResult(
+                          message: _pullMessage!,
+                          ok: _pullOk ?? false,
                         ),
                       ],
                     ],
@@ -440,6 +599,43 @@ class _SyncSettingsScreenState extends ConsumerState<SyncSettingsScreen> {
                 label: Text(_saving ? 'Saving…' : 'Save'),
               ),
             ),
+    );
+  }
+}
+
+/// The green/red outcome box shared by "Test connection" and "Pull now" —
+/// one widget so both probes tell the truth in the same voice.
+class _HonestResult extends StatelessWidget {
+  const _HonestResult({required this.message, required this.ok});
+
+  final String message;
+  final bool ok;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = ok ? AppColors.triageGreen : AppColors.triageRed;
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: ok ? AppColors.triageGreenBg : AppColors.triageRedBg,
+        borderRadius: BorderRadius.circular(Gap.radiusSm),
+      ),
+      child: AccentEdge(
+        accent: color,
+        borderRadius: BorderRadius.circular(Gap.radiusSm),
+        child: Padding(
+          padding: const EdgeInsets.all(Gap.md),
+          child: Text(
+            message,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              height: 1.4,
+              color: color,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

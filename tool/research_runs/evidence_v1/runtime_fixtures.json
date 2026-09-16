@@ -1,0 +1,811 @@
+{
+  "cases": [
+    {
+      "name": "neonatal_sepsis",
+      "model_path": "tool\\research_runs\\evidence_v1\\neonatal_sepsis.tflite",
+      "features": [
+        {
+          "name": "age_days",
+          "min": 0,
+          "max": 59,
+          "kind": "int",
+          "transform": "min_max",
+          "imputation_normalized": 0.033898305147886276
+        },
+        {
+          "name": "temperature_celsius",
+          "min": 34.0,
+          "max": 41.0,
+          "kind": "double",
+          "transform": "min_max",
+          "imputation_normalized": 0.6714285612106323
+        },
+        {
+          "name": "respiratory_rate_per_min",
+          "min": 20,
+          "max": 120,
+          "kind": "int",
+          "transform": "min_max",
+          "imputation_normalized": 0.38999998569488525
+        },
+        {
+          "name": "heart_rate_per_min",
+          "min": 60,
+          "max": 220,
+          "kind": "int",
+          "transform": "min_max",
+          "imputation_normalized": 0.625
+        },
+        {
+          "name": "feeding_difficulty",
+          "min": 0,
+          "max": 1,
+          "kind": "bool",
+          "transform": "min_max",
+          "imputation_normalized": 1.0
+        },
+        {
+          "name": "lethargic_unconscious",
+          "min": 0,
+          "max": 1,
+          "kind": "bool",
+          "transform": "min_max",
+          "imputation_normalized": 0.0
+        }
+      ],
+      "cases": [
+        {
+          "raw": [
+            0.0,
+            34.0,
+            20.0,
+            60.0,
+            0.0,
+            0.0
+          ],
+          "normalized": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "quantized": [
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128
+          ],
+          "expected": 0.7421875
+        },
+        {
+          "raw": [
+            59.0,
+            41.0,
+            120.0,
+            220.0,
+            1.0,
+            1.0
+          ],
+          "normalized": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "quantized": [
+            127,
+            127,
+            127,
+            127,
+            127,
+            127
+          ],
+          "expected": 0.48046875
+        },
+        {
+          "raw": [
+            29.5,
+            37.5,
+            70.0,
+            140.0,
+            0.5,
+            0.5
+          ],
+          "normalized": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ],
+          "quantized": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1
+          ],
+          "expected": 0.3671875
+        },
+        {
+          "raw": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "normalized": [
+            0.033898305147886276,
+            0.6714285612106323,
+            0.38999998569488525,
+            0.625,
+            1.0,
+            0.0
+          ],
+          "quantized": [
+            -119,
+            43,
+            -29,
+            31,
+            127,
+            -128
+          ],
+          "expected": 0.93359375
+        }
+      ],
+      "tolerance": 0.00390625
+    },
+    {
+      "name": "preeclampsia_risk",
+      "model_path": "tool\\research_runs\\evidence_v1\\preeclampsia_risk.tflite",
+      "features": [
+        {
+          "name": "maternal_age",
+          "min": 14,
+          "max": 50,
+          "kind": "int",
+          "transform": "min_max",
+          "imputation_normalized": 0.4166666567325592
+        },
+        {
+          "name": "gravida",
+          "min": 0,
+          "max": 12,
+          "kind": "int",
+          "transform": "min_max",
+          "imputation_normalized": 0.1666666716337204
+        },
+        {
+          "name": "previous_losses",
+          "min": 0,
+          "max": 8,
+          "kind": "int",
+          "transform": "min_max",
+          "imputation_normalized": 0.0
+        }
+      ],
+      "cases": [
+        {
+          "raw": [
+            14.0,
+            0.0,
+            0.0
+          ],
+          "normalized": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "quantized": [
+            -128,
+            -128,
+            -128
+          ],
+          "expected": 0.578125
+        },
+        {
+          "raw": [
+            50.0,
+            12.0,
+            8.0
+          ],
+          "normalized": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "quantized": [
+            127,
+            127,
+            127
+          ],
+          "expected": 0.58203125
+        },
+        {
+          "raw": [
+            32.0,
+            6.0,
+            4.0
+          ],
+          "normalized": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "quantized": [
+            30,
+            30,
+            30
+          ],
+          "expected": 0.58203125
+        },
+        {
+          "raw": [
+            null,
+            null,
+            null
+          ],
+          "normalized": [
+            0.4166666567325592,
+            0.1666666716337204,
+            0.0
+          ],
+          "quantized": [
+            4,
+            -75,
+            -128
+          ],
+          "expected": 0.578125
+        }
+      ],
+      "tolerance": 0.00390625
+    },
+    {
+      "name": "lbw_sga",
+      "model_path": "tool\\research_runs\\evidence_v1\\lbw_sga.tflite",
+      "features": [
+        {
+          "name": "maternal_age",
+          "min": 14,
+          "max": 50,
+          "kind": "int",
+          "transform": "min_max",
+          "imputation_normalized": 0.3333333432674408
+        }
+      ],
+      "cases": [
+        {
+          "raw": [
+            14.0
+          ],
+          "normalized": [
+            0.0
+          ],
+          "quantized": [
+            -128
+          ],
+          "expected": 0.65234375
+        },
+        {
+          "raw": [
+            50.0
+          ],
+          "normalized": [
+            1.0
+          ],
+          "quantized": [
+            127
+          ],
+          "expected": 0.80078125
+        },
+        {
+          "raw": [
+            32.0
+          ],
+          "normalized": [
+            0.5
+          ],
+          "quantized": [
+            63
+          ],
+          "expected": 0.76953125
+        },
+        {
+          "raw": [
+            null
+          ],
+          "normalized": [
+            0.3333333432674408
+          ],
+          "quantized": [
+            -1
+          ],
+          "expected": 0.73046875
+        }
+      ],
+      "tolerance": 0.00390625
+    },
+    {
+      "name": "legacy_neonatal_sepsis",
+      "model_path": "assets\\models\\neonatal_sepsis_int8_v1.tflite",
+      "features": [],
+      "cases": [
+        {
+          "normalized": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "quantized": [
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128
+          ],
+          "expected": 0.4921875
+        },
+        {
+          "normalized": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "quantized": [
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127
+          ],
+          "expected": 0.64453125
+        },
+        {
+          "normalized": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ],
+          "quantized": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1
+          ],
+          "expected": 0.5078125
+        }
+      ],
+      "tolerance": 1e-05
+    },
+    {
+      "name": "legacy_child_pneumonia",
+      "model_path": "assets\\models\\child_pneumonia_int8_v1.tflite",
+      "features": [],
+      "cases": [
+        {
+          "normalized": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "quantized": [
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128
+          ],
+          "expected": 0.5078125
+        },
+        {
+          "normalized": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "quantized": [
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127
+          ],
+          "expected": 0.671875
+        },
+        {
+          "normalized": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ],
+          "quantized": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1
+          ],
+          "expected": 0.625
+        }
+      ],
+      "tolerance": 1e-05
+    },
+    {
+      "name": "legacy_preeclampsia_risk",
+      "model_path": "assets\\models\\preeclampsia_risk_int8_v1.tflite",
+      "features": [],
+      "cases": [
+        {
+          "normalized": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "quantized": [
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128
+          ],
+          "expected": 0.0
+        },
+        {
+          "normalized": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "quantized": [
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127
+          ],
+          "expected": 0.99609375
+        },
+        {
+          "normalized": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ],
+          "quantized": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1
+          ],
+          "expected": 0.9375
+        }
+      ],
+      "tolerance": 1e-05
+    },
+    {
+      "name": "legacy_lbw_sga",
+      "model_path": "assets\\models\\lbw_sga_int8_v1.tflite",
+      "features": [],
+      "cases": [
+        {
+          "normalized": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "quantized": [
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128,
+            -128
+          ],
+          "expected": 0.9921875
+        },
+        {
+          "normalized": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "quantized": [
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127,
+            127
+          ],
+          "expected": 0.0
+        },
+        {
+          "normalized": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ],
+          "quantized": [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1
+          ],
+          "expected": 0.0
+        }
+      ],
+      "tolerance": 1e-05
+    }
+  ],
+  "input_quantization_arithmetic": "float32_divide_add_round_ties_away_from_zero",
+  "missing_input_scope": "Technical imputation parity only; missing required observations block patient output"
+}

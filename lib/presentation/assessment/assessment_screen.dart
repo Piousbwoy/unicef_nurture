@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../core/audio/voice_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/repositories/care_repository.dart';
 import '../../domain/entities/core.dart';
@@ -58,6 +59,13 @@ class AssessmentScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Assessment'),
+        actions: [
+          IconButton(
+            tooltip: 'Voice guide',
+            icon: const Icon(Icons.record_voice_over_rounded),
+            onPressed: () => _speakWelcome(person.valueOrNull?.fullName ?? 'the patient'),
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(22),
           child: Padding(
@@ -167,5 +175,16 @@ class AssessmentScreen extends ConsumerWidget {
     if (saved == true && context.mounted) {
       Navigator.of(context).pop(true);
     }
+  }
+
+  Future<void> _speakWelcome(String patientName) async {
+    final message = 'Welcome to the assessment for $patientName. '
+        'Follow the form sections: first check vital signs, then look for danger signs, '
+        'then record measurements. Take your time — the app will guide you.';
+    await VoiceService.speakText(
+      id: 'assessment-welcome',
+      text: message,
+      language: 'en',
+    );
   }
 }

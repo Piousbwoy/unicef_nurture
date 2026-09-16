@@ -862,7 +862,7 @@ class _ModelPackSheet extends ConsumerWidget {
           Text('The on-device assistant', style: AppType.title),
           const SizedBox(height: Gap.xs),
           Text(
-            'Every check runs on this phone with no network. If one is missing or out of date, the app falls back to the standard clinical rule charts, so you always get an answer.',
+            'Every check runs on this phone with no network. Models are research-only and never change the clinical rule charts, which always give you an answer.',
             style: AppType.caption.copyWith(color: AppColors.inkMuted),
           ),
           const SizedBox(height: Gap.md),
@@ -922,15 +922,17 @@ class _ModelStatusTile extends StatelessWidget {
         : usable && verified
         ? AppColors.triageGreenBg
         : AppColors.triageAmberBg;
+    // Integrity wording only: a hash match is a file check, never clinical
+    // validation. Research contracts keep every model non-actionable.
     final pill = !installed
         ? 'Not installed'
         : !usable && mismatch
         ? 'Blocked'
         : usable && verified
-        ? 'Verified'
+        ? 'File integrity checked'
         : mismatch
         ? 'Mismatch'
-        : 'Unverified';
+        : 'Unchecked';
     return Container(
       margin: const EdgeInsets.only(bottom: Gap.sm),
       padding: const EdgeInsets.all(Gap.md),

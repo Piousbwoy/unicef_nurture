@@ -59,6 +59,12 @@ re-validates the swap at load time).
 
 from __future__ import annotations
 
+# The historical implementation below is archival, not a release command.
+if __name__ == "__main__":
+    from evaluate_research_models import main as evaluate_main
+    evaluate_main()
+    raise SystemExit(0)
+
 import csv
 import hashlib
 import io
@@ -781,6 +787,12 @@ def _train_real(name, X_raw, y, features, desc, meta,
 # ---------------------------------------------------------------------------
 
 def main():
+    from evaluate_research_models import main as evaluate_main
+    return evaluate_main()
+
+
+def _archived_main():
+    raise RuntimeError("Legacy asset promotion is disabled; use evaluate_research_models.py")
     os.makedirs(ASSETS_DIR, exist_ok=True)
     print(f"\nCareBridge AI - Real-data model trainer ({VERSION})")
     print(f"TF: {tf.__version__}")

@@ -80,36 +80,43 @@ void main() {
     });
 
     test('overall triage is the worst across every engine and finding', () {
-      final plan = RecommendationEngine.synthesize(results: [
-        _result(triage: TriageLevel.watch),
-        _result(triage: TriageLevel.priority),
-        _result(
-          triage: TriageLevel.routine,
-          findings: [_finding('Severe pneumonia', TriageLevel.urgent)],
-        ),
-      ]);
+      final plan = RecommendationEngine.synthesize(
+        results: [
+          _result(triage: TriageLevel.watch),
+          _result(triage: TriageLevel.priority),
+          _result(
+            triage: TriageLevel.routine,
+            findings: [_finding('Severe pneumonia', TriageLevel.urgent)],
+          ),
+        ],
+      );
 
       expect(plan.overallTriage, TriageLevel.urgent);
       expect(plan.needsReferral, isTrue);
     });
 
     test('duplicate findings are merged, keeping the more severe', () {
-      final plan = RecommendationEngine.synthesize(results: [
-        _result(findings: [_finding('Pneumonia', TriageLevel.priority)]),
-        _result(findings: [_finding('Pneumonia', TriageLevel.urgent)]),
-      ]);
+      final plan = RecommendationEngine.synthesize(
+        results: [
+          _result(findings: [_finding('Pneumonia', TriageLevel.priority)]),
+          _result(findings: [_finding('Pneumonia', TriageLevel.urgent)]),
+        ],
+      );
 
-      final pneumonia =
-          plan.findings.where((f) => f.label == 'Pneumonia').toList();
+      final pneumonia = plan.findings
+          .where((f) => f.label == 'Pneumonia')
+          .toList();
       expect(pneumonia, hasLength(1));
       expect(pneumonia.single.severity, TriageLevel.urgent);
     });
 
     test('duplicate actions are not repeated', () {
-      final plan = RecommendationEngine.synthesize(results: [
-        _result(actions: [_action('Give ORS', ReferralUrgency.sameDay)]),
-        _result(actions: [_action('Give ORS', ReferralUrgency.sameDay)]),
-      ]);
+      final plan = RecommendationEngine.synthesize(
+        results: [
+          _result(actions: [_action('Give ORS', ReferralUrgency.sameDay)]),
+          _result(actions: [_action('Give ORS', ReferralUrgency.sameDay)]),
+        ],
+      );
 
       expect(
         plan.actions.where((a) => a.instruction == 'Give ORS'),
@@ -117,43 +124,97 @@ void main() {
       );
     });
 
+    test('same instruction preserves different indications and sources', () {
+      const first = RecommendedAction(
+        instruction: 'Review patient',
+        urgency: ReferralUrgency.sameDay,
+        rationale: 'First observed indication',
+        protocolSource: 'Protocol A',
+      );
+      const second = RecommendedAction(
+        instruction: 'Review patient',
+        urgency: ReferralUrgency.scheduled,
+        rationale: 'Second observed indication',
+        protocolSource: 'Protocol B',
+      );
+      final plan = RecommendationEngine.synthesize(
+        results: [
+          _result(actions: [first, second, first]),
+        ],
+      );
+      final actions = plan.actions.where(
+        (a) => a.instruction == 'Review patient',
+      );
+      expect(actions, hasLength(2));
+      expect(
+        actions.map((a) => a.rationale),
+        containsAll([first.rationale, second.rationale]),
+      );
+      expect(
+        actions.map((a) => a.protocolSource),
+        containsAll(['Protocol A', 'Protocol B']),
+      );
+    });
+
     test('findings are ordered most-severe first', () {
-      final plan = RecommendationEngine.synthesize(results: [
-        _result(findings: [
-          _finding('Runny nose', TriageLevel.routine),
-          _finding('Severe pneumonia', TriageLevel.urgent),
-          _finding('Fever', TriageLevel.watch),
-        ]),
-      ]);
+      final plan = RecommendationEngine.synthesize(
+        results: [
+          _result(
+            findings: [
+              _finding('Runny nose', TriageLevel.routine),
+              _finding('Severe pneumonia', TriageLevel.urgent),
+              _finding('Fever', TriageLevel.watch),
+            ],
+          ),
+        ],
+      );
 
       expect(plan.findings.first.label, 'Severe pneumonia');
       expect(plan.findings.last.label, 'Runny nose');
     });
 
-    test('actions are ordered by urgency, prereferral treatments FIRST within a band', () {
-      // ActionPhase clinical ordering ensures life-saving prereferral
-      // stabilisations (MgSO4, rectal artesunate, antibiotics) execute
-      // BEFORE the CHO sits down to write a referral note or arrange transport.
-      // A cohort with no injected counselling action, so this test stays
-      // pinned to phase ordering alone.
-      final plan = RecommendationEngine.synthesize(results: [
-        _result(
-          clientType: ClientType.womanOfReproductiveAge,
-          actions: [
-          _action('Counsel on feeding', ReferralUrgency.scheduled, counselling: true),
-          _action('Give pre-referral antibiotic', ReferralUrgency.immediate, treatment: true),
-          _action('Refer now', ReferralUrgency.immediate, referral: true),
-          _action('Review in 2 days', ReferralUrgency.withinTwoDays, counselling: true),
-        ]),
-      ]);
+    test(
+      'actions are ordered by urgency, prereferral treatments FIRST within a band',
+      () {
+        // ActionPhase clinical ordering ensures life-saving prereferral
+        // stabilisations (MgSO4, rectal artesunate, antibiotics) execute
+        // BEFORE the CHO sits down to write a referral note or arrange transport.
+        // A cohort with no injected counselling action, so this test stays
+        // pinned to phase ordering alone.
+        final plan = RecommendationEngine.synthesize(
+          results: [
+            _result(
+              clientType: ClientType.womanOfReproductiveAge,
+              actions: [
+                _action(
+                  'Counsel on feeding',
+                  ReferralUrgency.scheduled,
+                  counselling: true,
+                ),
+                _action(
+                  'Give pre-referral antibiotic',
+                  ReferralUrgency.immediate,
+                  treatment: true,
+                ),
+                _action('Refer now', ReferralUrgency.immediate, referral: true),
+                _action(
+                  'Review in 2 days',
+                  ReferralUrgency.withinTwoDays,
+                  counselling: true,
+                ),
+              ],
+            ),
+          ],
+        );
 
-      // Within the immediate-urgency band: prereferralTreatment (phase 0)
-      // sorts BEFORE immediateReferral (phase 1).
-      expect(plan.actions[0].instruction, 'Give pre-referral antibiotic');
-      expect(plan.actions[1].instruction, 'Refer now');
-      // Less urgent bands follow; counselling is last.
-      expect(plan.actions.last.instruction, 'Counsel on feeding');
-    });
+        // Within the immediate-urgency band: prereferralTreatment (phase 0)
+        // sorts BEFORE immediateReferral (phase 1).
+        expect(plan.actions[0].instruction, 'Give pre-referral antibiotic');
+        expect(plan.actions[1].instruction, 'Refer now');
+        // Less urgent bands follow; counselling is last.
+        expect(plan.actions.last.instruction, 'Counsel on feeding');
+      },
+    );
   });
 
   group('RecommendationEngine — interaction detection', () {
@@ -168,10 +229,7 @@ void main() {
         extraFindings: [_finding('Some dehydration', TriageLevel.priority)],
       );
 
-      expect(
-        plan.interactions.any((i) => i.label.contains('ReSoMal')),
-        isTrue,
-      );
+      expect(plan.interactions.any((i) => i.label.contains('ReSoMal')), isTrue);
       expect(
         plan.actions.any((a) => a.instruction.contains('ReSoMal')),
         isTrue,
@@ -235,12 +293,14 @@ void main() {
     test('a danger-sign finding mislabelled priority still forces urgent', () {
       // The engine called convulsions "priority" — a bug. The synthesizer
       // must catch it anyway.
-      final plan = RecommendationEngine.synthesize(results: [
-        _result(
-          triage: TriageLevel.priority,
-          findings: [_finding('Convulsions', TriageLevel.priority)],
-        ),
-      ]);
+      final plan = RecommendationEngine.synthesize(
+        results: [
+          _result(
+            triage: TriageLevel.priority,
+            findings: [_finding('Convulsions', TriageLevel.priority)],
+          ),
+        ],
+      );
 
       expect(plan.overallTriage, TriageLevel.urgent);
       expect(plan.guardrailEscalated, isTrue);
@@ -252,13 +312,21 @@ void main() {
       // The guard-rail injects one, and — per ActionPhase ordering — the
       // prereferral oxygen treatment still executes BEFORE the referral
       // note is written (clinical correctness: stabilise first, document second).
-      final plan = RecommendationEngine.synthesize(results: [
-        _result(
-          triage: TriageLevel.urgent,
-          findings: [_finding('Severe pneumonia', TriageLevel.urgent)],
-          actions: [_action('Give oxygen', ReferralUrgency.immediate, treatment: true)],
-        ),
-      ]);
+      final plan = RecommendationEngine.synthesize(
+        results: [
+          _result(
+            triage: TriageLevel.urgent,
+            findings: [_finding('Severe pneumonia', TriageLevel.urgent)],
+            actions: [
+              _action(
+                'Give oxygen',
+                ReferralUrgency.immediate,
+                treatment: true,
+              ),
+            ],
+          ),
+        ],
+      );
 
       expect(plan.referralGuaranteed, isTrue);
       expect(plan.actions.any((a) => a.isReferral), isTrue);
@@ -270,69 +338,80 @@ void main() {
       expect(injected.urgency, ReferralUrgency.immediate);
       expect(injected.instruction, contains('Refer now'));
       // And verify ordering: prereferral treatment index < referral index.
-      final treatmentIdx = plan.actions.indexWhere((a) => a.instruction == 'Give oxygen');
+      final treatmentIdx = plan.actions.indexWhere(
+        (a) => a.instruction == 'Give oxygen',
+      );
       final referralIdx = plan.actions.indexWhere((a) => a.isReferral);
       expect(treatmentIdx, lessThan(referralIdx));
     });
 
     test('no referral is injected when one already exists', () {
-      final plan = RecommendationEngine.synthesize(results: [
-        _result(
-          triage: TriageLevel.urgent,
-          findings: [_finding('Severe pneumonia', TriageLevel.urgent)],
-          actions: [_action('Refer now', ReferralUrgency.immediate, referral: true)],
-        ),
-      ]);
+      final plan = RecommendationEngine.synthesize(
+        results: [
+          _result(
+            triage: TriageLevel.urgent,
+            findings: [_finding('Severe pneumonia', TriageLevel.urgent)],
+            actions: [
+              _action('Refer now', ReferralUrgency.immediate, referral: true),
+            ],
+          ),
+        ],
+      );
 
       expect(plan.referralGuaranteed, isFalse);
-      expect(
-        plan.actions.where((a) => a.isReferral),
-        hasLength(1),
-      );
+      expect(plan.actions.where((a) => a.isReferral), hasLength(1));
     });
   });
 
   group('RecommendationEngine — uncertainty & explainability', () {
     test('confidence is the least confident of any input', () {
-      final plan = RecommendationEngine.synthesize(results: [
-        _result(confidence: RecommendationConfidence.high),
-        _result(confidence: RecommendationConfidence.low),
-      ]);
+      final plan = RecommendationEngine.synthesize(
+        results: [
+          _result(confidence: RecommendationConfidence.high),
+          _result(confidence: RecommendationConfidence.low),
+        ],
+      );
 
       expect(plan.confidence, RecommendationConfidence.low);
     });
 
     test('missing data and danger signs are unioned across engines', () {
-      final plan = RecommendationEngine.synthesize(results: [
-        _result(missingData: ['temperature'], dangerSigns: ['Convulsions']),
-        _result(missingData: ['haemoglobin', 'temperature'], dangerSigns: []),
-      ]);
+      final plan = RecommendationEngine.synthesize(
+        results: [
+          _result(missingData: ['temperature'], dangerSigns: ['Convulsions']),
+          _result(missingData: ['haemoglobin', 'temperature'], dangerSigns: []),
+        ],
+      );
 
       expect(plan.missingData, ['temperature', 'haemoglobin']);
       expect(plan.dangerSigns, ['Convulsions']);
     });
 
     test('referral capabilities are unioned and follow-up is earliest', () {
-      final plan = RecommendationEngine.synthesize(results: [
-        _result(capabilities: {'bloodBank'}, followUpInDays: 14),
-        _result(capabilities: {'theatre'}, followUpInDays: 7),
-      ]);
+      final plan = RecommendationEngine.synthesize(
+        results: [
+          _result(capabilities: {'bloodBank'}, followUpInDays: 14),
+          _result(capabilities: {'theatre'}, followUpInDays: 7),
+        ],
+      );
 
       expect(plan.referralCapabilitiesNeeded, {'bloodBank', 'theatre'});
       expect(plan.followUpInDays, 7);
     });
 
     test('top drivers name the findings behind the verdict', () {
-      final plan = RecommendationEngine.synthesize(results: [
-        _result(
-          triage: TriageLevel.urgent,
-          findings: [
-            _finding('Severe pneumonia', TriageLevel.urgent, weight: 3),
-            _finding('Fever', TriageLevel.watch),
-            _finding('Runny nose', TriageLevel.routine),
-          ],
-        ),
-      ]);
+      final plan = RecommendationEngine.synthesize(
+        results: [
+          _result(
+            triage: TriageLevel.urgent,
+            findings: [
+              _finding('Severe pneumonia', TriageLevel.urgent, weight: 3),
+              _finding('Fever', TriageLevel.watch),
+              _finding('Runny nose', TriageLevel.routine),
+            ],
+          ),
+        ],
+      );
 
       expect(plan.topDrivers.first.label, 'Severe pneumonia');
       expect(plan.triageRationale, contains('Severe pneumonia'));
@@ -340,13 +419,15 @@ void main() {
     });
 
     test('the caregiver message comes from the most urgent result', () {
-      final plan = RecommendationEngine.synthesize(results: [
-        _result(caregiverMessage: 'Feed well and keep warm.'),
-        _result(
-          triage: TriageLevel.urgent,
-          caregiverMessage: 'Go to the hospital now.',
-        ),
-      ]);
+      final plan = RecommendationEngine.synthesize(
+        results: [
+          _result(caregiverMessage: 'Feed well and keep warm.'),
+          _result(
+            triage: TriageLevel.urgent,
+            caregiverMessage: 'Go to the hospital now.',
+          ),
+        ],
+      );
 
       expect(plan.caregiverMessage, 'Go to the hospital now.');
     });
@@ -392,7 +473,10 @@ void main() {
       expect(restored.caregiverMessage, plan.caregiverMessage);
       expect(restored.referralGuaranteed, plan.referralGuaranteed);
       expect(restored.guardrailEscalated, plan.guardrailEscalated);
-      expect(restored.referralCapabilitiesNeeded, plan.referralCapabilitiesNeeded);
+      expect(
+        restored.referralCapabilitiesNeeded,
+        plan.referralCapabilitiesNeeded,
+      );
       expect(
         restored.findings.map((f) => f.label),
         plan.findings.map((f) => f.label),

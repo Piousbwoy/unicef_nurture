@@ -1,0 +1,31 @@
+{
+  "command": [
+    "C:/src/flutter/bin/flutter.bat",
+    "test",
+    "test/research_parity_test.dart",
+    "--dart-define=RESEARCH_RUN=tool/research_runs/evidence_v1",
+    "--reporter",
+    "expanded"
+  ],
+  "passed": true,
+  "hashes": {
+    "test\\research_parity_test.dart": "2217b28ec21f5db209125ec332964c09e959849b37e207a3dedd88f66e0ff0bc",
+    "lib\\core\\ml\\tflite_dart_interpreter.dart": "4193f139b7434c919b8eb8b573953b2738f258104f3673f9f81f2cfafc73bcc2",
+    "lib\\core\\ml\\research_runtime.dart": "b06cf147562f634e5f085ed9d17c59cb0950ae07d571fa7ef79a381b4b574e14",
+    "tool\\research_runs\\evidence_v1\\runtime_fixtures.json": "680010e35e19cfd80d948c5bee14095fe932deaf8ef322bf95072dbb6c755a95",
+    "tool\\research_runs\\evidence_v1\\neonatal_sepsis.tflite": "85922be4d2eb4738824574a503092a4b60d69fbce4aeeff97493782bf2d1f8d4",
+    "tool\\research_runs\\evidence_v1\\neonatal_sepsis_parity.json": "28ad97353cc97a90b94e6a9ec336cb869d035dd223c3dbb00e1435b5178a9836",
+    "tool\\research_runs\\evidence_v1\\preeclampsia_risk.tflite": "d953c5aad99d57fb3df14212e1f367c69008776c8d054946965dd33c2626995b",
+    "tool\\research_runs\\evidence_v1\\preeclampsia_risk_parity.json": "e9838aa878762bc85fc7938524923a1695d3bbaa7a8de2ef0ca3c79617361085",
+    "tool\\research_runs\\evidence_v1\\lbw_sga.tflite": "31388d5f82248eee44ee43886e84ebf082d0e905ccc8398f764b8a3f66adc990",
+    "tool\\research_runs\\evidence_v1\\lbw_sga_parity.json": "65fd3fb6ff902c8c65e72919b930a63824f362edc0093f277935dcf0f483895c",
+    "assets\\models\\neonatal_sepsis_int8_v1.tflite": "b40ce5c43958b16bf6508887f49d79e7de7c0e6b8c4fd68ffabefb8a8d2b0fff",
+    "assets\\models\\child_pneumonia_int8_v1.tflite": "a0479dc800c132f2d9f985cbc3117995725545bf8df65dce4b5091210384af5a",
+    "assets\\models\\preeclampsia_risk_int8_v1.tflite": "90c6a8d25de4d0fd88deda045b41ca7da3271a71e9fac0f4ad110adbb70698bf",
+    "assets\\models\\lbw_sga_int8_v1.tflite": "096cbd93b0995b9e41d7c8eca6126a53297cdd753ea8fbc643db32b736ec2d87"
+  },
+  "stdout": "00:00 +0: loading C:/Users/Alhaji_stunner/Videos/unicef/test/research_parity_test.dart\n00:00 +0: neonatal_sepsis boundary/missing preprocessing and exact INT8 input parity\n00:00 +1: preeclampsia_risk boundary/missing preprocessing and exact INT8 input parity\n00:00 +2: lbw_sga boundary/missing preprocessing and exact INT8 input parity\n00:00 +3: legacy_neonatal_sepsis boundary/missing preprocessing and exact INT8 input parity\n00:00 +4: legacy_child_pneumonia boundary/missing preprocessing and exact INT8 input parity\n00:00 +5: legacy_preeclampsia_risk boundary/missing preprocessing and exact INT8 input parity\n00:00 +6: legacy_lbw_sga boundary/missing preprocessing and exact INT8 input parity\n00:00 +7: invalid normalization does not clip into model support\n00:00 +8: neonatal_sepsis official TFLite versus pure-Dart INT8 output\n00:00 +9: preeclampsia_risk official TFLite versus pure-Dart INT8 output\n00:00 +10: lbw_sga official TFLite versus pure-Dart INT8 output\n00:00 +11: All tests passed!\n",
+  "stderr": "",
+  "scope": "Official Python TFLite versus pure-Dart; native Flutter runner not covered",
+  "clinical_use_allowed": false
+}

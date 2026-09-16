@@ -21,30 +21,36 @@ const _selector = StabilizationProtocolSelector();
 
 void main() {
   group('StabilizationProtocol — citable constants', () {
-    test('pre-eclampsia protocol cites WHO 2011 + GHS Safe Motherhood 2017',
-        () {
-      expect(preEclampsiaProtocol.id, 'pre_eclampsia_mgso4_v1');
-      expect(preEclampsiaProtocol.citation.publishedYear, lessThan(2020));
-      // The headline must mention the actual drug.
-      expect(preEclampsiaProtocol.headline, contains('Magnesium'));
-      // The first step must include a loading dose.
-      expect(preEclampsiaProtocol.steps.first.action, contains('Magnesium'));
-      expect(preEclampsiaProtocol.steps.first.dose, contains('IV'));
-      // Must declare a contraindication block.
-      expect(preEclampsiaProtocol.contraindications, isNotEmpty);
-      // Must carry the decision-support notice verbatim.
-      expect(
-        preEclampsiaProtocol.decisionSupportNotice,
-        contains('DECISION SUPPORT'),
-      );
-    });
+    test(
+      'pre-eclampsia protocol cites WHO 2011 + GHS Safe Motherhood 2017',
+      () {
+        expect(preEclampsiaProtocol.id, 'pre_eclampsia_mgso4_v1');
+        expect(preEclampsiaProtocol.citation.publishedYear, lessThan(2020));
+        // The headline must mention the actual drug.
+        expect(preEclampsiaProtocol.headline, contains('Magnesium'));
+        // The first step must include a loading dose.
+        expect(preEclampsiaProtocol.steps.first.action, contains('Magnesium'));
+        expect(preEclampsiaProtocol.steps.first.dose, contains('IV'));
+        // Must declare a contraindication block.
+        expect(preEclampsiaProtocol.contraindications, isNotEmpty);
+        // Must carry the decision-support notice verbatim.
+        expect(
+          preEclampsiaProtocol.decisionSupportNotice,
+          contains('DECISION SUPPORT'),
+        );
+      },
+    );
 
     test('PSBI protocol cites WHO IMCI 2014 + WHO PSBI 2015', () {
       expect(psbiProtocol.id, 'young_infant_psbi_v1');
-      expect(psbiProtocol.steps.any((s) => s.action.contains('Ampicillin')),
-          isTrue);
-      expect(psbiProtocol.steps.any((s) => s.action.contains('Gentamicin')),
-          isTrue);
+      expect(
+        psbiProtocol.steps.any((s) => s.action.contains('Ampicillin')),
+        isTrue,
+      );
+      expect(
+        psbiProtocol.steps.any((s) => s.action.contains('Gentamicin')),
+        isTrue,
+      );
       expect(
         psbiProtocol.steps.any((s) => s.action.contains('Kangaroo')),
         isTrue,
@@ -55,19 +61,22 @@ void main() {
     test('child pneumonia protocol cites WHO IMCI 2014 + GHS STG 2017', () {
       expect(childPneumoniaProtocol.id, 'child_pneumonia_v1');
       expect(
-        childPneumoniaProtocol.steps.any((s) => s.action.contains('Amoxicillin')),
+        childPneumoniaProtocol.steps.any(
+          (s) => s.action.contains('Amoxicillin'),
+        ),
         isTrue,
       );
       expect(
-        childPneumoniaProtocol.steps
-            .any((s) => s.action.toLowerCase().contains('oxygen')),
+        childPneumoniaProtocol.steps.any(
+          (s) => s.action.toLowerCase().contains('oxygen'),
+        ),
         isTrue,
       );
     });
   });
 
   group('StabilizationProtocolSelector — pre-eclampsia activation', () {
-    test('activates on AI preeclampsia_risk >= 0.22', () {
+    test('experimental preeclampsia score cannot activate medication', () {
       final plan = _selector.select(
         context: const StabilizationContext(
           gestationalWeeks: 34,
@@ -76,11 +85,8 @@ void main() {
         ),
         risks: const StabilizationAiRisks(preeclampsiaRisk: 0.85),
       );
-      expect(plan.protocols, contains(preEclampsiaProtocol));
-      expect(
-        plan.activatedBy[preEclampsiaProtocol.id],
-        contains('preeclampsia_risk'),
-      );
+      expect(plan.protocols, isEmpty);
+      expect(plan.activatedBy, isEmpty);
     });
 
     test('activates on severe hypertension (BP 170/112) even with no AI', () {
@@ -93,10 +99,7 @@ void main() {
         risks: const StabilizationAiRisks(),
       );
       expect(plan.protocols, contains(preEclampsiaProtocol));
-      expect(
-        plan.activatedBy[preEclampsiaProtocol.id],
-        contains('170/112'),
-      );
+      expect(plan.activatedBy[preEclampsiaProtocol.id], contains('170/112'));
     });
 
     test('activates on eclamptic convulsions even with normal BP', () {
@@ -148,40 +151,28 @@ void main() {
 
   group('StabilizationProtocolSelector — young-infant PSBI activation', () {
     test(
-      'activates on AI rule-in candidate (neonatal_sepsis >= 0.15 on the '
-      '2%-prior scale) in a 14-day-old',
+      'experimental neonatal score cannot activate PSBI in a 14-day-old',
       () {
         final plan = _selector.select(
           context: const StabilizationContext(patientAgeDays: 14),
           risks: const StabilizationAiRisks(neonatalSepsisRisk: 0.75),
         );
-        expect(plan.protocols, contains(psbiProtocol));
-        expect(plan.activatedBy[psbiProtocol.id], contains('rule-in'));
-        expect(
-          plan.activatedBy[psbiProtocol.id],
-          contains('neonatal_sepsis=0.750'),
-        );
+        expect(plan.protocols, isEmpty);
+        expect(plan.activatedBy, isEmpty);
       },
     );
 
-    test(
-      'activates on the explicit rule-in flag (the service-computed path, '
-      'drift-safe)',
-      () {
-        final plan = _selector.select(
-          context: const StabilizationContext(patientAgeDays: 3),
-          risks: const StabilizationAiRisks(
-            neonatalSepsisRisk: 0.42,
-            neonatalSepsisRuleInCandidate: true,
-          ),
-        );
-        expect(plan.protocols, contains(psbiProtocol));
-        expect(
-          plan.activatedBy[psbiProtocol.id],
-          contains('AI rule-in candidate'),
-        );
-      },
-    );
+    test('legacy explicit rule-in flag cannot initiate treatment', () {
+      final plan = _selector.select(
+        context: const StabilizationContext(patientAgeDays: 3),
+        risks: const StabilizationAiRisks(
+          neonatalSepsisRisk: 0.42,
+          neonatalSepsisRuleInCandidate: true,
+        ),
+      );
+      expect(plan.protocols, isEmpty);
+      expect(plan.activatedBy, isEmpty);
+    });
 
     test('does NOT activate on low-tier AI risk without danger signs', () {
       final plan = _selector.select(
@@ -192,36 +183,27 @@ void main() {
       expect(plan.activatedBy, isEmpty);
     });
 
-    test(
-      'does NOT activate when AI is drift-suppressed (null riskProbability) '
-      'without danger signs',
-      () {
-        final plan = _selector.select(
-          context: const StabilizationContext(patientAgeDays: 14),
-          risks: const StabilizationAiRisks(), // riskProbability is null
-        );
-        expect(plan.protocols, isNot(contains(psbiProtocol)));
-      },
-    );
+    test('does NOT activate when AI is drift-suppressed (null riskProbability) '
+        'without danger signs', () {
+      final plan = _selector.select(
+        context: const StabilizationContext(patientAgeDays: 14),
+        risks: const StabilizationAiRisks(), // riskProbability is null
+      );
+      expect(plan.protocols, isNot(contains(psbiProtocol)));
+    });
 
-    test(
-      'deterministic rules keep rule-out coverage when AI is '
-      'drift-suppressed',
-      () {
-        final plan = _selector.select(
-          context: const StabilizationContext(
-            patientAgeDays: 14,
-            convulsions: true,
-          ),
-          risks: const StabilizationAiRisks(), // riskProbability is null
-        );
-        expect(plan.protocols, contains(psbiProtocol));
-        expect(
-          plan.activatedBy[psbiProtocol.id],
-          contains('IMCI danger sign'),
-        );
-      },
-    );
+    test('deterministic rules keep rule-out coverage when AI is '
+        'drift-suppressed', () {
+      final plan = _selector.select(
+        context: const StabilizationContext(
+          patientAgeDays: 14,
+          convulsions: true,
+        ),
+        risks: const StabilizationAiRisks(), // riskProbability is null
+      );
+      expect(plan.protocols, contains(psbiProtocol));
+      expect(plan.activatedBy[psbiProtocol.id], contains('IMCI danger sign'));
+    });
 
     test('activates on IMCI danger sign (convulsions) at age 7 days', () {
       final plan = _selector.select(
@@ -232,10 +214,7 @@ void main() {
         risks: const StabilizationAiRisks(),
       );
       expect(plan.protocols, contains(psbiProtocol));
-      expect(
-        plan.activatedBy[psbiProtocol.id],
-        contains('IMCI danger sign'),
-      );
+      expect(plan.activatedBy[psbiProtocol.id], contains('IMCI danger sign'));
     });
 
     test('activates on fever >= 37.5 in a 20-day-old', () {
@@ -273,12 +252,12 @@ void main() {
   });
 
   group('StabilizationProtocolSelector — child pneumonia activation', () {
-    test('activates on AI child_pneumonia >= 0.28 in an 18-month-old', () {
+    test('experimental pneumonia score cannot initiate antibiotics', () {
       final plan = _selector.select(
         context: const StabilizationContext(patientAgeDays: 30 * 18),
         risks: const StabilizationAiRisks(childPneumoniaRisk: 0.65),
       );
-      expect(plan.protocols, contains(childPneumoniaProtocol));
+      expect(plan.protocols, isEmpty);
     });
 
     test('activates on cough + severe chest indrawing at 24 months', () {
@@ -317,6 +296,44 @@ void main() {
     });
   });
 
+  group('StabilizationProtocolSelector — cohort boundaries', () {
+    for (final age in <int?>[null, -1, 0, 59, 60]) {
+      test('young infant requires known age 0–59: $age', () {
+        final plan = _selector.select(
+          context: StabilizationContext(patientAgeDays: age, convulsions: true),
+          risks: const StabilizationAiRisks(neonatalSepsisRisk: 0.99),
+        );
+        expect(
+          plan.protocols.contains(psbiProtocol),
+          age != null && age >= 0 && age <= 59,
+        );
+      });
+    }
+    for (final months in [1, 2, 59, 60]) {
+      test('pneumonia requires completed months 2–59: $months', () {
+        final plan = _selector.select(
+          context: StabilizationContext(
+            patientAgeMonths: months,
+            coughPresent: true,
+            severeChestIndrawing: true,
+          ),
+          risks: const StabilizationAiRisks(),
+        );
+        expect(
+          plan.protocols.contains(childPneumoniaProtocol),
+          months == 2 || months == 59,
+        );
+      });
+    }
+    test('severe BP in an unspecified adult does not imply pregnancy', () {
+      final plan = _selector.select(
+        context: const StabilizationContext(systolicBp: 180, diastolicBp: 120),
+        risks: const StabilizationAiRisks(preeclampsiaRisk: 0.99),
+      );
+      expect(plan.protocols, isEmpty);
+    });
+  });
+
   group('StabilizationProtocolSelector — co-activation', () {
     test('a normal well-child assessment activates nothing', () {
       final plan = _selector.select(
@@ -332,8 +349,8 @@ void main() {
     });
   });
 
-  group('StabilizationAiRisks.fromPredictions — rule-in tier propagation', () {
-    test('carries the tier flag, the probability and the drift null', () {
+  group('StabilizationAiRisks.fromPredictions — clinical separation', () {
+    test('suppresses legacy probability and rule-in flags', () {
       final now = DateTime.now();
       OfflineRiskPrediction pred({double? rp, bool ruleIn = false}) =>
           OfflineRiskPrediction(
@@ -352,21 +369,21 @@ void main() {
       final high = StabilizationAiRisks.fromPredictions({
         'neonatal_sepsis': pred(rp: 0.42, ruleIn: true),
       });
-      expect(high.neonatalSepsisRisk, equals(0.42));
-      expect(high.neonatalSepsisRuleInCandidate, isTrue);
+      expect(high.neonatalSepsisRisk, isNull);
+      expect(high.neonatalSepsisRuleInCandidate, isNull);
 
       // Low tier: below the rule-in threshold.
       final low = StabilizationAiRisks.fromPredictions({
         'neonatal_sepsis': pred(rp: 0.05),
       });
-      expect(low.neonatalSepsisRuleInCandidate, isFalse);
+      expect(low.neonatalSepsisRuleInCandidate, isNull);
 
       // Drift-suppressed: null probability, never a rule-in candidate.
       final drift = StabilizationAiRisks.fromPredictions({
         'neonatal_sepsis': pred(rp: null),
       });
       expect(drift.neonatalSepsisRisk, isNull);
-      expect(drift.neonatalSepsisRuleInCandidate, isFalse);
+      expect(drift.neonatalSepsisRuleInCandidate, isNull);
 
       // No predictions at all: everything stays null/false-safe.
       final empty = StabilizationAiRisks.fromPredictions(null);
@@ -375,16 +392,15 @@ void main() {
   });
 
   group('RecommendationEngine — pre-referral protocol integration', () {
-    AssessmentResult emptyResult({
-      TriageLevel triage = TriageLevel.routine,
-    }) => AssessmentResult(
-      clientType: ClientType.childUnderFive,
-      triage: triage,
-      classification: 'NO IMCI CLASSIFICATION — WELL CHILD',
-      findings: const [],
-      actions: const [],
-      confidence: RecommendationConfidence.high,
-    );
+    AssessmentResult emptyResult({TriageLevel triage = TriageLevel.routine}) =>
+        AssessmentResult(
+          clientType: ClientType.childUnderFive,
+          triage: triage,
+          classification: 'NO IMCI CLASSIFICATION — WELL CHILD',
+          findings: const [],
+          actions: const [],
+          confidence: RecommendationConfidence.high,
+        );
 
     test('a routine plan with no protocols stays routine', () {
       final plan = RecommendationEngine.synthesize(
@@ -399,35 +415,37 @@ void main() {
       expect(plan.needsReferral, isFalse);
     });
 
-    test('an activated pre-referral protocol escalates a routine plan to urgent',
-        () {
-      final plan = RecommendationEngine.synthesize(
-        results: [emptyResult()],
-        stabilizationContext: const StabilizationContext(
-          patientAgeDays: 30 * 18,
-          coughPresent: true,
-          severeChestIndrawing: true,
-        ),
-        stabilizationRisks: const StabilizationAiRisks(),
-      );
-      expect(plan.preReferralProtocols, contains(childPneumoniaProtocol));
-      expect(plan.overallTriage, TriageLevel.urgent);
-      expect(plan.needsReferral, isTrue);
-      // The protocol headline is in the action list.
-      expect(
-        plan.actions.any(
-          (a) =>
-              a.instruction.contains(childPneumoniaProtocol.headline) ||
-              a.instruction.contains('Pre-referral'),
-        ),
-        isTrue,
-      );
-      // The activation reason is preserved.
-      expect(
-        plan.preReferralActivationReasons[childPneumoniaProtocol.id],
-        isNotNull,
-      );
-    });
+    test(
+      'an activated pre-referral protocol escalates a routine plan to urgent',
+      () {
+        final plan = RecommendationEngine.synthesize(
+          results: [emptyResult()],
+          stabilizationContext: const StabilizationContext(
+            patientAgeDays: 30 * 18,
+            coughPresent: true,
+            severeChestIndrawing: true,
+          ),
+          stabilizationRisks: const StabilizationAiRisks(),
+        );
+        expect(plan.preReferralProtocols, contains(childPneumoniaProtocol));
+        expect(plan.overallTriage, TriageLevel.urgent);
+        expect(plan.needsReferral, isTrue);
+        // The protocol headline is in the action list.
+        expect(
+          plan.actions.any(
+            (a) =>
+                a.instruction.contains(childPneumoniaProtocol.headline) ||
+                a.instruction.contains('Pre-referral'),
+          ),
+          isTrue,
+        );
+        // The activation reason is preserved.
+        expect(
+          plan.preReferralActivationReasons[childPneumoniaProtocol.id],
+          isNotNull,
+        );
+      },
+    );
 
     test('an activated protocol does not OVERRIDE an already-urgent plan', () {
       // Engine already produced urgent. Activated protocol should not
@@ -445,13 +463,13 @@ void main() {
       expect(plan.preReferralProtocols, isNotEmpty);
     });
 
-    test('synthesize without stabilization args still works (backwards compat)',
-        () {
-      final plan = RecommendationEngine.synthesize(
-        results: [emptyResult()],
-      );
-      expect(plan.preReferralProtocols, isEmpty);
-    });
+    test(
+      'synthesize without stabilization args still works (backwards compat)',
+      () {
+        final plan = RecommendationEngine.synthesize(results: [emptyResult()]);
+        expect(plan.preReferralProtocols, isEmpty);
+      },
+    );
 
     test('CarePlan JSON round-trip preserves pre-referral protocols', () {
       final original = RecommendationEngine.synthesize(

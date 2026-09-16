@@ -20,12 +20,12 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../local/preferences_store.dart';
 import '../local/user_dao.dart';
+import 'http_client.dart';
 
 class Tokens {
   const Tokens({
@@ -156,30 +156,29 @@ abstract final class ServerAuthClient {
       );
     }
     final cleanPhone = phone.trim();
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 20);
     try {
       // ─── Step 1: CHALLENGE ────────────────────────────────────────────────
       // Unauthenticated fetch. Server returns user_id + server_salt (public,
       // non-secret). The PIN is NEVER placed on the wire here or at any step.
       final challengeUri = Uri.parse('$base/api/auth/challenge')
           .replace(queryParameters: {'phone': cleanPhone});
-      final challengeReq = await client.getUrl(challengeUri);
-      challengeReq.headers.set('Accept', 'application/json');
-      final challengeResp = await challengeReq.close().timeout(const Duration(seconds: 15));
-      final challengeTxt = await challengeResp.transform(utf8.decoder).join();
-      final csc = challengeResp.statusCode;
+      final challengeReply = await PlatformHttpClient.get(
+        challengeUri,
+        headers: const {'Accept': 'application/json'},
+        timeout: const Duration(seconds: 15),
+      );
+      final csc = challengeReply.statusCode;
       if (csc == 429) {
-        final retry = (jsonDecode(challengeTxt) as Map<String, Object?>?)?['retry_after_seconds'];
+        final retry = challengeReply.jsonBody?['retry_after_seconds'];
         final s = retry is int ? ' Retry after $retry seconds.' : '';
         return ServerAuthResult.err('Too many sign-in attempts.$s');
       }
       if (csc != 200) {
-        final msg = (jsonDecode(challengeTxt) as Map<String, Object?>?)?['error'] ??
+        final msg = challengeReply.jsonBody?['error'] ??
             'Challenge endpoint returned HTTP $csc';
         return ServerAuthResult.err(msg.toString());
       }
-      final challengeJson = jsonDecode(challengeTxt) as Map<String, Object?>;
-      final serverSalt = challengeJson['server_salt'] as String?;
+      final serverSalt = challengeReply.jsonBody?['server_salt'] as String?;
       if (serverSalt == null || serverSalt.isEmpty) {
         return const ServerAuthResult.err('Server did not issue a challenge salt.');
       }
@@ -198,30 +197,27 @@ abstract final class ServerAuthClient {
       // ─── Step 3: LOGIN WITH VERIFIER RESPONSE ─────────────────────────────
       // Post verifier_response (NOT pin) + phone + device_id. Server performs
       // constant-time compare against the isolated user_verifiers table.
-      final uri = Uri.parse('$base/api/auth/login');
-      final req = await client.postUrl(uri);
-      req.headers.set('Content-Type', 'application/json; charset=utf-8');
-      final body = utf8.encode(jsonEncode({
-        'phone': cleanPhone,
-        'verifier_response': verifierResponse,
-        'device_id': await deviceId(),
-      }));
-      req.contentLength = body.length;
-      req.add(body);
-      final resp = await req.close().timeout(const Duration(seconds: 20));
-      final txt = await resp.transform(utf8.decoder).join();
-      final sc = resp.statusCode;
+      final reply = await PlatformHttpClient.post(
+        Uri.parse('$base/api/auth/login'),
+        headers: const {'Content-Type': 'application/json; charset=utf-8'},
+        body: jsonEncode({
+          'phone': cleanPhone,
+          'verifier_response': verifierResponse,
+          'device_id': await deviceId(),
+        }),
+        timeout: const Duration(seconds: 20),
+      );
+      final sc = reply.statusCode;
       if (sc == 429) {
-        final retry = (jsonDecode(txt) as Map<String, Object?>?)?['retry_after_seconds'];
+        final retry = reply.jsonBody?['retry_after_seconds'];
         final s = retry is int ? ' Retry after $retry seconds.' : '';
         return ServerAuthResult.err('Too many sign-in attempts.$s');
       }
       if (sc != 200) {
-        final msg = (jsonDecode(txt) as Map<String, Object?>?)?['error'] ??
-            'Server returned HTTP $sc';
+        final msg = reply.jsonBody?['error'] ?? 'Server returned HTTP $sc';
         return ServerAuthResult.err(msg.toString());
       }
-      final data = jsonDecode(txt) as Map<String, Object?>;
+      final data = reply.jsonBody ?? const <String, Object?>{};
       final access = data['access_token'] as String?;
       final refresh = data['refresh_token'] as String?;
       final expIn = (data['expires_in'] as num?)?.toInt();
@@ -237,16 +233,19 @@ abstract final class ServerAuthClient {
       );
       await saveTokens(tokens);
       return ServerAuthResult.ok(tokens, user);
-    } on SocketException catch (e) {
-      return ServerAuthResult.err('Network error: ${e.message}');
-    } on TimeoutException {
-      return const ServerAuthResult.err('Sign-in timed out. Try again when network is available.');
-    } on FormatException catch (e) {
-      return ServerAuthResult.err('Invalid URL: ${e.message}');
+    } on HttpFailure catch (e) {
+      switch (e.kind) {
+        case HttpFailureKind.timeout:
+          return const ServerAuthResult.err(
+            'Sign-in timed out. Try again when network is available.',
+          );
+        case HttpFailureKind.network:
+          return ServerAuthResult.err('Network error: ${e.message}');
+        case HttpFailureKind.malformedUrl:
+          return ServerAuthResult.err('Invalid URL: ${e.message}');
+      }
     } catch (e) {
       return ServerAuthResult.err('Sign-in error: $e');
-    } finally {
-      client.close();
     }
   }
 
@@ -257,26 +256,23 @@ abstract final class ServerAuthClient {
     if (base == null || base.isEmpty || t == null) {
       return const ServerAuthResult.err('Nothing to refresh.');
     }
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 20);
     try {
-      final uri = Uri.parse('$base/api/auth/refresh');
-      final req = await client.postUrl(uri);
-      req.headers.set('Content-Type', 'application/json; charset=utf-8');
-      final body = utf8.encode(jsonEncode({
-        'refresh_token': t.refreshToken,
-        'device_id': await deviceId(),
-      }));
-      req.contentLength = body.length;
-      req.add(body);
-      final resp = await req.close().timeout(const Duration(seconds: 20));
-      final txt = await resp.transform(utf8.decoder).join();
-      if (resp.statusCode != 200) {
+      final reply = await PlatformHttpClient.post(
+        Uri.parse('$base/api/auth/refresh'),
+        headers: const {'Content-Type': 'application/json; charset=utf-8'},
+        body: jsonEncode({
+          'refresh_token': t.refreshToken,
+          'device_id': await deviceId(),
+        }),
+        timeout: const Duration(seconds: 20),
+      );
+      if (reply.statusCode != 200) {
         await clearTokens();
-        final msg = (jsonDecode(txt) as Map<String, Object?>?)?['error'] ??
-            'Refresh failed (HTTP ${resp.statusCode}). Please sign in again.';
+        final msg = reply.jsonBody?['error'] ??
+            'Refresh failed (HTTP ${reply.statusCode}). Please sign in again.';
         return ServerAuthResult.err(msg.toString());
       }
-      final data = jsonDecode(txt) as Map<String, Object?>;
+      final data = reply.jsonBody ?? const <String, Object?>{};
       final access = data['access_token'] as String?;
       final expIn = (data['expires_in'] as num?)?.toInt();
       if (access == null || expIn == null) {
@@ -289,10 +285,49 @@ abstract final class ServerAuthClient {
       );
       await saveTokens(updated);
       return ServerAuthResult.ok(updated, null);
+    } on HttpFailure catch (e) {
+      switch (e.kind) {
+        case HttpFailureKind.timeout:
+          return const ServerAuthResult.err(
+            'Refresh timed out. Please sign in again when network is available.',
+          );
+        case HttpFailureKind.network:
+          return ServerAuthResult.err('Network error: ${e.message}');
+        case HttpFailureKind.malformedUrl:
+          return ServerAuthResult.err('Invalid URL: ${e.message}');
+      }
     } catch (e) {
       return ServerAuthResult.err(e.toString());
-    } finally {
-      client.close();
+    }
+  }
+
+  // ------------------------------------------------------------------ profile
+  /// Fetches the scrubbed profile of whoever owns the current credential.
+  ///
+  /// Used by Sync settings to show an honest "signed in to the server as …"
+  /// line. Returns null when there is no server URL, no credential at all,
+  /// the credential is not recognised, or the network is down — the caller
+  /// renders each of those as exactly what it is, never a guess.
+  static Future<Map<String, dynamic>?> currentUserProfile() async {
+    final base = await PreferencesStore.syncApiUrl();
+    if (base == null || base.isEmpty) return null;
+    final auth = await pickAuthorization();
+    if (auth == null) return null;
+    try {
+      final reply = await PlatformHttpClient.post(
+        Uri.parse('$base/api/restore/lookup'),
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Authorization': auth,
+        },
+        body: jsonEncode({'device_confirmation': true}),
+        timeout: const Duration(seconds: 12),
+      );
+      if (reply.statusCode != 200) return null;
+      final user = reply.jsonBody?['user'];
+      return user is Map<String, dynamic> ? user : null;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -301,26 +336,23 @@ abstract final class ServerAuthClient {
     final base = await PreferencesStore.syncApiUrl();
     final t = await loadTokens();
     if (base != null && base.isNotEmpty && t != null) {
-      final client = HttpClient()
-        ..connectionTimeout = const Duration(seconds: 15);
       try {
-        final uri = Uri.parse('$base/api/auth/logout');
-        final req = await client.postUrl(uri);
-        req.headers.set('Content-Type', 'application/json; charset=utf-8');
-        req.headers.set('Authorization', 'Bearer ${t.accessToken}');
-        final body = utf8.encode(jsonEncode({
-          'refresh_token': t.refreshToken,
-          'all_devices': allDevices,
-        }));
-        req.contentLength = body.length;
-        req.add(body);
-        await req.close().timeout(const Duration(seconds: 15));
+        await PlatformHttpClient.post(
+          Uri.parse('$base/api/auth/logout'),
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Authorization': 'Bearer ${t.accessToken}',
+          },
+          body: jsonEncode({
+            'refresh_token': t.refreshToken,
+            'all_devices': allDevices,
+          }),
+          timeout: const Duration(seconds: 15),
+        );
       } catch (_) {
         // Offline — just wipe the local tokens; server-side revocation is
         // best-effort. The user will still be signed out locally and any
         // remaining refresh token lifetime is bounded by JWT_REFRESH_TTL_DAYS.
-      } finally {
-        client.close();
       }
     }
     await clearTokens();

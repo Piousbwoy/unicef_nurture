@@ -9,15 +9,8 @@ import 'tflite_runner.dart';
 
 TfliteRunner createTfliteRunner() => _WebDartTfliteRunner();
 
-/// Web build: there is no dart:ffi, so the native tflite_flutter runtime
-/// cannot load. The SHA-pinned int8 weights are instead executed on-device
-/// by the pure-Dart flatbuffer interpreter, which has been cross-validated
-/// bit-exact (24/24 trials, maxAbsDiff 0.0) against the official TFLite
-/// runtime (`tf.lite.Interpreter`) on the exact shipped flatbuffers.
-///
-/// Failure semantics are preserved: any load/parse/run error throws, so
-/// `OfflineInferenceService` keeps falling back to the deterministic
-/// rules path exactly as before.
+/// Web execution of supported TFLite graphs. Failures are explicit; clinical
+/// rules remain independent of model execution and do not fabricate scores.
 class _WebDartTfliteRunner implements TfliteRunner {
   final Map<String, TfliteDartModel> _models = {};
 
@@ -32,6 +25,9 @@ class _WebDartTfliteRunner implements TfliteRunner {
       model = TfliteDartModel.fromBytes(bytes);
       _models[assetPath] = model;
     }
-    return model.run(input).clamp(0.0, 1.0);
+    final p = model.run(input);
+    if (!p.isFinite || p < 0 || p > 1)
+      throw const FormatException('Invalid model output');
+    return p;
   }
 }

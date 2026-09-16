@@ -1,301 +1,722 @@
-/// Widget tests for the two-tier triage (rule-in / screening) on the
-/// neonatal sepsis model, rendered end-to-end through the result screen.
-///
-/// The three cases the clinical reviewer cares about:
-///   * HIGH tier  — the AI alone labels the newborn a "rule-in candidate"
-///     (probability >= 0.15 on the 2%-prior scale): the urgent PSBI
-///     finding appears and the pre-referral protocol activates with an
-///     "AI rule-in candidate" reason.
-///   * LOW tier   — below the rule-in threshold with no IMCI danger sign:
-///     no AI finding, no protocol activation; the model card reads
-///     "screening tier".
-///   * DRIFT      — out-of-training-window input (14-day-old vs the 0-3d
-///     real-data window): riskProbability is null, no AI finding, and the
-///     deterministic GHS rules keep the rule-out coverage by activating
-///     the protocol on the danger sign alone.
-library;
-
+// Clinical decisions must remain independent of research model availability.
+import 'dart:async';
+import 'dart:convert';
+import 'package:carebridge_ai/app/providers.dart';
+import 'package:carebridge_ai/data/repositories/care_repository.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:carebridge_ai/core/ml/offline_inference_service.dart';
 import 'package:carebridge_ai/domain/entities/core.dart';
 import 'package:carebridge_ai/domain/entities/visit.dart';
 import 'package:carebridge_ai/domain/enums.dart';
 import 'package:carebridge_ai/presentation/assessment/result_screen.dart';
+import 'package:carebridge_ai/presentation/assessment/assessment_feature_adapter.dart';
+import 'package:carebridge_ai/presentation/assessment/decision_workspace.dart';
 import 'package:carebridge_ai/presentation/assessment/types.dart';
+import 'package:carebridge_ai/presentation/shared/recommendation_kit.dart';
+import 'package:carebridge_ai/presentation/assessment/form_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-AppUser _user() => AppUser(
-  id: 'u-fhw-1',
-  fullName: 'Amina Fuseini',
-  phone: '0244000000',
-  role: UserRole.frontlineHealthWorker,
-  region: 'Northern Region',
-  district: 'Gushegu',
-  community: 'Gushegu',
-);
-
 const _household = Household(
-  id: 'h-1',
-  name: "Mariama's household",
-  region: 'Northern Region',
+  id: 'h1',
+  name: 'Test household',
+  region: 'Northern',
   district: 'Gushegu',
   community: 'Gushegu',
-  createdBy: 'u-fhw-1',
+  createdBy: 'u1',
 );
-
-AssessmentResult _routineResult() => const AssessmentResult(
-  clientType: ClientType.newborn,
-  triage: TriageLevel.routine,
-  classification: 'WELL NEWBORN — NO IMCI CLASSIFICATION',
-  findings: [],
-  actions: [],
-  confidence: RecommendationConfidence.high,
-);
-
-/// A newborn whose ONLY risk signals are the ones the test scenario needs.
-/// Everything else is a normal 2-day-old (or the requested age). The vitals
-/// are required: the service zero-imputes missing features, and a mostly-
-/// empty tensor drifts against the v2.0 training baseline — which would
-/// null riskProbability even in-window (the real form always captures
-/// vitals, so the test bags mirror that).
-AssessmentDraft _draft({
-  required int ageDays,
-  List<String> dangerSigns = const [],
-  double? temperatureCelsius,
-  int? respiratoryRate,
-  int? pulse,
-  int? oxygenSaturation,
-  double? birthWeightKg,
-}) => AssessmentDraft(
-  inputs: {
-    'age_in_days': ageDays,
-    'danger_signs': dangerSigns,
-    'temperature_celsius': ?temperatureCelsius,
-    'respiratory_rate': ?respiratoryRate,
-    'pulse': ?pulse,
-    'oxygen_saturation': ?oxygenSaturation,
-    'birth_weight_kg': ?birthWeightKg,
-  },
-  result: _routineResult(),
-);
-
-/// Vitals of a well 2-day-old: all inside the WHO IMCI normal bands, so
-/// none of them trips a deterministic PSBI trigger (fever >= 37.5,
-/// hypothermia < 35.5, SpO2 < 90, RR >= 60) — any activation below is the
-/// AI rule-in tier acting alone. Passed to [_draft] in every scenario.
-({double temp, int rr, int pulse, int spo2, double bw}) _normalVitals() =>
-    (temp: 37.0, rr: 48, pulse: 140, spo2: 97, bw: 3.1);
-
-AssessmentContext _context(int ageDays) => AssessmentContext(
-  user: _user(),
+AssessmentContext _context({
+  int age = 2,
+  ClientType type = ClientType.newborn,
+  BirthRecord? birth,
+  MaternalRecord? maternal,
+}) => AssessmentContext(
+  user: AppUser(
+    id: 'u1',
+    fullName: 'Test nurse',
+    phone: '0244000000',
+    role: UserRole.frontlineHealthWorker,
+    region: 'Northern',
+    district: 'Gushegu',
+    community: 'Gushegu',
+  ),
   household: _household,
   person: Person(
-    id: 'p-newborn-1',
-    householdId: _household.id,
-    fullName: 'Baby Fuseini',
-    clientType: ClientType.newborn,
-    dateOfBirth: DateTime.now().subtract(Duration(days: ageDays)),
+    id: 'p1',
+    householdId: 'h1',
+    fullName: 'Test patient',
+    clientType: type,
+    dateOfBirth: DateTime.now().subtract(Duration(days: age)),
+  ),
+  birth: birth,
+  maternal: maternal,
+);
+AssessmentDraft _draft({
+  int age = 2,
+  List<String> signs = const [],
+  ClientType type = ClientType.newborn,
+  Map<String, Object?>? inputs,
+}) => AssessmentDraft(
+  inputs:
+      inputs ??
+      {
+        'age_in_days': age,
+        'danger_signs': signs,
+        'temperature_celsius': 37.0,
+        'respiratory_rate': 48,
+        'pulse': 140,
+      },
+  result: AssessmentResult(
+    clientType: type,
+    triage: TriageLevel.routine,
+    classification: 'WELL NEWBORN — NO IMCI CLASSIFICATION',
+    findings: const [],
+    actions: const [],
+    confidence: RecommendationConfidence.high,
   ),
 );
 
 Future<void> _pump(
   WidgetTester tester,
-  AssessmentContext input,
-  AssessmentDraft draft,
-) async {
-  // The verdict screen is a lazy ListView; make the viewport tall enough
-  // that the pre-referral section (top) and the AI predictions card
-  // (below the fold) are both inflated.
-  tester.view.physicalSize = const Size(1080, 6000);
-  tester.view.devicePixelRatio = 1.0;
+  AssessmentDraft draft, {
+  int age = 2,
+  OfflineInferenceService? service,
+  CareRepository? repository,
+  Size size = const Size(1080, 6000),
+  double textScale = 1,
+}) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-
-  // The ML predictions resolve through real asset-bundle I/O (model SHA
-  // probes + metrics JSON + drift baselines), so the widget needs real
-  // event-loop time before the FutureBuilder can settle. The first test
-  // to run pays the cold-start cost of the asset checks; wait until the
-  // predictions spinner is gone (or give up after 10 s) instead of
-  // guessing a fixed delay.
-  await tester.runAsync(() async {
-    await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(
-          home: AssessmentResultScreen(
-            input: input,
-            draft: draft,
-            visitId: 'v-1',
+  await tester.runAsync(() => OfflineInferenceService.instance.modelStatuses());
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        if (repository != null)
+          careRepositoryProvider.overrideWithValue(repository),
+      ],
+      child: MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(textScale),
+            disableAnimations: true,
           ),
+          child: child!,
+        ),
+        home: AssessmentResultScreen(
+          input: _context(age: age),
+          draft: draft,
+          visitId: 'v1',
+          inferenceService: service,
         ),
       ),
-    );
-    for (var i = 0; i < 40; i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-      await tester.pump();
-      if (!tester.any(find.byType(CircularProgressIndicator))) break;
-    }
-  });
+    ),
+  );
   await tester.pumpAndSettle();
 }
 
-/// Opens the second page — the full clinical report — where the AI
-/// evidence cards live. The result experience is two pages by design:
-/// the verdict moment first, the documentation behind it. The AI
-/// predictions resolve through real asset-bundle I/O, so the wait loop
-/// runs on the real event loop until the analysis spinner is gone.
-Future<void> _openReport(WidgetTester tester) async {
+Future<void> _report(WidgetTester tester) async {
   await tester.tap(find.text('Open full clinical report'));
-  await tester.runAsync(() async {
-    for (var i = 0; i < 40; i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-      await tester.pump();
-      if (!tester.any(find.byType(CircularProgressIndicator))) break;
-    }
-  });
   await tester.pumpAndSettle();
+  await tester.scrollUntilVisible(find.byType(ResearchAnalysisPanel), 300);
+  final panel = tester.widget<ResearchAnalysisPanel>(
+    find.byType(ResearchAnalysisPanel),
+  );
+  await tester.runAsync(
+    () => panel.statuses.timeout(const Duration(seconds: 2)),
+  );
+  await tester.pumpAndSettle();
+}
+
+OfflineRiskPrediction _prediction({
+  ModelExecution execution = ModelExecution.completed,
+  ModelApplicability applicability = ModelApplicability.applicable,
+  ModelInputQuality quality = ModelInputQuality.complete,
+  ModelEvidence evidence = ModelEvidence.retrospectiveResearch,
+}) => OfflineRiskPrediction(
+  modelName: 'neonatal_sepsis',
+  usingModel: true,
+  riskProbability: .99,
+  classification: 'high',
+  featuresUsed: const ['temperature_celsius'],
+  featuresMissing: quality == ModelInputQuality.missingObservations
+      ? const ['pulse']
+      : const [],
+  predictedAt: DateTime(2026),
+  modelVersion: 'test-research',
+  researchOutput: .987,
+  execution: execution,
+  applicability: applicability,
+  inputQuality: quality,
+  evidence: evidence,
+  ruleInCandidate: true,
+);
+
+class _CaptureRepository extends CareRepository {
+  Assessment? assessment;
+  Referral? referral;
+  @override
+  Future<void> saveAssessment(
+    AppUser user,
+    Assessment assessment, {
+    Referral? referral,
+    List<ScheduledContact> followUps = const [],
+  }) async {
+    this.assessment = assessment;
+    this.referral = referral;
+  }
+}
+
+class _DelayedService extends OfflineInferenceService {
+  final predictions = Completer<Map<String, OfflineRiskPrediction>>();
+  @override
+  Future<List<OfflineModelStatus>> modelStatuses() async => [];
+  @override
+  Future<Map<String, OfflineRiskPrediction>> runAllPredictions(
+    OfflineFeatureBag bag, {
+    bool includeNeonatal = true,
+    bool includeChildPneumonia = true,
+    bool includePreeclampsia = true,
+    bool includeLbwSga = true,
+  }) => predictions.future;
 }
 
 void main() {
   GoogleFonts.config.allowRuntimeFetching = false;
 
-  group('result screen — two-tier triage: HIGH tier (rule-in candidate)', () {
-    testWidgets(
-      'nasal flaring + grunting + bleeding (no IMCI danger sign) push the '
-      'fallback past 0.15: AI alone activates PSBI',
-      (tester) async {
-        // None of these three are IMCI "pink row" danger signs in the
-        // stabilization selector, so any PSBI activation below is the AI
-        // rule-in tier acting alone — the deterministic rules add nothing.
-        final v = _normalVitals();
-        await _pump(
-          tester,
-          _context(2),
-          _draft(
-            ageDays: 2,
-            dangerSigns: ['nasalFlaring', 'grunting', 'bleeding'],
-            temperatureCelsius: v.temp,
-            respiratoryRate: v.rr,
-            pulse: v.pulse,
-            oxygenSaturation: v.spo2,
-            birthWeightKg: v.bw,
+  testWidgets('research-only signals cannot add a PSBI treatment or referral', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _draft(signs: ['nasalFlaring', 'grunting', 'bleeding']),
+    );
+    expect(find.text('Pre-referral stabilisation'), findsNothing);
+    expect(find.textContaining('AI rule-in candidate'), findsNothing);
+    expect(find.text('PROTOCOL DECISION'), findsOneWidget);
+    await _report(tester);
+    expect(find.text('Research only'), findsOneWidget);
+    expect(find.textContaining('Rule-in candidate:'), findsNothing);
+    expect(find.textContaining('Risk 2.0%'), findsNothing);
+  });
+
+  testWidgets(
+    'healthy newborn has no experimental reassurance or clinical score',
+    (tester) async {
+      await _pump(tester, _draft());
+      expect(find.text('Pre-referral stabilisation'), findsNothing);
+      await _report(tester);
+      expect(find.text('Research only'), findsOneWidget);
+      await tester.tap(find.text('Neonatal sepsis research'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Experimental model output — not a diagnosis'),
+        findsOneWidget,
+      );
+      final evidenceText = tester
+          .widgetList<Text>(find.byType(Text))
+          .map((t) => t.data ?? t.textSpan?.toPlainText() ?? '')
+          .join('\n');
+      expect(evidenceText, contains('File integrity checked'));
+      expect(
+        find.textContaining('saw no pattern of severe infection'),
+        findsNothing,
+      );
+      expect(find.textContaining('screening tier'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    '14-day-old convulsions activate clinical PSBI outside model support',
+    (tester) async {
+      await _pump(tester, _draft(age: 14, signs: ['convulsions']), age: 14);
+      expect(find.text('Pre-referral stabilisation'), findsOneWidget);
+      expect(find.textContaining('IMCI danger sign'), findsOneWidget);
+      await _report(tester);
+      expect(find.text('Outside model support'), findsOneWidget);
+      expect(find.textContaining('Rule-in candidate:'), findsNothing);
+    },
+  );
+
+  test(
+    'historical negative never masks a current positive; old positive is not current',
+    () {
+      final context = _context(
+        birth: const BirthRecord(
+          personId: 'p1',
+          historyOfConvulsions: false,
+          feedingDifficulty: true,
+          birthWeightKg: 2.4,
+        ),
+      );
+      final current = AssessmentFeatureAdapter(
+        context,
+        _draft(signs: ['convulsions']),
+      ).features;
+      expect(current.historyOfConvulsions, isTrue);
+      expect(current.feedingDifficulty, isFalse);
+      expect(current.birthWeightKg, 2.4);
+      final unknown = AssessmentFeatureAdapter(
+        context,
+        _draft(inputs: const {}),
+      ).features;
+      expect(unknown.feedingDifficulty, isNull);
+      expect(unknown.historyOfConvulsions, isNull);
+    },
+  );
+
+  test('uncollected symptoms and ambiguous cord redness stay unknown', () {
+    final bag = AssessmentFeatureAdapter(
+      _context(),
+      _draft(signs: ['cordRed']),
+    ).features;
+    expect(bag.cordPus, isNull);
+    expect(bag.grunting, isNull);
+    expect(bag.bleedingFromAnySite, isNull);
+    expect(bag.abdominalDistension, isNull);
+    expect(bag.historyOfConvulsions, isFalse);
+  });
+
+  test(
+    'current maternal symptoms override historical false and ignore old positives',
+    () {
+      final context = _context(
+        type: ClientType.pregnantWoman,
+        maternal: const MaternalRecord(
+          personId: 'p1',
+          headacheSevere: false,
+          blurredVision: true,
+          gravida: 3,
+        ),
+      );
+      final bag = AssessmentFeatureAdapter(
+        context,
+        _draft(
+          type: ClientType.pregnantWoman,
+          inputs: const {
+            'danger_signs': ['headache'],
+            'pre_eclampsia_flags': <String>[],
+            'gestational_weeks': 32,
+          },
+        ),
+      ).features;
+      expect(bag.headacheSevere, isTrue);
+      expect(bag.blurredVision, isFalse);
+      expect(bag.gravida, 3);
+      expect(bag.ageDays, isNull);
+    },
+  );
+
+  test('general adult visit does not imply obstetric eligibility', () {
+    final adapter = AssessmentFeatureAdapter(
+      _context(type: ClientType.womanOfReproductiveAge),
+      _draft(
+        type: ClientType.womanOfReproductiveAge,
+        inputs: const {
+          'systolic': 180,
+          'diastolic': 120,
+          'danger_signs': ['convulsions'],
+        },
+      ),
+    );
+    expect(adapter.stabilization.isMaternal, isFalse);
+    expect(adapter.stabilization.hasEclampsiaConvulsions, isFalse);
+    expect(adapter.features.gestationalWeeks, isNull);
+  });
+
+  test('invalid explicit age does not fall back to stored age', () {
+    final adapter = AssessmentFeatureAdapter(
+      _context(),
+      _draft(inputs: const {'age_in_days': 1.5}),
+    );
+    expect(adapter.features.ageDays, isNull);
+  });
+
+  testWidgets(
+    'analysis states suppress numbers and preserve input correction',
+    (tester) async {
+      var edited = false;
+      final cases = <(OfflineRiskPrediction, String)>[
+        (
+          _prediction(execution: ModelExecution.integrityFailure),
+          'Integrity failure',
+        ),
+        (
+          _prediction(execution: ModelExecution.invalidMetadata),
+          'Invalid metadata',
+        ),
+        (_prediction(execution: ModelExecution.failed), 'Execution failure'),
+        (
+          _prediction(execution: ModelExecution.unavailable),
+          'Model unavailable',
+        ),
+        (
+          _prediction(applicability: ModelApplicability.unsupportedCohort),
+          'Unsupported or unknown cohort',
+        ),
+        (
+          _prediction(quality: ModelInputQuality.missingObservations),
+          'Missing observations',
+        ),
+        (
+          _prediction(quality: ModelInputQuality.invalidValues),
+          'Review measurements',
+        ),
+        (
+          _prediction(quality: ModelInputQuality.outsideSupport),
+          'Outside model support',
+        ),
+        (_prediction(evidence: ModelEvidence.synthetic), 'Research only'),
+      ];
+      for (final (prediction, message) in cases) {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: ResearchAnalysisPanel(
+                  key: ValueKey(message),
+                  predictions: Future.value({'neonatal_sepsis': prediction}),
+                  statuses: Future.value([]),
+                  showEvidence: true,
+                  onEdit: () => edited = true,
+                ),
+              ),
+            ),
           ),
         );
-
-        // The pre-referral section renders with an AI-only reason.
-        expect(find.text('Pre-referral stabilisation'), findsOneWidget);
-        expect(find.textContaining('AI rule-in candidate'), findsOneWidget);
-        expect(find.textContaining('IMCI danger sign'), findsNothing);
-
-        // The AI evidence lives on the full clinical report page.
-        await _openReport(tester);
-
-        // The AI finding names the tier and its cut-off. (The label also
-        // appears in the verdict banner rationale and the synthesised
-        // summary, so it can legitimately match several Text widgets.)
+        await tester.pumpAndSettle();
+        expect(find.text(message), findsOneWidget);
+        if (message == 'Missing observations') {
+          await tester.tap(find.text('Review assessment inputs'));
+          expect(edited, isTrue);
+        }
+        await tester.tap(find.text('Neonatal sepsis research'));
+        await tester.pumpAndSettle();
+        expect(find.text('0.987'), findsNothing);
         expect(
-          find.textContaining('Rule-in candidate: possible severe bacterial'),
-          findsWidgets,
-        );
-        expect(find.textContaining('Rule-in ≥ 15%'), findsOneWidget);
-
-        // The model card shows the rule-in badge + tier label.
-        expect(find.text('rule-in'), findsOneWidget);
-        expect(find.textContaining('rule-in candidate'), findsWidgets);
-
-        // The nurse-facing reading sits under the number on every model
-        // card: plain words and the one step to take — not just a
-        // statistic. The PSBI card is the one that names the treatment.
-        expect(find.text('WHAT THIS MEANS'), findsWidgets);
-        expect(
-          find.textContaining('treat as possible severe infection (PSBI)'),
+          find.textContaining('not a diagnosis or treatment threshold'),
           findsOneWidget,
         );
-        // And what drove each number is visible without expanding.
-        expect(find.text('WHAT THE AI CHECKED'), findsWidgets);
-      },
-    );
-  });
+      }
+    },
+  );
 
-  group('result screen — two-tier triage: LOW tier (screening)', () {
-    testWidgets(
-      'healthy newborn at the 0.02 baseline: no AI finding, no protocol, '
-      'card reads screening tier',
-      (tester) async {
-        await _pump(
-          tester,
-          _context(2),
-          _draft(
-            ageDays: 2,
-            temperatureCelsius: 36.8,
-            respiratoryRate: 42,
-            pulse: 130,
-            oxygenSaturation: 98,
-            birthWeightKg: 3.0,
+  testWidgets('research output requires matching usable permitted evidence', (
+    tester,
+  ) async {
+    for (final (version, usable, allowed, shown) in [
+      ('test-research', true, true, true),
+      ('different-version', true, true, false),
+      ('test-research', false, true, false),
+      ('test-research', true, false, false),
+    ]) {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: ResearchAnalysisPanel(
+                predictions: Future.value({'neonatal_sepsis': _prediction()}),
+                statuses: Future.value([
+                  OfflineModelStatus(
+                    name: 'neonatal_sepsis',
+                    modelAssetPath: 'test-artifact',
+                    metricsAssetPath: 'test-metadata',
+                    isModelPresent: true,
+                    isModelUsable: usable,
+                    hasMetrics: true,
+                    expectedSha256: 'test-hash',
+                    actualSha256: 'test-hash',
+                    integrityVerified: usable,
+                    metadataValid: usable,
+                    modelVersion: version,
+                    contract: {'patient_output_allowed': allowed},
+                  ),
+                ]),
+                showEvidence: true,
+                onEdit: () {},
+              ),
+            ),
           ),
-        );
-
-        // No rule-in, no danger sign -> nothing activates.
-        expect(find.text('Pre-referral stabilisation'), findsNothing);
-
-        // The model card lives on the full clinical report page, and it
-        // still surfaces the honest screening number.
-        await _openReport(tester);
-        expect(
-          find.textContaining('Rule-in candidate: possible severe bacterial'),
-          findsNothing,
-        );
-        expect(find.text('rule-in'), findsNothing);
-        expect(find.textContaining('screening tier'), findsOneWidget);
-        expect(find.textContaining('Risk 2.0%'), findsOneWidget);
-
-        // Plain words for the nurse even when the AI sees nothing.
-        expect(
-          find.textContaining('saw no pattern of severe infection'),
-          findsOneWidget,
-        );
-      },
-    );
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('0.987'), findsNothing);
+      await tester.tap(find.text('Neonatal sepsis research'));
+      await tester.pumpAndSettle();
+      expect(find.text('0.987'), shown ? findsOneWidget : findsNothing);
+      expect(
+        find.text('Research output (0–1 scale)'),
+        shown ? findsOneWidget : findsNothing,
+      );
+      expect(
+        find.textContaining('not a diagnosis or treatment threshold'),
+        findsOneWidget,
+      );
+    }
   });
 
-  group('result screen — two-tier triage: DRIFT-suppressed AI', () {
-    testWidgets(
-      '14-day-old is outside the 0-3d training window: no AI number, no AI '
-      'finding, deterministic rules carry PSBI',
-      (tester) async {
-        final v = _normalVitals();
-        await _pump(
-          tester,
-          _context(14),
-          _draft(
-            ageDays: 14,
-            dangerSigns: ['convulsions'],
-            temperatureCelsius: v.temp,
-            respiratoryRate: v.rr,
-            pulse: v.pulse,
-            oxygenSaturation: v.spo2,
-            birthWeightKg: v.bw,
+  testWidgets('metadata failure does not hide analysis state or show output', (
+    tester,
+  ) async {
+    final statuses = Completer<List<OfflineModelStatus>>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: ResearchAnalysisPanel(
+              predictions: Future.value({'neonatal_sepsis': _prediction()}),
+              statuses: statuses.future,
+              showEvidence: true,
+              onEdit: () {},
+            ),
           ),
-        );
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Research only'), findsOneWidget);
+    expect(find.text('Checking local evidence metadata…'), findsOneWidget);
+    statuses.completeError(StateError('missing metadata'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('Evidence metadata unavailable'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Neonatal sepsis research'));
+    await tester.pumpAndSettle();
+    expect(find.text('0.987'), findsNothing);
+  });
 
-        // The deterministic GHS rules keep the rule-out coverage: the
-        // protocol activates on the danger sign even with null AI risk.
-        expect(find.text('Pre-referral stabilisation'), findsOneWidget);
-        expect(find.textContaining('IMCI danger sign'), findsOneWidget);
+  testWidgets(
+    'late experimental output preserves referral and worklist choices',
+    (tester) async {
+      final service = _DelayedService();
+      await _pump(tester, _draft(), service: service);
+      expect(find.text('PROTOCOL DECISION'), findsOneWidget);
+      expect(
+        find.textContaining('You can continue clinical care'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Open action worklist'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Checkbox).first);
+      await tester.pump();
+      final checks = find.descendant(
+        of: find.byType(ActionWorklist),
+        matching: find.byType(Checkbox),
+      );
+      final before = tester
+          .widgetList<Checkbox>(checks)
+          .map((w) => w.value)
+          .toList();
+      final referral = find.byType(DangerSign);
+      expect(tester.widget<DangerSign>(referral).value, isFalse);
+      await tester.tap(
+        find.descendant(of: referral, matching: find.text('Yes')),
+      );
+      await tester.pumpAndSettle();
+      service.predictions.complete({'neonatal_sepsis': _prediction()});
+      await tester.pumpAndSettle();
+      expect(tester.widget<DangerSign>(referral).value, isTrue);
+      await _report(tester);
+      expect(find.textContaining('Rule-in candidate:'), findsNothing);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open action worklist'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<DangerSign>(referral).value, isTrue);
+      expect(
+        tester.widgetList<Checkbox>(checks).map((w) => w.value).toList(),
+        before,
+      );
+      expect(find.text('Pre-referral stabilisation'), findsNothing);
+    },
+  );
 
-        // The AI evidence lives on the full clinical report page.
-        await _openReport(tester);
-
-        // The AI is suppressed: no confident number, no rule-in finding.
-        // (More than one model can sit out-of-window for a newborn, so
-        // several cards can read n/a at once.)
-        expect(find.textContaining('out of training window'), findsWidgets);
-        expect(find.text('rule-in'), findsNothing);
-        expect(
-          find.textContaining('Rule-in candidate: possible severe bacterial'),
-          findsNothing,
-        );
-      },
+  testWidgets('saved clinical findings never acquire an experimental score', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final service = _DelayedService();
+    final repository = _CaptureRepository();
+    await _pump(tester, _draft(), service: service, repository: repository);
+    service.predictions.complete({'neonatal_sepsis': _prediction()});
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save assessment'));
+    await tester.pumpAndSettle();
+    final saved = repository.assessment!;
+    expect(repository.referral, isNull);
+    expect(saved.result.findings, isEmpty);
+    final serialized =
+        (saved.inputs['ml_predictions'] as Map)['neonatal_sepsis'] as Map;
+    expect(serialized['risk_probability'], isNull);
+    expect(serialized['classification'], 'unavailable');
+    expect(serialized['rule_in_candidate'], 0);
+    expect(saved.carePlanJson, isNot(contains('0.987')));
+    expect(saved.carePlanJson, isNot(contains('neonatal_sepsis')));
+    expect(
+      (jsonDecode(saved.carePlanJson!) as Map)['overall_triage'],
+      'routine',
     );
   });
+
+  testWidgets(
+    'clinical override reason survives analysis and evidence navigation',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final service = _DelayedService();
+      final repository = _CaptureRepository();
+      await _pump(tester, _draft(), service: service, repository: repository);
+      await tester.tap(find.text('Open action worklist'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.text('Disagree with this plan? Record a clinical override'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.widgetWithText(ChoiceChip, TriageLevel.watch.label),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField),
+        'Clinical review needed for persistent caregiver concern',
+      );
+      service.predictions.complete({
+        'neonatal_sepsis': _prediction(execution: ModelExecution.failed),
+      });
+      await tester.pumpAndSettle();
+      await _report(tester);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open action worklist'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        'Clinical review needed for persistent caregiver concern',
+      );
+      await tester.tap(find.text('Save assessment'));
+      await tester.pumpAndSettle();
+      expect(repository.assessment!.overriddenTriage, TriageLevel.watch);
+      expect(
+        repository.assessment!.overrideReason,
+        'Clinical review needed for persistent caregiver concern',
+      );
+      expect(repository.referral, isNull);
+    },
+  );
+
+  testWidgets('complete decision workspace supports 320px and 200% text', (
+    tester,
+  ) async {
+    await _pump(tester, _draft(), size: const Size(320, 1000), textScale: 2);
+    await tester.scrollUntilVisible(find.text('Open action worklist'), 250);
+    await tester.ensureVisible(find.text('Open action worklist'));
+    await tester.pumpAndSettle();
+    expect(find.text('Open action worklist').hitTestable(), findsOneWidget);
+    await tester.tap(find.text('Open action worklist'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Open full clinical report'),
+      400,
+    );
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -400));
+    await tester.pumpAndSettle();
+    await _report(tester);
+    await tester.scrollUntilVisible(find.text('Neonatal sepsis research'), 300);
+    await tester.ensureVisible(find.text('Neonatal sepsis research'));
+    await tester.pumpAndSettle();
+    expect(find.text('Neonatal sepsis research').hitTestable(), findsOneWidget);
+    await tester.tap(find.text('Neonatal sepsis research'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('decision header and worklist support 320px and 200% text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            textScaler: TextScaler.linear(2),
+            disableAnimations: true,
+          ),
+          child: Scaffold(
+            body: SingleChildScrollView(
+              child: Column(
+                children: [
+                  ClinicalDecisionHeader(
+                    classification: 'URGENT REFERRAL',
+                    level: TriageLevel.urgent,
+                    missingCount: 1,
+                    rationale: 'Convulsions observed during this visit.',
+                    onNext: () {},
+                  ),
+                  const ActionWorklist(
+                    actions: [
+                      RecommendedAction(
+                        instruction: 'Arrange referral now',
+                        urgency: ReferralUrgency.immediate,
+                        rationale: 'Observed danger sign',
+                        protocolSource: 'Existing protocol',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    final button = tester.getSize(
+      find.widgetWithText(FilledButton, 'Open action worklist'),
+    );
+    expect(button.height, greaterThanOrEqualTo(48));
+  });
+
+  testWidgets(
+    'action completion survives reordering without losing distinct indications',
+    (tester) async {
+      const a = RecommendedAction(
+        instruction: 'Review patient',
+        urgency: ReferralUrgency.sameDay,
+        rationale: 'First indication',
+        protocolSource: 'Protocol A',
+      );
+      const b = RecommendedAction(
+        instruction: 'Review patient',
+        urgency: ReferralUrgency.scheduled,
+        rationale: 'Second indication',
+        protocolSource: 'Protocol B',
+      );
+      Future<void> render(List<RecommendedAction> actions) => tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ActionWorklist(key: const ValueKey('work'), actions: actions),
+          ),
+        ),
+      );
+      await render([a, b, a]);
+      expect(find.text('0 of 2 done'), findsOneWidget);
+      await tester.tap(find.text('Review patient').first);
+      await tester.pump();
+      expect(find.text('1 of 2 done'), findsOneWidget);
+      await render([b, a]);
+      expect(find.text('1 of 2 done'), findsOneWidget);
+      expect(find.text('TODAY'), findsOneWidget);
+      expect(find.text('FOLLOW-UP'), findsOneWidget);
+    },
+  );
 }

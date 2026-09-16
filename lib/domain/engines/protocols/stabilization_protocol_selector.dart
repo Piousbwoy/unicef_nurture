@@ -1,18 +1,11 @@
 /// Pre-referral stabilization protocol selector.
 ///
-/// Given the AI risk predictions and a clinical snapshot, this module
+/// Given an observed clinical snapshot, this module
 /// returns the set of [StabilizationProtocol]s that the CHO should see
 /// at the top of the result screen BEFORE the rest of the care plan.
 ///
-/// Selection is biased toward activation. In the rural CHPS setting, the
-/// cost of missing a pre-referral dose of MgSO4 or ampicillin is a dead
-/// patient two hours down a flooded road; the cost of activating a
-/// protocol the patient did not strictly need is a wasted minute at the
-/// compound. The asymmetry justifies the bias.
-///
-/// Triggers combine the AI risk with hard clinical thresholds from the
-/// underlying WHO / MOH guidance, so the protocol activates even when the
-/// AI is unavailable (using the deterministic fallback output).
+/// Activations use observed clinical indications and cohort eligibility.
+/// Experimental scores never initiate medication or replace clinical review.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -27,6 +20,8 @@ import 'stabilization_protocols.dart';
 class StabilizationContext {
   const StabilizationContext({
     this.patientAgeDays,
+    this.patientAgeMonths,
+    this.isMaternal = false,
     this.gestationalWeeks,
     this.systolicBp,
     this.diastolicBp,
@@ -51,6 +46,8 @@ class StabilizationContext {
   /// Patient age in days. For adults / pregnancies, leave null and use
   /// [gestationalWeeks].
   final int? patientAgeDays;
+  final int? patientAgeMonths;
+  final bool isMaternal;
 
   /// Gestational age in weeks (>= 20 means an ANC assessment).
   final int? gestationalWeeks;
@@ -80,16 +77,13 @@ class StabilizationContext {
   final bool generalDangerSign;
 }
 
-/// The set of activated protocols, plus the AI risks that activated them.
+/// The activated protocols and their observed clinical indications.
 /// A non-empty list MUST be rendered before any other care-plan content;
 /// the empty list means "no pre-referral protocol activated, proceed to
 /// the regular care plan".
 @immutable
 class StabilizationPlan {
-  const StabilizationPlan({
-    required this.protocols,
-    required this.activatedBy,
-  });
+  const StabilizationPlan({required this.protocols, required this.activatedBy});
 
   final List<StabilizationProtocol> protocols;
   final Map<String, String> activatedBy;
@@ -110,63 +104,34 @@ class StabilizationAiRisks {
     this.neonatalSepsisRuleInCandidate,
   });
 
-  /// 0..1 calibrated probability.
+  /// Legacy transport fields. Ignored for every clinical decision.
   final double? preeclampsiaRisk;
   final double? neonatalSepsisRisk;
   final double? childPneumoniaRisk;
   final double? lbwSgaRisk;
 
-  /// Two-tier triage flag computed by the inference service: true only
-  /// when the neonatal-sepsis probability is at or above the rule-in
-  /// threshold on the 2%-prior scale (0.15). Null when the caller built
-  /// the risks by hand without the prediction object — the selector then
-  /// falls back to comparing [neonatalSepsisRisk] against the same
-  /// threshold. Drift-suppressed predictions carry false, never null.
+  /// Legacy flag retained for source compatibility; never activates care.
   final bool? neonatalSepsisRuleInCandidate;
 
   factory StabilizationAiRisks.fromPredictions(
     Map<String, OfflineRiskPrediction>? predictions,
   ) {
-    if (predictions == null) return const StabilizationAiRisks();
-    return StabilizationAiRisks(
-      preeclampsiaRisk: predictions['preeclampsia_risk']?.riskProbability,
-      neonatalSepsisRisk: predictions['neonatal_sepsis']?.riskProbability,
-      childPneumoniaRisk: predictions['child_pneumonia']?.riskProbability,
-      lbwSgaRisk: predictions['lbw_sga']?.riskProbability,
-      neonatalSepsisRuleInCandidate:
-          predictions['neonatal_sepsis']?.ruleInCandidate,
-    );
+    return const StabilizationAiRisks();
   }
 }
 
-/// GHS / WHO-aligned classification thresholds. These mirror the
-/// `OfflineInferenceService._GhsThresholds` constants and the WHO IMCI
-/// 2014 classification cutoffs.
+/// Existing protocol thresholds, independent of model execution.
 class _StabThresholds {
-  // TriageLevel.urgent threshold = 0.22 (preeclampsia)
-  // Two-tier rule-in threshold for PSBI = 0.15 on the v2.0 real-data
-  // 2%-prior scale (mirrors _GhsThresholds.neonatalSepsisRuleIn in
-  // offline_inference_service.dart — the single constant the GHS
-  // re-sign-off ratifies). The old 0.30 sat on the 78%-cohort scale and
-  // is not valid on the deployed scale.
-  static const peUrgent = 0.22;
-  static const psbiRuleIn = 0.15;
-  static const pneumoniaUrgent = 0.28;
-
   // WHO IMCI severe hypertension = 160/110 (matches WHO 2011 PE guideline)
   static const severeSbp = 160;
   static const severeDbp = 110;
-  // GHS / ACOG treatment threshold for severe hypertension = >= 160/110
-  static const treatSbp = 160;
-  static const treatDbp = 110;
   // GHS / WHO gestational hypertension threshold
   static const gestationalSbp = 140;
-  static const gestationalDbp = 90;
   // PSBI age limit
   static const psbiMaxAgeDays = 59;
   // Child pneumonia age range
   static const childPneumoniaMinAgeDays = 60;
-  static const childPneumoniaMaxAgeDays = 60 * 59;
+  static const childPneumoniaMaxAgeDays = 1825;
   // Severe hypoxia
   static const severeHypoxia = 90;
 }
@@ -180,7 +145,6 @@ class StabilizationProtocolSelector {
   /// Activation logic (each line is "if TRUE, activate"):
   ///
   /// **Pre-eclampsia / eclampsia protocol** when ANY of:
-  ///   * AI `preeclampsia_risk` >= 0.22 (the "urgent" triage threshold)
   ///   * systolic >= 160 OR diastolic >= 110 (WHO severe hypertension)
   ///   * eclampsia convulsions observed
   ///   * systolic >= 140 AND proteinuria >= 1+ (gestational hypertension
@@ -188,16 +152,14 @@ class StabilizationProtocolSelector {
   ///
   /// **Young-infant PSBI protocol** when ALL of:
   ///   * age 0-59 days
-  ///   * AI `neonatal_sepsis` is a rule-in candidate (>= 0.15 on the
-  ///     2%-prior scale) OR any IMCI danger sign present
+  ///   * any applicable IMCI danger sign present
   ///   * (convulsions, unable to feed, lethargic/unconscious, severe chest
   ///     indrawing, bulging fontanelle, fever >= 37.5 or hypothermia
   ///     < 35.5, cord pus with skin extension, etc.)
   ///
   /// **Child pneumonia protocol** when ALL of:
   ///   * age 2-59 months
-  ///   * AI `child_pneumonia` >= 0.28 OR (cough AND (severe
-  ///     chest indrawing OR general danger sign OR SaO2 < 90))
+  ///   * cough AND (severe chest indrawing OR general danger sign OR SaO2 < 90)
   StabilizationPlan select({
     required StabilizationContext context,
     required StabilizationAiRisks risks,
@@ -206,21 +168,22 @@ class StabilizationProtocolSelector {
     final reasons = <String, String>{};
 
     // ── Pre-eclampsia ────────────────────────────────────────────────────
-    final aiPe = risks.preeclampsiaRisk ?? 0.0;
+    final maternal =
+        context.isMaternal ||
+        (context.patientAgeDays == null && context.gestationalWeeks != null);
     final sbp = context.systolicBp;
     final dbp = context.diastolicBp;
     final protein = context.urineProtein0To4 ?? 0;
-    final aiPeHigh = aiPe >= _StabThresholds.peUrgent;
-    final severeHt = (sbp != null && sbp >= _StabThresholds.severeSbp) ||
+    final severeHt =
+        (sbp != null && sbp >= _StabThresholds.severeSbp) ||
         (dbp != null && dbp >= _StabThresholds.severeDbp);
     final gestationalHtWithProtein =
         sbp != null && sbp >= _StabThresholds.gestationalSbp && protein >= 1;
     final eclampsia = context.hasEclampsiaConvulsions;
 
-    if (aiPeHigh || severeHt || eclampsia || gestationalHtWithProtein) {
+    if (maternal && (severeHt || eclampsia || gestationalHtWithProtein)) {
       activated.add(preEclampsiaProtocol);
       final r = <String>[];
-      if (aiPeHigh) r.add('AI preeclampsia_risk=${aiPe.toStringAsFixed(2)}');
       if (severeHt) r.add('BP $sbp/$dbp >= 160/110');
       if (eclampsia) r.add('eclamptic convulsions observed');
       if (gestationalHtWithProtein) {
@@ -230,22 +193,16 @@ class StabilizationProtocolSelector {
     }
 
     // ── Young-infant PSBI ────────────────────────────────────────────────
-    final aiPsbi = risks.neonatalSepsisRisk ?? 0.0;
-    final psbiRuleIn = risks.neonatalSepsisRuleInCandidate ??
-        (aiPsbi >= _StabThresholds.psbiRuleIn);
     final ageDays = context.patientAgeDays;
     final inPsbiAge =
-        ageDays != null && ageDays <= _StabThresholds.psbiMaxAgeDays;
+        !maternal &&
+        ageDays != null &&
+        ageDays >= 0 &&
+        ageDays <= _StabThresholds.psbiMaxAgeDays;
     final psbiDanger = _psbiDangerSignPresent(context);
-    if (inPsbiAge && (psbiRuleIn || psbiDanger)) {
+    if (inPsbiAge && psbiDanger) {
       activated.add(psbiProtocol);
       final r = <String>[];
-      if (psbiRuleIn) {
-        r.add(
-          'AI rule-in candidate: neonatal_sepsis='
-          '${aiPsbi.toStringAsFixed(3)} >= ${_StabThresholds.psbiRuleIn}',
-        );
-      }
       if (psbiDanger) {
         r.add('IMCI danger sign present');
       }
@@ -254,23 +211,25 @@ class StabilizationProtocolSelector {
     }
 
     // ── Child pneumonia ─────────────────────────────────────────────────
-    final aiPneu = risks.childPneumoniaRisk ?? 0.0;
-    final inPneuAge = ageDays != null &&
-        ageDays >= _StabThresholds.childPneumoniaMinAgeDays &&
-        ageDays <= _StabThresholds.childPneumoniaMaxAgeDays;
-    final severeHypoxia = context.oxygenSaturation != null &&
+    final months = context.patientAgeMonths;
+    final inPneuAge =
+        !maternal &&
+        (months != null
+            ? months >= 2 && months <= 59
+            : ageDays != null &&
+                  ageDays >= _StabThresholds.childPneumoniaMinAgeDays &&
+                  ageDays < _StabThresholds.childPneumoniaMaxAgeDays);
+    final severeHypoxia =
+        context.oxygenSaturation != null &&
         context.oxygenSaturation! < _StabThresholds.severeHypoxia;
-    final dangerPneumonia = context.coughPresent &&
+    final dangerPneumonia =
+        context.coughPresent &&
         (context.severeChestIndrawing ||
             context.generalDangerSign ||
             severeHypoxia);
-    if (inPneuAge &&
-        (aiPneu >= _StabThresholds.pneumoniaUrgent || dangerPneumonia)) {
+    if (inPneuAge && dangerPneumonia) {
       activated.add(childPneumoniaProtocol);
       final r = <String>[];
-      if (aiPneu >= _StabThresholds.pneumoniaUrgent) {
-        r.add('AI child_pneumonia=${aiPneu.toStringAsFixed(2)}');
-      }
       if (dangerPneumonia) {
         r.add('cough + severe chest indrawing / danger sign / SaO2 < 90');
       }

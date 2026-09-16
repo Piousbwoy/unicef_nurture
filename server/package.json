@@ -8,7 +8,8 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "test": "node test/verify.js",
-    "verify": "node test/verify.js"
+    "verify": "node test/verify.js",
+    "verify:pull": "node scripts/verify-pull.js"
   },
   "engines": {
     "node": ">=18"

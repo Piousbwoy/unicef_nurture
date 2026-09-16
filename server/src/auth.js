@@ -97,13 +97,19 @@ function signAccessToken(user, { deviceId, jti } = {}) {
     facility_name: user.facility_name || null,
     phone: user.phone,
     device_id: deviceId || null,
+    // RFC 7519 wants an ABSOLUTE epoch here. jsonwebtoken's options.notBefore
+    // instead treats numbers as an OFFSET from iat, so passing the epoch value
+    // there minted tokens that would not activate for ~56 years — every
+    // authenticated request failed 401 the moment a device left the login
+    // response (restore, pull, per-user push). Keep the claim in the payload,
+    // where its unit really is seconds since epoch, with 5s of clock skew.
+    nbf: now - 5,
   };
   return jwt.sign(payload, config.jwt.accessSecret, {
     issuer: config.jwt.issuer,
     audience: config.jwt.audience,
     jwtid: jti || crypto.randomBytes(12).toString('hex'),
     expiresIn: `${config.jwt.accessTtlMinutes * 60}s`,
-    notBefore: now - 5,
   });
 }
 

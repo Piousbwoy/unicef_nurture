@@ -55,6 +55,12 @@ dependencies:
   url_launcher: ^6.3.1
   sqflite_common_ffi_web: ^1.1.2
 
+  # District-server communication. package:http selects the right client per
+  # platform (IOClient on Android/desktop, BrowserClient/XHR on web). The web
+  # build cannot use dart:io's HttpClient at all — every sync/auth request
+  # therefore goes through lib/data/sync/http_client.dart which wraps this.
+  http: ^1.2.2
+
   # On-device offline ML (TFLite INT8 Random Forest classifiers)
   # Four maternal/child risk models: neonatal_sepsis, child_pneumonia,
   # preeclampsia_risk, lbw_sga. INT8 quantized, <2 MB each, 10–40 ms ARM64.

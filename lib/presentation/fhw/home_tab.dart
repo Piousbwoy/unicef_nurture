@@ -77,6 +77,9 @@ class FhwHomeTab extends ConsumerWidget {
           _HeroHeader(user: user, sync: sync, online: online),
           const SizedBox(height: Gap.lg),
 
+          _DailyImpactCard(households: households, referrals: referrals),
+          const SizedBox(height: Gap.lg),
+
           _QuickActions(
             households: households,
             onOpenFamilies: onOpenFamilies,
@@ -1063,6 +1066,167 @@ class _SyncPromptCard extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------- Daily impact
+
+/// Today's impact summary — the first thing a CHO sees after the greeting.
+/// Shows households visited, referrals completed, and a subtle encouragement
+/// when the day is still young.
+class _DailyImpactCard extends ConsumerWidget {
+  const _DailyImpactCard({
+    required this.households,
+    required this.referrals,
+  });
+
+  final AsyncValue<List<Household>> households;
+  final AsyncValue<List<Referral>> referrals;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final today = DateTime.now();
+    final startOfDay = DateTime(today.year, today.month, today.day);
+
+    final visitedToday = households.maybeWhen(
+      data: (list) => list.where((h) {
+        final updated = h.updatedAt;
+        if (updated == null) return false;
+        return updated.isAfter(startOfDay);
+      }).length,
+      orElse: () => 0,
+    );
+
+    final completedToday = referrals.maybeWhen(
+      data: (list) => list.where((r) {
+        final updated = r.statusUpdatedAt;
+        if (updated == null) return false;
+        // Count referrals that reached a positive outcome today.
+        final isSuccess = r.status == ReferralStatus.arrived ||
+            r.status == ReferralStatus.treated;
+        return updated.isAfter(startOfDay) && isSuccess;
+      }).length,
+      orElse: () => 0,
+    );
+
+    // Only show the card if there's something to report, or if it's still
+    // morning (encourage the CHO to get started).
+    final isMorning = today.hour < 12;
+    if (visitedToday == 0 && completedToday == 0 && !isMorning) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(Gap.lg),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.primary.withValues(alpha: 0.08),
+            AppColors.primary.withValues(alpha: 0.02),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(Gap.radius),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.12),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.insights_rounded,
+                size: 18,
+                color: AppColors.primary,
+              ),
+              const SizedBox(width: Gap.sm),
+              Text(
+                'Today\'s Impact',
+                style: AppType.eyebrow.copyWith(
+                  color: AppColors.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Gap.md),
+          Row(
+            children: [
+              Expanded(
+                child: _ImpactStat(
+                  icon: Icons.home_work_rounded,
+                  label: 'Households',
+                  value: visitedToday,
+                ),
+              ),
+              Expanded(
+                child: _ImpactStat(
+                  icon: Icons.check_circle_rounded,
+                  label: 'Referrals',
+                  value: completedToday,
+                ),
+              ),
+            ],
+          ),
+          if (visitedToday == 0 && completedToday == 0 && isMorning) ...[
+            const SizedBox(height: Gap.md),
+            Text(
+              'A fresh day. Every household you visit today matters.',
+              style: AppType.caption.copyWith(
+                color: AppColors.inkMuted,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ImpactStat extends StatelessWidget {
+  const _ImpactStat({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final int value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 16, color: AppColors.inkMuted),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: AppType.caption.copyWith(
+                color: AppColors.inkMuted,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '$value',
+          style: AppType.headline.copyWith(
+            fontSize: 28,
+            fontWeight: FontWeight.w900,
+            color: AppColors.ink,
+          ),
+        ),
+      ],
     );
   }
 }

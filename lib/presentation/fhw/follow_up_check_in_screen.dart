@@ -140,6 +140,12 @@ class _FollowUpCheckInScreenState extends ConsumerState<FollowUpCheckInScreen> {
         }
       }
 
+      // Celebrate successful referral completion — the family reached care.
+      if (!mounted) return;
+      if (status == ReferralStatus.arrived || status == ReferralStatus.treated) {
+        await _showCelebration(status);
+      }
+
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
@@ -148,6 +154,18 @@ class _FollowUpCheckInScreenState extends ConsumerState<FollowUpCheckInScreen> {
         _error = 'Could not save follow-up: $e';
       });
     }
+  }
+
+  Future<void> _showCelebration(ReferralStatus status) async {
+    final message = status == ReferralStatus.treated
+        ? 'The family received treatment. This is what referrals are for.'
+        : 'The family reached the facility. The loop is closed.';
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _CelebrationDialog(message: message),
+    );
   }
 
   @override
@@ -727,6 +745,90 @@ class _ClosedLoopCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A celebration dialog shown when a referral reaches a successful outcome.
+/// Features an animated checkmark and a message acknowledging the health
+/// worker's impact.
+class _CelebrationDialog extends StatefulWidget {
+  const _CelebrationDialog({required this.message});
+
+  final String message;
+
+  @override
+  State<_CelebrationDialog> createState() => _CelebrationDialogState();
+}
+
+class _CelebrationDialogState extends State<_CelebrationDialog>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..forward();
+    _scaleAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.elasticOut,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: Padding(
+        padding: const EdgeInsets.all(Gap.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ScaleTransition(
+              scale: _scaleAnimation,
+              child: Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: AppColors.triageGreen.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  size: 60,
+                  color: AppColors.triageGreen,
+                ),
+              ),
+            ),
+            const SizedBox(height: Gap.lg),
+            Text(
+              'Referral Complete',
+              style: AppType.headline.copyWith(fontSize: 20),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: Gap.sm),
+            Text(
+              widget.message,
+              style: AppType.body.copyWith(color: AppColors.inkMuted),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: Gap.xl),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,0 +1,890 @@
+{
+  "schema_version": 1,
+  "models": {
+    "neonatal_sepsis": {
+      "model_type": "dense_network",
+      "output_type": "binary_probability",
+      "input_dtype": "int8",
+      "input_shape": [
+        1,
+        20
+      ],
+      "output_dtype": "float32",
+      "output_shape": [
+        1,
+        1
+      ],
+      "input_quantization": [
+        0.003921568859368563,
+        -128
+      ],
+      "output_quantization": [
+        0.0,
+        0
+      ],
+      "input_quantization_arithmetic": "float32_divide_add_round_ties_away_from_zero",
+      "schema_version": 1,
+      "model_name": "neonatal_sepsis",
+      "model_version": "v2.0-real-data-neonatal_sepsis",
+      "artifact_sha256": "b40ce5c43958b16bf6508887f49d79e7de7c0e6b8c4fd68ffabefb8a8d2b0fff",
+      "evidence": "legacy_real_data",
+      "patient_output_allowed": false,
+      "clinical_use_allowed": false,
+      "cohort": "young_infant",
+      "age_days_support": [
+        0,
+        3
+      ],
+      "dataset": "REAL: Mbarara RRH neonatal sepsis EMR, Uganda (964 rows [756 positive, 208 negative]; age 0-3 days; vitals + feeding/lethargy signs)",
+      "outcome": "Dataset-defined neonatal_sepsis; reference standard unverified",
+      "limitations": [
+        "Legacy feeding/lethargy encoding discarded Yes/No observations",
+        "Weight meaning differs from the app's birth-weight field",
+        "Published metrics describe the teacher, not an independently evaluated exported model",
+        "Not clinically validated for Northern Ghana",
+        "No individual probability confidence interval"
+      ],
+      "evaluation_kind": "legacy_teacher_only",
+      "evaluation": {},
+      "features": [
+        {
+          "name": "age_days",
+          "meaning": "age days",
+          "kind": "int",
+          "unit": "days",
+          "min": 0,
+          "max": 59,
+          "transform": "min_max",
+          "imputation": null,
+          "required": true,
+          "supported": true
+        },
+        {
+          "name": "temperature_celsius",
+          "meaning": "temperature celsius",
+          "kind": "double",
+          "unit": "C",
+          "min": 34.0,
+          "max": 41.0,
+          "transform": "min_max",
+          "imputation": null,
+          "required": true,
+          "supported": true
+        },
+        {
+          "name": "respiratory_rate_per_min",
+          "meaning": "respiratory rate per min",
+          "kind": "int",
+          "unit": "per_min",
+          "min": 20,
+          "max": 120,
+          "transform": "min_max",
+          "imputation": null,
+          "required": true,
+          "supported": true
+        },
+        {
+          "name": "heart_rate_per_min",
+          "meaning": "heart rate per min",
+          "kind": "int",
+          "unit": "per_min",
+          "min": 60,
+          "max": 220,
+          "transform": "min_max",
+          "imputation": null,
+          "required": true,
+          "supported": true
+        },
+        {
+          "name": "oxygen_saturation_per_cent",
+          "meaning": "oxygen saturation per cent",
+          "kind": "int",
+          "unit": "source_schema_unit",
+          "min": 60,
+          "max": 100,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "birth_weight_kg",
+          "meaning": "birth weight kg",
+          "kind": "double",
+          "unit": "source_schema_unit",
+          "min": 0.8,
+          "max": 5.0,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "apgar_5_minute",
+          "meaning": "apgar 5 minute",
+          "kind": "int",
+          "unit": "source_schema_unit",
+          "min": 0,
+          "max": 10,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "history_of_convulsions",
+          "meaning": "history of convulsions",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "severe_chest_indrawing",
+          "meaning": "severe chest indrawing",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "nasal_flaring_grunting",
+          "meaning": "nasal flaring grunting",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "bulging_fontanelle",
+          "meaning": "bulging fontanelle",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "jaundice_before_24h",
+          "meaning": "jaundice before 24h",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "feeding_difficulty",
+          "meaning": "feeding difficulty",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "abdominal_distension",
+          "meaning": "abdominal distension",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "cord_infection",
+          "meaning": "cord infection",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "skin_pustules",
+          "meaning": "skin pustules",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "lethargic_unconscious",
+          "meaning": "lethargic unconscious",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "bleeding",
+          "meaning": "bleeding",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "hiv_exposed",
+          "meaning": "hiv exposed",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "multiple_birth",
+          "meaning": "multiple birth",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        }
+      ]
+    },
+    "child_pneumonia": {
+      "model_type": "dense_network",
+      "output_type": "binary_probability",
+      "input_dtype": "int8",
+      "input_shape": [
+        1,
+        10
+      ],
+      "output_dtype": "float32",
+      "output_shape": [
+        1,
+        1
+      ],
+      "input_quantization": [
+        0.003921568859368563,
+        -128
+      ],
+      "output_quantization": [
+        0.0,
+        0
+      ],
+      "input_quantization_arithmetic": "float32_divide_add_round_ties_away_from_zero",
+      "schema_version": 1,
+      "model_name": "child_pneumonia",
+      "model_version": "v1.1-ghana-baseline-normalized-serving",
+      "artifact_sha256": "a0479dc800c132f2d9f985cbc3117995725545bf8df65dce4b5091210384af5a",
+      "evidence": "synthetic",
+      "patient_output_allowed": false,
+      "clinical_use_allowed": false,
+      "cohort": "child",
+      "age_days_support": null,
+      "dataset": "[M14] WHO IMCI 2014 (pneumonia cutoffs); [M10] Baiden 2011 (CHO RR under-counting correction)",
+      "outcome": "Simulated outcome",
+      "limitations": [
+        "Synthetic training does not establish patient-level predictive performance",
+        "Not clinically validated for Northern Ghana",
+        "No individual probability confidence interval"
+      ],
+      "evaluation_kind": "legacy_teacher_only",
+      "evaluation": {},
+      "features": [
+        {
+          "name": "age_days",
+          "meaning": "age days",
+          "kind": "int",
+          "unit": "days",
+          "min": 60,
+          "max": 1825,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "cough_present",
+          "meaning": "cough present",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "respiratory_rate_per_min",
+          "meaning": "respiratory rate per min",
+          "kind": "int",
+          "unit": "per_min",
+          "min": 16,
+          "max": 100,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "chest_indrawing",
+          "meaning": "chest indrawing",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "stridor_calm",
+          "meaning": "stridor calm",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "temperature_celsius",
+          "meaning": "temperature celsius",
+          "kind": "double",
+          "unit": "C",
+          "min": 34.0,
+          "max": 42.0,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "oxygen_saturation",
+          "meaning": "oxygen saturation",
+          "kind": "int",
+          "unit": "source_schema_unit",
+          "min": 60,
+          "max": 100,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "general_danger_sign",
+          "meaning": "general danger sign",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "hiv_exposed",
+          "meaning": "hiv exposed",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "heart_rate_per_min",
+          "meaning": "heart rate per min",
+          "kind": "int",
+          "unit": "per_min",
+          "min": 50,
+          "max": 200,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        }
+      ]
+    },
+    "preeclampsia_risk": {
+      "model_type": "dense_network",
+      "output_type": "binary_probability",
+      "input_dtype": "int8",
+      "input_shape": [
+        1,
+        18
+      ],
+      "output_dtype": "float32",
+      "output_shape": [
+        1,
+        1
+      ],
+      "input_quantization": [
+        0.003921568859368563,
+        -128
+      ],
+      "output_quantization": [
+        0.0,
+        0
+      ],
+      "input_quantization_arithmetic": "float32_divide_add_round_ties_away_from_zero",
+      "schema_version": 1,
+      "model_name": "preeclampsia_risk",
+      "model_version": "v1.1-ghana-baseline-normalized-serving",
+      "artifact_sha256": "90c6a8d25de4d0fd88deda045b41ca7da3271a71e9fac0f4ad110adbb70698bf",
+      "evidence": "synthetic",
+      "patient_output_allowed": false,
+      "clinical_use_allowed": false,
+      "cohort": "maternal",
+      "age_days_support": null,
+      "dataset": "[M1] Adokiya 2022 (Hb); [M7] Charadan 2025 (PIH); [M8] Bugri 2023 (HTN); [M9] Boafo 2025 (PE meta)",
+      "outcome": "Simulated outcome",
+      "limitations": [
+        "Synthetic training does not establish patient-level predictive performance",
+        "Not clinically validated for Northern Ghana",
+        "No individual probability confidence interval"
+      ],
+      "evaluation_kind": "legacy_teacher_only",
+      "evaluation": {},
+      "features": [
+        {
+          "name": "maternal_age",
+          "meaning": "maternal age",
+          "kind": "int",
+          "unit": "source_schema_unit",
+          "min": 14,
+          "max": 50,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "gravida",
+          "meaning": "gravida",
+          "kind": "int",
+          "unit": "source_schema_unit",
+          "min": 0,
+          "max": 12,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "parity",
+          "meaning": "parity",
+          "kind": "int",
+          "unit": "source_schema_unit",
+          "min": 0,
+          "max": 10,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "systolic_bp",
+          "meaning": "systolic bp",
+          "kind": "int",
+          "unit": "mmHg",
+          "min": 80,
+          "max": 180,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "diastolic_bp",
+          "meaning": "diastolic bp",
+          "kind": "int",
+          "unit": "mmHg",
+          "min": 50,
+          "max": 130,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "haemoglobin",
+          "meaning": "haemoglobin",
+          "kind": "double",
+          "unit": "source_schema_unit",
+          "min": 6.0,
+          "max": 16.0,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "urine_protein",
+          "meaning": "urine protein",
+          "kind": "int",
+          "unit": "source_schema_unit",
+          "min": 0,
+          "max": 4,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "maternal_muac_mm",
+          "meaning": "maternal muac mm",
+          "kind": "int",
+          "unit": "source_schema_unit",
+          "min": 180,
+          "max": 380,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "maternal_bmi",
+          "meaning": "maternal bmi",
+          "kind": "double",
+          "unit": "source_schema_unit",
+          "min": 15.0,
+          "max": 45.0,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "oedema_hands_or_face",
+          "meaning": "oedema hands or face",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "epigastric_pain",
+          "meaning": "epigastric pain",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "headache_severe",
+          "meaning": "headache severe",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "blurred_vision",
+          "meaning": "blurred vision",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "brisk_reflexes",
+          "meaning": "brisk reflexes",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "oliguria",
+          "meaning": "oliguria",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "weight_gain_over_1kg_per_week",
+          "meaning": "weight gain over 1kg per week",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "previous_losses",
+          "meaning": "previous losses",
+          "kind": "int",
+          "unit": "source_schema_unit",
+          "min": 0,
+          "max": 8,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "prev_caesarean",
+          "meaning": "prev caesarean",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        }
+      ]
+    },
+    "lbw_sga": {
+      "model_type": "dense_network",
+      "output_type": "binary_probability",
+      "input_dtype": "int8",
+      "input_shape": [
+        1,
+        11
+      ],
+      "output_dtype": "float32",
+      "output_shape": [
+        1,
+        1
+      ],
+      "input_quantization": [
+        0.003921568859368563,
+        -128
+      ],
+      "output_quantization": [
+        0.0,
+        0
+      ],
+      "input_quantization_arithmetic": "float32_divide_add_round_ties_away_from_zero",
+      "schema_version": 1,
+      "model_name": "lbw_sga",
+      "model_version": "v1.1-ghana-baseline-normalized-serving",
+      "artifact_sha256": "096cbd93b0995b9e41d7c8eca6126a53297cdd753ea8fbc643db32b736ec2d87",
+      "evidence": "synthetic",
+      "patient_output_allowed": false,
+      "clinical_use_allowed": false,
+      "cohort": "maternal",
+      "age_days_support": null,
+      "dataset": "[M3] Adjei-Gyamfi 2023 Savelugu (LBW); [M5] Fosu 2013 (Northern MICS); [M1] Adokiya 2022 (Hb)",
+      "outcome": "Simulated outcome",
+      "limitations": [
+        "Synthetic training does not establish patient-level predictive performance",
+        "Not clinically validated for Northern Ghana",
+        "No individual probability confidence interval"
+      ],
+      "evaluation_kind": "legacy_teacher_only",
+      "evaluation": {},
+      "features": [
+        {
+          "name": "maternal_age",
+          "meaning": "maternal age",
+          "kind": "int",
+          "unit": "source_schema_unit",
+          "min": 14,
+          "max": 50,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "gravida",
+          "meaning": "gravida",
+          "kind": "int",
+          "unit": "source_schema_unit",
+          "min": 0,
+          "max": 12,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "parity",
+          "meaning": "parity",
+          "kind": "int",
+          "unit": "source_schema_unit",
+          "min": 0,
+          "max": 10,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "maternal_muac_mm",
+          "meaning": "maternal muac mm",
+          "kind": "int",
+          "unit": "source_schema_unit",
+          "min": 180,
+          "max": 380,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "maternal_bmi",
+          "meaning": "maternal bmi",
+          "kind": "double",
+          "unit": "source_schema_unit",
+          "min": 15.0,
+          "max": 45.0,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "haemoglobin",
+          "meaning": "haemoglobin",
+          "kind": "double",
+          "unit": "source_schema_unit",
+          "min": 6.0,
+          "max": 16.0,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "urine_protein",
+          "meaning": "urine protein",
+          "kind": "int",
+          "unit": "source_schema_unit",
+          "min": 0,
+          "max": 4,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "weight_gain_kg_this_pregnancy",
+          "meaning": "weight gain kg this pregnancy",
+          "kind": "double",
+          "unit": "source_schema_unit",
+          "min": 0,
+          "max": 30,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "previous_losses",
+          "meaning": "previous losses",
+          "kind": "int",
+          "unit": "source_schema_unit",
+          "min": 0,
+          "max": 8,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "prev_caesarean",
+          "meaning": "prev caesarean",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        },
+        {
+          "name": "multiple_birth",
+          "meaning": "multiple birth",
+          "kind": "bool",
+          "unit": "boolean",
+          "min": 0,
+          "max": 1,
+          "transform": "min_max",
+          "imputation": null,
+          "required": false,
+          "supported": false
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "candidate_sha256": "31388d5f82248eee44ee43886e84ebf082d0e905ccc8398f764b8a3f66adc990",
+  "evaluation_groups": 1,
+  "baseline_evaluation": {
+    "n": 27,
+    "prevalence": 0.8148148148148148,
+    "auroc": 0.5,
+    "average_precision": 0.8148148148148148,
+    "brier": 0.15924752276042456,
+    "log_loss": 0.5018261821225314,
+    "threshold": 0.7036393934301266,
+    "sensitivity": 1.0,
+    "specificity": 0.0,
+    "ppv": 0.8148148148148148,
+    "npv": null,
+    "confusion": {
+      "tn": 0,
+      "fp": 5,
+      "fn": 0,
+      "tp": 22
+    },
+    "reliability_bins": [
+      {
+        "lower": 0.0,
+        "upper": 0.1,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.1,
+        "upper": 0.2,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.2,
+        "upper": 0.3,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.3,
+        "upper": 0.4,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.4,
+        "upper": 0.5,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.5,
+        "upper": 0.6,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.6,
+        "upper": 0.7,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.7,
+        "upper": 0.8,
+        "n": 27,
+        "mean_output": 0.7234042553191491,
+        "observed_fraction": 0.8148148148148148
+      },
+      {
+        "lower": 0.8,
+        "upper": 0.9,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.9,
+        "upper": 1.0,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      }
+    ]
+  },
+  "no_refitting_or_threshold_changes": true,
+  "configuration_limit": "Historical run records seed, dependencies and candidate grid, but lacks a contemporaneous trainer-code hash",
+  "bootstrap_correction": "Singleton evaluation group: original degenerate intervals are invalid and withdrawn",
+  "clinical_use_allowed": false,
+  "exported_metrics_reproduced": true,
+  "dart_parity": "Passed exact INT8 input and official output tolerance checks"
+}

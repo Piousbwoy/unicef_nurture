@@ -12,16 +12,20 @@
 /// reviewer notices.
 library;
 
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/auth/session.dart';
 import '../data/local/app_database.dart';
 import '../data/local/outbox_dao.dart';
 import '../data/local/preferences_store.dart';
+import '../data/local/sync_state_dao.dart';
 import '../data/local/user_dao.dart';
 import '../data/repositories/care_repository.dart';
 import '../data/repositories/insight_repository.dart';
 import '../data/sync/sync_service.dart';
+import '../data/sync/pull_service.dart';
 import '../data/sync/http_transport.dart';
 import '../domain/engines/barrier_engine.dart';
 import '../domain/engines/trajectory_engine.dart';
@@ -59,6 +63,18 @@ final syncServiceProvider = FutureProvider<SyncService>((ref) async {
   // outbox lifecycle still works for demonstration and testing.
   final transport = await HttpSyncTransport.fromPreferences();
   final service = SyncService(transport: transport);
+  // The hybrid engine's other half: every accepted push batch and every
+  // reconnect is also a moment new data may be waiting to come DOWN.
+  // Plain assignments, not a cascade — an `=> expr` closure body would
+  // otherwise swallow the next `..` section into itself.
+  // The user id is read here, on the sync service's own ref, not inside
+  // [runPull]: runPull also runs from the session notifier, and
+  // currentUserProvider watches the session — reading it there is the
+  // dependency cycle Riverpod refuses.
+  service.onPushAccepted = () =>
+      _pullAndRefresh(ref, userId: ref.read(currentUserProvider)?.id);
+  service.onConnectivityRegained = () =>
+      _pullAndRefresh(ref, userId: ref.read(currentUserProvider)?.id);
   ref.onDispose(service.dispose);
   // Start here, not only in [bootstrapProvider]: when the sync-settings
   // screen invalidates this provider to pick up a newly configured server,
@@ -67,6 +83,123 @@ final syncServiceProvider = FutureProvider<SyncService>((ref) async {
   // path starting it again is harmless.
   await service.start();
   return service;
+});
+
+/// The delta-pull engine. Stateless besides its debounce, so one instance
+/// serves every trigger — sign-in, session restore, push drains, reconnects,
+/// the sync settings' "Pull now" button — and they share its in-flight
+/// session rather than racing the server.
+final pullServiceProvider = Provider<PullService>((_) => PullService());
+
+/// Runs one delta pull for the signed-in user and, when it changed local
+/// data, refreshes every read the new rows could have moved. A pulled
+/// household becoming searchable without a restart is the whole point of the
+/// feature, so the invalidation is not optional polish.
+///
+/// [userId] is passed in rather than read from [currentUserProvider] here:
+/// the session notifier is one of the callers, and that provider watches the
+/// session — reading it from inside a session notification is the exact
+/// cycle Riverpod refuses with CircularDependencyError. Callers that live
+/// outside the session (the sync triggers, "Pull now") resolve it from
+/// their own ref instead.
+///
+/// Returns the honest [PullReport] so a caller that speaks to a human — the
+/// sync settings' "Pull now" — can render exactly what happened instead of
+/// inventing a success. Never throws: every failure is a returned report.
+Future<PullReport> runPull(
+  Ref ref, {
+  String? userId,
+  bool force = false,
+}) async {
+  try {
+    final report = await ref
+        .read(pullServiceProvider)
+        .pull(userId: userId, force: force);
+    if (report.isSuccess) {
+      // A completed pull always advances the watermark, so the
+      // "received … from the server" line must refresh even at zero rows.
+      if (report.changedLocalData) {
+        _invalidatePulledReads(ref);
+      } else {
+        ref.invalidate(lastPullProvider);
+      }
+    }
+    return report;
+  } catch (_) {
+    // Offline or between sessions — the next trigger retries. Nothing here
+    // is allowed to break the push run or the sign-in flow that started it.
+    return const PullReport(
+      status: PullStatus.unavailable,
+      detail: 'pull crashed before the server was asked',
+    );
+  }
+}
+
+/// Fire-and-forget wrapper for the automatic triggers (sign-in, session
+/// restore, push accepted, connectivity regained): pull quietly, refresh
+/// quietly, never surface anything to the user.
+Future<void> _pullAndRefresh(Ref ref, {String? userId}) =>
+    runPull(ref, userId: userId);
+
+/// The UI-facing handle on [runPull]. Widgets live in WidgetRef world and
+/// cannot pass their ref into a Ref-typed function, so the container hands
+/// them a ready-made closure bound to force:true instead.
+final pullNowProvider = Provider<Future<PullReport> Function()>((ref) {
+  // The user id resolves on this provider's own ref for the same anti-cycle
+  // reason [runPull] documents: runPull itself must stay session-blind.
+  return () => runPull(
+        ref,
+        userId: ref.read(currentUserProvider)?.id,
+        force: true,
+      );
+});
+
+/// The reads delta pull can change: the five pulled tables (households,
+/// persons, visits, assessments, referrals) feed all of these. Family
+/// providers invalidate wholesale — the alternative is guessing instance ids.
+void _invalidatePulledReads(Ref ref) {
+  ref.invalidate(visibleHouseholdsProvider);
+  ref.invalidate(dayPlanProvider);
+  ref.invalidate(openReferralsProvider);
+  ref.invalidate(decliningChildrenProvider);
+  ref.invalidate(barrierPatternsProvider);
+  ref.invalidate(referralCompletionProvider);
+  ref.invalidate(impactSummaryProvider);
+  ref.invalidate(lastPullProvider);
+  ref.invalidate(householdProvider);
+  ref.invalidate(householdMembersProvider);
+  ref.invalidate(householdScoreProvider);
+  ref.invalidate(visitHistoryProvider);
+  ref.invalidate(latestAssessmentProvider);
+  ref.invalidate(personProvider);
+}
+
+/// The last delta pull's honest one-line summary for the signed-in account,
+/// or null when this account has never pulled (or nobody is signed in).
+/// Display only — the pull engine never reasons with device clocks; the
+/// server owns the change markers.
+final lastPullProvider = FutureProvider<String?>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return null;
+  final at = await SyncStateDao.read(
+    SyncStateKeys.scoped(SyncStateKeys.lastPullAt, user.id),
+  );
+  final t = DateTime.tryParse(at ?? '')?.toLocal();
+  if (t == null) return null;
+  final rows = int.tryParse(
+        await SyncStateDao.read(
+              SyncStateKeys.scoped(SyncStateKeys.lastPullRows, user.id),
+            ) ??
+            '',
+      ) ??
+      0;
+  final hh = t.hour.toString().padLeft(2, '0');
+  final mm = t.minute.toString().padLeft(2, '0');
+  final now = DateTime.now();
+  final sameDay =
+      t.year == now.year && t.month == now.month && t.day == now.day;
+  final when = sameDay ? 'today at $hh:$mm' : 'on ${t.day}/${t.month} at $hh:$mm';
+  return 'Received $rows record${rows == 1 ? '' : 's'} from the server $when';
 });
 
 /// Drives the offline banner. Seeded with the current summary so the banner is
@@ -117,11 +250,18 @@ class SessionNotifier extends Notifier<SessionState> {
   Future<void> restore() async {
     await ref.read(bootstrapProvider.future);
     state = await _controller.restore();
+    // Session restore is a pull trigger: the account may have moved on other
+    // devices since this one last looked.
+    _pullAfterSessionChange();
   }
 
   Future<bool> signIn({required String phone, required String pin}) async {
     state = await _controller.signIn(phone: phone, pin: pin);
-    return state is SessionActive;
+    final ok = state is SessionActive;
+    // Sign-in is a pull trigger — on a recovered device this is what fills a
+    // fresh database, and on an established one it catches up the gap.
+    if (ok) _pullAfterSessionChange();
+    return ok;
   }
 
   Future<bool> register({
@@ -134,7 +274,22 @@ class SessionNotifier extends Notifier<SessionState> {
       pin: pin,
       linkedHouseholdId: linkedHouseholdId,
     );
-    return state is SessionActive;
+    final ok = state is SessionActive;
+    // A registration that just drained to the server can immediately discover
+    // the rest of the zone: colleagues' households in the same community.
+    if (ok) _pullAfterSessionChange();
+    return ok;
+  }
+
+  /// Pulls once the session has settled into an active state. The user id
+  /// comes from the session state itself: reading [currentUserProvider] from
+  /// inside this notifier would make the session depend on its own
+  /// derivative, and Riverpod throws CircularDependencyError before any pull
+  /// can happen.
+  void _pullAfterSessionChange() {
+    final active = state;
+    if (active is! SessionActive) return;
+    unawaited(_pullAndRefresh(ref, userId: active.user.id));
   }
 
   Future<void> signOut() async {

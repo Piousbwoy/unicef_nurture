@@ -5,41 +5,74 @@ import 'dart:typed_data';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
 import 'tflite_runner.dart';
+import 'tflite_dart_interpreter.dart';
 
 TfliteRunner createTfliteRunner() => _IoTfliteRunner();
 
 class _IoTfliteRunner implements TfliteRunner {
-  final Map<String, Interpreter> _cache = {};
+  final Map<String, Future<Interpreter>> _cache = {};
 
   @override
-  Future<double> run({required String assetPath, required Float32List input}) async {
+  Future<double> run({
+    required String assetPath,
+    required Float32List input,
+  }) async {
     final interpreter = await _loadInterpreter(assetPath);
     final inputTensor = interpreter.getInputTensor(0);
     final outputTensor = interpreter.getOutputTensor(0);
 
+    if (interpreter.getInputTensors().length != 1 ||
+        interpreter.getOutputTensors().length != 1 ||
+        inputTensor.shape.length != 2 ||
+        inputTensor.shape[0] != 1 ||
+        inputTensor.shape[1] != input.length ||
+        outputTensor.shape.length != 2 ||
+        outputTensor.shape[0] != 1 ||
+        outputTensor.shape[1] != 1 ||
+        input.any((v) => !v.isFinite)) {
+      throw const FormatException('Incompatible model signature or input');
+    }
+    for (final tensor in [inputTensor, outputTensor]) {
+      if (![
+        TensorType.float32,
+        TensorType.int8,
+        TensorType.uint8,
+      ].contains(tensor.type)) {
+        throw const FormatException('Unsupported tensor type');
+      }
+      if (tensor.type != TensorType.float32 &&
+          (!tensor.params.scale.isFinite ||
+              tensor.params.scale <= 0 ||
+              tensor.params.zeroPoint <
+                  (tensor.type == TensorType.int8 ? -128 : 0) ||
+              tensor.params.zeroPoint >
+                  (tensor.type == TensorType.int8 ? 127 : 255))) {
+        throw const FormatException('Invalid quantization scale or zero point');
+      }
+    }
     final inputObj = _materializeInput(inputTensor, input);
     final output = _allocateOutput(outputTensor);
     interpreter.run(inputObj, output);
     final p = _readProbability(outputTensor, output);
-    return p.clamp(0.0, 1.0);
+    if (!p.isFinite || p < 0 || p > 1) {
+      throw const FormatException('Invalid model output');
+    }
+    return p;
   }
 
-  Future<Interpreter> _loadInterpreter(String assetPath) async {
-    final existing = _cache[assetPath];
-    if (existing != null) return existing;
-    final options = InterpreterOptions()..threads = 2;
-    final interpreter = await Interpreter.fromAsset(assetPath, options: options);
-    _cache[assetPath] = interpreter;
-    return interpreter;
-  }
+  Future<Interpreter> _loadInterpreter(String assetPath) => _cache.putIfAbsent(
+    assetPath,
+    () => Interpreter.fromAsset(
+      assetPath,
+      options: InterpreterOptions()..threads = 2,
+    ),
+  );
 
   static Object _materializeInput(Tensor tensor, Float32List input) {
-    final params = tensor.params;
-    final isQuantized = params.scale != 0;
-    if (!isQuantized) {
+    if (tensor.type == TensorType.float32) {
       return <List<double>>[input.map((e) => e.toDouble()).toList()];
     }
-    if (params.zeroPoint < 0) {
+    if (tensor.type == TensorType.int8) {
       return <Int8List>[_quantizeInt8(tensor, input)];
     }
     return <Uint8List>[_quantizeUint8(tensor, input)];
@@ -47,11 +80,11 @@ class _IoTfliteRunner implements TfliteRunner {
 
   static Int8List _quantizeInt8(Tensor tensor, Float32List input) {
     final params = tensor.params;
-    final scale = params.scale == 0 ? 1.0 : params.scale;
+    final scale = params.scale;
     final zeroPoint = params.zeroPoint;
     final out = Int8List(input.length);
     for (int i = 0; i < input.length; i++) {
-      final q = (input[i] / scale + zeroPoint).round();
+      final q = TfliteDartModel.quantizeInputValue(input[i], scale, zeroPoint);
       out[i] = q.clamp(-128, 127).toInt();
     }
     return out;
@@ -59,11 +92,11 @@ class _IoTfliteRunner implements TfliteRunner {
 
   static Uint8List _quantizeUint8(Tensor tensor, Float32List input) {
     final params = tensor.params;
-    final scale = params.scale == 0 ? 1.0 : params.scale;
+    final scale = params.scale;
     final zeroPoint = params.zeroPoint;
     final out = Uint8List(input.length);
     for (int i = 0; i < input.length; i++) {
-      final q = (input[i] / scale + zeroPoint).round();
+      final q = TfliteDartModel.quantizeInputValue(input[i], scale, zeroPoint);
       out[i] = q.clamp(0, 255).toInt();
     }
     return out;
@@ -72,9 +105,8 @@ class _IoTfliteRunner implements TfliteRunner {
   static Object _allocateOutput(Tensor outputTensor) {
     final shape = outputTensor.shape;
     final channels = shape.isEmpty ? 1 : shape.last;
-    final params = outputTensor.params;
-    if (params.scale != 0) {
-      if (params.zeroPoint < 0) {
+    if (outputTensor.type != TensorType.float32) {
+      if (outputTensor.type == TensorType.int8) {
         return <Int8List>[Int8List(channels)];
       }
       return <Uint8List>[Uint8List(channels)];
@@ -84,7 +116,7 @@ class _IoTfliteRunner implements TfliteRunner {
 
   static double _readProbability(Tensor outputTensor, Object output) {
     final params = outputTensor.params;
-    final scale = params.scale == 0 ? null : params.scale;
+    final scale = outputTensor.type == TensorType.float32 ? null : params.scale;
     final zeroPoint = params.zeroPoint;
 
     double deq(num v) =>
@@ -105,6 +137,6 @@ class _IoTfliteRunner implements TfliteRunner {
         return deq(first.length > 1 ? first[1] : first[0]);
       }
     }
-    return 0.5;
+    throw const FormatException('Unrecognized model output');
   }
 }

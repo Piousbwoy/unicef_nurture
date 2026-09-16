@@ -11,9 +11,42 @@ const { ping } = require('./db');
 const { requireAuth, requireJwtUser } = require('./auth');
 const { handleSync } = require('./sync');
 const { handleProfileLookup, handleCaseloadRestore } = require('./recovery');
+const { handlePull } = require('./pull');
 const { handleChallenge, handleLogin, handleRefresh, handleLogout } = require('./auth_login');
 
 const app = express();
+
+// ---- CORS ------------------------------------------------------------------
+// The web build of the app runs in a browser on a different origin than this
+// server; a browser refuses to even send the request unless the server answers
+// with these headers. Native clients ignore CORS entirely, so this is harmless
+// for the Android build. Preflight OPTIONS is answered directly with 204 and
+// never touches auth or the database.
+const allowedOrigins = String(config.cors.origin)
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    const allowAll = allowedOrigins.includes('*');
+    if (allowAll || allowedOrigins.includes(origin)) {
+      // Echo a specific origin when an allow-list is configured; '*' when the
+      // open policy is in effect. The API is bearer-token authenticated and
+      // uses no cookies, so neither mode carries a CSRF risk.
+      res.setHeader('Access-Control-Allow-Origin', allowAll ? '*' : origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Max-Age', '86400');
+    }
+  }
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  next();
+});
 
 // Assessment payloads embed full care plans as JSON; give them room.
 app.use(express.json({ limit: '10mb' }));
@@ -58,6 +91,12 @@ app.post('/api/sync', requireAuth, handleSync);
 app.post('/api/restore/lookup', requireJwtUser, handleProfileLookup);
 app.get('/api/restore/caseload', requireJwtUser, handleCaseloadRestore);
 app.post('/api/restore/caseload', requireJwtUser, handleCaseloadRestore);
+
+// -------- Delta pull (STRICT: JWT-only) -------------------------------------
+// The read half of hybrid sync: rows newer than the caller's watermark,
+// scoped exactly like the recovery endpoints. See pull.js for the
+// watermark/cursor contract.
+app.get('/api/pull', requireJwtUser, handlePull);
 
 // Nothing else exists.
 app.use((req, res) => {

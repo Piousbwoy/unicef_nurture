@@ -28,6 +28,12 @@ Deterministic: fixed seeds + TF_ENABLE_ONEDNN_OPTS=0, no network access
 
 from __future__ import annotations
 
+# The historical implementation below is archival, not a release command.
+if __name__ == "__main__":
+    from evaluate_research_models import main as evaluate_main
+    evaluate_main()
+    raise SystemExit(0)
+
 import hashlib
 import io
 import json
@@ -141,7 +147,7 @@ def _platt_with_ci(y_true, p_in, n_bins=10):
     lr.fit(z, y_true)
     A = float(lr.coef_[0][0])
     B = float(lr.intercept_[0])
-    p_cal = 1.0 / (1.0 + np.exp(-(A * p_clip + B)))
+    p_cal = 1.0 / (1.0 + np.exp(-(A * np.log(p_clip / (1 - p_clip)) + B)))
     brier = float(brier_score_loss(y_true, p_cal))
     residuals = p_cal - y_true
     edges = np.linspace(0.0, 1.0, n_bins + 1)
@@ -169,6 +175,12 @@ def _platt_with_ci(y_true, p_in, n_bins=10):
 
 
 def main():
+    from evaluate_research_models import main as evaluate_main
+    return evaluate_main()
+
+
+def _archived_main():
+    raise RuntimeError("Legacy asset promotion is disabled; use evaluate_research_models.py")
     os.makedirs(ASSETS_DIR, exist_ok=True)
     print(f"CareBridge AI - normalization skew fix ({VERSION})")
     print(f"TF {tf.__version__} | seeds pinned | UCI external for "

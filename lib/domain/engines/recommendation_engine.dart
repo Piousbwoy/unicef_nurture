@@ -37,6 +37,8 @@
 /// be able to defend after a death.
 library;
 
+import 'dart:convert';
+
 import '../enums.dart';
 import '../entities/visit.dart';
 import 'protocols/stabilization_protocols.dart';
@@ -468,7 +470,9 @@ abstract final class RecommendationEngine {
     // tailored note, and fold in the cohort's own counselling action —
     // the watchpoints that group is known to deteriorate on.
     final patientCohort = _primaryCohort(results);
-    final cohortNote = patientCohort == null ? null : _cohortNote(patientCohort);
+    final cohortNote = patientCohort == null
+        ? null
+        : _cohortNote(patientCohort);
     for (final action in _cohortActions(patientCohort)) {
       if (!_hasAction(allActions, action)) {
         allActions.add(action);
@@ -551,22 +555,17 @@ abstract final class RecommendationEngine {
   }
 
   static List<RecommendedAction> _dedupeActions(List<RecommendedAction> input) {
-    final byInstruction = <String, RecommendedAction>{};
-    for (final a in input) {
-      final key = a.instruction.trim().toLowerCase();
-      byInstruction.putIfAbsent(key, () => a);
+    final unique = <String, RecommendedAction>{};
+    for (final action in input) {
+      unique.putIfAbsent(jsonEncode(action.toJson()), () => action);
     }
-    return byInstruction.values.toList();
+    return unique.values.toList();
   }
 
   static bool _hasAction(
     List<RecommendedAction> actions,
     RecommendedAction a,
-  ) => actions.any(
-    (x) =>
-        x.instruction.trim().toLowerCase() ==
-        a.instruction.trim().toLowerCase(),
-  );
+  ) => actions.any((x) => jsonEncode(x.toJson()) == jsonEncode(a.toJson()));
 
   static TriageLevel _worstTriage(List<TriageLevel> levels) => levels.isEmpty
       ? TriageLevel.routine

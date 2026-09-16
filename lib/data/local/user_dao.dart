@@ -181,21 +181,34 @@ abstract final class Credentials {
 /// Why a sign-in failed, so the UI can say something true and useful rather
 /// than "invalid credentials".
 enum AuthFailure {
-  unknownPhone('No account found locally or on the MariaDB Main Server. Tap Create Account below to set up your offline profile.'),
+  unknownPhone(
+      'No account exists for this phone on this device. Tap Create Account '
+      'below to register — or, if you had an account on another phone, set up '
+      'the sync server in Me → Sync settings and try again.'),
   wrongPin('That PIN is not correct.'),
   noPinSet('This account has no PIN yet. Set one to continue.'),
-  lockedOut('Too many wrong attempts. Wait a moment and try again.');
+  lockedOut('Too many wrong attempts. Wait a moment and try again.'),
+  serverUnreachable(
+      'Could not reach the sync server to look up this phone number. Check '
+      'the network — or the address in Me → Sync settings — and try again.');
 
   const AuthFailure(this.message);
   final String message;
 }
 
 class AuthResult {
-  const AuthResult.success(this.user) : failure = null;
-  const AuthResult.failure(this.failure) : user = null;
+  const AuthResult.success(this.user)
+      : failure = null,
+        detail = null;
+  const AuthResult.failure(this.failure, {this.detail}) : user = null;
 
   final AppUser? user;
   final AuthFailure? failure;
+
+  /// Optional specific reason — e.g. exactly what the sync server answered
+  /// during cloud recovery. The UI shows this when present, in preference to
+  /// the generic [AuthFailure.message].
+  final String? detail;
 
   bool get isSuccess => user != null;
 }
@@ -225,6 +238,17 @@ abstract final class UserDao {
     final db = await AppDatabase.instance.database;
 
     await db.transaction((txn) async {
+      // One phone number = one live account on this device. Re-registering an
+      // existing phone used to leave the previous row behind under a different
+      // user id, and sign-in could then resolve to the stale one — which is
+      // how a nurse ended up seeing the wrong name on the home screen. Remove
+      // any other row with the same phone inside the same transaction.
+      await txn.delete(
+        Tables.users,
+        where: 'phone = ? AND id != ?',
+        whereArgs: [user.phone, user.id],
+      );
+
       // LOCAL SQLite ONLY — localSalt and localPinHash NEVER leave the device, nowhere else.
       final localUserRow = {
         ...user.toMap(),
@@ -446,6 +470,9 @@ abstract final class UserDao {
       Tables.users,
       where: 'phone = ?',
       whereArgs: [phone.trim()],
+      // If historical duplicate rows for one phone ever exist, the newest
+      // registration wins — the account the user actually created last.
+      orderBy: 'created_at DESC',
       limit: 1,
     );
 
@@ -474,12 +501,26 @@ abstract final class UserDao {
         return const AuthResult.failure(AuthFailure.wrongPin);
       }
 
+      if (recovery.status == RecoveryStatus.networkError) {
+        // The server exists but could not be reached — that is a different
+        // truth from "no such account" and must never be reported as one.
+        await AuditDao.record(
+          action: 'sign_in',
+          outcome: 'denied',
+          detail: 'Server unreachable during recovery: ${recovery.message ?? 'no detail'}',
+        );
+        return AuthResult.failure(
+          AuthFailure.serverUnreachable,
+          detail: recovery.message,
+        );
+      }
+
       await AuditDao.record(
         action: 'sign_in',
         outcome: 'denied',
         detail: 'Unknown phone number locally and on server',
       );
-      return const AuthResult.failure(AuthFailure.unknownPhone);
+      return AuthResult.failure(AuthFailure.unknownPhone, detail: recovery.message);
     }
 
     final row = rows.first;

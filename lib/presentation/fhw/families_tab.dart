@@ -98,6 +98,10 @@ class HouseholdTile extends ConsumerWidget {
                         color: AppColors.inkMuted,
                       ),
                     ),
+                    if (household.updatedAt != null) ...[
+                      const SizedBox(height: 2),
+                      _ContinuityLabel(updatedAt: household.updatedAt!),
+                    ],
                     if (household.landmark != null &&
                         household.landmark!.isNotEmpty)
                       Text(
@@ -143,6 +147,57 @@ class HouseholdTile extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// "Last visited X days ago" or "Visited today" — shows the household's
+/// continuity so the CHO knows at a glance when they were last here.
+class _ContinuityLabel extends StatelessWidget {
+  const _ContinuityLabel({required this.updatedAt});
+
+  final DateTime updatedAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final updatedDay = DateTime(updatedAt.year, updatedAt.month, updatedAt.day);
+    final daysAgo = today.difference(updatedDay).inDays;
+
+    String label;
+    if (daysAgo == 0) {
+      label = 'Visited today';
+    } else if (daysAgo == 1) {
+      label = 'Yesterday';
+    } else if (daysAgo < 7) {
+      label = '$daysAgo days ago';
+    } else if (daysAgo < 30) {
+      final weeks = (daysAgo / 7).floor();
+      label = '$weeks week${weeks == 1 ? '' : 's'} ago';
+    } else {
+      final months = (daysAgo / 30).floor();
+      label = '$months month${months == 1 ? '' : 's'} ago';
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.schedule_rounded,
+          size: 11,
+          color: daysAgo > 30 ? AppColors.offline : AppColors.inkFaint,
+        ),
+        const SizedBox(width: 3),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: daysAgo > 30 ? AppColors.offline : AppColors.inkFaint,
+            fontWeight: daysAgo > 30 ? FontWeight.w600 : FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 }

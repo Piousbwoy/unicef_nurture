@@ -29,6 +29,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../assessment/emergency_tunnel.dart';
+import '../shared/ui.dart';
 import 'assess_tab.dart';
 import 'day_plan_tab.dart';
 import 'home_tab.dart';
@@ -50,6 +51,7 @@ class _FhwHomeState extends ConsumerState<FhwHome> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
+    final isOnline = ref.watch(connectivityProvider).valueOrNull ?? false;
     if (user == null) return const SizedBox.shrink();
 
     return Scaffold(
@@ -66,6 +68,12 @@ class _FhwHomeState extends ConsumerState<FhwHome> {
           ],
         ),
         actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: Gap.md),
+            child: Center(
+              child: ConnectivityDot(isOnline: isOnline),
+            ),
+          ),
           IconButton(
             tooltip: 'Refresh',
             onPressed: () {

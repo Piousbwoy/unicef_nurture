@@ -1,0 +1,183 @@
+{
+  "datasets": {
+    "neonatal_sepsis": {
+      "model": "neonatal_sepsis",
+      "files": [
+        {
+          "file": "mbarara_neonatal_sepsis_cases.csv",
+          "sha256": "a8f31d980c35ad2871964f43638b67a6e2ef4b3a3e129f70c264fe95ae5948a8"
+        },
+        {
+          "file": "mbarara_neonatal_sepsis_controls.csv",
+          "sha256": "4a1930926c796bc1bd4a36b8aadda308dac73184e64645e9b14d126d8e08ff61"
+        }
+      ],
+      "n": 964,
+      "positive": 756,
+      "dataset_defined_label": "neonatal_sepsis",
+      "outcome_semantics_verified": false,
+      "feature_mapping": {
+        "age_days": "age_days",
+        "temperature_celsius": "temperature",
+        "respiratory_rate_per_min": "respiratory_rate",
+        "heart_rate_per_min": "heart_rate",
+        "feeding_difficulty": "poor_feeding",
+        "lethargic_unconscious": "lethargy"
+      },
+      "excluded": {
+        "weight": "Admission weight is not verified birth weight",
+        "blood_culture": "Potential outcome information, not an intake predictor"
+      },
+      "local_provenance": {
+        "mbarara_neonatal_sepsis_cases.csv": {
+          "sha256": "a8f31d980c35ad2871964f43638b67a6e2ef4b3a3e129f70c264fe95ae5948a8",
+          "n_bytes": 61474,
+          "source_url": "https://raw.githubusercontent.com/Helenaden/Neonatal-Sepsis-Prediction/main/Dennis_Neonatal_Sepsis_D.csv",
+          "license": "Public GitHub mirror of anonymised Mbarara RRH neonatal sepsis EMR (Dennis et al.); no PHI in mirror."
+        },
+        "mbarara_neonatal_sepsis_controls.csv": {
+          "sha256": "4a1930926c796bc1bd4a36b8aadda308dac73184e64645e9b14d126d8e08ff61",
+          "n_bytes": 64788,
+          "source_url": "https://raw.githubusercontent.com/Helenaden/Neonatal-Sepsis-Prediction/main/Dennis_Neonatal_Sepsis_N.csv",
+          "license": "Public GitHub mirror of anonymised Mbarara RRH neonatal sepsis EMR (Dennis et al.); no PHI in mirror."
+        }
+      },
+      "measurement_timing": "Not established locally; exploratory associations only",
+      "license_status": "Local attribution is not an independently verified data-use license",
+      "raw_missing": {
+        "age_days": 0,
+        "temperature_celsius": 0,
+        "respiratory_rate_per_min": 10,
+        "heart_rate_per_min": 16,
+        "feeding_difficulty": 0,
+        "lethargic_unconscious": 0
+      },
+      "missing_or_outside_transform_support": {
+        "age_days": 0,
+        "temperature_celsius": 24,
+        "respiratory_rate_per_min": 28,
+        "heart_rate_per_min": 18,
+        "feeding_difficulty": 0,
+        "lethargic_unconscious": 0
+      },
+      "unique_groups": 481,
+      "duplicate_predictor_rows": 483,
+      "groups_with_conflicting_labels": 0,
+      "limitations": [
+        "Clinical reference standard and measurement timing not documented locally",
+        "No patient identifiers; duplicate-predictor grouping is not proof of patient independence",
+        "Hospital admission cohort, not community screening"
+      ],
+      "license_file": "mbarara_LICENSE.txt (Apache-2.0 text; dataset applicability not independently verified)",
+      "packaging_allowed": false,
+      "packaging_blocker": "Clinical outcome definition/measurement timing requires source documentation"
+    },
+    "preeclampsia_risk": {
+      "model": "preeclampsia_risk",
+      "files": [
+        {
+          "file": "preeclampsia_cfarkas.csv",
+          "sha256": "319e79453531aa2bb48cdf3c05099601e965dfce3c15f4e924a25c7909fd69fe"
+        }
+      ],
+      "n": 190,
+      "positive": 110,
+      "dataset_defined_label": "preeclampsia_onset",
+      "outcome_semantics_verified": false,
+      "feature_mapping": {
+        "maternal_age": "maternal_age",
+        "gravida": "n_pregnancies",
+        "previous_losses": "n_abortions"
+      },
+      "excluded": {
+        "bmi": "Measurement time relative to pregnancy/outcome is not established",
+        "parity": "Not an observed source column; do not derive from primigravidity",
+        "newborn_weight": "Post-delivery outcome information"
+      },
+      "local_provenance": {
+        "preeclampsia_cfarkas.csv": {
+          "sha256": "319e79453531aa2bb48cdf3c05099601e965dfce3c15f4e924a25c7909fd69fe",
+          "n_bytes": 19167,
+          "source_url": "https://raw.githubusercontent.com/cfarkas/preeclampsia_ml/main/data/dataframe.csv",
+          "license": "Public research cohort (Benedetto et al. / cfarkas mirror); anonymised."
+        }
+      },
+      "measurement_timing": "Not established locally; exploratory associations only",
+      "license_status": "Local attribution is not an independently verified data-use license",
+      "raw_missing": {
+        "maternal_age": 0,
+        "gravida": 0,
+        "previous_losses": 0
+      },
+      "missing_or_outside_transform_support": {
+        "maternal_age": 0,
+        "gravida": 0,
+        "previous_losses": 0
+      },
+      "unique_groups": 93,
+      "duplicate_predictor_rows": 97,
+      "groups_with_conflicting_labels": 32,
+      "limitations": [
+        "Outcome coding/reference standard and pregnancy observation times lack a local data dictionary",
+        "No blood pressure predictors; cannot validate blood-pressure decision rules",
+        "No dataset-specific license statement located locally"
+      ],
+      "license_file": null,
+      "packaging_allowed": false,
+      "packaging_blocker": "Clinical outcome definition/measurement timing requires source documentation"
+    },
+    "lbw_sga": {
+      "model": "lbw_sga",
+      "files": [
+        {
+          "file": "lbw_classic.csv",
+          "sha256": "55eb41cc2d1661f7d4b710bf15d8d9cef3306009df30a89c6f7e15f6702af695"
+        }
+      ],
+      "n": 101,
+      "positive": 75,
+      "dataset_defined_label": "reslt",
+      "outcome_semantics_verified": false,
+      "feature_mapping": {
+        "maternal_age": "age"
+      },
+      "excluded": {
+        "Hb": "Measurement units/timing not established in local documentation",
+        "BP": "Ratio-like column is neither systolic nor diastolic pressure"
+      },
+      "local_provenance": {
+        "lbw_classic.csv": {
+          "sha256": "55eb41cc2d1661f7d4b710bf15d8d9cef3306009df30a89c6f7e15f6702af695",
+          "n_bytes": 2963,
+          "source_url": "https://raw.githubusercontent.com/parthvshah/lbw-classification/main/data/Final.csv",
+          "license": "Public academic dataset (LBW risk factors); anonymised."
+        }
+      },
+      "measurement_timing": "Not established locally; exploratory associations only",
+      "license_status": "Local attribution is not an independently verified data-use license",
+      "raw_missing": {
+        "maternal_age": 0
+      },
+      "missing_or_outside_transform_support": {
+        "maternal_age": 0
+      },
+      "unique_groups": 14,
+      "duplicate_predictor_rows": 87,
+      "groups_with_conflicting_labels": 9,
+      "limitations": [
+        "Meaning and polarity of reslt are not documented locally",
+        "No gestational-age-specific outcome: LBW does not establish SGA",
+        "No patient identifiers or dataset-specific license statement located locally"
+      ],
+      "license_file": null,
+      "packaging_allowed": false,
+      "packaging_blocker": "Clinical outcome definition/measurement timing requires source documentation"
+    }
+  },
+  "pneumonia": "No compatible real dataset in the current repository",
+  "excluded_validation": [
+    "Adult ICU sepsis",
+    "UCI general maternal risk",
+    "Fetal CTG"
+  ]
+}

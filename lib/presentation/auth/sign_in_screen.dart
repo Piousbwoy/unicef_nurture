@@ -31,6 +31,7 @@ import '../../core/auth/session.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../domain/enums.dart';
+import '../settings/sync_settings_screen.dart';
 import '../shared/ui.dart';
 
 class SignInScreen extends ConsumerStatefulWidget {
@@ -293,6 +294,25 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                           },
                     icon: const Icon(Icons.person_add_alt_1_outlined, size: 17),
                     label: const Text('Create a new account'),
+                  ),
+                  const SizedBox(height: Gap.sm),
+                  TextButton.icon(
+                    // A fresh or lost handset must be able to point at the
+                    // district server BEFORE any account exists — cloud
+                    // recovery reads this configuration at sign-in time.
+                    onPressed: _busy
+                        ? null
+                        : () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const SyncSettingsScreen(),
+                              ),
+                            ),
+                    icon: const Icon(Icons.dns_rounded, size: 17),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.inkMuted,
+                      textStyle: AppType.label.copyWith(fontSize: 13),
+                    ),
+                    label: const Text('Sync server settings'),
                   ),
                 ],
               ),

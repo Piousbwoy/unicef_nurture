@@ -148,9 +148,11 @@ CREATE TABLE IF NOT EXISTS households (
   landmark                    VARCHAR(255) NULL,
   created_at                  VARCHAR(40)  NOT NULL,
   updated_at                  VARCHAR(40)  NOT NULL,
+  pull_updated_at             VARCHAR(40)  NULL,
   PRIMARY KEY (id),
   KEY idx_households_community (region, district, community),
-  KEY idx_households_created_by (created_by)
+  KEY idx_households_created_by (created_by),
+  KEY idx_households_pull (pull_updated_at)
 ) ENGINE=InnoDB;
 
 -- ----------------------------------------------------------------------------
@@ -171,10 +173,12 @@ CREATE TABLE IF NOT EXISTS persons (
   created_at       VARCHAR(40)  NOT NULL,
   updated_at       VARCHAR(40)  NOT NULL,
   is_active        TINYINT(1)   NOT NULL DEFAULT 1,
+  pull_updated_at  VARCHAR(40)  NULL,
   PRIMARY KEY (id),
   KEY idx_persons_household (household_id, is_active),
   KEY idx_persons_mother (mother_id),
-  KEY idx_persons_type (client_type, is_active)
+  KEY idx_persons_type (client_type, is_active),
+  KEY idx_persons_pull (pull_updated_at)
 ) ENGINE=InnoDB;
 
 -- ----------------------------------------------------------------------------
@@ -430,9 +434,11 @@ CREATE TABLE IF NOT EXISTS visits (
   longitude    DOUBLE       NULL,
   notes        TEXT         NULL,
   sync_state   VARCHAR(24)  NOT NULL DEFAULT 'pending',
+  pull_updated_at VARCHAR(40)  NULL,
   PRIMARY KEY (id),
   KEY idx_visits_household (household_id, started_at),
-  KEY idx_visits_worker_date (conducted_by, started_at)
+  KEY idx_visits_worker_date (conducted_by, started_at),
+  KEY idx_visits_pull (pull_updated_at)
 ) ENGINE=InnoDB;
 
 -- ----------------------------------------------------------------------------
@@ -466,10 +472,12 @@ CREATE TABLE IF NOT EXISTS assessments (
   override_reason   TEXT        NULL,
   override_by       VARCHAR(64) NULL,
   sync_state        VARCHAR(24) NOT NULL DEFAULT 'pending',
+  pull_updated_at   VARCHAR(40) NULL,
   PRIMARY KEY (id),
   KEY idx_assessments_person (person_id, performed_at),
   KEY idx_assessments_visit (visit_id),
-  KEY idx_assessments_overrides (overridden_triage)
+  KEY idx_assessments_overrides (overridden_triage),
+  KEY idx_assessments_pull (pull_updated_at)
 ) ENGINE=InnoDB;
 
 -- ----------------------------------------------------------------------------
@@ -492,10 +500,12 @@ CREATE TABLE IF NOT EXISTS referrals (
   outcome_notes        TEXT         NULL,
   escalated_at         VARCHAR(40)  NULL,
   sync_state           VARCHAR(24)  NOT NULL DEFAULT 'pending',
+  pull_updated_at      VARCHAR(40)  NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uq_referrals_code (reference_code),
   KEY idx_referrals_status (status, issued_at),
-  KEY idx_referrals_person (person_id, issued_at)
+  KEY idx_referrals_person (person_id, issued_at),
+  KEY idx_referrals_pull (pull_updated_at)
 ) ENGINE=InnoDB;
 
 -- ----------------------------------------------------------------------------
@@ -560,3 +570,40 @@ CREATE TABLE IF NOT EXISTS sync_log (
   KEY idx_sync_log_user (user_id, received_at),
   KEY idx_sync_log_time (received_at)
 ) ENGINE=InnoDB;
+
+-- ----------------------------------------------------------------------------
+-- Delta-pull change markers for GET /api/pull.
+--
+-- The SERVER owns these markers: device clocks are not trusted. Every INSERT
+-- and UPDATE on the five pullable clinical tables stamps pull_updated_at with
+-- second-precision UTC — including the INSERT ... ON DUPLICATE KEY UPDATE that
+-- POST /api/sync performs, which is how Nurse B's pull discovers Nurse A's
+-- pushed rows. Fresh installs (this file) get the column and triggers
+-- immediately, so no backfill is needed; databases created before this
+-- feature are upgraded idempotently by migrations/002_delta_pull.sql.
+-- Single-statement trigger bodies, so no DELIMITER gymnastics is required.
+-- ----------------------------------------------------------------------------
+CREATE TRIGGER IF NOT EXISTS trg_households_pull_ins BEFORE INSERT ON households
+  FOR EACH ROW SET NEW.pull_updated_at = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%s');
+CREATE TRIGGER IF NOT EXISTS trg_households_pull_upd BEFORE UPDATE ON households
+  FOR EACH ROW SET NEW.pull_updated_at = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%s');
+
+CREATE TRIGGER IF NOT EXISTS trg_persons_pull_ins BEFORE INSERT ON persons
+  FOR EACH ROW SET NEW.pull_updated_at = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%s');
+CREATE TRIGGER IF NOT EXISTS trg_persons_pull_upd BEFORE UPDATE ON persons
+  FOR EACH ROW SET NEW.pull_updated_at = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%s');
+
+CREATE TRIGGER IF NOT EXISTS trg_visits_pull_ins BEFORE INSERT ON visits
+  FOR EACH ROW SET NEW.pull_updated_at = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%s');
+CREATE TRIGGER IF NOT EXISTS trg_visits_pull_upd BEFORE UPDATE ON visits
+  FOR EACH ROW SET NEW.pull_updated_at = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%s');
+
+CREATE TRIGGER IF NOT EXISTS trg_assessments_pull_ins BEFORE INSERT ON assessments
+  FOR EACH ROW SET NEW.pull_updated_at = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%s');
+CREATE TRIGGER IF NOT EXISTS trg_assessments_pull_upd BEFORE UPDATE ON assessments
+  FOR EACH ROW SET NEW.pull_updated_at = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%s');
+
+CREATE TRIGGER IF NOT EXISTS trg_referrals_pull_ins BEFORE INSERT ON referrals
+  FOR EACH ROW SET NEW.pull_updated_at = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%s');
+CREATE TRIGGER IF NOT EXISTS trg_referrals_pull_upd BEFORE UPDATE ON referrals
+  FOR EACH ROW SET NEW.pull_updated_at = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%s');

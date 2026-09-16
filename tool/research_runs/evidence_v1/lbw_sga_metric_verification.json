@@ -1,0 +1,7 @@
+{
+  "passed": true,
+  "candidate_sha256": "31388d5f82248eee44ee43886e84ebf082d0e905ccc8398f764b8a3f66adc990",
+  "evaluation_report_sha256": "0f6a8f515ebf69e3a3a2679cefff21121e8439113073399c5a125e0603fb3127",
+  "scope": "Frozen exported INT8 evaluation, recorded imputation/calibration/threshold; no fitting",
+  "clinical_use_allowed": false
+}

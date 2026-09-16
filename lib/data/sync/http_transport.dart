@@ -20,12 +20,11 @@
 /// has definitely lost signal and the battery is better spent waiting.
 library;
 
-import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import '../local/outbox_dao.dart';
 import '../local/preferences_store.dart';
+import 'http_client.dart';
 import 'server_auth_client.dart';
 import 'sync_service.dart';
 
@@ -46,79 +45,84 @@ class HttpSyncTransport implements SyncTransport {
   /// Per-entry request timeout.
   final Duration timeout;
 
-  HttpClient? _client;
-
-  HttpClient get _http {
-    _client?.close();
-    _client = HttpClient()
-      ..connectionTimeout = timeout;
-    return _client!;
-  }
-
   @override
   Future<SendOutcome> send(OutboxEntry entry) async {
-    final uri = Uri.parse('$baseUrl/api/sync');
-    final initialAuth = await _resolveAuthHeader();
-
-    try {
-      final first = await _postOnce(uri: uri, entry: entry, auth: initialAuth);
-      if (first.statusCode == 401 && initialAuth != null) {
-        // Silent refresh, then retry once. If refresh fails, fall back to
-        // returning the original 401 outcome so the operator sees a
-        // "permission denied / please sign in" hint at the drainer layer.
-        final refreshed = await ServerAuthClient.refreshAccessToken();
-        if (refreshed.isOk) {
-          final retryAuth = await _resolveAuthHeader();
-          final retry = await _postOnce(uri: uri, entry: entry, auth: retryAuth);
-          return _classify(retry.statusCode);
-        }
-      }
-      return _classify(first.statusCode);
-    } on TimeoutException {
-      return const SendUnavailable(
-        'Request timed out. The network may be too slow or the server is '
-        'unreachable.',
-      );
-    } on SocketException catch (e) {
-      return SendUnavailable('Network error: ${e.message}');
-    } on HttpException catch (e) {
-      return SendUnavailable('HTTP error: ${e.message}');
-    } on FormatException {
-      return SendRejected(
+    final uri = Uri.tryParse('$baseUrl/api/sync');
+    if (uri == null || uri.host.isEmpty) {
+      // A mistyped address is a configuration error, not a network blip —
+      // retrying it would never help, so classify as rejected.
+      return const SendRejected(
         'The base URL is malformed. Check the sync server address in settings.',
       );
-    } catch (e) {
-      return SendUnavailable('Unexpected error: $e');
     }
+    final initialAuth = await _resolveAuthHeader();
+
+    final HttpReply first;
+    try {
+      first = await _postOnce(uri: uri, entry: entry, auth: initialAuth);
+    } on HttpFailure catch (e) {
+      return _mapFailure(e);
+    }
+
+    if (first.statusCode == 401 && initialAuth != null) {
+      // Silent refresh, then retry once. If refresh fails, fall back to
+      // returning the original 401 outcome so the operator sees a
+      // "permission denied / please sign in" hint at the drainer layer.
+      final refreshed = await ServerAuthClient.refreshAccessToken();
+      if (refreshed.isOk) {
+        final retryAuth = await _resolveAuthHeader();
+        try {
+          final retry = await _postOnce(uri: uri, entry: entry, auth: retryAuth);
+          return _classify(retry.statusCode);
+        } on HttpFailure catch (e) {
+          return _mapFailure(e);
+        }
+      }
+    }
+    return _classify(first.statusCode);
   }
 
-  Future<_Posted> _postOnce({
+  /// One POST attempt through the platform-neutral HTTP layer. Throws
+  /// [HttpFailure] for anything that never produced a reply.
+  Future<HttpReply> _postOnce({
     required Uri uri,
     required OutboxEntry entry,
     required String? auth,
-  }) async {
-    final request = await _http.postUrl(uri);
-    request.headers.set('Content-Type', 'application/json; charset=utf-8');
-    if (auth != null) {
-      request.headers.set('Authorization', auth);
+  }) {
+    return PlatformHttpClient.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Authorization': ?auth,
+      },
+      body: jsonEncode({
+        'entity_table': entry.entityTable,
+        'entity_id': entry.entityId,
+        'operation': entry.operation.name,
+        'payload': entry.payload,
+        'queued_at': entry.queuedAt.toIso8601String(),
+        'client_version': '1.1.0',
+      }),
+      timeout: timeout,
+    );
+  }
+
+  /// Translates a transport-level failure into the same honest outcomes the
+  /// drainer expects — unavailable (retry later) versus rejected (config error).
+  SendOutcome _mapFailure(HttpFailure e) {
+    switch (e.kind) {
+      case HttpFailureKind.timeout:
+        return const SendUnavailable(
+          'Request timed out. The network may be too slow or the server is '
+          'unreachable.',
+        );
+      case HttpFailureKind.network:
+        return SendUnavailable('Network error: ${e.message}');
+      case HttpFailureKind.malformedUrl:
+        return const SendRejected(
+          'The base URL is malformed. Check the sync server address in settings.',
+        );
     }
-
-    final body = utf8.encode(jsonEncode({
-      'entity_table': entry.entityTable,
-      'entity_id': entry.entityId,
-      'operation': entry.operation.name,
-      'payload': entry.payload,
-      'queued_at': entry.queuedAt.toIso8601String(),
-      'client_version': '1.1.0',
-    }));
-
-    request.contentLength = body.length;
-    request.add(body);
-
-    final response = await request.close().timeout(timeout);
-    // Drain the response body so the connection can be reused.
-    await response.drain<void>();
-    return _Posted(response.statusCode);
   }
 
   SendOutcome _classify(int statusCode) {
@@ -157,9 +161,4 @@ class HttpSyncTransport implements SyncTransport {
     // a rebuild of the transport on sign-in / sign-out events.
     return HttpSyncTransport(baseUrl: url, token: null);
   }
-}
-
-class _Posted {
-  _Posted(this.statusCode);
-  final int statusCode;
 }

@@ -1,0 +1,286 @@
+{
+  "audit": {
+    "model": "preeclampsia_risk",
+    "files": [
+      {
+        "file": "preeclampsia_cfarkas.csv",
+        "sha256": "319e79453531aa2bb48cdf3c05099601e965dfce3c15f4e924a25c7909fd69fe"
+      }
+    ],
+    "n": 190,
+    "positive": 110,
+    "dataset_defined_label": "preeclampsia_onset",
+    "outcome_semantics_verified": false,
+    "feature_mapping": {
+      "maternal_age": "maternal_age",
+      "gravida": "n_pregnancies",
+      "previous_losses": "n_abortions"
+    },
+    "excluded": {
+      "bmi": "Measurement time relative to pregnancy/outcome is not established",
+      "parity": "Not an observed source column; do not derive from primigravidity",
+      "newborn_weight": "Post-delivery outcome information"
+    },
+    "missing_or_outside_transform_support": {
+      "maternal_age": 0,
+      "gravida": 0,
+      "previous_losses": 0
+    },
+    "unique_groups": 93,
+    "duplicate_predictor_rows": 97,
+    "groups_with_conflicting_labels": 32,
+    "limitations": [
+      "Outcome coding/reference standard and pregnancy observation times lack a local data dictionary",
+      "No blood pressure predictors; cannot validate blood-pressure decision rules",
+      "No dataset-specific license statement located locally"
+    ],
+    "license_file": null,
+    "packaging_allowed": false,
+    "packaging_blocker": "Clinical outcome definition/measurement timing requires source documentation"
+  },
+  "selected": "logistic_C0.1",
+  "training_cv": [
+    {
+      "name": "logistic_C0.1",
+      "mean_average_precision": 0.549690339471432,
+      "folds": [
+        0.6013615008180226,
+        0.4428272664727773,
+        0.566813345384774,
+        0.5782967032967032,
+        0.5591528813848827
+      ],
+      "order": 0
+    },
+    {
+      "name": "logistic_C1",
+      "mean_average_precision": 0.5486884061820494,
+      "folds": [
+        0.6013615008180226,
+        0.4483828220283329,
+        0.5741393527107813,
+        0.5668037428158885,
+        0.5527546125372214
+      ],
+      "order": 1
+    },
+    {
+      "name": "logistic_C10",
+      "mean_average_precision": 0.5399367472684139,
+      "folds": [
+        0.5577107071672289,
+        0.4447648756472286,
+        0.5767511151190939,
+        0.5577702640160576,
+        0.56268677439246
+      ],
+      "order": 2
+    },
+    {
+      "name": "forest_d4_leaf20",
+      "mean_average_precision": 0.5590868652268697,
+      "folds": [
+        0.5569475814041032,
+        0.5315656565656566,
+        0.6862708719851578,
+        0.546092796092796,
+        0.4745574200866351
+      ],
+      "order": 3
+    },
+    {
+      "name": "forest_d4_leaf10",
+      "mean_average_precision": 0.5176516753542117,
+      "folds": [
+        0.5288863569143072,
+        0.43693058031293325,
+        0.5741720562596281,
+        0.5395886792945616,
+        0.5086807039896284
+      ],
+      "order": 4
+    },
+    {
+      "name": "forest_d8_leaf20",
+      "mean_average_precision": 0.5590868652268697,
+      "folds": [
+        0.5569475814041032,
+        0.5315656565656566,
+        0.6862708719851578,
+        0.546092796092796,
+        0.4745574200866351
+      ],
+      "order": 5
+    },
+    {
+      "name": "forest_d8_leaf10",
+      "mean_average_precision": 0.5176516753542117,
+      "folds": [
+        0.5288863569143072,
+        0.43693058031293325,
+        0.5741720562596281,
+        0.5395886792945616,
+        0.5086807039896284
+      ],
+      "order": 6
+    }
+  ],
+  "evaluation": {
+    "n": 40,
+    "prevalence": 0.6,
+    "auroc": 0.5104166666666666,
+    "average_precision": 0.6050438596491229,
+    "brier": 0.24196793979447495,
+    "log_loss": 0.6770291632331282,
+    "threshold": 0.5556380468337752,
+    "sensitivity": 0.9583333333333334,
+    "specificity": 0.0625,
+    "ppv": 0.6052631578947368,
+    "npv": 0.5,
+    "confusion": {
+      "tn": 1,
+      "fp": 15,
+      "fn": 1,
+      "tp": 23
+    },
+    "reliability_bins": [
+      {
+        "lower": 0.0,
+        "upper": 0.1,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.1,
+        "upper": 0.2,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.2,
+        "upper": 0.3,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.3,
+        "upper": 0.4,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.4,
+        "upper": 0.5,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.5,
+        "upper": 0.6,
+        "n": 40,
+        "mean_output": 0.5556376595336288,
+        "observed_fraction": 0.6
+      },
+      {
+        "lower": 0.6,
+        "upper": 0.7,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.7,
+        "upper": 0.8,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.8,
+        "upper": 0.9,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.9,
+        "upper": 1.0,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      }
+    ]
+  },
+  "aggregate_bootstrap_95": {
+    "auroc": {
+      "low": 0.4399375,
+      "high": 0.6111111111111112,
+      "replicates": 1000
+    },
+    "average_precision": {
+      "low": 0.42955617605059154,
+      "high": 0.7923459993934541,
+      "replicates": 1000
+    },
+    "brier": {
+      "low": 0.22218600754994927,
+      "high": 0.26023383451075277,
+      "replicates": 1000
+    },
+    "log_loss": {
+      "low": 0.6373007846916589,
+      "high": 0.7137128632358821,
+      "replicates": 1000
+    },
+    "sensitivity": {
+      "low": 0.8421052631578947,
+      "high": 1.0,
+      "replicates": 1000
+    },
+    "specificity": {
+      "low": 0.0,
+      "high": 0.25,
+      "replicates": 1000
+    },
+    "ppv": {
+      "low": 0.42857142857142855,
+      "high": 0.7931288032454361,
+      "replicates": 1000
+    },
+    "npv": {
+      "low": 0.0,
+      "high": 1.0,
+      "replicates": 877
+    }
+  },
+  "baseline_brier": 0.2404432132963989,
+  "training_prevalence": 0.5789473684210527,
+  "split_sha256": "deacd8a499b06a0f95eda6aa28b552ac78c7e49f75715209e35439f3a087a359",
+  "features": [
+    "maternal_age",
+    "gravida",
+    "previous_losses"
+  ],
+  "training_imputation_normalized": [
+    0.4166666567325592,
+    0.1666666716337204,
+    0.0
+  ],
+  "calibration": {
+    "A": -0.001956322737583802,
+    "B": 0.22409404741082936,
+    "formula": "sigmoid(A * logit(p) + B)"
+  },
+  "teacher_diagnostic_auroc": 0.3971354166666667,
+  "teacher_student_mean_absolute_difference": 0.0009965509176254272,
+  "candidate_sha256": "d953c5aad99d57fb3df14212e1f367c69008776c8d054946965dd33c2626995b",
+  "packaged": false,
+  "parity": "pending Dart verification",
+  "evaluation_scope": "Exploratory reuse of historically examined repository data",
+  "clinical_use_allowed": false
+}

@@ -14,6 +14,7 @@
 /// worklist, not a memo.
 library;
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../../core/i18n/speech_bank.dart';
@@ -443,19 +444,19 @@ class CohortCallout extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              Wrap(
+                spacing: Gap.xs,
+                runSpacing: Gap.xs,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Icon(_icon, size: 16, color: AppColors.primaryDeep),
-                  const SizedBox(width: Gap.xs),
-                  const Expanded(
-                    child: Text(
-                      'TAILORED PLAN',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.8,
-                        color: AppColors.primaryDeep,
-                      ),
+                  const Text(
+                    'TAILORED PLAN',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.8,
+                      color: AppColors.primaryDeep,
                     ),
                   ),
                   Container(
@@ -517,10 +518,17 @@ class ActionWorklist extends StatefulWidget {
     super.key,
     required this.actions,
     this.audience = RecAudience.healthWorker,
+    this.completed,
+    this.onCompletedChanged,
   });
 
   final List<RecommendedAction> actions;
   final RecAudience audience;
+  final Set<String>? completed;
+  final ValueChanged<Set<String>>? onCompletedChanged;
+
+  static String identity(RecommendedAction action) =>
+      jsonEncode(action.toJson());
 
   @override
   State<ActionWorklist> createState() => _ActionWorklistState();
@@ -544,37 +552,45 @@ class _Band {
 }
 
 class _ActionWorklistState extends State<ActionWorklist> {
-  /// Indices of plan actions ticked off. A plan you can check off is a
-  /// worklist, not a memo. Keyed by the action's position in the plan, so
-  /// the ticks survive the band regrouping below.
-  final Set<int> _done = {};
+  final Set<String> _localDone = {};
+  Set<String> get _done => widget.completed ?? _localDone;
 
-  /// The three urgency bands, in the order a CHO must work them. Band
-  /// membership is structural: a referral or a pre-referral treatment can
-  /// never sort below "before you leave", however its urgency field reads.
+  void _toggle(RecommendedAction action) {
+    final next = Set<String>.from(_done);
+    final key = ActionWorklist.identity(action);
+    if (!next.add(key)) next.remove(key);
+    if (widget.onCompletedChanged != null) {
+      widget.onCompletedChanged!(next);
+    } else {
+      setState(
+        () => _localDone
+          ..clear()
+          ..addAll(next),
+      );
+    }
+  }
+
+  /// Urgency controls the band; a scheduled referral is not an emergency.
   static final List<_Band> _bands = [
     _Band(
-      title: 'Before you leave',
+      title: 'Now',
       note: 'Do these first — they cannot wait for transport or tomorrow.',
       colour: AppColors.triageRed,
       bg: AppColors.triageRedBg,
       matches: (a) =>
-          a.isReferral ||
-          a.isPrereferralTreatment ||
-          a.urgency == ReferralUrgency.immediate,
+          a.isPrereferralTreatment || a.urgency == ReferralUrgency.immediate,
     ),
     _Band(
-      title: 'Today & within 2 days',
+      title: 'Today',
       note: 'Set these in motion while the visit is still fresh.',
       colour: AppColors.triageAmber,
       bg: AppColors.triageAmberBg,
-      matches: (a) =>
-          a.urgency == ReferralUrgency.sameDay ||
-          a.urgency == ReferralUrgency.withinTwoDays,
+      matches: (a) => a.urgency == ReferralUrgency.sameDay,
     ),
     _Band(
-      title: 'This week & ongoing care',
-      note: 'The routine steps that keep this plan working.',
+      title: 'Follow-up',
+      note:
+          'Follow the due time shown on each action, including reviews within 2 days.',
       colour: AppColors.triageGreen,
       bg: AppColors.triageGreenBg,
       matches: (_) => true,
@@ -585,9 +601,15 @@ class _ActionWorklistState extends State<ActionWorklist> {
   Widget build(BuildContext context) {
     // Every action paired with its plan index, then dealt into bands —
     // each action lands in the first band that claims it.
-    final indexed = [
-      for (var i = 0; i < widget.actions.length; i++) (i, widget.actions[i]),
-    ];
+    // Collapse only exact duplicates, preserving distinct indications/sources.
+    final unique = {
+      for (final action in widget.actions)
+        ActionWorklist.identity(action): action,
+    }.values.toList();
+    final doneCount = unique
+        .where((a) => _done.contains(ActionWorklist.identity(a)))
+        .length;
+    final indexed = [for (var i = 0; i < unique.length; i++) (i, unique[i])];
     final claimed = <int>{};
     final dealt = <(List<(int, RecommendedAction)>, _Band)>[];
     for (final band in _bands) {
@@ -604,9 +626,7 @@ class _ActionWorklistState extends State<ActionWorklist> {
         ClipRRect(
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
-            value: widget.actions.isEmpty
-                ? 0
-                : _done.length / widget.actions.length,
+            value: unique.isEmpty ? 0 : doneCount / unique.length,
             minHeight: 6,
             backgroundColor: AppColors.inkFaint.withValues(alpha: 0.2),
             valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accent),
@@ -614,7 +634,7 @@ class _ActionWorklistState extends State<ActionWorklist> {
         ),
         const SizedBox(height: Gap.xs),
         Text(
-          '${_done.length} of ${widget.actions.length} done',
+          '$doneCount of ${unique.length} done',
           style: const TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w700,
@@ -625,22 +645,18 @@ class _ActionWorklistState extends State<ActionWorklist> {
         for (final (members, band) in dealt) ...[
           _BandHeader(
             band: band,
-            doneCount: members.where((p) => _done.contains(p.$1)).length,
+            doneCount: members
+                .where((p) => _done.contains(ActionWorklist.identity(p.$2)))
+                .length,
             totalCount: members.length,
           ),
-          for (final (i, action) in members)
+          for (final (_, action) in members)
             _WorklistTile(
               action,
               audience: widget.audience,
               accent: band.colour,
-              done: _done.contains(i),
-              onToggle: () => setState(() {
-                if (_done.contains(i)) {
-                  _done.remove(i);
-                } else {
-                  _done.add(i);
-                }
-              }),
+              done: _done.contains(ActionWorklist.identity(action)),
+              onToggle: () => _toggle(action),
             ),
           const SizedBox(height: Gap.sm),
         ],
@@ -753,25 +769,14 @@ class _WorklistTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Tick circle — the satisfying "done" micro-interaction.
-            Container(
-              width: 22,
-              height: 22,
-              margin: const EdgeInsets.only(right: Gap.md),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: done ? AppColors.triageGreen : Colors.transparent,
-                border: Border.all(
-                  color: done ? AppColors.triageGreen : AppColors.inkFaint,
-                  width: 1.5,
-                ),
+            SizedBox(
+              width: 48,
+              height: 48,
+              child: Checkbox(
+                value: done,
+                semanticLabel: 'Complete action: ${action.instruction}',
+                onChanged: onToggle == null ? null : (_) => onToggle!(),
               ),
-              child: done
-                  ? const Icon(
-                      Icons.check_rounded,
-                      size: 14,
-                      color: Colors.white,
-                    )
-                  : null,
             ),
             Container(
               padding: const EdgeInsets.all(6),
@@ -793,7 +798,7 @@ class _WorklistTile extends StatelessWidget {
                   Text(
                     action.instruction,
                     style: TextStyle(
-                      fontSize: 13.5,
+                      fontSize: 16,
                       fontWeight: FontWeight.w700,
                       height: 1.4,
                       color: done ? AppColors.inkFaint : AppColors.ink,
@@ -802,31 +807,52 @@ class _WorklistTile extends StatelessWidget {
                           : TextDecoration.none,
                     ),
                   ),
-                  if (action.rationale != null) ...[
-                    const SizedBox(height: Gap.xs),
-                    Text(
-                      action.rationale!,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.inkMuted,
-                        height: 1.4,
+                  if (audience == RecAudience.healthWorker &&
+                      (action.rationale != null ||
+                          action.protocolSource != null))
+                    Material(
+                      color: Colors.transparent,
+                      child: ExpansionTile(
+                        key: PageStorageKey(
+                          'rationale-${ActionWorklist.identity(action)}',
+                        ),
+                        tilePadding: EdgeInsets.zero,
+                        title: const Text(
+                          'Why this action',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 14),
+                        ),
+                        minTileHeight: 48,
+                        expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (action.rationale != null)
+                            Text(
+                              action.rationale!,
+                              style: const TextStyle(fontSize: 14, height: 1.5),
+                            ),
+                          if (action.protocolSource != null)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              child: Text(
+                                action.protocolSource!,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    )
+                  else if (action.rationale != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        action.rationale!,
+                        style: const TextStyle(fontSize: 14, height: 1.5),
                       ),
                     ),
-                  ],
-                  // The guideline citation is the health worker's audit
-                  // anchor; the family only needs the instruction.
-                  if (action.protocolSource != null &&
-                      audience == RecAudience.healthWorker) ...[
-                    const SizedBox(height: Gap.xs),
-                    Text(
-                      action.protocolSource!,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontStyle: FontStyle.italic,
-                        color: AppColors.inkFaint,
-                      ),
-                    ),
-                  ],
                   const SizedBox(height: Gap.xs),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -2953,7 +2979,10 @@ class _NurturingCareActionTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 2),
-              Row(
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   if (action.deliveredAtVisit)
                     Container(
@@ -3000,15 +3029,13 @@ class _NurturingCareActionTile extends StatelessWidget {
                   // Citations are for the health worker's audit trail;
                   // the caregiver sees only the plain-language note.
                   if (audience == RecAudience.healthWorker)
-                    Flexible(
-                      child: Text(
-                        action.citation.shortName,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontStyle: FontStyle.italic,
-                          color: AppColors.inkMuted,
-                          height: 1.3,
-                        ),
+                    Text(
+                      action.citation.shortName,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontStyle: FontStyle.italic,
+                        color: AppColors.inkMuted,
+                        height: 1.3,
                       ),
                     ),
                 ],

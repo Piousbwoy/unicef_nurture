@@ -42,6 +42,14 @@ const config = {
     windowSeconds: parseInt(process.env.AUTH_RATE_WINDOW_SECONDS || '60', 10),
     lockSeconds: parseInt(process.env.AUTH_RATE_LOCK_SECONDS || '300', 10),
   },
+  // CORS: which browser origins may call this API. The Flutter WEB build runs
+  // in a browser on a different origin than this server; without these headers
+  // the browser silently blocks every request. A comma-separated list of
+  // origins, or '*' for the default open policy (the API uses bearer tokens
+  // and no cookies, so '*' carries no CSRF risk).
+  cors: {
+    origin: (process.env.CORS_ORIGIN || '*').trim(),
+  },
 };
 
 const jwt = config.jwt;

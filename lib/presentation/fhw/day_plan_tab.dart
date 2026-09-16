@@ -34,6 +34,7 @@ class DayPlanTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final plan = ref.watch(dayPlanProvider);
     final sync = ref.watch(syncStatusProvider);
+    final pullLine = ref.watch(lastPullProvider).valueOrNull;
 
     return Column(
       children: [
@@ -42,6 +43,7 @@ class DayPlanTab extends ConsumerWidget {
             pending: s.pending,
             failing: s.failing,
             detail: s.detail,
+            pullLine: pullLine,
             onTap: () => ref.read(syncServiceProvider).valueOrNull?.drain(),
           ),
           orElse: () => const SizedBox.shrink(),

@@ -107,6 +107,26 @@ class SyncService {
   Timer? _timer;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   bool _running = false;
+  bool _lastOnline = true;
+
+  /// Fired after a run accepted at least one outbox row. The delta-pull
+  /// engine rides on this: a successful push is exactly when new data may
+  /// also be waiting to come DOWN, and when this device's rows become
+  /// meaningful to everyone else's next pull. A failing hook must never
+  /// break pushing — invocations are awaited behind a swallowing guard.
+  Future<void> Function()? onPushAccepted;
+
+  /// Fired when connectivity transitions offline → online. The moment a
+  /// device regains signal is the moment both queues and pull deltas move.
+  Future<void> Function()? onConnectivityRegained;
+
+  Future<void> _notify(Future<void> Function()? hook) async {
+    try {
+      await hook?.call();
+    } catch (_) {
+      /* A failing pull must never break pushing. */
+    }
+  }
 
   final _statusController = StreamController<SyncStatusSummary>.broadcast();
   final _connectivityController = StreamController<bool>.broadcast();
@@ -135,16 +155,22 @@ class SyncService {
     // is correct — no flash of "offline" on a device that has always been
     // online.
     final initial = await isOnline;
+    _lastOnline = initial;
     if (!_connectivityController.isClosed) {
       _connectivityController.add(initial);
     }
 
     _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
       final online = results.any((r) => r != ConnectivityResult.none);
+      final regained = online && !_lastOnline;
+      _lastOnline = online;
       if (!_connectivityController.isClosed) {
         _connectivityController.add(online);
       }
-      if (online) runOnce();
+      if (online) {
+        runOnce();
+        if (regained) _notify(onConnectivityRegained);
+      }
     });
 
     await publishStatus();
@@ -215,24 +241,32 @@ class SyncService {
             deferred++;
             // The network has gone again. Stop the batch rather than burning
             // attempt counters on rows that were never going to send.
-            return SyncRunReport(
-              attempted: attempted,
-              accepted: accepted,
-              rejected: rejected,
-              deferred: deferred,
-            );
+            return _report(attempted, accepted, rejected, deferred);
         }
       }
-      return SyncRunReport(
-        attempted: attempted,
-        accepted: accepted,
-        rejected: rejected,
-        deferred: deferred,
-      );
+      return _report(attempted, accepted, rejected, deferred);
     } finally {
       _running = false;
       await publishStatus();
     }
+  }
+
+  /// Builds the run's report and, when the run actually moved rows, notifies
+  /// the pull engine — a successful push is exactly when a delta pull can
+  /// discover what everyone else has been doing.
+  Future<SyncRunReport> _report(
+    int attempted,
+    int accepted,
+    int rejected,
+    int deferred,
+  ) async {
+    if (accepted > 0) await _notify(onPushAccepted);
+    return SyncRunReport(
+      attempted: attempted,
+      accepted: accepted,
+      rejected: rejected,
+      deferred: deferred,
+    );
   }
 
   /// Sends everything, in batches, until nothing is left or nothing moves.

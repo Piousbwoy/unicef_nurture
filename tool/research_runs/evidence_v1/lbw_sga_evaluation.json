@@ -1,0 +1,272 @@
+{
+  "audit": {
+    "model": "lbw_sga",
+    "files": [
+      {
+        "file": "lbw_classic.csv",
+        "sha256": "55eb41cc2d1661f7d4b710bf15d8d9cef3306009df30a89c6f7e15f6702af695"
+      }
+    ],
+    "n": 101,
+    "positive": 75,
+    "dataset_defined_label": "reslt",
+    "outcome_semantics_verified": false,
+    "feature_mapping": {
+      "maternal_age": "age"
+    },
+    "excluded": {
+      "Hb": "Measurement units/timing not established in local documentation",
+      "BP": "Ratio-like column is neither systolic nor diastolic pressure"
+    },
+    "missing_or_outside_transform_support": {
+      "maternal_age": 0
+    },
+    "unique_groups": 14,
+    "duplicate_predictor_rows": 87,
+    "groups_with_conflicting_labels": 9,
+    "limitations": [
+      "Meaning and polarity of reslt are not documented locally",
+      "No gestational-age-specific outcome: LBW does not establish SGA",
+      "No patient identifiers or dataset-specific license statement located locally"
+    ],
+    "license_file": null,
+    "packaging_allowed": false,
+    "packaging_blocker": "Clinical outcome definition/measurement timing requires source documentation"
+  },
+  "selected": "forest_d4_leaf20",
+  "training_cv": [
+    {
+      "name": "logistic_C0.1",
+      "mean_average_precision": 0.6672222222222223,
+      "folds": [
+        0.75,
+        0.7625000000000001,
+        0.6166666666666666,
+        0.6166666666666666,
+        0.5902777777777777
+      ],
+      "order": 0
+    },
+    {
+      "name": "logistic_C1",
+      "mean_average_precision": 0.6672222222222223,
+      "folds": [
+        0.75,
+        0.7625000000000001,
+        0.6166666666666666,
+        0.6166666666666666,
+        0.5902777777777777
+      ],
+      "order": 1
+    },
+    {
+      "name": "logistic_C10",
+      "mean_average_precision": 0.6672222222222223,
+      "folds": [
+        0.75,
+        0.7625000000000001,
+        0.6166666666666666,
+        0.6166666666666666,
+        0.5902777777777777
+      ],
+      "order": 2
+    },
+    {
+      "name": "forest_d4_leaf20",
+      "mean_average_precision": 0.71,
+      "folds": [
+        0.75,
+        0.8,
+        0.6666666666666666,
+        0.6666666666666666,
+        0.6666666666666666
+      ],
+      "order": 3
+    },
+    {
+      "name": "forest_d4_leaf10",
+      "mean_average_precision": 0.7030555555555555,
+      "folds": [
+        0.75,
+        0.8,
+        0.6666666666666666,
+        0.6666666666666666,
+        0.6319444444444444
+      ],
+      "order": 4
+    },
+    {
+      "name": "forest_d8_leaf20",
+      "mean_average_precision": 0.71,
+      "folds": [
+        0.75,
+        0.8,
+        0.6666666666666666,
+        0.6666666666666666,
+        0.6666666666666666
+      ],
+      "order": 5
+    },
+    {
+      "name": "forest_d8_leaf10",
+      "mean_average_precision": 0.7030555555555555,
+      "folds": [
+        0.75,
+        0.8,
+        0.6666666666666666,
+        0.6666666666666666,
+        0.6319444444444444
+      ],
+      "order": 6
+    }
+  ],
+  "evaluation": {
+    "n": 27,
+    "prevalence": 0.8148148148148148,
+    "auroc": 0.5,
+    "average_precision": 0.8148148148148148,
+    "brier": 0.1632556206116076,
+    "log_loss": 0.511626499957224,
+    "threshold": 0.7036393934301266,
+    "sensitivity": 0.0,
+    "specificity": 1.0,
+    "ppv": null,
+    "npv": 0.18518518518518517,
+    "confusion": {
+      "tn": 5,
+      "fp": 0,
+      "fn": 22,
+      "tp": 0
+    },
+    "reliability_bins": [
+      {
+        "lower": 0.0,
+        "upper": 0.1,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.1,
+        "upper": 0.2,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.2,
+        "upper": 0.3,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.3,
+        "upper": 0.4,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.4,
+        "upper": 0.5,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.5,
+        "upper": 0.6,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.6,
+        "upper": 0.7,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.7,
+        "upper": 0.8,
+        "n": 27,
+        "mean_output": 0.7036213427110362,
+        "observed_fraction": 0.8148148148148148
+      },
+      {
+        "lower": 0.8,
+        "upper": 0.9,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      },
+      {
+        "lower": 0.9,
+        "upper": 1.0,
+        "n": 0,
+        "mean_output": null,
+        "observed_fraction": null
+      }
+    ]
+  },
+  "aggregate_bootstrap_95": {
+    "auroc": {
+      "low": 0.5,
+      "high": 0.5,
+      "replicates": 1000
+    },
+    "average_precision": {
+      "low": 0.8148148148148148,
+      "high": 0.8148148148148148,
+      "replicates": 1000
+    },
+    "brier": {
+      "low": 0.1632556206116076,
+      "high": 0.1632556206116076,
+      "replicates": 1000
+    },
+    "log_loss": {
+      "low": 0.511626499957224,
+      "high": 0.511626499957224,
+      "replicates": 1000
+    },
+    "sensitivity": {
+      "low": 0.0,
+      "high": 0.0,
+      "replicates": 1000
+    },
+    "specificity": {
+      "low": 1.0,
+      "high": 1.0,
+      "replicates": 1000
+    },
+    "npv": {
+      "low": 0.18518518518518517,
+      "high": 0.18518518518518517,
+      "replicates": 1000
+    }
+  },
+  "baseline_brier": 0.15924752276042456,
+  "training_prevalence": 0.723404255319149,
+  "split_sha256": "16d905fe0a308a21222c98ee0c45f333338e2c15d511c81203e2ed769a34073b",
+  "features": [
+    "maternal_age"
+  ],
+  "training_imputation_normalized": [
+    0.3333333432674408
+  ],
+  "calibration": {
+    "A": -0.0009141459388493608,
+    "B": 0.8654601769870586,
+    "formula": "sigmoid(A * logit(p) + B)"
+  },
+  "teacher_diagnostic_auroc": 0.5,
+  "teacher_student_mean_absolute_difference": 0.0045833333333327175,
+  "candidate_sha256": "31388d5f82248eee44ee43886e84ebf082d0e905ccc8398f764b8a3f66adc990",
+  "packaged": false,
+  "parity": "pending Dart verification",
+  "evaluation_scope": "Exploratory reuse of historically examined repository data",
+  "clinical_use_allowed": false
+}

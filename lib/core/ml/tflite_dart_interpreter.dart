@@ -46,7 +46,8 @@ class _Activation {
 
 /// Minimal FlatBuffers reader over the TFLite v3 schema.
 class _Fb {
-  _Fb(this.bytes) : bd = bytes.buffer.asByteData(bytes.offsetInBytes);
+  _Fb(this.bytes)
+    : bd = bytes.buffer.asByteData(bytes.offsetInBytes, bytes.lengthInBytes);
 
   final Uint8List bytes;
   final ByteData bd;
@@ -114,6 +115,7 @@ class _Tensor {
     required this.data,
     required this.scales,
     required this.zeroPoints,
+    required this.constant,
   });
 
   final List<int> shape;
@@ -124,6 +126,7 @@ class _Tensor {
 
   final List<double> scales;
   final List<int> zeroPoints;
+  final bool constant;
 
   int get count => shape.isEmpty ? 1 : shape.reduce((a, b) => a * b);
 
@@ -191,12 +194,15 @@ class TfliteDartModel {
   /// Parses a `.tflite` flatbuffer. Throws [FormatException] on anything
   /// this minimal interpreter cannot honour.
   factory TfliteDartModel.fromBytes(Uint8List bytes) {
-    final fb = _Fb(bytes);
-    final model = fb.root();
     if (bytes.length < 8 ||
-        bytes[4] != 0x54 || bytes[5] != 0x46 || bytes[6] != 0x4C) {
+        bytes[4] != 0x54 ||
+        bytes[5] != 0x46 ||
+        bytes[6] != 0x4C ||
+        bytes[7] != 0x33) {
       throw const FormatException('Not a TFLite flatbuffer');
     }
+    final fb = _Fb(bytes);
+    final model = fb.root();
 
     // Operator codes.
     final codes = <int>[];
@@ -206,7 +212,7 @@ class TfliteDartModel {
         final t = fb.tableAt(oc.$1, i);
         // deprecated_builtin_code when < 127, else the extended int32 field.
         final dep = fb.byteField(t, 0);
-        codes.add(dep != 127 ? dep : fb.intField(t, 1));
+        codes.add(dep != 127 ? dep : fb.intField(t, 3));
       }
     }
 
@@ -220,15 +226,14 @@ class TfliteDartModel {
         if (d == null) {
           buffers.add(Uint8List(0));
         } else {
-          buffers.add(Uint8List.fromList(
-              bytes.sublist(d.$1, d.$1 + d.$2)));
+          buffers.add(Uint8List.fromList(bytes.sublist(d.$1, d.$1 + d.$2)));
         }
       }
     }
 
     // First subgraph only — every model in the pack ships exactly one.
     final sgv = fb.vec(model, 2);
-    if (sgv == null || sgv.$2 == 0) {
+    if (sgv == null || sgv.$2 != 1) {
       throw const FormatException('Model has no subgraphs');
     }
     final sub = fb.tableAt(sgv.$1, 0);
@@ -241,8 +246,10 @@ class TfliteDartModel {
         final shape = fb.intVec(t, 0);
         final type = fb.byteField(t, 1);
         final bufferIdx = fb.intField(t, 2);
-        var count = shape.isEmpty ? 1 : shape.reduce((a, b) => a * b);
-        if (count < 0) count = 0;
+        if (shape.any((d) => d <= 0)) {
+          throw const FormatException('Invalid tensor shape');
+        }
+        final count = shape.isEmpty ? 1 : shape.reduce((a, b) => a * b);
 
         // QuantizationParameters (field 4): scale(2), zero_point(3).
         List<double> scales = const [];
@@ -252,13 +259,35 @@ class TfliteDartModel {
           final rel = t + qfo;
           final q = rel + fb.u32(rel);
           scales = fb.floatVec(q, 2);
+          if (scales.length > 1 &&
+              (fb.intField(q, 6) != 0 ||
+                  shape.isEmpty ||
+                  scales.length != shape.first)) {
+            throw const FormatException('Unsupported quantized dimension');
+          }
           final zpv = fb.vec(q, 3);
           if (zpv != null) {
             zps = [for (var j = 0; j < zpv.$2; j++) fb.i64(zpv.$1 + 8 * j)];
           }
         }
 
-        final raw = bufferIdx < buffers.length ? buffers[bufferIdx] : Uint8List(0);
+        if (type == _TensorType.int8 && zps.any((z) => z < -128 || z > 127)) {
+          throw const FormatException('Invalid INT8 zero point');
+        }
+        if (type != _TensorType.float32 &&
+            (scales.isEmpty ||
+                scales.any((s) => !s.isFinite || s <= 0) ||
+                scales.length != zps.length)) {
+          throw const FormatException('Invalid tensor quantization');
+        }
+        if (bufferIdx < 0 || bufferIdx >= buffers.length) {
+          throw const FormatException('Invalid buffer index');
+        }
+        final raw = buffers[bufferIdx];
+        final expectedBytes = count * (type == _TensorType.int8 ? 1 : 4);
+        if (raw.isNotEmpty && raw.length != expectedBytes) {
+          throw const FormatException('Truncated or oversized constant tensor');
+        }
         final TypedData data;
         switch (type) {
           case _TensorType.float32:
@@ -284,13 +313,16 @@ class TfliteDartModel {
           default:
             throw FormatException('Unsupported tensor type $type');
         }
-        tensors.add(_Tensor(
-          shape: shape,
-          type: type,
-          data: data,
-          scales: scales,
-          zeroPoints: zps,
-        ));
+        tensors.add(
+          _Tensor(
+            shape: shape,
+            type: type,
+            data: data,
+            scales: scales,
+            zeroPoints: zps,
+            constant: raw.isNotEmpty,
+          ),
+        );
       }
     }
 
@@ -300,25 +332,117 @@ class TfliteDartModel {
       for (var i = 0; i < ov.$2; i++) {
         final o = fb.tableAt(ov.$1, i);
         final opcodeIndex = fb.intField(o, 0);
-        if (opcodeIndex >= codes.length) {
+        if (opcodeIndex < 0 || opcodeIndex >= codes.length) {
           throw FormatException('Bad opcode index $opcodeIndex');
         }
         var fused = _Activation.none;
         final optType = fb.byteField(o, 3);
-        if (optType == _BuiltinOptions.fullyConnectedOptions) {
-          final rel = o + fb.field(o, 4);
+        if (optType == _BuiltinOptions.fullyConnectedOptions ||
+            codes[opcodeIndex] == _Op.add) {
+          final field = fb.field(o, 4);
+          if (field == 0) {
+            throw const FormatException('Missing operator options');
+          }
+          final rel = o + field;
           final opts = rel + fb.u32(rel);
           fused = fb.byteField(opts, 0);
+          if (codes[opcodeIndex] == _Op.fullyConnected &&
+              (fb.byteField(opts, 1) != 0 || fb.byteField(opts, 2) != 0)) {
+            throw const FormatException('Unsupported dense-layer options');
+          }
         }
-        ops.add(_Operator(
-          builtinCode: codes[opcodeIndex],
-          inputs: fb.intVec(o, 1),
-          outputs: fb.intVec(o, 2),
-          fusedActivation: fused,
-        ));
+        if (![
+              _Op.fullyConnected,
+              _Op.relu,
+              _Op.logistic,
+              _Op.add,
+              _Op.quantize,
+              _Op.dequantize,
+            ].contains(codes[opcodeIndex]) ||
+            ![_Activation.none, _Activation.relu].contains(fused)) {
+          throw const FormatException('Unsupported operator or activation');
+        }
+        ops.add(
+          _Operator(
+            builtinCode: codes[opcodeIndex],
+            inputs: fb.intVec(o, 1),
+            outputs: fb.intVec(o, 2),
+            fusedActivation: fused,
+          ),
+        );
       }
     }
 
+    final inputs = fb.intVec(sub, 1), outputs = fb.intVec(sub, 2);
+    if (inputs.length != 1 ||
+        outputs.length != 1 ||
+        [...inputs, ...outputs].any((i) => i < 0 || i >= tensors.length) ||
+        tensors[outputs.single].count != 1 ||
+        tensors[inputs.single].shape.length != 2 ||
+        tensors[inputs.single].shape.first != 1) {
+      throw const FormatException('Unsupported input/output signature');
+    }
+    for (final index in [...inputs, ...outputs]) {
+      final t = tensors[index];
+      if (![_TensorType.float32, _TensorType.int8].contains(t.type) ||
+          t.scales.length > 1) {
+        throw const FormatException(
+          'Unsupported I/O dtype or per-channel quantization',
+        );
+      }
+    }
+    final initialized = {
+      inputs.single,
+      for (var i = 0; i < tensors.length; i++)
+        if (tensors[i].constant) i,
+    };
+    for (final op in ops) {
+      if (op.outputs.length != 1 ||
+          op.outputs.any(
+            (i) => i < 0 || i >= tensors.length || initialized.contains(i),
+          ) ||
+          op.inputs.any(
+            (i) =>
+                i < -1 ||
+                i >= tensors.length ||
+                (i >= 0 && !initialized.contains(i)),
+          )) {
+        throw const FormatException('Invalid operator tensor references');
+      }
+      final dense = op.builtinCode == _Op.fullyConnected;
+      final arity = dense
+          ? (op.inputs.length == 2 || op.inputs.length == 3)
+          : op.inputs.length == (op.builtinCode == _Op.add ? 2 : 1);
+      if (!arity ||
+          op.inputs.asMap().entries.any(
+            (e) => e.value < 0 && !(dense && e.key == 2),
+          )) {
+        throw const FormatException('Unsupported operator arity');
+      }
+      final input = tensors[op.inputs.first],
+          output = tensors[op.outputs.single];
+      if (dense) {
+        final weights = tensors[op.inputs[1]];
+        if (weights.shape.length != 2 ||
+            input.count != weights.shape[1] ||
+            output.count != weights.shape[0] ||
+            (op.inputs.length == 3 &&
+                op.inputs[2] >= 0 &&
+                tensors[op.inputs[2]].count != output.count)) {
+          throw const FormatException('Incompatible dense-layer dimensions');
+        }
+      } else if (input.count != output.count ||
+          (op.builtinCode == _Op.add &&
+              tensors[op.inputs[1]].count != input.count)) {
+        throw const FormatException(
+          'Unsupported elementwise dimensions or broadcasting',
+        );
+      }
+      initialized.add(op.outputs.single);
+    }
+    if (ops.isEmpty || !initialized.contains(outputs.single)) {
+      throw const FormatException('Output is not produced by graph');
+    }
     return TfliteDartModel._(
       tensors,
       ops,
@@ -327,18 +451,59 @@ class TfliteDartModel {
     );
   }
 
+  /// Match the frozen Python adapter's float32 division and addition before
+  /// ties-away-from-zero rounding. Internal operator arithmetic is separate.
+  static int quantizeInputValue(double value, double scale, int zeroPoint) {
+    if (!value.isFinite || !scale.isFinite || scale <= 0) {
+      throw const FormatException('Invalid input quantization');
+    }
+    final intermediate = Float32List(1);
+    intermediate[0] = value / scale;
+    intermediate[0] = intermediate[0] + zeroPoint;
+    return intermediate[0].round();
+  }
+
   int get inputCount => _tensors[_inputs.first].count;
+  List<int> get quantizedInput => List.generate(
+    inputCount,
+    (i) => _tensors[_inputs.single].quantizedAt(i),
+    growable: false,
+  );
+  String _typeName(int type) => switch (type) {
+    0 => 'float32',
+    9 => 'int8',
+    _ => 'unsupported',
+  };
+  String get inputDtype => _typeName(_tensors[_inputs.single].type);
+  String get outputDtype => _typeName(_tensors[_outputs.single].type);
+  List<int> get inputShape => List.unmodifiable(_tensors[_inputs.single].shape);
+  List<int> get outputShape =>
+      List.unmodifiable(_tensors[_outputs.single].shape);
+  List<num> get inputQuantization => _quantization(_tensors[_inputs.single]);
+  List<num> get outputQuantization => _quantization(_tensors[_outputs.single]);
+  List<num> _quantization(_Tensor t) =>
+      t.type == _TensorType.float32 ? [0.0, 0] : [t.scale(0), t.zeroPoint(0)];
 
   /// Runs the graph on [input] (already feature-ordered by the caller) and
   /// returns the first output value — for the risk models, a probability.
   double run(Float32List input) {
     final inT = _tensors[_inputs.first];
-    if (input.length < inT.count) {
-      throw ArgumentError('Input has ${input.length} values, '
-          'model expects ${inT.count}');
+    if (input.length != inT.count || input.any((v) => !v.isFinite)) {
+      throw ArgumentError(
+        'Input has ${input.length} values, '
+        'model expects ${inT.count}',
+      );
     }
     for (var i = 0; i < inT.count; i++) {
-      inT.setReal(i, 0, input[i]);
+      if (inT.data is Int8List) {
+        (inT.data as Int8List)[i] = quantizeInputValue(
+          input[i],
+          inT.scale(0),
+          inT.zeroPoint(0),
+        ).clamp(-128, 127);
+      } else {
+        inT.setReal(i, 0, input[i]);
+      }
     }
 
     for (final op in _ops) {
@@ -346,7 +511,11 @@ class TfliteDartModel {
     }
 
     final outT = _tensors[_outputs.first];
-    return outT.realAt(0, 0);
+    final result = outT.realAt(0, 0);
+    if (!result.isFinite || result < 0 || result > 1) {
+      throw const FormatException('Invalid output');
+    }
+    return result;
   }
 
   void _dispatch(_Operator op) {
@@ -390,8 +559,7 @@ class TfliteDartModel {
         var isum = 0;
         for (var c = 0; c < cols; c++) {
           isum +=
-              (x.quantizedAt(c) - xzp) *
-              (w.quantizedAt(r * cols + c) - wzp);
+              (x.quantizedAt(c) - xzp) * (w.quantizedAt(r * cols + c) - wzp);
         }
         acc += isum * x.scale(0) * w.scale(wPerChannel ? r : 0);
       } else {

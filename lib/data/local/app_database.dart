@@ -50,7 +50,13 @@ import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 ///   • New child_assessment_snapshots table: exact GHS IMCI Sick-Child Case
 ///     Recording Form section order (10 sections), built-in RR-age pneumonia
 ///     classifier + dehydration Plan A/B/C classifier computed getters.
-const int kDatabaseVersion = 5;
+///
+/// Version 6 (August 2026 — delta pull, the read half of the hybrid engine)
+///   • New sync_state table: the pull engine's per-user watermark (the
+///     server_time of the last completed pull) and last-pull facts, kept
+///     next to the rows they describe so GET /api/pull resumes where this
+///     device left off instead of re-downloading the whole caseload.
+const int kDatabaseVersion = 6;
 
 const String kDatabaseName = 'carebridge.db';
 
@@ -178,6 +184,7 @@ class AppDatabase {
       for (final table in const [
         Tables.outbox,
         Tables.auditLog,
+        Tables.syncState,
         Tables.scheduledContacts,
         Tables.milestoneChecks,
         Tables.homeChecks,
@@ -264,6 +271,11 @@ class AppDatabase {
         '${Tables.childAssessmentSnapshots}(visit_type, assessed_at DESC)',
       );
     }
+    if (from < 6) {
+      // Version 6: the delta-pull engine's watermark store. A device that has
+      // never pulled has no watermark; its first pull is a full one.
+      await db.execute(_syncStateTable);
+    }
   }
 
   static Future<void> _createAll(DatabaseExecutor db) async {
@@ -294,6 +306,7 @@ abstract final class Tables {
   static const scheduledContacts = 'scheduled_contacts';
   static const outbox = 'sync_outbox';
   static const auditLog = 'audit_log';
+  static const syncState = 'sync_state';
 }
 
 const List<String> _schema = [
@@ -799,7 +812,25 @@ const List<String> _schema = [
   ''',
   'CREATE INDEX idx_audit_time ON ${Tables.auditLog}(occurred_at DESC)',
   'CREATE INDEX idx_audit_actor ON ${Tables.auditLog}(actor_id, occurred_at DESC)',
+
+  // --------------------------------------------------------------------------
+  // Sync state. The delta-pull engine's per-user watermark and last-pull
+  // facts, kept inside SQLite so "reset this device" clears pull memory and
+  // pulled data together — a rebuilt database never inherits a watermark it
+  // cannot justify.
+  // --------------------------------------------------------------------------
+  _syncStateTable,
 ];
+
+/// The sync-state DDL stands alone so the version-6 migration can run the
+/// exact same statement on devices that predate the table.
+const String _syncStateTable = '''
+  CREATE TABLE ${Tables.syncState} (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+  ''';
 
 /// The home-checks DDL stands alone so the version-3 migration can run the
 /// exact same statement on devices that predate the table.

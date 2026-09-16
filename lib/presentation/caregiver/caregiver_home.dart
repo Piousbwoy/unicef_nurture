@@ -139,6 +139,7 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
     final linked = ref.watch(linkedHouseholdProvider);
+    final isOnline = ref.watch(connectivityProvider).valueOrNull ?? false;
     if (user == null) return const SizedBox.shrink();
 
     if (linked == null) {
@@ -175,6 +176,14 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
             ),
           ],
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: Gap.md),
+            child: Center(
+              child: ConnectivityDot(isOnline: isOnline),
+            ),
+          ),
+        ],
       ),
       body: IndexedStack(
         index: _tab,

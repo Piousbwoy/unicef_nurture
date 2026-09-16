@@ -396,12 +396,19 @@ class ConfidenceChip extends StatelessWidget {
 ///
 /// Phrased as reassurance, because the commonest field fear is that unsent means
 /// lost. It never blocks anything and it never asks the CHO to fix the network.
+///
+/// Honesty contract: the banner says what the hybrid engine actually did —
+/// records waiting to go UP, and (when [pullLine] is supplied) what the last
+/// delta pull brought DOWN. When everything is quiet and a pull has happened,
+/// it says so in green instead of vanishing, because "nothing to say" and
+/// "everything is synced" are different claims.
 class SyncBanner extends StatelessWidget {
   const SyncBanner({
     super.key,
     required this.pending,
     required this.detail,
     this.failing = 0,
+    this.pullLine,
     this.onTap,
   });
 
@@ -410,12 +417,34 @@ class SyncBanner extends StatelessWidget {
   final String detail;
   final VoidCallback? onTap;
 
+  /// What the last delta pull brought down for this account, or null.
+  final String? pullLine;
+
   @override
   Widget build(BuildContext context) {
-    if (pending == 0 && failing == 0) return const SizedBox.shrink();
-    final isProblem = failing > 0;
-    final colour = isProblem ? AppColors.triageAmber : AppColors.offline;
-    final bg = isProblem ? AppColors.triageAmberBg : AppColors.offlineBg;
+    final quiet = pending == 0 && failing == 0;
+    final hasPull = pullLine != null && pullLine!.isNotEmpty;
+    if (quiet && !hasPull) return const SizedBox.shrink();
+
+    final IconData icon;
+    final Color colour;
+    final Color bg;
+    final String headline;
+    if (!quiet) {
+      final isProblem = failing > 0;
+      icon = isProblem ? Icons.sync_problem_rounded : Icons.cloud_off_rounded;
+      colour = isProblem ? AppColors.triageAmber : AppColors.offline;
+      bg = isProblem ? AppColors.triageAmberBg : AppColors.offlineBg;
+      headline = isProblem
+          ? '$failing record${failing == 1 ? '' : 's'} need attention'
+          : '$pending record${pending == 1 ? '' : 's'} saved on this '
+                'phone, waiting for network';
+    } else {
+      icon = Icons.cloud_done_rounded;
+      colour = AppColors.triageGreen;
+      bg = AppColors.triageGreenBg;
+      headline = 'Everything is sent and up to date';
+    }
 
     return Material(
       color: bg,
@@ -428,25 +457,31 @@ class SyncBanner extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(
-                isProblem
-                    ? Icons.sync_problem_rounded
-                    : Icons.cloud_off_rounded,
-                size: 17,
-                color: colour,
-              ),
+              Icon(icon, size: 17, color: colour),
               const SizedBox(width: Gap.sm),
               Expanded(
-                child: Text(
-                  isProblem
-                      ? '$failing record${failing == 1 ? '' : 's'} need attention'
-                      : '$pending record${pending == 1 ? '' : 's'} saved on this '
-                            'phone, waiting for network',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: colour,
-                    fontWeight: FontWeight.w600,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      headline,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: colour,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (!quiet && hasPull)
+                      Text(
+                        pullLine!,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: colour,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                  ],
                 ),
               ),
               if (onTap != null)
@@ -502,6 +537,42 @@ class ConnectivityPill extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A minimal connectivity indicator: a small colored dot (green=online, red=offline)
+/// with smooth animation. Designed for app bars and persistent UI chrome.
+class ConnectivityDot extends StatelessWidget {
+  const ConnectivityDot({super.key, required this.isOnline});
+
+  final bool isOnline;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: isOnline ? 'Online' : 'Offline',
+      child: Tooltip(
+        message: isOnline ? 'Online' : 'Offline',
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: isOnline ? AppColors.triageGreen : AppColors.offline,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: (isOnline ? AppColors.triageGreen : AppColors.offline)
+                    .withValues(alpha: 0.4),
+                blurRadius: 4,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

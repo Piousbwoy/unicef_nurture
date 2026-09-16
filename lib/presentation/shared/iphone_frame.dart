@@ -261,14 +261,33 @@ class _IPhoneFrameState extends State<IPhoneFrame> {
       );
     }
 
-    return Navigator(
-      onGenerateRoute: (settings) => PageRouteBuilder<void>(
-        transitionDuration: Duration.zero,
-        reverseTransitionDuration: Duration.zero,
-        pageBuilder: (context, _, _) => Scaffold(
-          backgroundColor: Colors.transparent,
-          body: LayoutBuilder(
-            builder: (context, constraints) {
+    return Overlay(initialEntries: [_chromeEntry]);
+  }
+
+  /// The frame chrome lives in its own [Overlay], deliberately NOT in a
+  /// Navigator: dialogs resolve the ROOT navigator (showDialog defaults to
+  /// useRootNavigator: true), and a navigator at this level sat outside
+  /// the phone chassis — the "Sign out?" confirm opened browser-window
+  /// sized instead of inside the simulated screen. A plain Overlay still
+  /// hosts the dock's tooltips, while confirmations resolve to the app's
+  /// router navigator inside the chassis and scale with it.
+  late final OverlayEntry _chromeEntry = OverlayEntry(
+    builder: (_) => _buildChrome(),
+  );
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    // The chrome entry only exists while the desktop simulator is on
+    // screen; the phone-browser branch renders no Overlay at all.
+    if (_chromeEntry.mounted) _chromeEntry.markNeedsBuild();
+  }
+
+  Widget _buildChrome() {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
           // ── Edge-to-Edge Web Responsive Mode ──────────────────────
           if (_selectedDevice == DeviceModel.edgeToEdge) {
             return Stack(
@@ -420,8 +439,6 @@ class _IPhoneFrameState extends State<IPhoneFrame> {
           );
         },
       ),
-    ),
-    ),
     );
   }
 
