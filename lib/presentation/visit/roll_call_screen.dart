@@ -26,6 +26,8 @@ import 'package:uuid/uuid.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/glass.dart';
+import '../../core/theme/motion.dart';
 import '../../data/local/visit_dao.dart';
 import '../../data/repositories/care_repository.dart';
 import '../../domain/entities/core.dart';
@@ -101,8 +103,11 @@ class _RollCallScreenState extends ConsumerState<RollCallScreen> {
     final household = ref.watch(householdProvider(widget.householdId));
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_visit == null ? 'Who came today?' : 'Assessment in progress'),
+      backgroundColor: Colors.transparent,
+      appBar: GlassAppBar(
+        title: Text(
+          _visit == null ? 'Who came today?' : 'Assessment in progress',
+        ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(22),
           child: Padding(
@@ -125,22 +130,22 @@ class _RollCallScreenState extends ConsumerState<RollCallScreen> {
           ),
         ),
       ),
-      body: members.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => ErrorView(
-          error: e is AccessDenied ? e.message : e,
+      body: AmbientBackdrop(
+        child: members.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => ErrorView(error: e is AccessDenied ? e.message : e),
+          data: (people) => people.isEmpty
+              ? const EmptyState(
+                  icon: Icons.person_off_outlined,
+                  title: 'Nobody registered here',
+                  message:
+                      'Register the mother and any children in this household '
+                      'before starting an assessment.',
+                )
+              : _visit == null
+              ? _RollCallPhase(this, people, household.valueOrNull)
+              : _QueuePhase(this, people),
         ),
-        data: (people) => people.isEmpty
-            ? const EmptyState(
-                icon: Icons.person_off_outlined,
-                title: 'Nobody registered here',
-                message:
-                    'Register the mother and any children in this household '
-                    'before starting an assessment.',
-              )
-            : _visit == null
-            ? _RollCallPhase(this, people, household.valueOrNull)
-            : _QueuePhase(this, people),
       ),
     );
   }
@@ -228,7 +233,7 @@ class _RollCallScreenState extends ConsumerState<RollCallScreen> {
     if (visit == null) return;
 
     final done = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
+      GlassPageRoute<bool>(
         builder: (_) => AssessmentScreen(visit: visit, personId: person.id),
       ),
     );
@@ -236,16 +241,18 @@ class _RollCallScreenState extends ConsumerState<RollCallScreen> {
 
     final user = ref.read(currentUserProvider);
     if (user != null) {
-      await ref.read(careRepositoryProvider).updateRollCall(
-        user,
-        VisitParticipant(
-          visitId: visit.id,
-          personId: person.id,
-          wasPresent: true,
-          queueOrder: 0,
-          assessed: true,
-        ),
-      );
+      await ref
+          .read(careRepositoryProvider)
+          .updateRollCall(
+            user,
+            VisitParticipant(
+              visitId: visit.id,
+              personId: person.id,
+              wasPresent: true,
+              queueOrder: 0,
+              assessed: true,
+            ),
+          );
     }
     ref.invalidate(latestAssessmentProvider(person.id));
     ref.invalidate(householdScoreProvider(widget.householdId));
@@ -295,7 +302,7 @@ class _RollCallScreenState extends ConsumerState<RollCallScreen> {
     // person has a result AND the CHO has signed off the whole encounter in
     // one view. The summary screen performs the actual save.
     final saved = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
+      GlassPageRoute<bool>(
         builder: (_) => HouseholdSummaryScreen(
           visit: visit,
           householdId: widget.householdId,
@@ -326,7 +333,7 @@ class _RollCallPhase extends StatelessWidget {
     final h = household;
     if (h == null) return;
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => MemberFormScreen(household: h)),
+      GlassPageRoute<void>(builder: (_) => MemberFormScreen(household: h)),
     );
     state.ref.invalidate(householdMembersProvider(h.id));
     state.ref.invalidate(householdScoreProvider(h.id));
@@ -334,109 +341,109 @@ class _RollCallPhase extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final presentCount =
-        people.where((p) => state._present[p.id] ?? true).length;
+    final presentCount = people
+        .where((p) => state._present[p.id] ?? true)
+        .length;
     final ready = state._reasons.isNotEmpty && presentCount > 0;
 
     return Column(
-    children: [
-      Expanded(
-        child: ListView(
-          padding: const EdgeInsets.all(Gap.lg),
-          children: [
-            SectionCard(
-              title: 'Why are you here?',
-              subtitle:
-                  'More than one is normal. A mother who came about a fever '
-                  'often leaves with her child weighed and her own postnatal '
-                  'check done.',
-              icon: Icons.flag_outlined,
-              child: Wrap(
-                spacing: Gap.sm,
-                runSpacing: Gap.sm,
-                children: [
-                  for (final r in VisitReason.values)
-                    FilterChip(
-                      label: Text(r.label),
-                      selected: state._reasons.contains(r),
-                      onSelected: (on) => state.update(() {
-                        if (on) {
-                          state._reasons.add(r);
-                        } else {
-                          state._reasons.remove(r);
-                        }
-                      }),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: Gap.lg),
-
-            SectionCard(
-              title: 'Mark who came',
-              subtitle:
-                  'Everyone registered in this household. Untick anybody who '
-                  'did not come today, and say where they are — that note is '
-                  'the start of the follow-up.',
-              icon: Icons.how_to_reg_outlined,
-              child: Column(
-                children: [
-                  for (final p in people) _RollTile(state: state, person: p),
-                ],
-              ),
-            ),
-            const SizedBox(height: Gap.lg),
-
-            // Master flow [16] → [17]: somebody new showed up today. Register
-            // them, then loop straight back into this roll call so they are
-            // assessed in the same session — never a second trip.
-            OutlinedButton.icon(
-              onPressed: household == null ? null : () => _addPerson(context),
-              icon: const Icon(Icons.person_add_alt_1_rounded),
-              label: const Text('Register someone who came today'),
-            ),
-            const SizedBox(height: Gap.xxl),
-          ],
-        ),
-      ),
-      SafeArea(
-        minimum: const EdgeInsets.all(Gap.lg),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (state._error != null) ...[
-              _Warning(state._error!),
-              const SizedBox(height: Gap.sm),
-            ],
-            if (!ready && !state._busy) ...[
-              Text(
-                state._reasons.isEmpty
-                    ? 'Pick why the family came — then you can start.'
-                    : 'Tick at least one person as present to start.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.inkMuted,
+      children: [
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(Gap.lg),
+            children: [
+              SectionCard(
+                title: 'Why are you here?',
+                subtitle:
+                    'More than one is normal. A mother who came about a fever '
+                    'often leaves with her child weighed and her own postnatal '
+                    'check done.',
+                icon: Icons.flag_outlined,
+                child: Wrap(
+                  spacing: Gap.sm,
+                  runSpacing: Gap.sm,
+                  children: [
+                    for (final r in VisitReason.values)
+                      FilterChip(
+                        label: Text(r.label),
+                        selected: state._reasons.contains(r),
+                        onSelected: (on) => state.update(() {
+                          if (on) {
+                            state._reasons.add(r);
+                          } else {
+                            state._reasons.remove(r);
+                          }
+                        }),
+                      ),
+                  ],
                 ),
               ),
-              const SizedBox(height: Gap.sm),
-            ],
-            FilledButton.icon(
-              onPressed: ready && !state._busy
-                  ? () => state._start(people)
-                  : null,
-              icon: const Icon(Icons.play_arrow_rounded),
-              label: Text(
-                state._busy
-                    ? 'Starting assessments…'
-                    : 'Start the assessments ($presentCount present)',
+              const SizedBox(height: Gap.lg),
+
+              SectionCard(
+                title: 'Mark who came',
+                subtitle:
+                    'Everyone registered in this household. Untick anybody who '
+                    'did not come today, and say where they are — that note is '
+                    'the start of the follow-up.',
+                icon: Icons.how_to_reg_outlined,
+                child: Column(
+                  children: [
+                    for (final p in people) _RollTile(state: state, person: p),
+                  ],
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: Gap.lg),
+
+              // Master flow [16] → [17]: somebody new showed up today. Register
+              // them, then loop straight back into this roll call so they are
+              // assessed in the same session — never a second trip.
+              OutlinedButton.icon(
+                onPressed: household == null ? null : () => _addPerson(context),
+                icon: const Icon(Icons.person_add_alt_1_rounded),
+                label: const Text('Add a person'),
+              ),
+              const SizedBox(height: Gap.xxl),
+            ],
+          ),
         ),
-      ),
-    ],
+        GlassActionBar(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (state._error != null) ...[
+                _Warning(state._error!),
+                const SizedBox(height: Gap.sm),
+              ],
+              if (!ready && !state._busy) ...[
+                Text(
+                  state._reasons.isEmpty
+                      ? 'Pick why the family came — then you can start.'
+                      : 'Tick at least one person as present to start.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.inkMuted,
+                  ),
+                ),
+                const SizedBox(height: Gap.sm),
+              ],
+              FilledButton.icon(
+                onPressed: ready && !state._busy
+                    ? () => state._start(people)
+                    : null,
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: Text(
+                  state._busy
+                      ? 'Starting assessments…'
+                      : 'Start assessments ($presentCount present)',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -666,9 +673,7 @@ class _QueuePhase extends ConsumerWidget {
             onPressed: state._busy ? null : () => state._finish(people),
             style: remaining == 0
                 ? null
-                : FilledButton.styleFrom(
-                    backgroundColor: AppColors.inkMuted,
-                  ),
+                : FilledButton.styleFrom(backgroundColor: AppColors.inkMuted),
             icon: const Icon(Icons.check_circle_outline_rounded),
             label: const Text('Finish and sign off'),
           ),

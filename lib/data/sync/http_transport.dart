@@ -154,8 +154,8 @@ class HttpSyncTransport implements SyncTransport {
   /// Creates a transport from the configured preferences, or returns null if
   /// no sync URL has been set (in which case [LoopbackTransport] is used).
   static Future<HttpSyncTransport?> fromPreferences() async {
-    final url = await PreferencesStore.syncApiUrl();
-    if (url == null || url.isEmpty) return null;
+    final url = await PreferencesStore.effectiveSyncApiUrl();
+    if (url.isEmpty) return null;
     // Auth is resolved per-request via ServerAuthClient.pickAuthorization() so
     // we can transparently pick JWT → legacy-token → empty without requiring
     // a rebuild of the transport on sign-in / sign-out events.

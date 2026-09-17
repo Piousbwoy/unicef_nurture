@@ -24,7 +24,7 @@ library;
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 // The analyzer flags this as redundant because sqflite_common_ffi re-exports the
@@ -56,7 +56,8 @@ import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 ///     server_time of the last completed pull) and last-pull facts, kept
 ///     next to the rows they describe so GET /api/pull resumes where this
 ///     device left off instead of re-downloading the whole caseload.
-const int kDatabaseVersion = 6;
+/// Version 7: local-only caregiver drafts, activities, and settings.
+const int kDatabaseVersion = 7;
 
 const String kDatabaseName = 'carebridge.db';
 
@@ -185,6 +186,9 @@ class AppDatabase {
         Tables.outbox,
         Tables.auditLog,
         Tables.syncState,
+        Tables.caregiverDrafts,
+        Tables.caregiverActivity,
+        Tables.caregiverSettings,
         Tables.scheduledContacts,
         Tables.milestoneChecks,
         Tables.homeChecks,
@@ -250,7 +254,9 @@ class AppDatabase {
       // Version 5: Ghana CHPS IMCI / MCH Record Book field expansion.
       //   (a) maternal_records +60 columns
       for (final col in _maternalRecordsNewV5Columns) {
-        await db.execute('ALTER TABLE ${Tables.maternalRecords} ADD COLUMN $col');
+        await db.execute(
+          'ALTER TABLE ${Tables.maternalRecords} ADD COLUMN $col',
+        );
       }
       //   (b) birth_records +40 columns
       for (final col in _birthRecordsNewV5Columns) {
@@ -258,7 +264,9 @@ class AppDatabase {
       }
       //   (c) growth_measurements + 3 columns (muac_mm + palmar_pallor)
       for (final col in _growthMeasurementsNewV5Columns) {
-        await db.execute('ALTER TABLE ${Tables.growthMeasurements} ADD COLUMN $col');
+        await db.execute(
+          'ALTER TABLE ${Tables.growthMeasurements} ADD COLUMN $col',
+        );
       }
       //   (d) brand new structured IMCI sick-child snapshot table
       await db.execute(_childAssessmentSnapshotsTable);
@@ -276,7 +284,16 @@ class AppDatabase {
       // never pulled has no watermark; its first pull is a full one.
       await db.execute(_syncStateTable);
     }
+    if (from < 7) {
+      for (final statement in _caregiverSchema) {
+        await db.execute(statement);
+      }
+    }
   }
+
+  @visibleForTesting
+  static Future<void> upgradeForTesting(Database db, int from) =>
+      instance._upgrade(db, from, kDatabaseVersion);
 
   static Future<void> _createAll(DatabaseExecutor db) async {
     for (final statement in _schema) {
@@ -307,6 +324,9 @@ abstract final class Tables {
   static const outbox = 'sync_outbox';
   static const auditLog = 'audit_log';
   static const syncState = 'sync_state';
+  static const caregiverDrafts = 'caregiver_drafts';
+  static const caregiverActivity = 'caregiver_activity';
+  static const caregiverSettings = 'caregiver_settings';
 }
 
 const List<String> _schema = [
@@ -587,9 +607,9 @@ const List<String> _schema = [
   // --------------------------------------------------------------------------
   _childAssessmentSnapshotsTable,
   'CREATE INDEX idx_child_assessment_snapshots_person ON '
-  '${Tables.childAssessmentSnapshots}(person_id, assessed_at DESC)',
+      '${Tables.childAssessmentSnapshots}(person_id, assessed_at DESC)',
   'CREATE INDEX idx_child_assessment_snapshots_visit ON '
-  '${Tables.childAssessmentSnapshots}(visit_type, assessed_at DESC)',
+      '${Tables.childAssessmentSnapshots}(visit_type, assessed_at DESC)',
 
   // --------------------------------------------------------------------------
   // Visits. One encounter can carry several assessments — a mother, her
@@ -820,11 +840,60 @@ const List<String> _schema = [
   // cannot justify.
   // --------------------------------------------------------------------------
   _syncStateTable,
+  ..._caregiverSchema,
+];
+
+// Shared by fresh creation and upgrade. No sync_state or outbox integration.
+const List<String> _caregiverSchema = [
+  '''
+  CREATE TABLE ${Tables.caregiverDrafts} (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES ${Tables.users}(id) ON DELETE CASCADE,
+    household_id TEXT NOT NULL REFERENCES ${Tables.households}(id) ON DELETE CASCADE,
+    person_id TEXT NOT NULL REFERENCES ${Tables.persons}(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    question_version INTEGER NOT NULL,
+    cohort_key TEXT NOT NULL,
+    content_json TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(user_id, household_id, person_id, kind)
+  )
+  ''',
+  '''
+  CREATE TABLE ${Tables.caregiverActivity} (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES ${Tables.users}(id) ON DELETE CASCADE,
+    household_id TEXT NOT NULL REFERENCES ${Tables.households}(id) ON DELETE CASCADE,
+    person_id TEXT REFERENCES ${Tables.persons}(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    source_id TEXT NOT NULL DEFAULT '',
+    item_key TEXT NOT NULL,
+    occurrence_key TEXT NOT NULL,
+    content_json TEXT NOT NULL,
+    occurred_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+  ''',
+  'CREATE UNIQUE INDEX idx_caregiver_activity_identity ON ${Tables.caregiverActivity}'
+      "(user_id, household_id, IFNULL(person_id, ''), kind, source_id, item_key, occurrence_key)",
+  'CREATE INDEX idx_caregiver_activity_timeline ON ${Tables.caregiverActivity}'
+      '(user_id, household_id, occurred_at DESC)',
+  '''
+  CREATE TABLE ${Tables.caregiverSettings} (
+    user_id TEXT NOT NULL REFERENCES ${Tables.users}(id) ON DELETE CASCADE,
+    household_id TEXT NOT NULL REFERENCES ${Tables.households}(id) ON DELETE CASCADE,
+    content_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(user_id, household_id)
+  )
+  ''',
 ];
 
 /// The sync-state DDL stands alone so the version-6 migration can run the
 /// exact same statement on devices that predate the table.
-const String _syncStateTable = '''
+const String _syncStateTable =
+    '''
   CREATE TABLE ${Tables.syncState} (
     key        TEXT PRIMARY KEY,
     value      TEXT NOT NULL,
@@ -834,7 +903,8 @@ const String _syncStateTable = '''
 
 /// The home-checks DDL stands alone so the version-3 migration can run the
 /// exact same statement on devices that predate the table.
-const String _homeChecksTable = '''
+const String _homeChecksTable =
+    '''
   CREATE TABLE ${Tables.homeChecks} (
     id            TEXT PRIMARY KEY,
     household_id  TEXT NOT NULL,
@@ -852,7 +922,8 @@ const String _homeChecksTable = '''
 
 /// The milestone-checks DDL, standalone for the same reason: the version-4
 /// migration must run the exact same statement on older devices.
-const String _milestoneChecksTable = '''
+const String _milestoneChecksTable =
+    '''
   CREATE TABLE ${Tables.milestoneChecks} (
     id            TEXT PRIMARY KEY,
     household_id  TEXT NOT NULL,
@@ -967,7 +1038,8 @@ const List<String> _growthMeasurementsNewV5Columns = [
 
 /// The child-assessment-snapshots DDL — one row per IMCI sick-child encounter.
 /// Standalone so the version-5 migration (and `_createAll`) can share the text.
-const String _childAssessmentSnapshotsTable = '''
+const String _childAssessmentSnapshotsTable =
+    '''
   CREATE TABLE ${Tables.childAssessmentSnapshots} (
     id                           TEXT PRIMARY KEY,
     person_id                    TEXT NOT NULL,

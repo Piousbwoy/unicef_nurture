@@ -31,6 +31,8 @@ import '../../domain/entities/visit.dart';
 import '../../domain/enums.dart';
 import '../shared/ui.dart';
 import 'form_kit.dart';
+import 'station/captured_vitals_card.dart';
+import 'station/vitals_station_screen.dart';
 import 'types.dart';
 
 enum _Path { pregnant, delivered, general }
@@ -40,10 +42,18 @@ class MaternalProtocolForm extends StatefulWidget {
     super.key,
     required this.input,
     required this.onComplete,
+    this.initialVitals,
+    this.onRetakeVital,
   });
 
   final AssessmentContext input;
   final ValueChanged<AssessmentDraft> onComplete;
+
+  /// What the Vitals Station captured; pre-fills the measurement boxes.
+  final StationResult? initialVitals;
+
+  /// Per-vital 'Re-take' — the shell reopens the station on that vital.
+  final ValueChanged<String>? onRetakeVital;
 
   @override
   State<MaternalProtocolForm> createState() => _MaternalProtocolFormState();
@@ -52,6 +62,9 @@ class MaternalProtocolForm extends StatefulWidget {
 class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
   AssessmentContext get input => widget.input;
   MaternalRecord? get record => input.maternal;
+
+  StationResult? get _station => widget.initialVitals;
+  bool get _fromStation => _station != null && !_station!.isEmpty;
 
   _Path _path = _Path.pregnant;
   bool _busy = false;
@@ -150,7 +163,48 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
     _llin = record?.llinSupplied;
     _hiv = record?.hivTested;
     _prevStillbirth = false;
+    _seedFromStation();
   }
+
+  /// The station only pre-fills; every box stays editable and the engines
+  /// read the boxes, never the station.
+  void _seedFromStation() {
+    final s = _station;
+    if (s == null || s.isEmpty) return;
+    void seed(TextEditingController c, String key, {int decimals = 0}) {
+      final v = s.values[key];
+      if (v == null) return;
+      c.text = decimals == 0
+          ? v.round().toString()
+          : v.toDouble().toStringAsFixed(decimals);
+    }
+
+    seed(_systolic, 'systolic');
+    seed(_diastolic, 'diastolic');
+    seed(_hb, 'haemoglobin', decimals: 1);
+    seed(_muac, 'muac_cm', decimals: 1);
+    seed(_weight, 'weight_kg', decimals: 1);
+    seed(_fundal, 'fundal_height_cm');
+    seed(_fhr, 'foetal_heart_rate');
+  }
+
+  /// The 'Measurements' card: the station's glass tiles with the boxes under
+  /// 'Edit values manually' when vitals were captured, the plain card of
+  /// boxes otherwise. The boxes themselves are identical either way.
+  Widget _measurementsCard({String? subtitle, required List<Widget> fields}) =>
+      _fromStation
+      ? CapturedVitalsCard(
+          input: input,
+          result: _station!,
+          onRetakeVital: widget.onRetakeVital,
+          manualFields: fields,
+        )
+      : SectionCard(
+          title: 'Measurements',
+          subtitle: subtitle,
+          icon: Icons.monitor_heart_outlined,
+          child: Column(children: fields),
+        );
 
   @override
   void dispose() {
@@ -184,8 +238,7 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
   }
 
   /// The gestational week from the record's LMP, or from the manual box.
-  int? get gestationalWeeks =>
-      record?.gestationalWeeks ?? parseInt(_weeks);
+  int? get gestationalWeeks => record?.gestationalWeeks ?? parseInt(_weeks);
 
   /// The day after delivery from the record, or from the manual box.
   int? get postpartumDays => record?.postpartumDays ?? parseInt(_days);
@@ -215,54 +268,19 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
       'Definitely less than I used to',
       'Hardly any',
     ],
-    [
-      'No, never',
-      'Hardly ever',
-      'Yes, sometimes',
-      'Yes, most of the time',
-    ],
-    [
-      'No, not at all',
-      'Sometimes',
-      'Yes, very often',
-      'Yes, very much indeed',
-    ],
-    [
-      'No, not at all',
-      'Sometimes',
-      'Often',
-      'Very often',
-    ],
-    [
-      'No, I coped all right',
-      'Rarely',
-      'Yes, sometimes',
-      'Most of the time',
-    ],
+    ['No, never', 'Hardly ever', 'Yes, sometimes', 'Yes, most of the time'],
+    ['No, not at all', 'Sometimes', 'Yes, very often', 'Yes, very much indeed'],
+    ['No, not at all', 'Sometimes', 'Often', 'Very often'],
+    ['No, I coped all right', 'Rarely', 'Yes, sometimes', 'Most of the time'],
     [
       'No, not at all',
       'Not very often',
       'Yes, quite often',
       'Yes, most of the time',
     ],
-    [
-      'No, not at all',
-      'Seldom',
-      'Yes, quite a lot',
-      'Yes, very often',
-    ],
-    [
-      'No, never',
-      'Only occasionally',
-      'Quite often',
-      'Most of the time',
-    ],
-    [
-      'Never',
-      'Hardly ever',
-      'Sometimes',
-      'Quite often',
-    ],
+    ['No, not at all', 'Seldom', 'Yes, quite a lot', 'Yes, very often'],
+    ['No, never', 'Only occasionally', 'Quite often', 'Most of the time'],
+    ['Never', 'Hardly ever', 'Sometimes', 'Quite often'],
   ];
 
   static const List<String> _epdsQuestions = [
@@ -287,10 +305,27 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
 
   // --------------------------------------------- Danger-sign screening
   static const _maternalGeneral = {
-    'bleeding', 'headache', 'vision', 'convulsions', 'abdoPain', 'reducedFM',
-    'noFM', 'leaking', 'fever', 'swelling', 'breathing', 'urination',
-    'vomiting', 'heavyBleeding', 'foulDischarge', 'legPain', 'breastPain',
-    'perineal', 'csWound', 'leakage', 'dizziness',
+    'bleeding',
+    'headache',
+    'vision',
+    'convulsions',
+    'abdoPain',
+    'reducedFM',
+    'noFM',
+    'leaking',
+    'fever',
+    'swelling',
+    'breathing',
+    'urination',
+    'vomiting',
+    'heavyBleeding',
+    'foulDischarge',
+    'legPain',
+    'breastPain',
+    'perineal',
+    'csWound',
+    'leakage',
+    'dizziness',
   };
 
   /// Any one of these maternal danger signs is a referral today.
@@ -357,14 +392,20 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
                   _Path.general => 'Danger-sign screen · no dedicated chart',
                 },
                 anchor: switch (_path) {
-                  _Path.pregnant => gestationalWeeks == null
-                      ? 'Gestational age not yet known'
-                      : '$gestationalWeeks weeks pregnant '
-                            '(${_trimester(gestationalWeeks!)} trimester)',
-                  _Path.delivered => postpartumDays == null
-                      ? 'Day after delivery not yet known'
-                      : 'Day $postpartumDays after delivery'
-                            '${postpartumDays! <= 1 ? ' — the highest-risk day' : postpartumDays! <= 7 ? ' — the highest-risk week' : ''}',
+                  _Path.pregnant =>
+                    gestationalWeeks == null
+                        ? 'Gestational age not yet known'
+                        : '$gestationalWeeks weeks pregnant '
+                              '(${_trimester(gestationalWeeks!)} trimester)',
+                  _Path.delivered =>
+                    postpartumDays == null
+                        ? 'Day after delivery not yet known'
+                        : 'Day $postpartumDays after delivery'
+                              '${postpartumDays! <= 1
+                                  ? ' — the highest-risk day'
+                                  : postpartumDays! <= 7
+                                  ? ' — the highest-risk week'
+                                  : ''}',
                   _Path.general =>
                     'Neither pregnant nor recently delivered — running the '
                         'danger-sign screen over her complaint',
@@ -405,19 +446,18 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
                 const SizedBox(height: Gap.lg),
               ],
 
-              if (_path == _Path.pregnant) ..._ancSections()
-              else if (_path == _Path.delivered) ..._pncSections()
-              else ..._generalSections(),
+              if (_path == _Path.pregnant)
+                ..._ancSections()
+              else if (_path == _Path.delivered)
+                ..._pncSections()
+              else
+                ..._generalSections(),
 
               const SizedBox(height: Gap.xxl),
             ],
           ),
         ),
-        RunBar(
-          busy: _busy,
-          blocked: _blocked,
-          onRun: _run,
-        ),
+        RunBar(busy: _busy, blocked: _blocked, onRun: _run),
       ],
     );
   }
@@ -462,8 +502,10 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
                 'Last menstrual period',
                 _pretty(record!.lastMenstrualPeriod),
               ),
-              _RecordLine('Gravida / Para',
-                  '${record?.gravida ?? '—'} / ${record?.parity ?? '—'}'),
+              _RecordLine(
+                'Gravida / Para',
+                '${record?.gravida ?? '—'} / ${record?.parity ?? '—'}',
+              ),
               _RecordLine('Previous losses', '${record?.previousLosses ?? 0}'),
               _RecordLine(
                 'Previous caesarean',
@@ -475,87 +517,86 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
         ),
       const SizedBox(height: Gap.lg),
 
-      SectionCard(
-        title: 'Measurements',
-        subtitle: 'Blank boxes are allowed — the engine says what it could not '
+      _measurementsCard(
+        subtitle:
+            'Blank boxes are allowed — the engine says what it could not '
             'check, instead of pretending it did.',
-        icon: Icons.monitor_heart_outlined,
-        child: Column(
-          children: [
-            MeasurePair(
-              left: MeasureField(
-                label: 'Systolic BP',
-                controller: _systolic,
-                unit: 'mmHg',
-                cutoff: 'High ≥140 · severe ≥160',
-                example: 'e.g. 120',
-              ),
-              right: MeasureField(
-                label: 'Diastolic BP',
-                controller: _diastolic,
-                unit: 'mmHg',
-                cutoff: 'High ≥90 · severe ≥110',
-                example: 'e.g. 80',
-              ),
+        fields: [
+          MeasurePair(
+            left: MeasureField(
+              label: 'Systolic BP',
+              controller: _systolic,
+              unit: 'mmHg',
+              cutoff: 'High ≥140 · severe ≥160',
+              example: 'e.g. 120',
             ),
-            MeasurePair(
-              left: MeasureField(
-                label: 'Haemoglobin',
-                controller: _hb,
-                unit: 'g/dL',
-                cutoff: 'Anaemia <11 · severe <7',
-                example: 'e.g. 11.5',
-              ),
-              right: MeasureField(
-                label: 'MUAC',
-                controller: _muac,
-                unit: 'cm',
-                cutoff: 'Undernutrition <23 in pregnancy',
-                example: 'e.g. 24.5',
-              ),
+            right: MeasureField(
+              label: 'Diastolic BP',
+              controller: _diastolic,
+              unit: 'mmHg',
+              cutoff: 'High ≥90 · severe ≥110',
+              example: 'e.g. 80',
             ),
-            MeasurePair(
-              left: MeasureField(
-                label: 'Weight',
-                controller: _weight,
-                unit: 'kg',
-                decimal: true,
-                example: 'e.g. 62.5',
-              ),
-              right: MeasureField(
-                label: 'Fundal height',
-                controller: _fundal,
-                unit: 'cm',
-                cutoff: 'Should roughly match the week from ~20 wks',
-                example: 'e.g. 28',
-              ),
+          ),
+          MeasurePair(
+            left: MeasureField(
+              label: 'Haemoglobin',
+              controller: _hb,
+              unit: 'g/dL',
+              cutoff: 'Anaemia <11 · severe <7',
+              example: 'e.g. 11.5',
             ),
-            MeasurePair(
-              left: MeasureField(
-                label: 'Foetal heart rate',
-                controller: _fhr,
-                unit: 'bpm',
-                cutoff: 'Normal 120–160',
-                example: 'e.g. 140',
-              ),
-              right: ChoiceChipsField<int>(
-                label: 'Protein in urine',
-                why: 'With high BP this separates gestational hypertension '
-                    'from pre-eclampsia.',
-                options: const [0, 1, 2, 3, 4],
-                labelOf: (v) => v == 0 ? 'Nil' : '+$v',
-                value: _proteinuria,
-                onChanged: (v) => setState(() => _proteinuria = v),
-              ),
+            right: MeasureField(
+              label: 'MUAC',
+              controller: _muac,
+              unit: 'cm',
+              cutoff: 'Undernutrition <23 in pregnancy',
+              example: 'e.g. 24.5',
             ),
-          ],
-        ),
+          ),
+          MeasurePair(
+            left: MeasureField(
+              label: 'Weight',
+              controller: _weight,
+              unit: 'kg',
+              decimal: true,
+              example: 'e.g. 62.5',
+            ),
+            right: MeasureField(
+              label: 'Fundal height',
+              controller: _fundal,
+              unit: 'cm',
+              cutoff: 'Should roughly match the week from ~20 wks',
+              example: 'e.g. 28',
+            ),
+          ),
+          MeasurePair(
+            left: MeasureField(
+              label: 'Foetal heart rate',
+              controller: _fhr,
+              unit: 'bpm',
+              cutoff: 'Normal 120–160',
+              example: 'e.g. 140',
+            ),
+            right: ChoiceChipsField<int>(
+              label: 'Protein in urine',
+              why:
+                  'With high BP this separates gestational hypertension '
+                  'from pre-eclampsia.',
+              options: const [0, 1, 2, 3, 4],
+              labelOf: (v) => v == 0 ? 'Nil' : '+$v',
+              value: _proteinuria,
+              onChanged: (v) => setState(() => _proteinuria = v),
+            ),
+          ),
+        ],
       ),
       const SizedBox(height: Gap.lg),
 
       SectionCard(
         title: 'Danger signs',
-        subtitle: 'Tick every sign that is present — more than one can be '
+        subtitle:
+            'Tick every sign that is present — more than one can be '
             'present at once, and the list stays open. Any one of them is a '
             'referral today. Off means asked and absent — do not tick off '
             'what was not asked.',
@@ -586,7 +627,8 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
 
       SectionCard(
         title: 'History the chart needs',
-        subtitle: 'Two things the registration form does not ask, because they '
+        subtitle:
+            'Two things the registration form does not ask, because they '
             'only matter once she is pregnant.',
         icon: Icons.history_outlined,
         child: Column(
@@ -616,7 +658,8 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
 
       SectionCard(
         title: 'Coverage so far',
-        subtitle: 'What the record shows, corrected if today\u2019s visit '
+        subtitle:
+            'What the record shows, corrected if today\u2019s visit '
             'changes it.',
         icon: Icons.shield_outlined,
         child: Column(
@@ -730,7 +773,8 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
           children: [
             ChoiceChipsField<int>(
               label: 'Protein',
-              why: 'With high BP this separates gestational hypertension '
+              why:
+                  'With high BP this separates gestational hypertension '
                   'from pre-eclampsia.',
               options: const [0, 1, 2, 3, 4],
               labelOf: (v) => v == 0 ? 'Nil' : '+$v',
@@ -792,72 +836,87 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
               danger: false,
               allowUnknown: false,
               value: _pmhx.contains('prev_hypertension'),
-              onChanged: (v) => setState(() => v == true
-                  ? _pmhx.add('prev_hypertension')
-                  : _pmhx.remove('prev_hypertension')),
+              onChanged: (v) => setState(
+                () => v == true
+                    ? _pmhx.add('prev_hypertension')
+                    : _pmhx.remove('prev_hypertension'),
+              ),
             ),
             DangerSign(
               label: 'Previous diabetes',
               danger: false,
               allowUnknown: false,
               value: _pmhx.contains('prev_diabetes'),
-              onChanged: (v) => setState(() => v == true
-                  ? _pmhx.add('prev_diabetes')
-                  : _pmhx.remove('prev_diabetes')),
+              onChanged: (v) => setState(
+                () => v == true
+                    ? _pmhx.add('prev_diabetes')
+                    : _pmhx.remove('prev_diabetes'),
+              ),
             ),
             DangerSign(
               label: 'Previous anaemia',
               danger: false,
               allowUnknown: false,
               value: _pmhx.contains('prev_anaemia'),
-              onChanged: (v) => setState(() => v == true
-                  ? _pmhx.add('prev_anaemia')
-                  : _pmhx.remove('prev_anaemia')),
+              onChanged: (v) => setState(
+                () => v == true
+                    ? _pmhx.add('prev_anaemia')
+                    : _pmhx.remove('prev_anaemia'),
+              ),
             ),
             DangerSign(
               label: 'Previous tuberculosis (TB)',
               danger: false,
               allowUnknown: false,
               value: _pmhx.contains('prev_tb'),
-              onChanged: (v) => setState(() => v == true
-                  ? _pmhx.add('prev_tb')
-                  : _pmhx.remove('prev_tb')),
+              onChanged: (v) => setState(
+                () =>
+                    v == true ? _pmhx.add('prev_tb') : _pmhx.remove('prev_tb'),
+              ),
             ),
             DangerSign(
               label: 'Asthma',
               danger: false,
               allowUnknown: false,
               value: _pmhx.contains('prev_asthma'),
-              onChanged: (v) => setState(() => v == true
-                  ? _pmhx.add('prev_asthma')
-                  : _pmhx.remove('prev_asthma')),
+              onChanged: (v) => setState(
+                () => v == true
+                    ? _pmhx.add('prev_asthma')
+                    : _pmhx.remove('prev_asthma'),
+              ),
             ),
             DangerSign(
               label: 'Heart disease',
               danger: false,
               allowUnknown: false,
               value: _pmhx.contains('prev_heart_disease'),
-              onChanged: (v) => setState(() => v == true
-                  ? _pmhx.add('prev_heart_disease')
-                  : _pmhx.remove('prev_heart_disease')),
+              onChanged: (v) => setState(
+                () => v == true
+                    ? _pmhx.add('prev_heart_disease')
+                    : _pmhx.remove('prev_heart_disease'),
+              ),
             ),
             DangerSign(
               label: 'Kidney disease',
               danger: false,
               allowUnknown: false,
               value: _pmhx.contains('prev_kidney_disease'),
-              onChanged: (v) => setState(() => v == true
-                  ? _pmhx.add('prev_kidney_disease')
-                  : _pmhx.remove('prev_kidney_disease')),
+              onChanged: (v) => setState(
+                () => v == true
+                    ? _pmhx.add('prev_kidney_disease')
+                    : _pmhx.remove('prev_kidney_disease'),
+              ),
             ),
             DangerSign(
               label: 'Hepatitis',
               danger: false,
               allowUnknown: false,
               value: _pmhx.contains('prev_hepatitis'),
-              onChanged: (v) => setState(() => v == true
-                  ? _pmhx.add('prev_hepatitis')
-                  : _pmhx.remove('prev_hepatitis')),
+              onChanged: (v) => setState(
+                () => v == true
+                    ? _pmhx.add('prev_hepatitis')
+                    : _pmhx.remove('prev_hepatitis'),
+              ),
             ),
           ],
         ),
@@ -947,70 +1006,68 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
           controller: _complaint,
           maxLines: 2,
           decoration: const InputDecoration(
-            hintText: 'e.g. headache since the delivery, burning when urinating',
+            hintText:
+                'e.g. headache since the delivery, burning when urinating',
           ),
         ),
       ),
       const SizedBox(height: Gap.lg),
 
-      SectionCard(
-        title: 'Measurements',
-        subtitle: 'Blank boxes are allowed — the engine says what it could not '
+      _measurementsCard(
+        subtitle:
+            'Blank boxes are allowed — the engine says what it could not '
             'check.',
-        icon: Icons.monitor_heart_outlined,
-        child: Column(
-          children: [
-            MeasurePair(
-              left: MeasureField(
-                label: 'Systolic BP',
-                controller: _systolic,
-                unit: 'mmHg',
-                cutoff: 'High ≥140 · severe ≥160',
-                example: 'e.g. 120',
-              ),
-              right: MeasureField(
-                label: 'Diastolic BP',
-                controller: _diastolic,
-                unit: 'mmHg',
-                cutoff: 'High ≥90 · severe ≥110',
-                example: 'e.g. 80',
-              ),
+        fields: [
+          MeasurePair(
+            left: MeasureField(
+              label: 'Systolic BP',
+              controller: _systolic,
+              unit: 'mmHg',
+              cutoff: 'High ≥140 · severe ≥160',
+              example: 'e.g. 120',
             ),
-            MeasurePair(
-              left: MeasureField(
-                label: 'Temperature',
-                controller: _temp,
-                unit: '°C',
-                decimal: true,
-                cutoff: 'Fever ≥38.0',
-                example: 'e.g. 36.8',
-              ),
-              right: MeasureField(
-                label: 'Pulse',
-                controller: _pulse,
-                unit: 'bpm',
-                cutoff: 'Fast >110',
-                example: 'e.g. 80',
-              ),
+            right: MeasureField(
+              label: 'Diastolic BP',
+              controller: _diastolic,
+              unit: 'mmHg',
+              cutoff: 'High ≥90 · severe ≥110',
+              example: 'e.g. 80',
             ),
-            MeasurePair(
-              left: MeasureField(
-                label: 'Haemoglobin',
-                controller: _hb,
-                unit: 'g/dL',
-                cutoff: 'Anaemia <11 · severe <7',
-                example: 'e.g. 11.5',
-              ),
-              right: MeasureField(
-                label: 'MUAC',
-                controller: _muac,
-                unit: 'cm',
-                cutoff: 'Undernutrition <23 while breastfeeding',
-                example: 'e.g. 24.5',
-              ),
+          ),
+          MeasurePair(
+            left: MeasureField(
+              label: 'Temperature',
+              controller: _temp,
+              unit: '°C',
+              decimal: true,
+              cutoff: 'Fever ≥38.0',
+              example: 'e.g. 36.8',
             ),
-          ],
-        ),
+            right: MeasureField(
+              label: 'Pulse',
+              controller: _pulse,
+              unit: 'bpm',
+              cutoff: 'Fast >110',
+              example: 'e.g. 80',
+            ),
+          ),
+          MeasurePair(
+            left: MeasureField(
+              label: 'Haemoglobin',
+              controller: _hb,
+              unit: 'g/dL',
+              cutoff: 'Anaemia <11 · severe <7',
+              example: 'e.g. 11.5',
+            ),
+            right: MeasureField(
+              label: 'MUAC',
+              controller: _muac,
+              unit: 'cm',
+              cutoff: 'Undernutrition <23 while breastfeeding',
+              example: 'e.g. 24.5',
+            ),
+          ),
+        ],
       ),
       const SizedBox(height: Gap.lg),
 
@@ -1097,9 +1154,15 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.only(bottom: Gap.md, left: Gap.sm, right: Gap.sm),
+                padding: const EdgeInsets.only(
+                  bottom: Gap.md,
+                  left: Gap.sm,
+                  right: Gap.sm,
+                ),
                 child: Text(
-                  _epds[q] == null ? 'Not answered' : _epdsCaption(q, _epds[q]!),
+                  _epds[q] == null
+                      ? 'Not answered'
+                      : _epdsCaption(q, _epds[q]!),
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.inkMuted,
@@ -1237,33 +1300,41 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
               danger: false,
               allowUnknown: false,
               value: _woundFlags.contains('episiotomy_or_laceration'),
-              onChanged: (v) => setState(() => v == true
-                  ? _woundFlags.add('episiotomy_or_laceration')
-                  : _woundFlags.remove('episiotomy_or_laceration')),
+              onChanged: (v) => setState(
+                () => v == true
+                    ? _woundFlags.add('episiotomy_or_laceration')
+                    : _woundFlags.remove('episiotomy_or_laceration'),
+              ),
             ),
             DangerSign(
               label: 'Wound redness',
               value: _woundFlags.contains('wound_redness'),
               allowUnknown: true,
-              onChanged: (v) => setState(() => v == true
-                  ? _woundFlags.add('wound_redness')
-                  : _woundFlags.remove('wound_redness')),
+              onChanged: (v) => setState(
+                () => v == true
+                    ? _woundFlags.add('wound_redness')
+                    : _woundFlags.remove('wound_redness'),
+              ),
             ),
             DangerSign(
               label: 'Wound oedema / swelling',
               value: _woundFlags.contains('wound_oedema'),
               allowUnknown: true,
-              onChanged: (v) => setState(() => v == true
-                  ? _woundFlags.add('wound_oedema')
-                  : _woundFlags.remove('wound_oedema')),
+              onChanged: (v) => setState(
+                () => v == true
+                    ? _woundFlags.add('wound_oedema')
+                    : _woundFlags.remove('wound_oedema'),
+              ),
             ),
             DangerSign(
               label: 'Wound discharge / pus',
               value: _woundFlags.contains('wound_discharge'),
               allowUnknown: true,
-              onChanged: (v) => setState(() => v == true
-                  ? _woundFlags.add('wound_discharge')
-                  : _woundFlags.remove('wound_discharge')),
+              onChanged: (v) => setState(
+                () => v == true
+                    ? _woundFlags.add('wound_discharge')
+                    : _woundFlags.remove('wound_discharge'),
+              ),
             ),
             DangerSign(
               label: 'Wound edges well approximated (closed)',
@@ -1285,26 +1356,32 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
               label: 'Nipples cracked',
               value: _breastFlags.contains('nipples_cracked'),
               allowUnknown: true,
-              onChanged: (v) => setState(() => v == true
-                  ? _breastFlags.add('nipples_cracked')
-                  : _breastFlags.remove('nipples_cracked')),
+              onChanged: (v) => setState(
+                () => v == true
+                    ? _breastFlags.add('nipples_cracked')
+                    : _breastFlags.remove('nipples_cracked'),
+              ),
             ),
             DangerSign(
               label: 'Nipples inverted',
               danger: false,
               allowUnknown: true,
               value: _breastFlags.contains('nipples_inverted'),
-              onChanged: (v) => setState(() => v == true
-                  ? _breastFlags.add('nipples_inverted')
-                  : _breastFlags.remove('nipples_inverted')),
+              onChanged: (v) => setState(
+                () => v == true
+                    ? _breastFlags.add('nipples_inverted')
+                    : _breastFlags.remove('nipples_inverted'),
+              ),
             ),
             DangerSign(
               label: 'Breast mastitis signs (red/hot/tender lump)',
               value: _breastFlags.contains('breast_mastitis_signs'),
               allowUnknown: true,
-              onChanged: (v) => setState(() => v == true
-                  ? _breastFlags.add('breast_mastitis_signs')
-                  : _breastFlags.remove('breast_mastitis_signs')),
+              onChanged: (v) => setState(
+                () => v == true
+                    ? _breastFlags.add('breast_mastitis_signs')
+                    : _breastFlags.remove('breast_mastitis_signs'),
+              ),
             ),
             DangerSign(
               label: 'Attachment to breast is OK',
@@ -1347,7 +1424,8 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
               ),
               DangerSign(
                 label: 'Giving the baby water or other foods',
-                why: 'Before 6 months this displaces breast milk and carries '
+                why:
+                    'Before 6 months this displaces breast milk and carries '
                     'infection.',
                 value: _otherFoods,
                 onChanged: (v) => setState(() => _otherFoods = v ?? false),
@@ -1426,46 +1504,42 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
       ),
     ),
     const SizedBox(height: Gap.lg),
-    SectionCard(
-      title: 'Measurements',
-      icon: Icons.monitor_heart_outlined,
-      child: Column(
-        children: [
-          MeasurePair(
-            left: MeasureField(
-              label: 'Systolic BP',
-              controller: _systolic,
-              unit: 'mmHg',
-              cutoff: 'High ≥140 · severe ≥160',
-              example: 'e.g. 120',
-            ),
-            right: MeasureField(
-              label: 'Diastolic BP',
-              controller: _diastolic,
-              unit: 'mmHg',
-              cutoff: 'High ≥90 · severe ≥110',
-              example: 'e.g. 80',
-            ),
+    _measurementsCard(
+      fields: [
+        MeasurePair(
+          left: MeasureField(
+            label: 'Systolic BP',
+            controller: _systolic,
+            unit: 'mmHg',
+            cutoff: 'High ≥140 · severe ≥160',
+            example: 'e.g. 120',
           ),
-          MeasurePair(
-            left: MeasureField(
-              label: 'Temperature',
-              controller: _temp,
-              unit: '°C',
-              decimal: true,
-              cutoff: 'Fever ≥38.0',
-              example: 'e.g. 36.8',
-            ),
-            right: MeasureField(
-              label: 'Haemoglobin',
-              controller: _hb,
-              unit: 'g/dL',
-              cutoff: 'Anaemia <11',
-              example: 'e.g. 11.5',
-            ),
+          right: MeasureField(
+            label: 'Diastolic BP',
+            controller: _diastolic,
+            unit: 'mmHg',
+            cutoff: 'High ≥90 · severe ≥110',
+            example: 'e.g. 80',
           ),
-        ],
-      ),
+        ),
+        MeasurePair(
+          left: MeasureField(
+            label: 'Temperature',
+            controller: _temp,
+            unit: '°C',
+            decimal: true,
+            cutoff: 'Fever ≥38.0',
+            example: 'e.g. 36.8',
+          ),
+          right: MeasureField(
+            label: 'Haemoglobin',
+            controller: _hb,
+            unit: 'g/dL',
+            cutoff: 'Anaemia <11',
+            example: 'e.g. 11.5',
+          ),
+        ),
+      ],
     ),
     const SizedBox(height: Gap.lg),
     SectionCard(
@@ -1719,6 +1793,7 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
     'syphilis_tested': _syphilis,
     'birth_plan': _birthPlan,
     'planned_delivery_place': _plannedPlace?.name,
+    ...stationInputs(_station),
   };
 
   Map<String, Object?> _postpartumInputs() => {
@@ -1766,6 +1841,7 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
     'iron_folate': _iron,
     'vitamin_a': _vitA,
     'pnc_contacts_completed': _pncContacts,
+    ...stationInputs(_station),
   };
 
   Map<String, Object?> _generalInputs() => {
@@ -1778,18 +1854,28 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
     'danger_signs': _signs.toList()..sort(),
     'sad_most_days': _sad,
     'thoughts_of_self_harm': _selfHarm,
+    ...stationInputs(_station),
   };
 
   String _trimester(int weeks) =>
       weeks < 13 ? '1st' : (weeks < 28 ? '2nd' : '3rd');
 
-  String _pretty(DateTime? d) => d == null
-      ? '—'
-      : '${d.day} ${_months[d.month - 1]} ${d.year}';
+  String _pretty(DateTime? d) =>
+      d == null ? '—' : '${d.day} ${_months[d.month - 1]} ${d.year}';
 
   static const _months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
 }
 

@@ -149,8 +149,8 @@ abstract final class ServerAuthClient {
     required String phone,
     required String pin,
   }) async {
-    final base = await PreferencesStore.syncApiUrl();
-    if (base == null || base.isEmpty) {
+    final base = await PreferencesStore.effectiveSyncApiUrl();
+    if (base.isEmpty) {
       return const ServerAuthResult.err(
         'No sync server URL is configured. Use the demo mode or configure a server.',
       );
@@ -251,9 +251,9 @@ abstract final class ServerAuthClient {
 
   // ------------------------------------------------------------------- refresh
   static Future<ServerAuthResult> refreshAccessToken() async {
-    final base = await PreferencesStore.syncApiUrl();
+    final base = await PreferencesStore.effectiveSyncApiUrl();
     final t = await loadTokens();
-    if (base == null || base.isEmpty || t == null) {
+    if (base.isEmpty || t == null) {
       return const ServerAuthResult.err('Nothing to refresh.');
     }
     try {
@@ -309,8 +309,8 @@ abstract final class ServerAuthClient {
   /// the credential is not recognised, or the network is down — the caller
   /// renders each of those as exactly what it is, never a guess.
   static Future<Map<String, dynamic>?> currentUserProfile() async {
-    final base = await PreferencesStore.syncApiUrl();
-    if (base == null || base.isEmpty) return null;
+    final base = await PreferencesStore.effectiveSyncApiUrl();
+    if (base.isEmpty) return null;
     final auth = await pickAuthorization();
     if (auth == null) return null;
     try {
@@ -333,9 +333,9 @@ abstract final class ServerAuthClient {
 
   // ------------------------------------------------------------------ logout
   static Future<void> signOut({bool allDevices = false}) async {
-    final base = await PreferencesStore.syncApiUrl();
+    final base = await PreferencesStore.effectiveSyncApiUrl();
     final t = await loadTokens();
-    if (base != null && base.isNotEmpty && t != null) {
+    if (base.isNotEmpty && t != null) {
       try {
         await PlatformHttpClient.post(
           Uri.parse('$base/api/auth/logout'),

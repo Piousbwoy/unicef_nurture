@@ -1,249 +1,253 @@
 /// AI Insight Card - Glassmorphism Design
-/// Displays AI risk prediction with confidence and explainability
-/// Part of the CareBridge Premium Design System
+///
+/// The on-device model's voice on the result page: the continuous acuity
+/// index, its 95% band, the patient-specific narrative it generated, the
+/// feature attributions behind the number, and what would change it.
+/// Fed entirely by [ClinicalReasoning] — every sentence and every number on
+/// this card is derived from THIS patient's measurements, so two patients
+/// with similar-but-different records never read identically.
+///
+/// The card explains and grades; the protocol verdict governs care. It
+/// never issues treatment or referral instructions.
+/// Part of the CareBridge Premium Design System.
+library;
 
 import 'package:flutter/material.dart';
-import '../../../../core/theme/premium_design_tokens.dart';
+
+import '../../../core/ml/clinical_reasoning_engine.dart';
+import '../../../core/theme/glass.dart';
+import '../../../core/theme/premium_design_tokens.dart';
 
 class AiInsightCard extends StatelessWidget {
   const AiInsightCard({
     super.key,
-    required this.riskProbability,
-    this.confidenceInterval,
-    this.confidenceLevel = ConfidenceLevel.medium,
-    this.topFeatures = const [],
-    this.driftDetected = false,
+    required this.reasoning,
     this.onExplainTapped,
     this.animationDuration = PremiumDesignTokens.standardTransition,
   });
 
-  /// Risk probability (0.0 - 1.0)
-  final double riskProbability;
-
-  /// 95% confidence interval [lower, upper]
-  final List<double>? confidenceInterval;
-
-  /// Confidence level based on data quality
-  final ConfidenceLevel confidenceLevel;
-
-  /// Top 3 features driving the prediction
-  final List<FeatureImportance> topFeatures;
-
-  /// Whether drift was detected (reduces confidence)
-  final bool driftDetected;
-
-  /// Callback when user taps "Explain"
+  final ClinicalReasoning reasoning;
   final VoidCallback? onExplainTapped;
-
   final Duration animationDuration;
 
-  String get _riskLabel {
-    if (riskProbability >= 0.8) return 'Very High Risk';
-    if (riskProbability >= 0.6) return 'High Risk';
-    if (riskProbability >= 0.4) return 'Moderate Risk';
-    if (riskProbability >= 0.2) return 'Low Risk';
-    return 'Very Low Risk';
-  }
-
-  Color get _riskColor {
-    if (riskProbability >= 0.7) return PremiumDesignTokens.urgent;
-    if (riskProbability >= 0.4) return PremiumDesignTokens.watch;
+  Color get _indexColor {
+    final v = reasoning.acuityIndex;
+    if (v >= 65) return PremiumDesignTokens.urgent;
+    if (v >= 40) return PremiumDesignTokens.watch;
     return PremiumDesignTokens.routine;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: PremiumDesignTokens.glassCard(),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Stack(
-          children: [
-            // Gradient overlay based on risk
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      _riskColor.withOpacity(0.08),
-                      Colors.transparent,
-                    ],
-                  ),
+    final color = _indexColor;
+    return GlassSurface(
+      blur: false,
+      padding: EdgeInsets.zero,
+      child: Stack(
+        children: [
+          // Gradient overlay tinted by the index band.
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [color.withValues(alpha: 0.08), Colors.transparent],
                 ),
               ),
             ),
-
-            // Content
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header row with icon and badge
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: _riskColor.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          Icons.psychology,
-                          color: _riskColor,
-                          size: 24,
-                        ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Header row: identity + confidence badge ─────────────
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'AI Assessment',
-                              style: PremiumDesignTokens.headlineSmall.copyWith(
-                                color: PremiumDesignTokens.neutral800,
-                              ),
+                      child: Icon(Icons.psychology, color: color, size: 24),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'On-device AI assessment',
+                            style: PremiumDesignTokens.headlineSmall.copyWith(
+                              color: PremiumDesignTokens.neutral800,
                             ),
-                            const SizedBox(height: 2),
-                            _ConfidenceBadge(
-                              level: confidenceLevel,
-                              driftDetected: driftDetected,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Risk probability with gauge
-                  _RiskGauge(
-                    probability: riskProbability,
-                    label: _riskLabel,
-                    color: _riskColor,
-                  ),
-
-                  // Confidence interval
-                  if (confidenceInterval != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      '95% Confidence: ${(confidenceInterval![0] * 100).toStringAsFixed(0)}–${(confidenceInterval![1] * 100).toStringAsFixed(0)}%',
-                      style: PremiumDesignTokens.bodyMedium.copyWith(
-                        color: PremiumDesignTokens.neutral500,
+                          ),
+                          const SizedBox(height: 2),
+                          _ConfidenceBadge(
+                            confidencePct: reasoning.confidencePct,
+                            color: color,
+                          ),
+                        ],
                       ),
                     ),
                   ],
+                ),
 
-                  // Drift warning
-                  if (driftDetected) ...[
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: PremiumDesignTokens.watchLight,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: PremiumDesignTokens.watch.withOpacity(0.3),
+                const SizedBox(height: 20),
+
+                // ── The index, its band and its band ─────────────────────
+                _AcuityGauge(
+                  index: reasoning.acuityIndex,
+                  band: reasoning.bandLabel,
+                  color: color,
+                ),
+
+                const SizedBox(height: 10),
+                // Wrap, not Row: the chips must fold onto a second line on
+                // narrow screens at large text scales instead of
+                // overflowing.
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    _StatChip(
+                      label:
+                          '95% band ${reasoning.ci95.lo.round()}–'
+                          '${reasoning.ci95.hi.round()}',
+                    ),
+                    _StatChip(label: 'Confidence ${reasoning.confidencePct}%'),
+                  ],
+                ),
+
+                // ── The narrative: the model speaking about THIS patient ──
+                const SizedBox(height: 18),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: PremiumDesignTokens.neutral50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: PremiumDesignTokens.neutral200,
+                    ),
+                  ),
+                  child: Text(
+                    reasoning.narrative,
+                    style: PremiumDesignTokens.bodyMedium.copyWith(
+                      color: PremiumDesignTokens.neutral800,
+                      height: 1.55,
+                    ),
+                  ),
+                ),
+
+                // ── Feature attributions ─────────────────────────────────
+                if (reasoning.contributions.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'What moves the number',
+                        style: PremiumDesignTokens.headlineSmall.copyWith(
+                          color: PremiumDesignTokens.neutral800,
                         ),
                       ),
+                      if (onExplainTapped != null)
+                        TextButton(
+                          onPressed: onExplainTapped,
+                          child: Text(
+                            'Details',
+                            style: PremiumDesignTokens.labelLarge.copyWith(
+                              color: PremiumDesignTokens.primary,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ...reasoning.contributions
+                      .take(3)
+                      .map(
+                        (c) => _ContributionBar(
+                          label: c.label,
+                          measured: c.measured,
+                          points: c.points,
+                          maxPoints: reasoning.contributions.first.points,
+                          color: color,
+                        ),
+                      ),
+                ],
+
+                // ── What would change this ───────────────────────────────
+                if (reasoning.whatWouldChangeThis.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  Text(
+                    'What would change this read',
+                    style: PremiumDesignTokens.headlineSmall.copyWith(
+                      color: PremiumDesignTokens.neutral800,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final change in reasoning.whatWouldChangeThis)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Icon(
-                            Icons.warning_amber_rounded,
-                            color: PremiumDesignTokens.watch,
-                            size: 20,
+                            Icons.cached_rounded,
+                            size: 15,
+                            color: PremiumDesignTokens.primary,
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Input outside training range. Rely on clinical judgment.',
+                              change,
                               style: PremiumDesignTokens.bodyMedium.copyWith(
                                 color: PremiumDesignTokens.neutral700,
+                                height: 1.45,
                               ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ],
-
-                  // Explainability section
-                  if (topFeatures.isNotEmpty) ...[
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Why this risk?',
-                          style: PremiumDesignTokens.headlineSmall.copyWith(
-                            color: PremiumDesignTokens.neutral800,
-                          ),
-                        ),
-                        if (onExplainTapped != null)
-                          TextButton(
-                            onPressed: onExplainTapped,
-                            child: Text(
-                              'Details',
-                              style: PremiumDesignTokens.labelLarge.copyWith(
-                                color: PremiumDesignTokens.primary,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    ...topFeatures.take(3).map((feature) => _FeatureBar(
-                          feature: feature,
-                          maxImpact: topFeatures.first.impact,
-                        )),
-                  ],
                 ],
-              ),
+
+                const SizedBox(height: 16),
+                Text(
+                  'Generated on-device from this visit’s measurements. It '
+                  'explains and grades — the protocol verdict above governs '
+                  'treatment and referral.',
+                  style: PremiumDesignTokens.labelMedium.copyWith(
+                    color: PremiumDesignTokens.neutral500,
+                    height: 1.45,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Confidence level badge
+/// Confidence badge driven by the model's data-quality arithmetic.
 class _ConfidenceBadge extends StatelessWidget {
-  const _ConfidenceBadge({
-    required this.level,
-    required this.driftDetected,
-  });
+  const _ConfidenceBadge({required this.confidencePct, required this.color});
 
-  final ConfidenceLevel level;
-  final bool driftDetected;
-
-  Color get _color {
-    if (driftDetected) return PremiumDesignTokens.watch;
-    switch (level) {
-      case ConfidenceLevel.high:
-        return PremiumDesignTokens.routine;
-      case ConfidenceLevel.medium:
-        return PremiumDesignTokens.watch;
-      case ConfidenceLevel.low:
-        return PremiumDesignTokens.urgent;
-    }
-  }
-
-  String get _label {
-    if (driftDetected) return 'Low Confidence';
-    return '${level.name[0].toUpperCase()}${level.name.substring(1)} Confidence';
-  }
+  final int confidencePct;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: _color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -253,16 +257,14 @@ class _ConfidenceBadge extends StatelessWidget {
             width: 6,
             height: 6,
             decoration: BoxDecoration(
-              color: _color,
+              color: color,
               borderRadius: BorderRadius.circular(3),
             ),
           ),
           const SizedBox(width: 6),
           Text(
-            _label,
-            style: PremiumDesignTokens.labelSmall.copyWith(
-              color: _color,
-            ),
+            '$confidencePct% confidence',
+            style: PremiumDesignTokens.labelSmall.copyWith(color: color),
           ),
         ],
       ),
@@ -270,80 +272,73 @@ class _ConfidenceBadge extends StatelessWidget {
   }
 }
 
-/// Animated risk gauge with progress indicator
-class _RiskGauge extends StatelessWidget {
-  const _RiskGauge({
-    required this.probability,
-    required this.label,
+/// The continuous acuity index, rendered as a gradient progress gauge.
+class _AcuityGauge extends StatelessWidget {
+  const _AcuityGauge({
+    required this.index,
+    required this.band,
     required this.color,
   });
 
-  final double probability;
-  final String label;
+  final double index;
+  final String band;
   final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GlassSurface(
+      tier: GlassTier.chip,
+      blur: false,
+      shadow: false,
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: PremiumDesignTokens.neutral50,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: PremiumDesignTokens.neutral200,
-        ),
-      ),
       child: Column(
         children: [
-          // Probability text
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${(probability * 100).toStringAsFixed(0)}',
-                style: PremiumDesignTokens.displayLarge.copyWith(
-                  color: color,
-                  fontSize: 56,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  '%',
-                  style: PremiumDesignTokens.headlineMedium.copyWith(
-                    color: color.withOpacity(0.8),
+          // FittedBox: the big number and its unit keep their natural size
+          // on wide screens and scale down together on narrow ones, instead
+          // of overflowing a fixed-width row.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  index.round().toString(),
+                  style: PremiumDesignTokens.displayLarge.copyWith(
+                    color: color,
+                    fontSize: 56,
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 4),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    '/ 100 acuity',
+                    style: PremiumDesignTokens.headlineMedium.copyWith(
+                      color: color.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-
           const SizedBox(height: 8),
-
-          // Risk label
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              label,
-              style: PremiumDesignTokens.labelLarge.copyWith(
-                color: color,
-              ),
+              band,
+              style: PremiumDesignTokens.labelLarge.copyWith(color: color),
             ),
           ),
-
           const SizedBox(height: 16),
-
-          // Progress bar
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: probability,
+              value: index / 100,
               backgroundColor: PremiumDesignTokens.neutral200,
               valueColor: AlwaysStoppedAnimation<Color>(color),
               minHeight: 8,
@@ -355,20 +350,25 @@ class _RiskGauge extends StatelessWidget {
   }
 }
 
-/// Feature importance bar for explainability
-class _FeatureBar extends StatelessWidget {
-  const _FeatureBar({
-    required this.feature,
-    required this.maxImpact,
+/// One attribution: label + measured value, signed bar sized by points.
+class _ContributionBar extends StatelessWidget {
+  const _ContributionBar({
+    required this.label,
+    required this.measured,
+    required this.points,
+    required this.maxPoints,
+    required this.color,
   });
 
-  final FeatureImportance feature;
-  final double maxImpact;
+  final String label;
+  final String measured;
+  final double points;
+  final double maxPoints;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final ratio = (feature.impact.abs() / maxImpact).clamp(0.0, 1.0);
-
+    final ratio = maxPoints <= 0 ? 0.0 : (points / maxPoints).clamp(0.0, 1.0);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -378,18 +378,16 @@ class _FeatureBar extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  feature.name,
+                  '$label — $measured',
                   style: PremiumDesignTokens.bodyMedium.copyWith(
                     color: PremiumDesignTokens.neutral700,
                   ),
                 ),
               ),
               Text(
-                feature.impact > 0 ? '+${(feature.impact * 100).toStringAsFixed(0)}%' : '${(feature.impact * 100).toStringAsFixed(0)}%',
+                '+${points.toStringAsFixed(1)}',
                 style: PremiumDesignTokens.bodyMedium.copyWith(
-                  color: feature.impact > 0
-                      ? PremiumDesignTokens.urgent
-                      : PremiumDesignTokens.routine,
+                  color: color,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -401,11 +399,7 @@ class _FeatureBar extends StatelessWidget {
             child: LinearProgressIndicator(
               value: ratio,
               backgroundColor: PremiumDesignTokens.neutral200,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                feature.impact > 0
-                    ? PremiumDesignTokens.urgent
-                    : PremiumDesignTokens.routine,
-              ),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
               minHeight: 6,
             ),
           ),
@@ -415,16 +409,25 @@ class _FeatureBar extends StatelessWidget {
   }
 }
 
-/// Confidence level enum
-enum ConfidenceLevel { high, medium, low }
+/// One small stat pill on the index row.
+class _StatChip extends StatelessWidget {
+  const _StatChip({required this.label});
 
-/// Feature importance model
-class FeatureImportance {
-  const FeatureImportance({
-    required this.name,
-    required this.impact,
-  });
+  final String label;
 
-  final String name;
-  final double impact;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: PremiumDesignTokens.neutral100,
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Text(
+      label,
+      style: PremiumDesignTokens.labelMedium.copyWith(
+        color: PremiumDesignTokens.neutral600,
+        fontWeight: FontWeight.w700,
+      ),
+    ),
+  );
 }

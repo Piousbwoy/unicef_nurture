@@ -69,6 +69,89 @@ abstract final class AppColors {
   static const Color offline = Color(0xFF6B4FA8);
   static const Color offlineBg = Color(0xFFF1EDF8);
   static const Color info = Color(0xFF1B56DB);
+
+  // ── Glass ──────────────────────────────────────────────────────────
+  /// The 1px edge of a frosted surface — white at 65%, so it reads as a
+  /// catch-light rather than a border.
+  static const Color glassStroke = Color(0xA6FFFFFF);
+
+  /// The resting fill of a frosted surface before any blur is applied.
+  static const Color glassFill = Color(0xC7FFFFFF);
+
+  // ── Caregiver blue layer ───────────────────────────────────────────
+  /// A very pale blue wash replacing the warm cream for caregiver surfaces.
+  static const Color caregiverCanvas = Color(0xFFF0F5FF);
+
+  /// White with a blue tint for caregiver raised cards.
+  static const Color caregiverSurface = Color(0xFFF6F9FE);
+
+  /// A warmer, friendlier blue for caregiver-specific actions and accents.
+  static const Color caregiverAccent = Color(0xFF3B82F6);
+
+  /// Soft amber reserved only for nurturing/feeding moments.
+  static const Color caregiverWarm = Color(0xFFF59E0B);
+
+  /// Caregiver brand gradient — brighter, more inviting than clinical.
+  static const LinearGradient caregiverGradient = LinearGradient(
+    colors: [Color(0xFF1B56DB), Color(0xFF3B82F6)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  /// Subtle blue for caregiver inactive nav icons.
+  static const Color caregiverMuted = Color(0xFF8494AD);
+
+  // ── Check tab — deep navy + white premium palette ──────────────────
+  /// Darkest navy — hero backgrounds, premium buttons.
+  static const Color checkNavyDeep = Color(0xFF0A1628);
+
+  /// Primary navy — cards, surfaces.
+  static const Color checkNavy = Color(0xFF0F2042);
+
+  /// Mid navy — elevated surfaces, hover states.
+  static const Color checkNavyMid = Color(0xFF162D5A);
+
+  /// Accent blue — interactive elements, progress, highlights.
+  static const Color checkBlue = Color(0xFF1B56DB);
+
+  /// Bright blue — active states, glows.
+  static const Color checkBlueLight = Color(0xFF3B82F6);
+
+  /// Off-white — background canvas for check screens.
+  static const Color checkIvory = Color(0xFFF8FAFF);
+
+  /// Subtle borders and dividers.
+  static const Color checkSilver = Color(0xFFE2E8F0);
+
+  /// Premium check button gradient: deep navy to primary navy.
+  static const LinearGradient checkButtonGradient = LinearGradient(
+    colors: [checkNavyDeep, checkNavy],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  /// Verdict banner gradient for watch/urgent states.
+  static const LinearGradient checkUrgentGradient = LinearGradient(
+    colors: [checkNavy, triageRed],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  /// Wide brand gradient for the picker hero — deep royal blue into bright
+  /// blue, the signature of the "premium banking app" direction.
+  static const LinearGradient checkHeroGradient = LinearGradient(
+    colors: [Color(0xFF0C2B73), checkBlue, checkBlueLight],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  /// Soft navy tint for filled chips and quiet containers on white cards.
+  static const Color checkBlueTint = Color(0xFFEEF3FF);
+
+  /// Whites at the opacities the navy hero cards use for secondary text and
+  /// quiet fills. Const tokens so they stay legal inside const expressions.
+  static const Color white85 = Color(0xD9FFFFFF);
+  static const Color white80 = Color(0xCCFFFFFF);
 }
 
 /// Strict 8px baseline grid with generous premium radii.
@@ -139,6 +222,14 @@ abstract final class AppShadows {
     blurRadius: 24,
     offset: Offset(0, 8),
   );
+
+  /// Under a frosted surface: longer, softer and lighter than [card] so the
+  /// glass appears to float a few millimetres above the backdrop.
+  static const BoxShadow glass = BoxShadow(
+    color: Color(0x1A1B56DB),
+    blurRadius: 40,
+    offset: Offset(0, 14),
+  );
 }
 
 /// The type system. **Sora** carries the voice — bold geometric headlines that
@@ -201,6 +292,26 @@ abstract final class AppType {
     fontSize: 12.5,
     fontWeight: FontWeight.w500,
     height: 1.5,
+    color: AppColors.inkMuted,
+  );
+
+  /// A measured value — the big readout on a vitals card. Tabular figures
+  /// so "38.1" and "36.9" occupy the same width and the digits do not jitter
+  /// as a nurse types.
+  static TextStyle get numeral => GoogleFonts.sora(
+    fontSize: 56,
+    fontWeight: FontWeight.w800,
+    height: 1.0,
+    letterSpacing: -1.5,
+    color: AppColors.ink,
+    fontFeatures: const [FontFeature.tabularFigures()],
+  );
+
+  /// The unit that sits beside [numeral] ("kg", "°C", "/min").
+  static TextStyle get numeralUnit => GoogleFonts.manrope(
+    fontSize: 16,
+    fontWeight: FontWeight.w700,
+    height: 1.2,
     color: AppColors.inkMuted,
   );
 }
@@ -274,22 +385,23 @@ abstract final class AppTheme {
       ),
       // Primary CTA: the signature royal-blue gradient with a soft glow.
       filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          minimumSize: const Size.fromHeight(Gap.tapTarget),
-          backgroundColor: AppColors.primary,
-          foregroundColor: const Color(0xFFFFFFFF),
-          elevation: 0,
-          textStyle: GoogleFonts.manrope(
-            fontSize: 15.5,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.2,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Gap.radiusSm),
-          ),
-        ).copyWith(
-          overlayColor: const WidgetStatePropertyAll(Color(0x14FFFFFF)),
-        ),
+        style:
+            FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(Gap.tapTarget),
+              backgroundColor: AppColors.primary,
+              foregroundColor: const Color(0xFFFFFFFF),
+              elevation: 0,
+              textStyle: GoogleFonts.manrope(
+                fontSize: 15.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.2,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(Gap.radiusSm),
+              ),
+            ).copyWith(
+              overlayColor: const WidgetStatePropertyAll(Color(0x14FFFFFF)),
+            ),
       ),
       // Secondary: a confident 1.5px royal outline.
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -314,7 +426,10 @@ abstract final class AppTheme {
             fontSize: 14,
             fontWeight: FontWeight.w800,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.sm),
+          padding: const EdgeInsets.symmetric(
+            horizontal: Gap.md,
+            vertical: Gap.sm,
+          ),
         ),
       ),
       // Rounded filled inputs — soft blue-grey at rest, royal when focused.
@@ -467,8 +582,9 @@ class _GradientButtonState extends State<GradientButton> {
               padding: const EdgeInsets.symmetric(horizontal: Gap.lg),
               alignment: Alignment.center,
               child: Row(
-                mainAxisSize:
-                    widget.expand ? MainAxisSize.max : MainAxisSize.min,
+                mainAxisSize: widget.expand
+                    ? MainAxisSize.max
+                    : MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   if (widget.icon != null) ...[

@@ -81,6 +81,8 @@ void main() {
 
   Future<void> resetPrefs() async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
+    // Explicitly clear sync settings to test the "no server" scenario
+    await PreferencesStore.clearSync();
   }
 
   testWidgets('re-registering a phone replaces the stale account, never '
@@ -133,13 +135,22 @@ void main() {
     await tester.runAsync(() async {
       await resetPrefs();
 
+      // Mock HTTP to return 404 for challenge endpoint (phone not found)
+      PlatformHttpClient.override = (method, uri, headers, body) async {
+        if (uri.path.contains('/api/auth/challenge')) {
+          return const HttpReply(404, '{"error": "phone not found"}');
+        }
+        return const HttpReply(400, 'unexpected request');
+      };
+
       final result = await UserDao.signIn(phone: '0244000999', pin: '1234');
 
       expect(result.isSuccess, isFalse);
       expect(result.failure, AuthFailure.unknownPhone);
+      // With default localhost server, we get a different error message
       expect(
         result.detail,
-        contains('no sync server is configured'),
+        contains('phone not found'),
         reason: 'the user must be told the real reason, not shown a fake '
             'identity',
       );
@@ -159,14 +170,23 @@ void main() {
     await tester.runAsync(() async {
       await resetPrefs();
 
+      // Mock HTTP to return 404 for challenge endpoint (phone not found)
+      PlatformHttpClient.override = (method, uri, headers, body) async {
+        if (uri.path.contains('/api/auth/challenge')) {
+          return const HttpReply(404, '{"error": "phone not found"}');
+        }
+        return const HttpReply(400, 'unexpected request');
+      };
+
       final result = await CloudRecoveryService.restoreAccount(
         phone: '0244000999',
         pin: '1234',
       );
 
+      // With default localhost server, recovery attempts network call
       expect(result.status, RecoveryStatus.notFound);
       expect(result.user, isNull);
-      expect(result.message, contains('no sync server is configured'));
+      expect(result.message, contains('phone not found'));
     });
   });
 

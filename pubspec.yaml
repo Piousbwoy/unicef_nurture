@@ -82,3 +82,13 @@ flutter:
     - assets/images/
     - assets/fonts/
     - assets/models/
+  fonts:
+    # The caregiver Check flow styles its premium surfaces with raw
+    # `fontFamily: 'Sora'` — these declarations are what make that resolve
+    # instead of silently falling back to the platform font.
+    - family: Sora
+      fonts:
+        - asset: assets/fonts/Sora-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Sora-ExtraBold.ttf
+          weight: 800

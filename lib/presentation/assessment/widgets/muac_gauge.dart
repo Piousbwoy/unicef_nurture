@@ -100,11 +100,11 @@ class _MuacGaugeState extends State<MuacGauge>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            const Spacer(),
-            _Tag(label: zone.tag, fg: zone.fg, bg: zone.bg),
-          ],
+        // Align + Flexible rather than Row + Spacer so a long zone tag wraps
+        // at 200% text inside a narrow card instead of overflowing.
+        Align(
+          alignment: Alignment.centerRight,
+          child: _Tag(label: zone.tag, fg: zone.fg, bg: zone.bg),
         ),
         const SizedBox(height: Gap.xs),
         AspectRatio(
@@ -177,13 +177,15 @@ class _Tag extends StatelessWidget {
       children: [
         Icon(Icons.flag_rounded, size: 12, color: fg),
         const SizedBox(width: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10.5,
-            fontWeight: FontWeight.w800,
-            color: fg,
-            letterSpacing: 0.4,
+        Flexible(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+              color: fg,
+              letterSpacing: 0.4,
+            ),
           ),
         ),
       ],
@@ -198,10 +200,7 @@ class _ZoneBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(
-      horizontal: Gap.md,
-      vertical: Gap.sm,
-    ),
+    padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.sm),
     decoration: BoxDecoration(
       color: zone.bg,
       borderRadius: BorderRadius.circular(Gap.radiusSm),
@@ -315,10 +314,7 @@ enum MuacZone {
 }
 
 class _MuacGaugePainter extends CustomPainter {
-  _MuacGaugePainter({
-    required this.needleValue,
-    required this.showNeedle,
-  });
+  _MuacGaugePainter({required this.needleValue, required this.showNeedle});
 
   final double needleValue;
   final bool showNeedle;
@@ -384,10 +380,7 @@ class _MuacGaugePainter extends CustomPainter {
       final theta = _angleFor(needleValue);
       final cosT = math.cos(theta);
       final sinT = math.sin(theta);
-      final tip = Offset(
-        cx + (radius - 6) * cosT,
-        cy + (radius - 6) * sinT,
-      );
+      final tip = Offset(cx + (radius - 6) * cosT, cy + (radius - 6) * sinT);
       final base = Offset(cx - 8 * cosT, cy - 8 * sinT);
 
       final needle = Paint()

@@ -148,8 +148,11 @@ class _BarrierCheckScreenState extends ConsumerState<BarrierCheckScreen> {
                   : const Text('Save & continue'),
             ),
             const SizedBox(height: Gap.md),
+            // Skipping still continues to the session — barriers inform
+            // care, they never block it. (Backing out through the app bar
+            // is the abort path, and that one returns false.)
             TextButton(
-              onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+              onPressed: _busy ? null : () => Navigator.of(context).pop(true),
               child: const Text('Skip — continue'),
             ),
             const SizedBox(height: Gap.xl),

@@ -188,6 +188,22 @@ abstract final class VisitDao {
     return rows.map(Visit.fromMap).toList(growable: false);
   }
 
+  /// Distinct households this worker has visited since [since]. The
+  /// dashboard's truthful "households visited today" count — a visit row is
+  /// proof of contact; an edited household row is not.
+  static Future<int> countDistinctHouseholdsVisitedSince(
+    String workerId,
+    DateTime since,
+  ) async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.rawQuery(
+      'SELECT COUNT(DISTINCT household_id) AS c FROM ${Tables.visits} '
+      'WHERE conducted_by = ? AND started_at >= ?',
+      [workerId, since.toIso8601String()],
+    );
+    return (rows.first['c'] as num).toInt();
+  }
+
   static Future<void> complete(String visitId, {String? notes}) async {
     final db = await AppDatabase.instance.database;
     final now = DateTime.now().toIso8601String();

@@ -17,13 +17,19 @@
 /// idle guessing by whoever picked the phone up, not to survive a reboot, and a
 /// CHO locked out of a maternal emergency by a counter they cannot clear is a
 /// worse outcome than a guessed PIN.
+///
+/// **Fallback storage.** FlutterSecureStorage can fail on some platforms (web,
+/// desktop, devices with broken keystore). When it does, we fall back to shared
+/// preferences so the session still survives restarts. The user sees a warning
+/// that their session is less secure, but they are not forced to re-register.
 library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../data/local/app_database.dart';
 import '../../data/local/user_dao.dart';
 import '../../data/sync/http_transport.dart';
 import '../../data/sync/server_auth_client.dart';
@@ -92,11 +98,15 @@ class SessionController {
 
   static const _kUserIdKey = 'carebridge.session.user_id';
   static const _kLastPhoneKey = 'carebridge.session.last_phone';
+  // Fallback keys for shared preferences when secure storage fails
+  static const _kFallbackUserIdKey = 'carebridge.session.user_id_fallback';
+  static const _kFallbackLastPhoneKey = 'carebridge.session.last_phone_fallback';
 
   static const int maxAttempts = 5;
   static const Duration lockDuration = Duration(seconds: 30);
 
   final FlutterSecureStorage _storage;
+  bool _secureStorageFailed = false;
 
   int _failedAttempts = 0;
   DateTime? _lockedUntil;
@@ -117,7 +127,17 @@ class SessionController {
 
     final lastPhone = await _readLastPhone();
     final userId = await _read(_kUserIdKey);
-    if (userId == null) return SessionSignedOut(lastPhone: lastPhone);
+    if (userId == null) {
+      // Try fallback storage when secure storage returns null
+      final fallbackUserId = await _readFallback(_kFallbackUserIdKey);
+      if (fallbackUserId != null) {
+        final user = await UserDao.byId(fallbackUserId);
+        if (user != null) {
+          return SessionActive(user, linkedHouseholdId: await _linkedFor(user));
+        }
+      }
+      return SessionSignedOut(lastPhone: lastPhone);
+    }
 
     final user = await UserDao.byId(userId);
     if (user == null) {
@@ -170,6 +190,9 @@ class SessionController {
     final user = result.user!;
     await _write(_kUserIdKey, user.id);
     await _write(_kLastPhoneKey, user.phone);
+    // Also write to fallback storage in case secure storage fails later
+    await _writeFallback(_kFallbackUserIdKey, user.id);
+    await _writeFallback(_kFallbackLastPhoneKey, user.phone);
 
     await AuditDao.record(
       action: 'sign in',
@@ -242,6 +265,9 @@ class SessionController {
     // ─── Step B: Grant session ───────────────────────────────────────────
     await _write(_kUserIdKey, saved.id);
     await _write(_kLastPhoneKey, saved.phone);
+    // Also write to fallback storage in case secure storage fails later
+    await _writeFallback(_kFallbackUserIdKey, saved.id);
+    await _writeFallback(_kFallbackLastPhoneKey, saved.phone);
 
     await AuditDao.record(
       action: 'register account',
@@ -289,16 +315,29 @@ class SessionController {
     return UserDao.linkedHouseholdFor(user.id);
   }
 
-  Future<String?> _readLastPhone() => _read(_kLastPhoneKey);
+  Future<String?> _readLastPhone() async {
+    final value = await _read(_kLastPhoneKey);
+    if (value != null) return value;
+    // Try fallback if secure storage failed
+    if (_secureStorageFailed) {
+      return await _readFallback(_kFallbackLastPhoneKey);
+    }
+    return null;
+  }
 
   // Secure storage is unavailable on some desktop test hosts and can throw on
   // Android devices with a broken keystore. None of that is worth crashing an
   // app whose records are already safe in SQLite, so every access degrades to
-  // "not remembered".
+  // "not remembered". When secure storage fails, we fall back to shared
+  // preferences so the session still survives restarts.
   Future<String?> _read(String key) async {
     try {
-      return await _storage.read(key: key);
-    } catch (_) {
+      final value = await _storage.read(key: key);
+      _secureStorageFailed = false;
+      return value;
+    } catch (e) {
+      debugPrint('Secure storage read failed for $key: $e');
+      _secureStorageFailed = true;
       return null;
     }
   }
@@ -306,16 +345,54 @@ class SessionController {
   Future<void> _write(String key, String value) async {
     try {
       await _storage.write(key: key, value: value);
-    } catch (_) {
-      /* Session simply is not remembered across restarts. */
+      _secureStorageFailed = false;
+    } catch (e) {
+      debugPrint('Secure storage write failed for $key: $e');
+      _secureStorageFailed = true;
+      // Fall back to shared preferences
+      await _writeFallback(key, value);
     }
   }
 
   Future<void> _delete(String key) async {
     try {
       await _storage.delete(key: key);
-    } catch (_) {
-      /* Ignored for the same reason. */
+      _secureStorageFailed = false;
+    } catch (e) {
+      debugPrint('Secure storage delete failed for $key: $e');
+      _secureStorageFailed = true;
+      // Also delete from fallback
+      await _deleteFallback(key);
+    }
+  }
+
+  // Fallback storage using shared preferences when secure storage fails.
+  // This is less secure but ensures the session survives restarts.
+  Future<String?> _readFallback(String key) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(key);
+    } catch (e) {
+      debugPrint('Fallback storage read failed for $key: $e');
+      return null;
+    }
+  }
+
+  Future<void> _writeFallback(String key, String value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(key, value);
+    } catch (e) {
+      debugPrint('Fallback storage write failed for $key: $e');
+    }
+  }
+
+  Future<void> _deleteFallback(String key) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(key);
+    } catch (e) {
+      debugPrint('Fallback storage delete failed for $key: $e');
     }
   }
 }

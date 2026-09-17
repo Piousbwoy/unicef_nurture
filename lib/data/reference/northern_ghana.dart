@@ -83,6 +83,20 @@ abstract final class NorthernGhana {
   static List<String> communitiesOf(String regionName, String districtName) =>
       districtByName(regionName, districtName)?.communities ?? const [];
 
+  /// Every community across all five northern regions, flattened,
+  /// de-duplicated and alphabetised — the pick list for CHPS zones, which
+  /// follow care routes rather than district lines.
+  static List<String> get allCommunities {
+    final set = <String>{};
+    for (final r in regions) {
+      for (final d in r.districts) {
+        set.addAll(d.communities);
+      }
+    }
+    final list = set.toList()..sort();
+    return List.unmodifiable(list);
+  }
+
   /// The languages CareBridge speaks, in picker order: the three
   /// on-device bank voices plus the universal English fallback.
   static const guidanceLanguages = <String>[
@@ -541,38 +555,19 @@ abstract final class NorthernGhana {
         name: 'Central Gonja',
         capital: 'Buipe',
         type: AssemblyType.district,
-        communities: [
-          'Buipe',
-          'Yapei',
-          'Mpaha',
-          'Kusawgu',
-          'Lito',
-          'Tuluwe',
-        ],
+        communities: ['Buipe', 'Yapei', 'Mpaha', 'Kusawgu', 'Lito', 'Tuluwe'],
       ),
       GhDistrict(
         name: 'North Gonja',
         capital: 'Daboya',
         type: AssemblyType.district,
-        communities: [
-          'Daboya',
-          'Mankarigu',
-          'Lingbinsi',
-          'Yapala',
-          'Kunfosi',
-        ],
+        communities: ['Daboya', 'Mankarigu', 'Lingbinsi', 'Yapala', 'Kunfosi'],
       ),
       GhDistrict(
         name: 'North East Gonja',
         capital: 'Kpalbe',
         type: AssemblyType.district,
-        communities: [
-          'Kpalbe',
-          'Bunjai',
-          'Nanjuro',
-          'Wulasi',
-          'Sabonjida',
-        ],
+        communities: ['Kpalbe', 'Bunjai', 'Nanjuro', 'Wulasi', 'Sabonjida'],
       ),
     ],
   );
@@ -763,38 +758,19 @@ abstract final class NorthernGhana {
         name: 'Garu',
         capital: 'Garu',
         type: AssemblyType.district,
-        communities: [
-          'Garu',
-          'Worikambo',
-          'Kugri',
-          'Denugu',
-          'Bugri',
-          'Songo',
-        ],
+        communities: ['Garu', 'Worikambo', 'Kugri', 'Denugu', 'Bugri', 'Songo'],
       ),
       GhDistrict(
         name: 'Tempane',
         capital: 'Tempane',
         type: AssemblyType.district,
-        communities: [
-          'Tempane',
-          'Woriyanga',
-          'Kpikpira',
-          'Bugri',
-          'Diare',
-        ],
+        communities: ['Tempane', 'Woriyanga', 'Kpikpira', 'Bugri', 'Diare'],
       ),
       GhDistrict(
         name: 'Pusiga',
         capital: 'Pusiga',
         type: AssemblyType.district,
-        communities: [
-          'Pusiga',
-          'Kulungugu',
-          'Widana',
-          'Kubongo',
-          'Tesnatinga',
-        ],
+        communities: ['Pusiga', 'Kulungugu', 'Widana', 'Kubongo', 'Tesnatinga'],
       ),
     ],
   );
@@ -805,13 +781,7 @@ abstract final class NorthernGhana {
     code: 'UWR',
     name: 'Upper West Region',
     capital: 'Wa',
-    languages: [
-      'Waali (Waala)',
-      'Dagaare',
-      'Sissali',
-      'Lobi',
-      'Birifor',
-    ],
+    languages: ['Waali (Waala)', 'Dagaare', 'Sissali', 'Lobi', 'Birifor'],
     districts: [
       GhDistrict(
         name: 'Wa',
@@ -872,13 +842,7 @@ abstract final class NorthernGhana {
         name: 'Daffiama Bussie Issa',
         capital: 'Issa',
         type: AssemblyType.district,
-        communities: [
-          'Issa',
-          'Daffiama',
-          'Bussie',
-          'Kojokperi',
-          'Nator',
-        ],
+        communities: ['Issa', 'Daffiama', 'Bussie', 'Kojokperi', 'Nator'],
       ),
       GhDistrict(
         name: 'Jirapa',
@@ -911,27 +875,13 @@ abstract final class NorthernGhana {
         name: 'Lawra',
         capital: 'Lawra',
         type: AssemblyType.municipal,
-        communities: [
-          'Lawra',
-          'Babile',
-          'Eremon',
-          'Zambo',
-          'Boo',
-          'Dikpe',
-        ],
+        communities: ['Lawra', 'Babile', 'Eremon', 'Zambo', 'Boo', 'Dikpe'],
       ),
       GhDistrict(
         name: 'Nandom',
         capital: 'Nandom',
         type: AssemblyType.municipal,
-        communities: [
-          'Nandom',
-          'Ko',
-          'Puffien',
-          'Guo',
-          'Baseble',
-          'Burutu',
-        ],
+        communities: ['Nandom', 'Ko', 'Puffien', 'Guo', 'Baseble', 'Burutu'],
       ),
       GhDistrict(
         name: 'Sissala East',

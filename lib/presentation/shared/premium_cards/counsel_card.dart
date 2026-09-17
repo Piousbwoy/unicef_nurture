@@ -1,9 +1,12 @@
 /// Counsel Card - Visual Memory Grid
 /// Icon-based counseling for low-literacy contexts
 /// Part of the CareBridge Premium Design System
+library;
 
 import 'package:flutter/material.dart';
-import '../../../../core/theme/premium_design_tokens.dart';
+
+import '../../../core/theme/glass.dart';
+import '../../../core/theme/premium_design_tokens.dart';
 
 class CounselCard extends StatelessWidget {
   const CounselCard({
@@ -21,92 +24,87 @@ class CounselCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: PremiumDesignTokens.elevatedCard(),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: PremiumDesignTokens.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    Icons.lightbulb,
-                    color: PremiumDesignTokens.primary,
-                    size: 24,
-                  ),
+    return GlassSurface(
+      blur: false,
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: PremiumDesignTokens.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Key Messages',
-                        style: PremiumDesignTokens.headlineSmall.copyWith(
-                          color: PremiumDesignTokens.neutral800,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Tap any icon to learn more',
-                        style: PremiumDesignTokens.bodyMedium.copyWith(
-                          color: PremiumDesignTokens.neutral500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            // Icon grid
-            _CounselGrid(
-              points: counselPoints,
-              onPointTapped: onPointTapped,
-            ),
-
-            // Share button
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  // Generate shareable summary
-                },
-                icon: Icon(
-                  Icons.share,
+                child: Icon(
+                  Icons.lightbulb,
                   color: PremiumDesignTokens.primary,
-                  size: 18,
+                  size: 24,
                 ),
-                label: Text(
-                  'Send to Caregiver',
-                  style: PremiumDesignTokens.labelLarge.copyWith(
-                    color: PremiumDesignTokens.primary,
-                  ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Key Messages',
+                      style: PremiumDesignTokens.headlineSmall.copyWith(
+                        color: PremiumDesignTokens.neutral800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Tap any icon to learn more',
+                      style: PremiumDesignTokens.bodyMedium.copyWith(
+                        color: PremiumDesignTokens.neutral500,
+                      ),
+                    ),
+                  ],
                 ),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  side: BorderSide(
-                    color: PremiumDesignTokens.primary.withOpacity(0.3),
-                  ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 24),
+
+          // Icon grid
+          _CounselGrid(points: counselPoints, onPointTapped: onPointTapped),
+
+          // Share button
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                // Generate shareable summary
+              },
+              icon: Icon(
+                Icons.share,
+                color: PremiumDesignTokens.primary,
+                size: 18,
+              ),
+              label: Text(
+                'Send to Caregiver',
+                style: PremiumDesignTokens.labelLarge.copyWith(
+                  color: PremiumDesignTokens.primary,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                side: BorderSide(
+                  color: PremiumDesignTokens.primary.withValues(alpha: 0.3),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -114,10 +112,7 @@ class CounselCard extends StatelessWidget {
 
 /// 2x3 grid of counsel points
 class _CounselGrid extends StatelessWidget {
-  const _CounselGrid({
-    required this.points,
-    this.onPointTapped,
-  });
+  const _CounselGrid({required this.points, this.onPointTapped});
 
   final List<CounselPoint> points;
   final void Function(CounselPoint)? onPointTapped;
@@ -131,80 +126,88 @@ class _CounselGrid extends StatelessWidget {
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
       childAspectRatio: 0.85,
-      children: points.map((point) => _CounselTile(
-        point: point,
-        onTap: onPointTapped != null ? () => onPointTapped!(point) : null,
-      )).toList(),
+      children: points
+          .map(
+            (point) => _CounselTile(
+              point: point,
+              onTap: onPointTapped != null ? () => onPointTapped!(point) : null,
+            ),
+          )
+          .toList(),
     );
   }
 }
 
 /// Individual counsel tile
 class _CounselTile extends StatelessWidget {
-  const _CounselTile({
-    required this.point,
-    this.onTap,
-  });
+  const _CounselTile({required this.point, this.onTap});
 
   final CounselPoint point;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: point.backgroundColor ?? PremiumDesignTokens.neutral50,
-      borderRadius: BorderRadius.circular(16),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Icon
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: point.iconColor?.withOpacity(0.15) ??
-                      PremiumDesignTokens.primary.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  point.icon,
-                  color: point.iconColor ?? PremiumDesignTokens.primary,
-                  size: 24,
-                ),
-              ),
-
-              const SizedBox(height: 10),
-
-              // Title
-              Text(
-                point.title,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: PremiumDesignTokens.labelLarge.copyWith(
-                  color: PremiumDesignTokens.neutral800,
-                  height: 1.3,
-                ),
-              ),
-
-              // Subtitle if exists
-              if (point.subtitle != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  point.subtitle!,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: PremiumDesignTokens.labelSmall.copyWith(
-                    color: PremiumDesignTokens.neutral500,
+    return GlassSurface(
+      tier: GlassTier.chip,
+      blur: false,
+      shadow: false,
+      tint: point.backgroundColor,
+      padding: EdgeInsets.zero,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(GlassTier.chip.radius),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Icon
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color:
+                        point.iconColor?.withValues(alpha: 0.15) ??
+                        PremiumDesignTokens.primary.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    point.icon,
+                    color: point.iconColor ?? PremiumDesignTokens.primary,
+                    size: 24,
                   ),
                 ),
+
+                const SizedBox(height: 10),
+
+                // Title
+                Text(
+                  point.title,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: PremiumDesignTokens.labelLarge.copyWith(
+                    color: PremiumDesignTokens.neutral800,
+                    height: 1.3,
+                  ),
+                ),
+
+                // Subtitle if exists
+                if (point.subtitle != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    point.subtitle!,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: PremiumDesignTokens.labelSmall.copyWith(
+                      color: PremiumDesignTokens.neutral500,
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

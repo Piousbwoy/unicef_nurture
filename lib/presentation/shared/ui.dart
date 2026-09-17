@@ -20,6 +20,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/glass.dart';
 import '../../domain/enums.dart';
 
 /// The safe way to put a coloured accent bar on the left edge of a rounded
@@ -151,13 +152,11 @@ class SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(Gap.radius),
-        border: Border.all(color: AppColors.line, width: Gap.hairline),
-        boxShadow: const [AppShadows.card],
-      ),
+    // Glass look without a per-card BackdropFilter: SectionCards live inside
+    // scrolling lists, and the blur budget belongs to the hero and the bars.
+    return GlassSurface(
+      tier: GlassTier.card,
+      blur: false,
       padding: padding,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -647,18 +646,24 @@ class StatTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = colour ?? AppColors.ink;
-    return Container(
+    return GlassSurface(
+      tier: GlassTier.card,
+      blur: false,
       padding: const EdgeInsets.all(Gap.lg),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(Gap.radius),
-        border: Border.all(color: AppColors.line, width: Gap.hairline),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 17, color: c),
+            Container(
+              width: 32,
+              height: 32,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: c.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(Gap.radiusXs),
+              ),
+              child: Icon(icon, size: 17, color: c),
+            ),
             const SizedBox(height: Gap.sm),
           ],
           Text(
@@ -666,7 +671,8 @@ class StatTile extends StatelessWidget {
             style: AppType.display.copyWith(
               fontSize: 30,
               color: c,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
           const SizedBox(height: Gap.xs),

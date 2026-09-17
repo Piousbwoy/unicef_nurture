@@ -80,14 +80,14 @@ abstract final class CloudRecoveryService {
     required String pin,
   }) async {
     final cleanPhone = phone.trim();
-    final baseUrl = await PreferencesStore.syncApiUrl();
+    final baseUrl = await PreferencesStore.effectiveSyncApiUrl();
 
     // If a live Main MariaDB Server URL is configured, attempt actual network
     // recovery. Every outcome is returned to the caller verbatim: the user
     // must see the real failure reason on a blank replacement device, because
     // silently substituting fake records would produce phantom caseloads that
     // never sync to MariaDB and are lost on the next sign-out.
-    if (baseUrl != null && baseUrl.isNotEmpty) {
+    if (baseUrl.isNotEmpty) {
       final outcome = await _restoreFromLiveServer(cleanPhone, pin, baseUrl);
       if (!kDemoMode) return outcome;
       // In DEMO MODE only: a transient networkError falls through to

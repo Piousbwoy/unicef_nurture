@@ -19,6 +19,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/i18n/speech_bank.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/glass.dart';
+import '../../core/theme/motion.dart';
 import '../../data/reference/local_foods.dart';
 import '../../domain/engines/immunisation_engine.dart';
 import '../../domain/engines/nurturing_care_engine.dart';
@@ -26,7 +28,6 @@ import '../../domain/engines/nutrition_engine.dart';
 import '../../domain/engines/nutrition/therapeutic_supplements.dart';
 import '../../domain/engines/protocols/stabilization_protocols.dart';
 import '../../domain/engines/recommendation_engine.dart';
-import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
 import '../../domain/enums.dart';
 import '../assessment/form_kit.dart';
@@ -339,22 +340,25 @@ class KitCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(Gap.radiusSm);
-    return Container(
-      width: double.infinity,
-      margin: margin,
-      decoration: BoxDecoration(
-        color: AppColors.canvas,
-        borderRadius: radius,
-        border: Border.all(color: AppColors.line, width: Gap.hairline),
-        boxShadow: const [AppShadows.card],
+    // Glass look without a per-card blur: these cards stack inside
+    // scrolling lists, so the filter budget stays with the hero and bars.
+    return Padding(
+      padding: margin,
+      child: SizedBox(
+        width: double.infinity,
+        child: GlassSurface(
+          blur: false,
+          radius: radius,
+          padding: EdgeInsets.zero,
+          child: accent == null
+              ? Padding(padding: padding, child: child)
+              : AccentEdge(
+                  accent: accent!,
+                  borderRadius: radius,
+                  child: Padding(padding: padding, child: child),
+                ),
+        ),
       ),
-      child: accent == null
-          ? Padding(padding: padding, child: child)
-          : AccentEdge(
-              accent: accent!,
-              borderRadius: radius,
-              child: Padding(padding: padding, child: child),
-            ),
     );
   }
 }
@@ -430,75 +434,78 @@ class CohortCallout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final radius = BorderRadius.circular(Gap.radiusSm);
+    return SizedBox(
       width: double.infinity,
-      decoration: BoxDecoration(
-        color: AppColors.primaryLight.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(Gap.radiusSm),
-      ),
-      child: AccentEdge(
-        accent: AppColors.primary,
-        borderRadius: BorderRadius.circular(Gap.radiusSm),
-        child: Padding(
-          padding: const EdgeInsets.all(Gap.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                spacing: Gap.xs,
-                runSpacing: Gap.xs,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Icon(_icon, size: 16, color: AppColors.primaryDeep),
-                  const Text(
-                    'TAILORED PLAN',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.8,
-                      color: AppColors.primaryDeep,
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: Gap.sm,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      cohort.protocolLabel,
-                      style: const TextStyle(
-                        fontSize: 9.5,
+      child: GlassSurface(
+        blur: false,
+        radius: radius,
+        tint: AppColors.primaryGlow,
+        padding: EdgeInsets.zero,
+        child: AccentEdge(
+          accent: AppColors.primary,
+          borderRadius: radius,
+          child: Padding(
+            padding: const EdgeInsets.all(Gap.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: Gap.xs,
+                  runSpacing: Gap.xs,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Icon(_icon, size: 16, color: AppColors.primaryDeep),
+                    const Text(
+                      'TAILORED PLAN',
+                      style: TextStyle(
+                        fontSize: 10,
                         fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
-                        color: Colors.white,
+                        letterSpacing: 0.8,
+                        color: AppColors.primaryDeep,
                       ),
                     ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: Gap.sm,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        cohort.protocolLabel,
+                        style: const TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: Gap.xs),
+                Text(
+                  cohort.label,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.ink,
                   ),
-                ],
-              ),
-              const SizedBox(height: Gap.xs),
-              Text(
-                cohort.label,
-                style: const TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.ink,
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                note,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.inkMuted,
-                  height: 1.45,
+                const SizedBox(height: 4),
+                Text(
+                  note,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.inkMuted,
+                    height: 1.45,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -758,6 +765,9 @@ class _WorklistTile extends StatelessWidget {
         : action.isTreatment
         ? (Icons.medication_outlined, AppColors.triageAmber)
         : (Icons.chat_bubble_outline_rounded, AppColors.accent);
+    // Completion micro-interaction: the tick pops, the line strikes through.
+    // Both collapse to instant under reduced motion or Lite.
+    final d = VisualEffects.of(context).scale(AppMotion.fast);
 
     return KitCard(
       accent: done ? AppColors.lineStrong : accent,
@@ -769,16 +779,22 @@ class _WorklistTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Tick circle — the satisfying "done" micro-interaction.
-            SizedBox(
-              width: 48,
-              height: 48,
-              child: Checkbox(
-                value: done,
-                semanticLabel: 'Complete action: ${action.instruction}',
-                onChanged: onToggle == null ? null : (_) => onToggle!(),
+            AnimatedScale(
+              scale: done ? 1.0 : 0.92,
+              duration: d,
+              curve: Curves.easeOutBack,
+              child: SizedBox(
+                width: 48,
+                height: 48,
+                child: Checkbox(
+                  value: done,
+                  semanticLabel: 'Complete action: ${action.instruction}',
+                  onChanged: onToggle == null ? null : (_) => onToggle!(),
+                ),
               ),
             ),
-            Container(
+            AnimatedContainer(
+              duration: d,
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 color: colour.withValues(alpha: done ? 0.08 : 0.12),
@@ -795,8 +811,8 @@ class _WorklistTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    action.instruction,
+                  AnimatedDefaultTextStyle(
+                    duration: d,
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -805,7 +821,9 @@ class _WorklistTile extends StatelessWidget {
                       decoration: done
                           ? TextDecoration.lineThrough
                           : TextDecoration.none,
+                      decorationColor: AppColors.inkFaint,
                     ),
+                    child: Text(action.instruction),
                   ),
                   if (audience == RecAudience.healthWorker &&
                       (action.rationale != null ||
@@ -836,10 +854,7 @@ class _WorklistTile extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(vertical: 8),
                               child: Text(
                                 action.protocolSource!,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontStyle: FontStyle.italic,
-                                ),
+                                style: const TextStyle(fontSize: 12),
                               ),
                             ),
                         ],
@@ -901,6 +916,10 @@ class NutritionRecSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Build a compact summary of the plan for the header.
+    final suppCount = plan.therapeuticPlan?.supplements.length ?? 0;
+    final foodCount = plan.suggestions.length;
+    final escalationCount = plan.escalationSigns.length;
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -912,16 +931,50 @@ class NutritionRecSection extends StatelessWidget {
                 : AppColors.triageGreenBg,
             borderRadius: BorderRadius.circular(Gap.radiusSm),
           ),
-          child: Text(
-            plan.headline,
-            style: TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w800,
-              height: 1.4,
-              color: plan.therapeuticFoodRequired
-                  ? AppColors.triageRed
-                  : AppColors.triageGreen,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                plan.headline,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                  height: 1.4,
+                  color: plan.therapeuticFoodRequired
+                      ? AppColors.triageRed
+                      : AppColors.triageGreen,
+                ),
+              ),
+              const SizedBox(height: Gap.sm),
+              // Summary pills
+              Wrap(
+                spacing: Gap.sm,
+                runSpacing: Gap.xs,
+                children: [
+                  if (suppCount > 0)
+                    _NutritionSummaryPill(
+                      icon: Icons.medication_outlined,
+                      label: '$suppCount supplement${suppCount == 1 ? '' : 's'}',
+                    ),
+                  if (plan.hydrationPlan != null)
+                    _NutritionSummaryPill(
+                      icon: Icons.water_drop_outlined,
+                      label: 'Hydration plan',
+                    ),
+                  if (foodCount > 0)
+                    _NutritionSummaryPill(
+                      icon: Icons.restaurant_outlined,
+                      label: '$foodCount food${foodCount == 1 ? '' : 's'}',
+                    ),
+                  if (escalationCount > 0)
+                    _NutritionSummaryPill(
+                      icon: Icons.warning_amber_rounded,
+                      label: '$escalationCount escalation sign${escalationCount == 1 ? '' : 's'}',
+                      danger: true,
+                    ),
+                ],
+              ),
+            ],
           ),
         ),
         if (plan.cohortLine != null) ...[
@@ -1229,79 +1282,105 @@ class _DayPlanCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    // The plate: one glass surface, each meal moment revealed in turn so the
+    // day reads top to bottom the way it will be eaten.
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.all(Gap.md),
-      decoration: BoxDecoration(
-        color: AppColors.canvas,
-        borderRadius: BorderRadius.circular(Gap.radiusSm),
-        border: Border.all(color: AppColors.line, width: Gap.hairline),
-        boxShadow: const [AppShadows.card],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (var i = 0; i < slots.length; i++) ...[
-            if (i > 0)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: Gap.xs),
-                child: Divider(height: 1, thickness: 1, color: AppColors.line),
-              ),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: Gap.xs),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+      child: GlassSurface(
+        blur: false,
+        radius: BorderRadius.circular(Gap.radiusSm),
+        padding: const EdgeInsets.all(Gap.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < slots.length; i++) ...[
+              if (i > 0)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: Gap.xs),
+                  child: Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: AppColors.line,
+                  ),
+                ),
+              StaggeredReveal(
+                index: i,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: Gap.xs),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(_clockIcon, size: 14, color: AppColors.accent),
-                      const SizedBox(width: Gap.xs),
-                      SizedBox(
-                        width: 64,
-                        child: Text(
-                          slots[i].moment.toUpperCase(),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Meal-moment chip: small glass pill so the eye
+                          // finds "LUNCH" before it reads the foods.
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: Gap.sm,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.glassFill,
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: AppColors.glassStroke,
+                                width: Gap.hairline,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _clockIcon,
+                                  size: 12,
+                                  color: AppColors.accent,
+                                ),
+                                const SizedBox(width: Gap.xs),
+                                Text(
+                                  slots[i].moment.toUpperCase(),
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.6,
+                                    color: AppColors.inkMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: Gap.sm),
+                          Expanded(
+                            child: Text(
+                              slots[i].foods.join(' + '),
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.ink,
+                                height: 1.35,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (slots[i].note != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          slots[i].note!,
                           style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.6,
-                            color: AppColors.inkMuted,
+                            fontSize: 11,
+                            color: AppColors.inkFaint,
+                            height: 1.4,
                           ),
                         ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          slots[i].foods.join(' + '),
-                          style: const TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.ink,
-                            height: 1.35,
-                          ),
-                        ),
-                      ),
+                      ],
                     ],
                   ),
-                  if (slots[i].note != null) ...[
-                    const SizedBox(height: 2),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 22),
-                      child: Text(
-                        slots[i].note!,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.inkFaint,
-                          height: 1.4,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
+                ),
               ),
-            ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1317,11 +1396,13 @@ class _CoverageChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Glass pill; the green lives on the tick and nutrient text only.
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: AppColors.triageGreenBg,
+        color: AppColors.glassFill,
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.glassStroke, width: Gap.hairline),
       ),
       child: Text.rich(
         TextSpan(
@@ -1330,7 +1411,7 @@ class _CoverageChip extends StatelessWidget {
               text: '$nutrient ✓ ',
               style: const TextStyle(
                 fontSize: 10.5,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
                 color: AppColors.triageGreen,
               ),
             ),
@@ -1400,97 +1481,128 @@ class _FoodTile extends StatelessWidget {
     return AppImages.foodCowpeaStew;
   }
 
+  /// A small icon medallion by food group, so a tile is recognisable even
+  /// where the illustration has not loaded. No new assets.
+  IconData get _groupIcon => switch (food.group) {
+    FoodGroup.breastMilk => Icons.child_care_outlined,
+    FoodGroup.grainsRootsTubers => Icons.rice_bowl_outlined,
+    FoodGroup.pulsesNutsSeeds => Icons.grain_outlined,
+    FoodGroup.dairy => Icons.water_drop_outlined,
+    FoodGroup.fleshFoods => Icons.set_meal_outlined,
+    FoodGroup.eggs => Icons.egg_alt_outlined,
+    FoodGroup.vitaminARichProduce ||
+    FoodGroup.otherProduce => Icons.eco_outlined,
+  };
+
   @override
-  Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(bottom: Gap.sm),
-    padding: const EdgeInsets.all(Gap.md),
-    decoration: BoxDecoration(
-      color: AppColors.canvas,
-      borderRadius: BorderRadius.circular(Gap.radiusSm),
-      border: Border.all(color: AppColors.line),
-      boxShadow: const [AppShadows.card],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(Gap.radiusXs),
-              child: SizedBox(
-                width: 52,
-                height: 52,
-                child: AppImage(src: _image),
-              ),
-            ),
-            const SizedBox(width: Gap.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: Gap.sm),
+    child: GlassSurface(
+      blur: false,
+      radius: BorderRadius.circular(Gap.radiusSm),
+      padding: const EdgeInsets.all(Gap.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
                 children: [
-                  Text(
-                    food.localName != null
-                        ? '${food.food} (${food.localName})'
-                        : food.food,
-                    style: const TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w800,
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(Gap.radiusXs),
+                    child: SizedBox(
+                      width: 52,
+                      height: 52,
+                      child: AppImage(src: _image),
                     ),
                   ),
-                  const SizedBox(height: Gap.xs),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: Gap.sm,
-                      vertical: Gap.xs,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryLight,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      food.householdMeasure,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary,
+                  Positioned(
+                    right: -6,
+                    bottom: -6,
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        gradient: AppColors.brandGradient,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5),
                       ),
+                      child: Icon(_groupIcon, size: 12, color: Colors.white),
                     ),
                   ),
                 ],
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: Gap.xs),
-        Text(
-          food.reason,
-          style: const TextStyle(
-            fontSize: 12,
-            color: AppColors.inkMuted,
-            height: 1.4,
+              const SizedBox(width: Gap.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      food.localName != null
+                          ? '${food.food} (${food.localName})'
+                          : food.food,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: Gap.xs),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: Gap.sm,
+                        vertical: Gap.xs,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryLight,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        food.householdMeasure,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ),
-        if (food.preparation != null) ...[
           const SizedBox(height: Gap.xs),
           Text(
-            'How: ${food.preparation}',
-            style: const TextStyle(fontSize: 12, height: 1.4),
-          ),
-        ],
-        if (food.caution != null) ...[
-          const SizedBox(height: Gap.xs),
-          Text(
-            'Caution: ${food.caution}',
+            food.reason,
             style: const TextStyle(
               fontSize: 12,
-              color: AppColors.triageAmber,
-              fontWeight: FontWeight.w600,
+              color: AppColors.inkMuted,
               height: 1.4,
             ),
           ),
+          if (food.preparation != null) ...[
+            const SizedBox(height: Gap.xs),
+            Text(
+              'How: ${food.preparation}',
+              style: const TextStyle(fontSize: 12, height: 1.4),
+            ),
+          ],
+          if (food.caution != null) ...[
+            const SizedBox(height: Gap.xs),
+            Text(
+              'Caution: ${food.caution}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.triageAmber,
+                fontWeight: FontWeight.w600,
+                height: 1.4,
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
     ),
   );
 }
@@ -1750,126 +1862,6 @@ class _GapLine extends StatelessWidget {
       ],
     ),
   );
-}
-
-// ----------------------------------------------------- Early learning [49]
-
-/// Early Learning & Responsive Care tips — master flow [49], a required NEW
-/// screen that closes Nurturing Care domains 3 (responsive caregiving) and 5
-/// (early learning). Two to three simple, age-appropriate things a caregiver
-/// can do today, with no toys and no money — talking, playing, responding.
-class EarlyLearningRecSection extends StatelessWidget {
-  const EarlyLearningRecSection({
-    super.key,
-    required this.person,
-    this.collapsible = false,
-  });
-
-  final Person person;
-  final bool collapsible;
-
-  List<String> get _tips {
-    final months = person.ageInMonths;
-    if (person.effectiveClientType == ClientType.newborn ||
-        (months != null && months < 3)) {
-      return const [
-        'Talk and sing to your baby while feeding and bathing. Your voice is '
-            'their first lesson.',
-        'Hold your baby close and look into their eyes. They learn safety '
-            'from your face.',
-        'When your baby cries, answer quickly. A baby who is answered learns '
-            'to trust the world.',
-      ];
-    }
-    if (months != null && months < 6) {
-      return const [
-        'Smile back when your baby smiles. This back-and-forth builds their '
-            'brain.',
-        'Let them reach for a clean spoon or cup. Grasping is their first '
-            'game.',
-        'Name things as you touch them: "nose", "hand", "water".',
-      ];
-    }
-    if (months != null && months < 12) {
-      return const [
-        'Play peek-a-boo. It teaches that things still exist when they are '
-            'hidden.',
-        'Give safe household objects to explore — a cup, a spoon, a cloth.',
-        'Answer their sounds and babbling as if you are having a real '
-            'conversation.',
-      ];
-    }
-    if (months != null && months < 24) {
-      return const [
-        'Name body parts while bathing: "This is your hand, this is your '
-            'foot".',
-        'Let them try feeding themselves, even if it is messy. Practice '
-            'builds skill.',
-        'Count out loud together as you walk: one, two, three.',
-      ];
-    }
-    return const [
-      'Tell stories and ask "What happens next?" Imagination is learning.',
-      'Let them draw with a stick in the sand, or with chalk on a wall.',
-      'Give small jobs — fetching a spoon, carrying a small bowl. '
-          'Responsibility is learning too.',
-    ];
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final content = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final tip in _tips)
-          Padding(
-            padding: const EdgeInsets.only(bottom: Gap.sm),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  Icons.tips_and_updates_outlined,
-                  size: 16,
-                  color: AppColors.primary,
-                ),
-                const SizedBox(width: Gap.sm),
-                Expanded(
-                  child: Text(
-                    tip,
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      height: 1.45,
-                      color: AppColors.ink,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-
-    if (collapsible) {
-      return CollapsibleRecSection(
-        title: 'Play, talk, respond',
-        subtitle:
-            'A child’s brain grows fastest in the first five years. These '
-            'cost nothing and need no toys — just you.',
-        icon: Icons.toys_outlined,
-        accent: AppColors.primary,
-        child: content,
-      );
-    }
-    return RecSection(
-      title: 'Play, talk, respond',
-      subtitle:
-          'A child’s brain grows fastest in the first five years. These '
-          'cost nothing and need no toys — just you.',
-      icon: Icons.toys_outlined,
-      accent: AppColors.primary,
-      child: content,
-    );
-  }
 }
 
 // --------------------------------------------------------------- Immunisation
@@ -3061,7 +3053,18 @@ class FamilyCarePlanCard extends StatelessWidget {
     required this.plan,
     required this.personName,
     required this.language,
+    this.completed,
+    this.onCompletedChanged,
+    this.savedAt,
+    this.voiceControl,
+    this.canComplete,
   });
+
+  final Set<String>? completed;
+  final ValueChanged<Set<String>>? onCompletedChanged;
+  final DateTime? savedAt;
+  final Widget? voiceControl;
+  final bool Function(RecommendedAction)? canComplete;
 
   final CarePlan plan;
   final String personName;
@@ -3165,15 +3168,25 @@ class FamilyCarePlanCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: Gap.sm),
-              AudioButton(
-                compact: true,
-                text: message,
-                language: language,
-                id: 'plan_family_brief',
-                bankClips: levelClip == null ? null : [levelClip.id],
-              ),
+              if (voiceControl == null)
+                AudioButton(
+                  compact: true,
+                  text: message,
+                  language: language,
+                  id: 'plan_family_brief',
+                  bankClips: levelClip == null ? null : [levelClip.id],
+                ),
             ],
           ),
+          if (voiceControl != null) voiceControl!,
+          if (savedAt != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                'Saved clinic advice from ${savedAt!.toLocal().toString().split('.').first}. '
+                'Timing such as “now” or “today” refers to that visit. This is historical advice, not a new assessment.',
+              ),
+            ),
           if (plan.dangerSigns.isNotEmpty) ...[
             const SizedBox(height: Gap.md),
             Container(
@@ -3222,15 +3235,28 @@ class FamilyCarePlanCard extends StatelessWidget {
           if (plan.actions.isNotEmpty) ...[
             const RecHairline(),
             ActionWorklist(
-              actions: plan.actions,
+              actions: canComplete == null
+                  ? plan.actions
+                  : plan.actions.where(canComplete!).toList(),
               audience: RecAudience.caregiver,
+              completed: completed,
+              onCompletedChanged: onCompletedChanged,
             ),
+            if (canComplete != null)
+              for (final action in plan.actions.where((a) => !canComplete!(a)))
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'Clinic decision • read only\n${action.instruction}\nAsk your health worker about treatment; do not start or change medicines from this checklist.',
+                  ),
+                ),
           ],
           if (plan.followUpInDays != null) ...[
             const SizedBox(height: Gap.sm),
             Text(
-              'The health worker asked to see $personName again in '
-              '${plan.followUpInDays} day${plan.followUpInDays == 1 ? '' : 's'}.',
+              savedAt == null
+                  ? 'The health worker asked to see $personName again in ${plan.followUpInDays} day${plan.followUpInDays == 1 ? '' : 's'}.'
+                  : 'Requested review date: ${savedAt!.add(Duration(days: plan.followUpInDays!)).toLocal().toString().split(' ').first}. Check the next clinic step for any explicitly scheduled contact.',
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
@@ -3239,6 +3265,50 @@ class FamilyCarePlanCard extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+
+/// A compact summary pill for the nutrition plan header.
+class _NutritionSummaryPill extends StatelessWidget {
+  const _NutritionSummaryPill({
+    required this.icon,
+    required this.label,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = danger ? AppColors.triageRed : AppColors.primaryDeep;
+    final bgColor = danger
+        ? AppColors.triageRed.withValues(alpha: 0.08)
+        : AppColors.primaryLight;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
         ],
       ),
     );

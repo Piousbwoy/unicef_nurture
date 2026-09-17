@@ -11,9 +11,9 @@ import 'package:carebridge_ai/domain/enums.dart';
 import 'package:carebridge_ai/presentation/assessment/result_screen.dart';
 import 'package:carebridge_ai/presentation/assessment/assessment_feature_adapter.dart';
 import 'package:carebridge_ai/presentation/assessment/decision_workspace.dart';
+import 'package:carebridge_ai/presentation/assessment/station/vitals_strip.dart';
 import 'package:carebridge_ai/presentation/assessment/types.dart';
 import 'package:carebridge_ai/presentation/shared/recommendation_kit.dart';
-import 'package:carebridge_ai/presentation/assessment/form_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -58,6 +58,7 @@ AssessmentDraft _draft({
   List<String> signs = const [],
   ClientType type = ClientType.newborn,
   Map<String, Object?>? inputs,
+  List<String> dangerSigns = const [],
 }) => AssessmentDraft(
   inputs:
       inputs ??
@@ -74,6 +75,7 @@ AssessmentDraft _draft({
     classification: 'WELL NEWBORN — NO IMCI CLASSIFICATION',
     findings: const [],
     actions: const [],
+    dangerSignsPresent: dangerSigns,
     confidence: RecommendationConfidence.high,
   ),
 );
@@ -220,7 +222,8 @@ void main() {
           .widgetList<Text>(find.byType(Text))
           .map((t) => t.data ?? t.textSpan?.toPlainText() ?? '')
           .join('\n');
-      expect(evidenceText, contains('File integrity checked'));
+      expect(evidenceText, contains('File integrity'));
+      expect(evidenceText, contains('Checked'));
       expect(
         find.textContaining('saw no pattern of severe infection'),
         findsNothing,
@@ -448,9 +451,10 @@ void main() {
       expect(find.text('0.987'), findsNothing);
       await tester.tap(find.text('Neonatal sepsis research'));
       await tester.pumpAndSettle();
-      expect(find.text('0.987'), shown ? findsOneWidget : findsNothing);
+      // Research output is now shown as a percentage in the gauge
+      expect(find.textContaining('99%'), shown ? findsOneWidget : findsNothing);
       expect(
-        find.text('Research output (0–1 scale)'),
+        find.textContaining('Research output'),
         shown ? findsOneWidget : findsNothing,
       );
       expect(
@@ -478,9 +482,12 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    // Use pump() instead of pumpAndSettle() because Shimmer has infinite animation
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
     expect(find.text('Research only'), findsOneWidget);
-    expect(find.text('Checking local evidence metadata…'), findsOneWidget);
+    // Loading state now shows a skeleton loader
+    expect(find.byType(ResearchAnalysisPanel), findsOneWidget);
     statuses.completeError(StateError('missing metadata'));
     await tester.pumpAndSettle();
     expect(
@@ -498,11 +505,9 @@ void main() {
       final service = _DelayedService();
       await _pump(tester, _draft(), service: service);
       expect(find.text('PROTOCOL DECISION'), findsOneWidget);
-      expect(
-        find.textContaining('You can continue clinical care'),
-        findsOneWidget,
-      );
-      await tester.tap(find.text('Open action worklist'));
+      // Loading state now shows a skeleton loader instead of text
+      expect(find.byType(ResearchAnalysisPanel), findsOneWidget);
+      await tester.tap(find.text('Open care plan'));
       await tester.pumpAndSettle();
       await tester.tap(find.byType(Checkbox).first);
       await tester.pump();
@@ -514,22 +519,24 @@ void main() {
           .widgetList<Checkbox>(checks)
           .map((w) => w.value)
           .toList();
-      final referral = find.byType(DangerSign);
-      expect(tester.widget<DangerSign>(referral).value, isFalse);
-      await tester.tap(
-        find.descendant(of: referral, matching: find.text('Yes')),
-      );
+      final referral = find.text('Add a referral (clinical judgement)');
+      // No referral ordered: the sheet says so in one quiet row, and the
+      // arrangement controls stay out of the way until one is added.
+      expect(referral, findsOneWidget);
+      expect(find.text('HOW SOON?'), findsNothing);
+      await tester.tap(referral);
       await tester.pumpAndSettle();
       service.predictions.complete({'neonatal_sepsis': _prediction()});
       await tester.pumpAndSettle();
-      expect(tester.widget<DangerSign>(referral).value, isTrue);
+      expect(find.text('Remove referral'), findsOneWidget);
+      expect(find.text('HOW SOON?'), findsOneWidget);
       await _report(tester);
       expect(find.textContaining('Rule-in candidate:'), findsNothing);
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Open action worklist'));
+      await tester.tap(find.text('Open care plan'));
       await tester.pumpAndSettle();
-      expect(tester.widget<DangerSign>(referral).value, isTrue);
+      expect(find.text('Remove referral'), findsOneWidget);
       expect(
         tester.widgetList<Checkbox>(checks).map((w) => w.value).toList(),
         before,
@@ -572,7 +579,7 @@ void main() {
       final service = _DelayedService();
       final repository = _CaptureRepository();
       await _pump(tester, _draft(), service: service, repository: repository);
-      await tester.tap(find.text('Open action worklist'));
+      await tester.tap(find.text('Open care plan'));
       await tester.pumpAndSettle();
       await tester.tap(
         find.text('Disagree with this plan? Record a clinical override'),
@@ -593,7 +600,7 @@ void main() {
       await _report(tester);
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Open action worklist'));
+      await tester.tap(find.text('Open care plan'));
       await tester.pumpAndSettle();
       expect(
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
@@ -614,11 +621,11 @@ void main() {
     tester,
   ) async {
     await _pump(tester, _draft(), size: const Size(320, 1000), textScale: 2);
-    await tester.scrollUntilVisible(find.text('Open action worklist'), 250);
-    await tester.ensureVisible(find.text('Open action worklist'));
+    await tester.scrollUntilVisible(find.text('Open care plan'), 250);
+    await tester.ensureVisible(find.text('Open care plan'));
     await tester.pumpAndSettle();
-    expect(find.text('Open action worklist').hitTestable(), findsOneWidget);
-    await tester.tap(find.text('Open action worklist'));
+    expect(find.text('Open care plan').hitTestable(), findsOneWidget);
+    await tester.tap(find.text('Open care plan'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Open full clinical report'),
@@ -681,7 +688,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     final button = tester.getSize(
-      find.widgetWithText(FilledButton, 'Open action worklist'),
+      find.widgetWithText(FilledButton, 'Open care plan'),
     );
     expect(button.height, greaterThanOrEqualTo(48));
   });
@@ -717,6 +724,36 @@ void main() {
       expect(find.text('1 of 2 done'), findsOneWidget);
       expect(find.text('TODAY'), findsOneWidget);
       expect(find.text('FOLLOW-UP'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'vitals strip shows decision-relevant vitals and hides when none',
+    (tester) async {
+      await _pump(tester, _draft());
+      expect(find.byType(VitalsStrip), findsOneWidget);
+      expect(
+        find.bySemanticsLabel('Vitals recorded this visit'),
+        findsOneWidget,
+      );
+      expect(find.text('TEMPERATURE'), findsOneWidget);
+      // Breathing rate decided nothing in this assessment, so it stays off
+      // the headline strip — it remains saved in the visit inputs.
+      expect(find.text('BREATHING RATE'), findsNothing);
+      expect(find.textContaining('37.0'), findsWidgets);
+
+      // A respiratory danger sign earns the breathing-rate chip its place.
+      await _pump(tester, _draft(dangerSigns: const ['Difficulty breathing']));
+      expect(find.byType(VitalsStrip), findsOneWidget);
+      expect(find.text('BREATHING RATE'), findsOneWidget);
+
+      await _pump(
+        tester,
+        _draft(inputs: const {'age_in_days': 2, 'danger_signs': <String>[]}),
+      );
+      expect(find.byType(VitalsStrip), findsOneWidget);
+      expect(find.bySemanticsLabel('Vitals recorded this visit'), findsNothing);
+      expect(find.text('TEMPERATURE'), findsNothing);
     },
   );
 }

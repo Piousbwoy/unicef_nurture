@@ -31,7 +31,6 @@ import '../../core/auth/session.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../domain/enums.dart';
-import '../settings/sync_settings_screen.dart';
 import '../shared/ui.dart';
 
 class SignInScreen extends ConsumerStatefulWidget {
@@ -98,16 +97,17 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
     await _saveRememberMe();
 
-    final ok = await ref.read(sessionProvider.notifier).signIn(
-      phone: _phone.text.trim(),
-      pin: _password.text.trim(),
-    );
+    final ok = await ref
+        .read(sessionProvider.notifier)
+        .signIn(phone: _phone.text.trim(), pin: _password.text.trim());
 
     if (!mounted) return;
     if (ok) {
       final pendingRole = ref.read(pendingRoleProvider);
       final state = ref.read(sessionProvider);
-      if (state is SessionActive && pendingRole != null && state.user.role != pendingRole) {
+      if (state is SessionActive &&
+          pendingRole != null &&
+          state.user.role != pendingRole) {
         await ref.read(sessionProvider.notifier).signOut();
         if (!mounted) return;
         setState(() {
@@ -271,7 +271,9 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
                   const SizedBox(height: Gap.xl),
                   GradientButton(
-                    label: _busy ? 'Verifying local & cloud record…' : 'Sign in',
+                    label: _busy
+                        ? 'Verifying local & cloud record…'
+                        : 'Sign in',
                     icon: Icons.login_rounded,
                     onPressed: _busy ? null : _submit,
                   ),
@@ -280,9 +282,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     onPressed: _busy
                         ? null
                         : () {
-                            ref
-                                .read(sessionProvider.notifier)
-                                .markNeedsSetup();
+                            ref.read(sessionProvider.notifier).markNeedsSetup();
                             // `markNeedsSetup` is a no-op if the device is
                             // already in [SessionNeedsSetup] (a fresh
                             // install that just picked a role), so the
@@ -294,25 +294,6 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                           },
                     icon: const Icon(Icons.person_add_alt_1_outlined, size: 17),
                     label: const Text('Create a new account'),
-                  ),
-                  const SizedBox(height: Gap.sm),
-                  TextButton.icon(
-                    // A fresh or lost handset must be able to point at the
-                    // district server BEFORE any account exists — cloud
-                    // recovery reads this configuration at sign-in time.
-                    onPressed: _busy
-                        ? null
-                        : () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const SyncSettingsScreen(),
-                              ),
-                            ),
-                    icon: const Icon(Icons.dns_rounded, size: 17),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.inkMuted,
-                      textStyle: AppType.label.copyWith(fontSize: 13),
-                    ),
-                    label: const Text('Sync server settings'),
                   ),
                 ],
               ),
@@ -345,8 +326,8 @@ class _Brand extends StatelessWidget {
           role == null
               ? Icons.favorite_rounded
               : (role!.isFhw
-                  ? Icons.medical_services_rounded
-                  : Icons.family_restroom_rounded),
+                    ? Icons.medical_services_rounded
+                    : Icons.family_restroom_rounded),
           color: Colors.white,
           size: 42,
         ),
@@ -363,8 +344,8 @@ class _Brand extends StatelessWidget {
         role == null
             ? 'AI-ASSISTED COMMUNITY HEALTHCARE'
             : (role!.isFhw
-                ? 'FRONTLINE HEALTH WORKER PORTAL'
-                : 'FAMILY NURTURING & CARE PORTAL'),
+                  ? 'FRONTLINE HEALTH WORKER PORTAL'
+                  : 'FAMILY NURTURING & CARE PORTAL'),
         style: AppType.eyebrow.copyWith(
           letterSpacing: 2.0,
           color: AppColors.primary,
@@ -372,36 +353,13 @@ class _Brand extends StatelessWidget {
         ),
       ),
       const SizedBox(height: Gap.md),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.sm),
-        decoration: BoxDecoration(
-          color: AppColors.triageGreenBg,
-          borderRadius: BorderRadius.circular(Gap.radiusSm),
-          border: Border.all(color: AppColors.triageGreen.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.cloud_done_rounded, size: 16, color: AppColors.triageGreen),
-            const SizedBox(width: Gap.sm),
-            Flexible(
-              child: Text(
-                'Hybrid Sync: Offline daily access & instant cloud restoration on replacement devices.',
-                style: AppType.caption.copyWith(color: AppColors.ink, fontSize: 11.5),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(height: Gap.md),
       Text(
         role == null
             ? 'Nurturing care for mothers and children,\n'
-              'powered by our MariaDB Main Server & SQLite.'
+                  'powered by our MariaDB Main Server & SQLite.'
             : (role!.isFhw
-                ? 'Sign in to access local records or recover your clinic caseload from the server.'
-                : 'Sign in with your family credentials to restore your records.'),
+                  ? 'Sign in to access local records or recover your clinic caseload from the server.'
+                  : 'Sign in with your family credentials to restore your records.'),
         textAlign: TextAlign.center,
         style: AppType.caption.copyWith(fontSize: 13.5, height: 1.55),
       ),

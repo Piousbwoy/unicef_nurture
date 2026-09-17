@@ -91,21 +91,28 @@ abstract final class HouseholdDao {
     String? district,
     String? community,
   }) async {
+    // Region names drift between record sources ('Northern' vs 'Northern
+    // Region' — the cloud-recovery flow writes the short form), so the
+    // region arm matches either spelling of the same name by mutual prefix.
+    // The prefix test still never crosses into a differently-named region:
+    // neither 'Northern Region' nor 'North East Region' is a prefix of the
+    // other.
+    const regionArm = "region LIKE ? OR ? LIKE region || '%'";
     final db = await AppDatabase.instance.database;
     final where = district == null
         ? (community == null
-              ? 'created_by = ? OR region = ?'
-              : 'created_by = ? OR (region = ? AND community = ?)')
+              ? 'created_by = ? OR $regionArm'
+              : 'created_by = ? OR ($regionArm AND community = ?)')
         : (community == null
-              ? 'created_by = ? OR (region = ? AND district = ?)'
-              : 'created_by = ? OR (region = ? AND district = ? AND community = ?)');
+              ? 'created_by = ? OR ($regionArm AND district = ?)'
+              : 'created_by = ? OR ($regionArm AND district = ? AND community = ?)');
     final args = district == null
         ? (community == null
-              ? [workerId, region]
-              : [workerId, region, community])
+              ? [workerId, '$region%', region]
+              : [workerId, '$region%', region, community])
         : (community == null
-              ? [workerId, region, district]
-              : [workerId, region, district, community]);
+              ? [workerId, '$region%', region, district]
+              : [workerId, '$region%', region, district, community]);
     final rows = await db.query(
       Tables.households,
       where: where,
@@ -143,15 +150,21 @@ abstract final class HouseholdDao {
   /// "behind the mosque" is how a compound is found, and a CHO covering for a
   /// colleague will search for exactly that. The region arm means a worker
   /// posted anywhere in her region finds every family in it — while a record
-  /// synced from another region never surfaces on her phone.
-  static Future<List<Household>> search(String query, {required String region}) async {
+  /// synced from another region never surfaces on her phone. Region spelling
+  /// is matched by mutual prefix (see [caseloadFor]), because record sources
+  /// disagree on 'Northern' vs 'Northern Region'.
+  static Future<List<Household>> search(
+    String query, {
+    required String region,
+  }) async {
     final db = await AppDatabase.instance.database;
     final q = '%${query.trim()}%';
     final rows = await db.query(
       Tables.households,
       where:
-          '(name LIKE ? OR head_name LIKE ? OR community LIKE ? OR landmark LIKE ?) AND region = ?',
-      whereArgs: [q, q, q, q, region],
+          '(name LIKE ? OR head_name LIKE ? OR community LIKE ? OR '
+          "landmark LIKE ?) AND (region LIKE ? OR ? LIKE region || '%')",
+      whereArgs: [q, q, q, q, '$region%', region],
       orderBy: 'name ASC',
       limit: 50,
     );
@@ -345,7 +358,8 @@ abstract final class PersonDao {
         if (byRank != 0) return byRank;
         final aDob = a.dateOfBirth;
         final bDob = b.dateOfBirth;
-        if (aDob == null || bDob == null) return a.fullName.compareTo(b.fullName);
+        if (aDob == null || bDob == null)
+          return a.fullName.compareTo(b.fullName);
         return aDob.compareTo(bDob);
       });
     return sorted;

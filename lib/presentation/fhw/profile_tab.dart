@@ -1,12 +1,11 @@
-/// The "Me" tab: who you are, whether your work is reaching the district, and
-/// the two deliberate exits.
+/// The "Me" tab: who you are, the checks that run on this phone, and the
+/// two deliberate exits.
 ///
 /// Sign-out lives here and is obvious on purpose — handing this phone to a
-/// mother for caregiver mode is a normal daily action, not an edge case. The
-/// connection & sync centre exists because the commonest fear in the field is
-/// that unsent means lost; the live online/offline state, the numbers and the
-/// reassurance sit next to each other so a CHO can see — not guess — that their
-/// morning's work is safe and on its way.
+/// mother for caregiver mode is a normal daily action, not an edge case.
+/// Sync needs no controls: saved records send themselves when the network
+/// returns, so this tab stays about the worker and the device — not about
+/// plumbing.
 library;
 
 import 'package:flutter/material.dart';
@@ -17,12 +16,11 @@ import '../../app/providers.dart';
 import '../../core/ml/offline_inference_service.dart';
 import '../../core/ml/recalibration_store.dart';
 import '../../core/theme/app_theme.dart';
-import '../../data/local/outbox_dao.dart';
+import '../../core/theme/glass.dart';
 import '../../data/local/preferences_store.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/enums.dart';
 import '../assessment/form_kit.dart';
-import '../settings/sync_settings_screen.dart';
 import '../shared/ui.dart';
 
 class ProfileTab extends ConsumerStatefulWidget {
@@ -33,40 +31,6 @@ class ProfileTab extends ConsumerStatefulWidget {
 }
 
 class _ProfileTabState extends ConsumerState<ProfileTab> {
-  List<OutboxEntry> _stuck = const [];
-  bool _draining = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadStuck();
-  }
-
-  Future<void> _loadStuck() async {
-    final stuck = await ref.read(syncServiceProvider).valueOrNull?.stuck();
-    if (mounted) setState(() => _stuck = stuck ?? []);
-  }
-
-  Future<void> _drain() async {
-    setState(() => _draining = true);
-    final report = await ref.read(syncServiceProvider).valueOrNull?.drain();
-    await _loadStuck();
-    if (!mounted) return;
-    setState(() => _draining = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          report == null
-              ? 'Sync is not ready yet.'
-              : report.attempted == 0
-              ? 'Nothing was waiting to send.'
-              : '${report.accepted} record${report.accepted == 1 ? '' : 's'} '
-                    'sent${report.deferred > 0 ? ', ${report.deferred} deferred \u2014 the network went again' : ''}.',
-        ),
-      ),
-    );
-  }
-
   Future<void> _signOut() async {
     final sure = await showDialog<bool>(
       context: context,
@@ -126,195 +90,10 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
     final user = ref.watch(currentUserProvider);
     if (user == null) return const SizedBox.shrink();
 
-    final sync = ref.watch(syncStatusProvider);
-    final online = ref.watch(connectivityProvider);
-    final isOnline = online.maybeWhen(data: (o) => o, orElse: () => false);
-
     return ListView(
       padding: const EdgeInsets.all(Gap.lg),
       children: [
         _ProfileHeader(user: user),
-        const SizedBox(height: Gap.md),
-
-        SectionCard(
-          title: 'Records & sync',
-          subtitle:
-              'Everything you save stays on this phone and goes to the district office when the network returns.',
-          icon: Icons.cloud_sync_outlined,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _ConnectivityHero(isOnline: isOnline),
-              const SizedBox(height: Gap.md),
-              sync.when(
-                loading: () => const Padding(
-                  padding: EdgeInsets.symmetric(vertical: Gap.md),
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-                error: (e, _) => ErrorView(error: e),
-                data: (summary) => Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          summary.isClean
-                              ? Icons.check_circle_rounded
-                              : summary.criticalPending > 0
-                              ? Icons.priority_high_rounded
-                              : Icons.cloud_off_rounded,
-                          size: 20,
-                          color: summary.isClean
-                              ? AppColors.triageGreen
-                              : summary.criticalPending > 0
-                              ? AppColors.triageRed
-                              : AppColors.offline,
-                        ),
-                        const SizedBox(width: Gap.sm),
-                        Expanded(
-                          child: Text(
-                            summary.label,
-                            style: const TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: Gap.xs),
-                    Text(
-                      summary.detail,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.inkMuted,
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: Gap.md),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: StatTile(
-                            value: '${summary.pending}',
-                            label: 'Waiting to Send',
-                            colour: AppColors.offline,
-                          ),
-                        ),
-                        const SizedBox(width: Gap.sm),
-                        Expanded(
-                          child: StatTile(
-                            value: '${summary.criticalPending}',
-                            label: 'Urgent',
-                            colour: summary.criticalPending > 0
-                                ? AppColors.triageRed
-                                : AppColors.triageGreen,
-                          ),
-                        ),
-                        const SizedBox(width: Gap.sm),
-                        Expanded(
-                          child: StatTile(
-                            value: '${summary.failing}',
-                            label: 'Need a Retry',
-                            colour: summary.failing > 0
-                                ? AppColors.triageAmber
-                                : AppColors.triageGreen,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: Gap.md),
-              Wrap(
-                spacing: Gap.sm,
-                runSpacing: Gap.sm,
-                children: [
-                  FilledButton.icon(
-                    onPressed: _draining ? null : _drain,
-                    icon: _draining
-                        ? const SizedBox(
-                            height: 16,
-                            width: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.sync_rounded),
-                    label: Text(
-                      _draining ? 'Sending\u2026' : 'Send records now',
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const SyncSettingsScreen(),
-                      ),
-                    ),
-                    icon: const Icon(Icons.dns_rounded),
-                    label: const Text('Connection settings'),
-                  ),
-                ],
-              ),
-              if (_stuck.isNotEmpty) ...[
-                const SizedBox(height: Gap.md),
-                const Text(
-                  'These records keep failing. Show them to your supervisor:',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: AppColors.triageAmber,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: Gap.sm),
-                for (final entry in _stuck)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: Gap.xs),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: Gap.md,
-                      vertical: Gap.sm,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.triageAmberBg,
-                      borderRadius: BorderRadius.circular(Gap.radiusSm),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.sync_problem_rounded,
-                          size: 18,
-                          color: AppColors.triageAmber,
-                        ),
-                        const SizedBox(width: Gap.sm),
-                        Expanded(
-                          child: Text(
-                            '${entry.entityTable} · ${entry.attempts} attempts'
-                            '${entry.lastError == null ? '' : ' — ${entry.lastError}'}',
-                            style: const TextStyle(
-                              fontSize: 12.5,
-                              color: AppColors.ink,
-                            ),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () async {
-                            await ref
-                                .read(syncServiceProvider)
-                                .valueOrNull
-                                ?.retry(entry.id);
-                            await _loadStuck();
-                          },
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ],
-          ),
-        ),
         const SizedBox(height: Gap.md),
 
         SectionCard(
@@ -336,6 +115,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                   );
                 },
               ),
+              const _VisualEffectsTile(),
             ],
           ),
         ),
@@ -525,68 +305,6 @@ class _ProfileHeader extends StatelessWidget {
   }
 }
 
-class _ConnectivityHero extends StatelessWidget {
-  const _ConnectivityHero({required this.isOnline});
-
-  final bool isOnline;
-
-  @override
-  Widget build(BuildContext context) {
-    final colour = isOnline ? AppColors.triageGreen : AppColors.offline;
-    final bg = isOnline ? AppColors.triageGreenBg : AppColors.offlineBg;
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(Gap.radiusSm),
-      ),
-      child: AccentEdge(
-        accent: colour,
-        borderRadius: BorderRadius.circular(Gap.radiusSm),
-        child: Padding(
-          padding: const EdgeInsets.all(Gap.md),
-          child: Row(
-            children: [
-              Icon(
-                isOnline ? Icons.wifi_rounded : Icons.wifi_off_rounded,
-                size: 22,
-                color: colour,
-              ),
-              const SizedBox(width: Gap.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isOnline ? 'Online' : 'Offline',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: colour,
-                      ),
-                    ),
-                    Text(
-                      isOnline
-                          ? 'Connected. Saved records upload automatically.'
-                          : 'No network right now. Records stay safe here and '
-                                'send themselves when signal returns.',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.inkMuted,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _SettingsTile extends StatelessWidget {
   const _SettingsTile({
     required this.icon,
@@ -654,6 +372,72 @@ class _SettingsTile extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Full or Lite rendering. Lite removes backdrop blur and motion so the
+/// glass UI stays smooth on the older handsets CHOs actually carry.
+class _VisualEffectsTile extends ConsumerWidget {
+  const _VisualEffectsTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final lite = ref.watch(visualEffectsProvider);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.md),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(Gap.sm),
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(Gap.radiusXs),
+            ),
+            child: const Icon(
+              Icons.auto_awesome_rounded,
+              size: 18,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(width: Gap.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Visual effects',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Lite turns off blur and motion for older phones.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.inkMuted,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: Gap.sm),
+                SegmentedButton<bool>(
+                  showSelectedIcon: false,
+                  style: const ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                    minimumSize: WidgetStatePropertyAll(Size(48, 40)),
+                  ),
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('Full')),
+                    ButtonSegment(value: true, label: Text('Lite')),
+                  ],
+                  selected: {lite},
+                  onSelectionChanged: (s) =>
+                      ref.read(visualEffectsProvider.notifier).setLite(s.first),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

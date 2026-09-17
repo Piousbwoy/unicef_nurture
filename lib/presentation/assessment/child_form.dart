@@ -37,6 +37,8 @@ import '../../domain/entities/visit.dart';
 import '../../domain/enums.dart';
 import '../shared/ui.dart';
 import 'form_kit.dart';
+import 'station/captured_vitals_card.dart';
+import 'station/vitals_station_screen.dart';
 import 'types.dart';
 
 const _uuid = Uuid();
@@ -46,10 +48,18 @@ class ChildProtocolForm extends StatefulWidget {
     super.key,
     required this.input,
     required this.onComplete,
+    this.initialVitals,
+    this.onRetakeVital,
   });
 
   final AssessmentContext input;
   final ValueChanged<AssessmentDraft> onComplete;
+
+  /// What the Vitals Station captured; pre-fills the measurement boxes.
+  final StationResult? initialVitals;
+
+  /// Per-vital 'Re-take' — the shell reopens the station on that vital.
+  final ValueChanged<String>? onRetakeVital;
 
   @override
   State<ChildProtocolForm> createState() => _ChildProtocolFormState();
@@ -60,8 +70,10 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
   Person get person => input.person;
   BirthRecord? get birth => input.birth;
 
-  bool get isYoungInfant =>
-      person.effectiveClientType == ClientType.newborn;
+  StationResult? get _station => widget.initialVitals;
+  bool get _fromStation => _station != null && !_station!.isEmpty;
+
+  bool get isYoungInfant => person.effectiveClientType == ClientType.newborn;
 
   bool _busy = false;
 
@@ -135,11 +147,20 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
 
   // --------------------------------------------- IMCI general danger signs
   static const _youngInfantGeneral = {
-    'notFeeding', 'noFeed', 'convulsions', 'movesStim', 'noMove', 'indrawing',
+    'notFeeding',
+    'noFeed',
+    'convulsions',
+    'movesStim',
+    'noMove',
+    'indrawing',
     'fontanelle',
   };
   static const _childGeneral = {
-    'noDrink', 'vomitsAll', 'convulsions', 'convulsingNow', 'lethargic',
+    'noDrink',
+    'vomitsAll',
+    'convulsions',
+    'convulsingNow',
+    'lethargic',
   };
 
   /// IMCI screens general danger signs first: any one of them makes this a
@@ -200,6 +221,31 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     _bfOneHour = birth?.breastfedWithinOneHour;
     // ENHANCEMENT 1: Visit type default
     _visitType = 'initial';
+    _seedFromStation();
+  }
+
+  /// The station only pre-fills; every box stays editable and the engines
+  /// read the boxes, never the station.
+  void _seedFromStation() {
+    final s = _station;
+    if (s == null || s.isEmpty) return;
+    void seed(TextEditingController c, String key, {int decimals = 0}) {
+      final v = s.values[key];
+      if (v == null) return;
+      c.text = decimals == 0
+          ? v.round().toString()
+          : v.toDouble().toStringAsFixed(decimals);
+    }
+
+    seed(_rr, 'respiratory_rate');
+    seed(_temp, 'temperature_celsius', decimals: 1);
+    seed(_weight, 'weight_kg', decimals: 1);
+    seed(_height, 'height_cm', decimals: 1);
+    seed(_muacMm, 'muac_mm');
+    seed(_spo2, 'oxygen_saturation');
+    seed(_hb, 'haemoglobin', decimals: 1);
+    final secs = s.values['rr_timer_secs'];
+    if (secs != null) _rrTimerSecs = secs.toInt();
   }
 
   @override
@@ -232,8 +278,9 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
 
   /// ENHANCEMENT 3: Backwards-compat MUAC cm — auto-populated from mm if the
   /// user typed mm, otherwise falls back to the legacy cm field.
-  double? _muacMmToCm() =>
-      parseInt(_muacMm) == null ? parseDouble(_muac) : parseInt(_muacMm)! / 10.0;
+  double? _muacMmToCm() => parseInt(_muacMm) == null
+      ? parseDouble(_muac)
+      : parseInt(_muacMm)! / 10.0;
 
   void _onEdited() {
     if (mounted) setState(() {});
@@ -276,7 +323,8 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
                 padding: const EdgeInsets.only(bottom: Gap.lg),
                 child: SectionCard(
                   title: 'Age',
-                  subtitle: 'No date of birth on record. Ask, or use the '
+                  subtitle:
+                      'No date of birth on record. Ask, or use the '
                       'weighing card.',
                   icon: Icons.calendar_month_outlined,
                   child: MeasureField(
@@ -322,8 +370,10 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
               const SizedBox(height: Gap.lg),
             ],
 
-            if (isYoungInfant) ..._youngInfantSections()
-            else ..._childSections(),
+            if (isYoungInfant)
+              ..._youngInfantSections()
+            else
+              ..._childSections(),
 
             const SizedBox(height: Gap.xxl),
           ],
@@ -359,6 +409,45 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     ),
   );
 
+  /// The young-infant measurement boxes, unchanged — shown in their own card
+  /// or under 'Edit values manually' when the station already filled them.
+  List<Widget> _youngInfantMeasureFields() => [
+    // ------------------------------------------------------------ ENH 2
+    MeasureField(
+      label: 'Respiratory rate',
+      controller: _rr,
+      unit: '/min',
+      cutoff: 'Count for a full 60 seconds while calm. ≥60 0–11mo, ≥50 12–59mo',
+      example: 'e.g. 40',
+    ),
+    CountField(
+      label: 'Count seconds elapsed',
+      value: _rrTimerSecs,
+      onChanged: (v) => setState(() => _rrTimerSecs = v),
+      max: 120,
+      why:
+          'If you counted 30s and ×2, record how many seconds you actually counted.',
+    ),
+    MeasureField(
+      label: 'Temperature',
+      controller: _temp,
+      unit: '°C',
+      decimal: true,
+      cutoff: 'Fever ≥37.5 · hypothermia <35.5',
+      example: 'e.g. 36.8',
+      width: 180,
+    ),
+    MeasureField(
+      label: 'Weight today',
+      controller: _weight,
+      unit: 'kg',
+      decimal: true,
+      cutoff: 'Saved to the growth series',
+      example: 'e.g. 4.2',
+      width: 180,
+    ),
+  ];
+
   List<Widget> _youngInfantSections() => [
     // Danger signs lead, exactly as the young-infant chart is worked at the
     // bedside: screen for a referral sign before anything else.
@@ -381,49 +470,20 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     ),
     const SizedBox(height: Gap.lg),
 
-    SectionCard(
-      title: 'Measurements',
-      subtitle: 'Count the breaths for a full minute while the baby is calm.',
-      icon: Icons.monitor_heart_outlined,
-      child: Column(
-        children: [
-          // ------------------------------------------------------------ ENH 2
-          MeasureField(
-            label: 'Respiratory rate',
-            controller: _rr,
-            unit: '/min',
-            cutoff:
-                'Count for a full 60 seconds while calm. ≥60 0–11mo, ≥50 12–59mo',
-            example: 'e.g. 40',
+    _fromStation
+        ? CapturedVitalsCard(
+            input: input,
+            result: _station!,
+            onRetakeVital: widget.onRetakeVital,
+            manualFields: _youngInfantMeasureFields(),
+          )
+        : SectionCard(
+            title: 'Measurements',
+            subtitle:
+                'Count the breaths for a full minute while the baby is calm.',
+            icon: Icons.monitor_heart_outlined,
+            child: Column(children: _youngInfantMeasureFields()),
           ),
-          CountField(
-            label: 'Count seconds elapsed',
-            value: _rrTimerSecs,
-            onChanged: (v) => setState(() => _rrTimerSecs = v),
-            max: 120,
-            why: 'If you counted 30s and ×2, record how many seconds you actually counted.',
-          ),
-          MeasureField(
-            label: 'Temperature',
-            controller: _temp,
-            unit: '°C',
-            decimal: true,
-            cutoff: 'Fever ≥37.5 · hypothermia <35.5',
-            example: 'e.g. 36.8',
-            width: 180,
-          ),
-          MeasureField(
-            label: 'Weight today',
-            controller: _weight,
-            unit: 'kg',
-            decimal: true,
-            cutoff: 'Saved to the growth series',
-            example: 'e.g. 4.2',
-            width: 180,
-          ),
-        ],
-      ),
-    ),
     const SizedBox(height: Gap.lg),
 
     SectionCard(
@@ -436,9 +496,8 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
             label: 'Umbilical cord red or draining pus',
             value: _signs.contains('cordRed'),
             onChanged: (v) => setState(
-              () => v == true
-                  ? _signs.add('cordRed')
-                  : _signs.remove('cordRed'),
+              () =>
+                  v == true ? _signs.add('cordRed') : _signs.remove('cordRed'),
             ),
           ),
           DangerSign(
@@ -565,7 +624,8 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
 
     SectionCard(
       title: 'Feeding',
-      subtitle: 'Watch a feed if you can — attachment is easier to see than '
+      subtitle:
+          'Watch a feed if you can — attachment is easier to see than '
           'to ask about.',
       icon: Icons.child_care_outlined,
       child: Column(
@@ -610,9 +670,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
             danger: false,
             value: _signs.contains('thrush'),
             onChanged: (v) => setState(
-              () => v == true
-                  ? _signs.add('thrush')
-                  : _signs.remove('thrush'),
+              () => v == true ? _signs.add('thrush') : _signs.remove('thrush'),
             ),
           ),
           DangerSign(
@@ -650,9 +708,23 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
       ),
       const SizedBox(height: Gap.lg),
 
+      // The station's readings, pre-filled into the boxes in the sections
+      // below — edit any of them there.
+      if (_fromStation) ...[
+        CapturedVitalsCard(
+          input: input,
+          result: _station!,
+          onRetakeVital: widget.onRetakeVital,
+          manualFields: const [],
+          subtitle: 'Pre-filled below — edit any value in its section.',
+        ),
+        const SizedBox(height: Gap.lg),
+      ],
+
       SectionCard(
         title: 'General danger signs',
-        subtitle: 'Tick every sign that is present — more than one can be '
+        subtitle:
+            'Tick every sign that is present — more than one can be '
             'present at once, and the list stays open. Any one of them is a '
             'referral, whatever the rest of the chart finds.',
         icon: Icons.warning_amber_rounded,
@@ -682,9 +754,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
               danger: false,
               value: _signs.contains('cough'),
               onChanged: (v) => setState(
-                () => v == true
-                    ? _signs.add('cough')
-                    : _signs.remove('cough'),
+                () => v == true ? _signs.add('cough') : _signs.remove('cough'),
               ),
             ),
             MeasureField(
@@ -718,7 +788,8 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
               value: _rrTimerSecs,
               onChanged: (v) => setState(() => _rrTimerSecs = v),
               max: 120,
-              why: 'If you counted 30s and ×2, record how many seconds you actually counted.',
+              why:
+                  'If you counted 30s and ×2, record how many seconds you actually counted.',
             ),
             MeasureField(
               label: 'Oxygen saturation',
@@ -751,9 +822,8 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
               danger: false,
               value: _signs.contains('wheeze'),
               onChanged: (v) => setState(
-                () => v == true
-                    ? _signs.add('wheeze')
-                    : _signs.remove('wheeze'),
+                () =>
+                    v == true ? _signs.add('wheeze') : _signs.remove('wheeze'),
               ),
             ),
           ],
@@ -855,9 +925,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
               danger: false,
               value: _signs.contains('fever'),
               onChanged: (v) => setState(
-                () => v == true
-                    ? _signs.add('fever')
-                    : _signs.remove('fever'),
+                () => v == true ? _signs.add('fever') : _signs.remove('fever'),
               ),
             ),
             MeasurePair(
@@ -934,9 +1002,8 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
               danger: false,
               value: _signs.contains('eyePus'),
               onChanged: (v) => setState(
-                () => v == true
-                    ? _signs.add('eyePus')
-                    : _signs.remove('eyePus'),
+                () =>
+                    v == true ? _signs.add('eyePus') : _signs.remove('eyePus'),
               ),
             ),
             DangerSign(
@@ -1003,7 +1070,8 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
       if (muacApplies) ...[
         SectionCard(
           title: 'MUAC screening',
-          subtitle: 'WHO cutoffs for 6–59 months. Oedema still trumps the tape '
+          subtitle:
+              'WHO cutoffs for 6–59 months. Oedema still trumps the tape '
               '— a child with bilateral pitting oedema is SAM whatever MUAC '
               'reads.',
           icon: Icons.straighten_outlined,
@@ -1131,9 +1199,8 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
                   FilterChip(
                     label: Text(g.label),
                     selected: _groups.contains(g),
-                    onSelected: (on) => setState(
-                      () => on ? _groups.add(g) : _groups.remove(g),
-                    ),
+                    onSelected: (on) =>
+                        setState(() => on ? _groups.add(g) : _groups.remove(g)),
                   ),
               ],
             ),
@@ -1168,33 +1235,29 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
               title: 'At birth',
               doses: _dosesDueBy(0),
               given: _vaxGiven,
-              onToggle: (l, on) => setState(
-                () => on ? _vaxGiven.add(l) : _vaxGiven.remove(l),
-              ),
+              onToggle: (l, on) =>
+                  setState(() => on ? _vaxGiven.add(l) : _vaxGiven.remove(l)),
             ),
             _VaxBand(
               title: '6, 10 and 14 weeks',
               doses: _dosesDueBy(14),
               given: _vaxGiven,
-              onToggle: (l, on) => setState(
-                () => on ? _vaxGiven.add(l) : _vaxGiven.remove(l),
-              ),
+              onToggle: (l, on) =>
+                  setState(() => on ? _vaxGiven.add(l) : _vaxGiven.remove(l)),
             ),
             _VaxBand(
               title: '6–9 months',
               doses: _dosesDueBy(39),
               given: _vaxGiven,
-              onToggle: (l, on) => setState(
-                () => on ? _vaxGiven.add(l) : _vaxGiven.remove(l),
-              ),
+              onToggle: (l, on) =>
+                  setState(() => on ? _vaxGiven.add(l) : _vaxGiven.remove(l)),
             ),
             _VaxBand(
               title: '18 months',
               doses: _dosesDueBy(78),
               given: _vaxGiven,
-              onToggle: (l, on) => setState(
-                () => on ? _vaxGiven.add(l) : _vaxGiven.remove(l),
-              ),
+              onToggle: (l, on) =>
+                  setState(() => on ? _vaxGiven.add(l) : _vaxGiven.remove(l)),
             ),
             DangerSign(
               label: 'Vitamin A in the last 6 months',
@@ -1263,7 +1326,8 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     }
 
     // -------------------------------------------------------------- ENH 5
-    final days = person.ageInDays ??
+    final days =
+        person.ageInDays ??
         (isYoungInfant ? (ageDays ?? 0) : ((ageMonths ?? 0) * 30.4375).round());
     final plan = ImmunisationEngine.plan(
       ageInDays: days,
@@ -1280,9 +1344,10 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
           ? !_signs.contains('noFeed')
           : !_signs.contains('noDrink'),
       vomitsEverything: _signs.contains('vomitsAll'),
-      hasConvulsionsThisVisit: _signs.contains('convulsions') ||
-          _signs.contains('convulsingNow'),
-      isLethargicOrUnconscious: _signs.contains('lethargic') ||
+      hasConvulsionsThisVisit:
+          _signs.contains('convulsions') || _signs.contains('convulsingNow'),
+      isLethargicOrUnconscious:
+          _signs.contains('lethargic') ||
           _signs.contains('noMove') ||
           _signs.contains('movesStim'),
       // 2. Cough / difficult breathing
@@ -1303,10 +1368,10 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
       skinPinchResult: _skinPinchResult == 'normal'
           ? 'normal'
           : _skinPinchResult == 'slow'
-              ? 'slowly'
-              : _skinPinchResult == 'very_slow'
-                  ? 'very_slowly'
-                  : null,
+          ? 'slowly'
+          : _skinPinchResult == 'very_slow'
+          ? 'very_slowly'
+          : null,
       // 4. Fever
       feverReported: _signs.contains('fever'),
       feverDurationDays: parseInt(_feverDays),
@@ -1322,8 +1387,8 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
           ? (_rdtPositive == true ? 'pf_positive' : 'negative')
           : null,
       // 5. Ear
-      earProblemPresent: _signs.contains('earPain') ||
-          _signs.contains('earDischarge'),
+      earProblemPresent:
+          _signs.contains('earPain') || _signs.contains('earDischarge'),
       earPainDurationDays: _signs.contains('earPain')
           ? parseInt(_earDays)
           : null,
@@ -1345,14 +1410,15 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
       minimumMealFrequency: isYoungInfant
           ? (_feedsPerDay ?? 0) >= 8
           : (ageMonths == null
-              ? null
-              : ageMonths! < 12
-                  ? (_mealsPerDay ?? 0) >= 2
-                  : (_mealsPerDay ?? 0) >= 3),
+                ? null
+                : ageMonths! < 12
+                ? (_mealsPerDay ?? 0) >= 2
+                : (_mealsPerDay ?? 0) >= 3),
       minimumAcceptableDiet: null,
       // 8. Immunizations
-      immunizationsDueToday:
-          plan.giveToday.map((d) => d.label).toList(growable: false),
+      immunizationsDueToday: plan.giveToday
+          .map((d) => d.label)
+          .toList(growable: false),
       immunizationsGivenToday: _vaxGiven.toList()..sort(),
       // Meta
       assessedByUserId: input.user.id,
@@ -1521,6 +1587,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     'skin_pustules': _pustules,
     'breastfeeds_per_day': _feedsPerDay,
     'breastfed_within_one_hour': _bfOneHour,
+    ...stationInputs(_station),
   };
 
   Map<String, Object?> _childInputs() => {
@@ -1554,6 +1621,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     'vaccines_given': _vaxGiven.toList()..sort(),
     'vitamin_a': _vitA,
     'dewormed': _dewormed,
+    ...stationInputs(_station),
   };
 }
 

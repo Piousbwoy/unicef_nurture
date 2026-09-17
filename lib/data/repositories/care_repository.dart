@@ -25,6 +25,10 @@
 /// is only true if it can be shown afterwards.
 library;
 
+import '../../domain/entities/caregiver.dart';
+import '../../domain/services/caregiver_check_policy.dart';
+import '../../domain/services/caregiver_milestone_policy.dart';
+import '../local/caregiver_dao.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
 import '../../domain/enums.dart';
@@ -53,7 +57,8 @@ class AccessDenied implements Exception {
 }
 
 class CareRepository {
-  CareRepository();
+  CareRepository({DateTime Function()? clock}) : _clock = clock ?? DateTime.now;
+  final DateTime Function() _clock;
 
   // ---------------------------------------------------------------------------
   // Guards
@@ -234,10 +239,11 @@ class CareRepository {
   /// register is what she searches, the plan is what she walks.
   Future<List<Household>> visibleHouseholds(AppUser user) async {
     if (user.can(Permission.viewAllHouseholds)) {
-      return HouseholdDao.caseloadFor(
-        workerId: user.id,
-        region: user.region,
-      );
+      // Region-wide register: a colleague's household in any district of
+      // the region is findable (see HouseholdDao.caseloadFor — region names
+      // are matched by mutual prefix so 'Northern' and 'Northern Region'
+      // count as the same region).
+      return HouseholdDao.caseloadFor(workerId: user.id, region: user.region);
     }
     final linked = await UserDao.linkedHouseholdFor(user.id);
     if (linked == null) return const [];
@@ -251,11 +257,7 @@ class CareRepository {
   }
 
   Future<List<Household>> searchHouseholds(AppUser user, String query) async {
-    await _require(
-      user,
-      Permission.viewAllHouseholds,
-      'search all households',
-    );
+    await _require(user, Permission.viewAllHouseholds, 'search all households');
     return HouseholdDao.search(query, region: user.region);
   }
 
@@ -404,8 +406,7 @@ class CareRepository {
     await VisitDao.start(visit, rollCall);
   }
 
-  Future<Visit?> resumableVisit(AppUser user) =>
-      VisitDao.openVisitFor(user.id);
+  Future<Visit?> resumableVisit(AppUser user) => VisitDao.openVisitFor(user.id);
 
   Future<void> completeVisit(AppUser user, String visitId, {String? notes}) =>
       VisitDao.complete(visitId, notes: notes);
@@ -419,6 +420,15 @@ class CareRepository {
   Future<List<Visit>> visitHistory(AppUser user, String householdId) async {
     await _requireHouseholdScope(user, householdId, 'view visit history');
     return VisitDao.forHousehold(householdId);
+  }
+
+  /// Distinct households this worker has visited since [since] — the
+  /// dashboard's "households visited today" figure. Deliberately visit-based:
+  /// a household row edited without a visit (phone number fixed, member
+  /// added) must not inflate it.
+  Future<int> householdsVisitedSince(AppUser user, DateTime since) async {
+    await _require(user, Permission.runClinicalAssessment, 'review your day');
+    return VisitDao.countDistinctHouseholdsVisitedSince(user.id, since);
   }
 
   // ---------------------------------------------------------------------------
@@ -668,7 +678,12 @@ class CareRepository {
       check.householdId,
       'record a home check for this household',
     );
-    await HomeCheckDao.save(check);
+    final scope = CaregiverScope(
+      userId: check.checkedBy,
+      householdId: check.householdId,
+    );
+    await _requireCaregiverScope(user, scope, personId: check.personId);
+    await CaregiverDao.saveLegacyHomeCheck(scope, check);
   }
 
   /// The home checks a family has run, newest first. Both roles may read
@@ -722,10 +737,7 @@ class CareRepository {
   /// Same contract as [recordHomeCheck]: gated, scoped, and deliberately not
   /// queued to the outbox. A family's report of what their child can do stays
   /// on their device until they choose to show it.
-  Future<void> recordMilestoneCheck(
-    AppUser user,
-    MilestoneCheck check,
-  ) async {
+  Future<void> recordMilestoneCheck(AppUser user, MilestoneCheck check) async {
     await _require(
       user,
       Permission.runCaregiverTriage,
@@ -738,7 +750,12 @@ class CareRepository {
       check.householdId,
       'record a milestone check for this household',
     );
-    await MilestoneCheckDao.save(check);
+    final scope = CaregiverScope(
+      userId: check.checkedBy,
+      householdId: check.householdId,
+    );
+    await _requireCaregiverScope(user, scope, personId: check.personId);
+    await CaregiverDao.saveLegacyMilestone(scope, check);
   }
 
   /// The milestone checks a family has run, newest first. Both roles read:
@@ -768,8 +785,16 @@ class CareRepository {
   ///
   /// FHW-only by construction: it aggregates every household, so it is gated
   /// on the zone-wide permission a caregiver does not hold.
-  Future<({int issued, int arrived, double rate, int urgentHomeChecks,
-      int flaggedChildren})> impactSummary(AppUser user) async {
+  Future<
+    ({
+      int issued,
+      int arrived,
+      double rate,
+      int urgentHomeChecks,
+      int flaggedChildren,
+    })
+  >
+  impactSummary(AppUser user) async {
     await _require(
       user,
       Permission.viewAllHouseholds,
@@ -795,6 +820,195 @@ class CareRepository {
     );
   }
 
+  // Local-only caregiver companion state. Never enqueue these records for sync.
+  Future<Person?> _requireCaregiverScope(
+    AppUser user,
+    CaregiverScope scope, {
+    String? personId,
+  }) async {
+    await _require(
+      user,
+      Permission.manageOwnFamily,
+      'access local caregiver records',
+    );
+    if (scope.userId != user.id) {
+      throw const AccessDenied(
+        'access another caregiver’s records',
+        Permission.manageOwnFamily,
+      );
+    }
+    await _requireHouseholdScope(
+      user,
+      scope.householdId,
+      'access local caregiver records',
+    );
+    if (personId == null) return null;
+    final person = await PersonDao.byId(personId);
+    if (person == null ||
+        person.householdId != scope.householdId ||
+        !person.isActive) {
+      throw const AccessDenied(
+        'access a person outside your family',
+        Permission.manageOwnFamily,
+      );
+    }
+    return person;
+  }
+
+  Future<CaregiverSettings?> caregiverSettings(
+    AppUser user,
+    CaregiverScope scope,
+  ) async {
+    await _requireCaregiverScope(user, scope);
+    return CaregiverDao.settings(scope);
+  }
+
+  Future<void> saveCaregiverSettings(
+    AppUser user,
+    CaregiverSettings settings,
+  ) async {
+    await _requireCaregiverScope(
+      user,
+      settings.scope,
+      personId: settings.selectedPersonId,
+    );
+    if (settings.contacts.any((c) => !c.isValid) ||
+        settings.contacts.map((c) => c.kind).toSet().length !=
+            settings.contacts.length) {
+      throw const CaregiverDataException(
+        'Review the saved contact names and numbers.',
+      );
+    }
+    await CaregiverDao.saveSettings(settings);
+  }
+
+  Future<CaregiverDraft?> caregiverDraft(
+    AppUser user,
+    CaregiverScope scope,
+    String personId,
+    CaregiverDraftKind kind,
+  ) async {
+    await _requireCaregiverScope(user, scope, personId: personId);
+    return CaregiverDao.draft(scope, personId, kind);
+  }
+
+  Future<void> saveCaregiverDraft(AppUser user, CaregiverDraft draft) async {
+    await _requireCaregiverScope(user, draft.scope, personId: draft.personId);
+    if (draft.id.isEmpty ||
+        draft.questionVersion < 1 ||
+        draft.questionIndex < 0 ||
+        draft.updatedAt.isBefore(draft.startedAt)) {
+      throw const CaregiverDataException('The check session is not valid.');
+    }
+    await CaregiverDao.saveDraft(draft);
+  }
+
+  Future<void> discardCaregiverDraft(
+    AppUser user,
+    CaregiverScope scope,
+    String personId,
+    CaregiverDraftKind kind,
+  ) async {
+    await _requireCaregiverScope(user, scope, personId: personId);
+    await CaregiverDao.discardDraft(scope, personId, kind);
+  }
+
+  Future<List<CaregiverActivity>> caregiverActivity(
+    AppUser user,
+    CaregiverScope scope, {
+    String? personId,
+  }) async {
+    await _requireCaregiverScope(user, scope, personId: personId);
+    return CaregiverDao.activity(scope, personId: personId);
+  }
+
+  Future<void> saveCaregiverActivity(
+    AppUser user,
+    CaregiverActivity activity,
+  ) async {
+    await _requireCaregiverScope(
+      user,
+      activity.scope,
+      personId: activity.personId,
+    );
+    if (activity.id.isEmpty ||
+        activity.itemKey.isEmpty ||
+        activity.occurrenceKey.isEmpty ||
+        activity.note.length > 1000 ||
+        (activity.personId == null &&
+            activity.kind != CaregiverActivityKind.shopping) ||
+        (activity.kind == CaregiverActivityKind.observation &&
+            activity.observation == null) ||
+        activity.kind == CaregiverActivityKind.homeCheckContext ||
+        activity.kind == CaregiverActivityKind.milestoneContext) {
+      throw const CaregiverDataException(
+        'This activity cannot be saved independently.',
+      );
+    }
+    await CaregiverDao.saveActivity(activity);
+  }
+
+  Future<HomeCheck> finalizeCaregiverHomeCheck(
+    AppUser user,
+    CaregiverDraft draft,
+  ) async {
+    final person = (await _requireCaregiverScope(
+      user,
+      draft.scope,
+      personId: draft.personId,
+    ))!;
+    final policy = CaregiverCheckPolicy(clock: _clock);
+    if (!policy.compatible(draft, person)) {
+      throw const CaregiverDataException(
+        'The person’s age or check questions changed. Start a new check.',
+      );
+    }
+    final questions = policy.questionsFor(person)!;
+    final decision = policy.decide(questions, draft.answers);
+    final verdict = switch (decision) {
+      CaregiverCheckDecision.urgent => HomeCheckVerdict.urgent,
+      CaregiverCheckDecision.contactToday => HomeCheckVerdict.caution,
+      CaregiverCheckDecision.routine => HomeCheckVerdict.fine,
+      _ => throw const CaregiverDataException(
+        'Answer the remaining questions before saving a completed check.',
+      ),
+    };
+    final report = HomeCheck(
+      id: draft.id,
+      householdId: draft.scope.householdId,
+      personId: draft.personId,
+      clientType: questions.clientType,
+      verdict: verdict,
+      yesSigns: questions.questions
+          .where((q) => draft.answers[q.key] == CaregiverAnswer.yes)
+          .map((q) => q.label)
+          .toList(),
+      unsureSigns: questions.questions
+          .where((q) => draft.answers[q.key] == CaregiverAnswer.unsure)
+          .map((q) => q.label)
+          .toList(),
+      checkedBy: user.id,
+      checkedAt: draft.startedAt,
+    );
+    return CaregiverDao.finalizeHomeCheck(draft, report, _clock());
+  }
+
+  Future<MilestoneCheck> finalizeCaregiverMilestone(
+    AppUser user,
+    CaregiverDraft draft,
+  ) async {
+    final person = (await _requireCaregiverScope(
+      user,
+      draft.scope,
+      personId: draft.personId,
+    ))!;
+    return CaregiverDao.finalizeMilestone(
+      draft,
+      CaregiverMilestonePolicy.report(draft, person, _clock()),
+      _clock(),
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Scheduled contacts
   // ---------------------------------------------------------------------------
@@ -809,9 +1023,17 @@ class CareRepository {
     final linked = await UserDao.linkedHouseholdFor(user.id);
     if (linked == null) return const [];
     final all = await ScheduleDao.due(horizonDays: horizonDays);
-    return all
-        .where((c) => c.householdId == linked)
-        .toList(growable: false);
+    return all.where((c) => c.householdId == linked).toList(growable: false);
+  }
+
+  /// Includes completed contacts so caregiver history does not recreate them
+  /// as pending follow-ups. Reading never confirms an appointment or a dose.
+  Future<List<ScheduledContact>> scheduledContactsForPerson(
+    AppUser user,
+    String personId,
+  ) async {
+    await _requirePersonScope(user, personId, 'view scheduled contacts');
+    return ScheduleDao.forPerson(personId);
   }
 
   Future<void> scheduleContacts(

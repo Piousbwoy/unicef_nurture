@@ -1,8 +1,11 @@
 /// Premium Design Tokens for CareBridge AI
 /// Modern, accessible, and visually stunning design system
 /// Designed for low-literacy contexts with high visual impact
+library;
 
 import 'package:flutter/material.dart';
+
+import 'app_theme.dart';
 
 class PremiumDesignTokens {
   PremiumDesignTokens._();
@@ -11,18 +14,18 @@ class PremiumDesignTokens {
   // COLOR PALETTE - Medical-Grade Accessibility
   // ===========================================================================
 
-  /// Primary brand color - Trustworthy blue
-  static const Color primary = Color(0xFF2563EB);
-  static const Color primaryLight = Color(0xFF3B82F6);
-  static const Color primaryDark = Color(0xFF1D4ED8);
+  /// Primary brand color — delegated to AppColors for single source of truth.
+  static const Color primary = AppColors.primary;
+  static const Color primaryLight = AppColors.primaryGlow;
+  static const Color primaryDark = AppColors.primaryDark;
 
-  /// Triage colors - WCAG AAA compliant
-  static const Color urgent = Color(0xFFDC2626);
-  static const Color urgentLight = Color(0xFFFEF2F2);
-  static const Color watch = Color(0xFFD97706);
-  static const Color watchLight = Color(0xFFFFFBEB);
-  static const Color routine = Color(0xFF059669);
-  static const Color routineLight = Color(0xFFF0FDF4);
+  /// Triage colors — delegated to AppColors IMCI bands.
+  static const Color urgent = AppColors.triageRed;
+  static const Color urgentLight = AppColors.triageRedBg;
+  static const Color watch = AppColors.triageAmber;
+  static const Color watchLight = AppColors.triageAmberBg;
+  static const Color routine = AppColors.triageGreen;
+  static const Color routineLight = AppColors.triageGreenBg;
 
   /// Neutral palette
   static const Color neutral50 = Color(0xFFF9FAFB);
@@ -40,62 +43,41 @@ class PremiumDesignTokens {
   // GLASSMORPHISM - Premium feel
   // ===========================================================================
 
+  /// Legacy decoration. New code should compose [GlassSurface] from
+  /// `core/theme/glass.dart`, which honours the Lite / reduced-motion
+  /// preference. This now delegates its colours to [AppColors] so the two
+  /// palettes cannot drift.
+  @Deprecated('Use GlassSurface')
   static BoxDecoration glassCard({Color? tint}) => BoxDecoration(
-        color: (tint ?? Colors.white).withOpacity(0.85),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.5),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 40,
-            offset: const Offset(0, 20),
-          ),
-        ],
-      );
+    color: (tint ?? Colors.white).withValues(alpha: 0.85),
+    borderRadius: BorderRadius.circular(20),
+    border: Border.all(color: AppColors.glassStroke, width: 1.5),
+    boxShadow: const [AppShadows.card, AppShadows.glass],
+  );
 
+  @Deprecated('Use GlassSurface')
   static BoxDecoration elevatedCard({Color? backgroundColor}) => BoxDecoration(
-        color: backgroundColor ?? Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      );
+    color: backgroundColor ?? AppColors.canvas,
+    borderRadius: BorderRadius.circular(16),
+    border: Border.all(color: AppColors.line, width: Gap.hairline),
+    boxShadow: const [AppShadows.card],
+  );
 
   static BoxDecoration urgentCard() => BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFDC2626),
-            Color(0xFFB91C1C),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFDC2626).withOpacity(0.4),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      );
+    gradient: const LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [Color(0xFFDC2626), Color(0xFFB91C1C)],
+    ),
+    borderRadius: BorderRadius.circular(20),
+    boxShadow: [
+      BoxShadow(
+        color: const Color(0xFFDC2626).withValues(alpha: 0.4),
+        blurRadius: 20,
+        offset: const Offset(0, 8),
+      ),
+    ],
+  );
 
   // ===========================================================================
   // TYPOGRAPHY - Medical clarity
@@ -215,7 +197,7 @@ class PremiumDesignTokens {
 
   static List<BoxShadow> elevation1 = [
     BoxShadow(
-      color: Colors.black.withOpacity(0.04),
+      color: Colors.black.withValues(alpha: 0.04),
       blurRadius: 4,
       offset: const Offset(0, 1),
     ),
@@ -223,7 +205,7 @@ class PremiumDesignTokens {
 
   static List<BoxShadow> elevation2 = [
     BoxShadow(
-      color: Colors.black.withOpacity(0.06),
+      color: Colors.black.withValues(alpha: 0.06),
       blurRadius: 8,
       offset: const Offset(0, 2),
     ),
@@ -231,7 +213,7 @@ class PremiumDesignTokens {
 
   static List<BoxShadow> elevation3 = [
     BoxShadow(
-      color: Colors.black.withOpacity(0.08),
+      color: Colors.black.withValues(alpha: 0.08),
       blurRadius: 16,
       offset: const Offset(0, 4),
     ),
@@ -239,7 +221,7 @@ class PremiumDesignTokens {
 
   static List<BoxShadow> elevation4 = [
     BoxShadow(
-      color: Colors.black.withOpacity(0.10),
+      color: Colors.black.withValues(alpha: 0.10),
       blurRadius: 24,
       offset: const Offset(0, 8),
     ),
@@ -247,7 +229,7 @@ class PremiumDesignTokens {
 
   static List<BoxShadow> elevation5 = [
     BoxShadow(
-      color: Colors.black.withOpacity(0.12),
+      color: Colors.black.withValues(alpha: 0.12),
       blurRadius: 32,
       offset: const Offset(0, 16),
     ),

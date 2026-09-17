@@ -293,17 +293,35 @@ void main() {
       expect(find.text('Who are you checking?'), findsWidgets);
       await _untilVisible(tester, find.text('Awah'));
       await tester.tap(find.text('Awah').last);
+      // Step 0: the check opens with her worry, then still asks every sign.
+      await _untilVisible(tester, find.text('What is worrying you about Awah today?'));
+      await tester.tap(find.text('No specific worry — just check'));
+      await _untilVisible(tester, find.text('What have you noticed?'));
       await tester.pumpAndSettle();
       expect(find.text('What have you noticed?'), findsWidgets);
-      // The check is a conversation now: one sign at a time, walking on by
-      // itself after each answer.
+      // Each NO stays on its question until the caregiver explicitly taps Next.
       for (var i = 0; i < 8; i++) {
         await _untilVisible(tester, find.text('NO'));
         expect(find.text('NO'), findsOneWidget);
         await tester.tap(find.text('NO'));
         await tester.pump(const Duration(milliseconds: 100));
         await tester.pumpAndSettle();
+        if (i < 7) {
+          await tester.ensureVisible(find.text('Next'));
+          await tester.tap(find.text('Next'));
+          await tester.pumpAndSettle();
+        }
       }
+      // Last question answered: an explicit continue, then how long, then
+      // pre-care context (skippable), then the verdict.
+      await tester.ensureVisible(find.text('Continue — almost done'));
+      await tester.tap(find.text('Continue — almost done'));
+      await _untilVisible(tester, find.text('How long has this been going on?'));
+      await tester.tap(find.text('Started today or yesterday'));
+      await _untilVisible(tester, find.text('Have you already given anything?'));
+      await tester.ensureVisible(find.text('Skip — just show me what to do'));
+      await tester.tap(find.text('Skip — just show me what to do'));
+      await _untilVisible(tester, find.textContaining('signs answered'));
       expect(find.textContaining('signs answered'), findsOneWidget);
       await tester.ensureVisible(find.text('What should I do?'));
       await tester.tap(find.text('What should I do?'));
@@ -311,46 +329,43 @@ void main() {
       expect(find.text('Continue routine care'), findsOneWidget);
       // Even a green verdict leaves the family with something to do.
       expect(find.text('Keep doing these'), findsOneWidget);
-      await tester.ensureVisible(find.text('Continue Routine Care'));
-      await tester.tap(find.text('Continue Routine Care'));
-      await tester.pumpAndSettle();
+      await _untilVisible(tester, find.text('Saved on this phone'));
       await tester.ensureVisible(find.text('Back to home'));
       await tester.tap(find.text('Back to home'));
       await tester.pumpAndSettle();
       expect(find.text('Is someone unwell?'), findsWidgets);
 
-      // Second run, this time with a danger sign: the result must be a
-      // plan, not just "go" — tickable steps and the family's own words
-      // for the nurse, then the scannable clinic pass.
+      // A single YES exits immediately, with readable guidance before saving.
+      // Sharing remains optional and arrival is only a local caregiver report.
       await tester.ensureVisible(find.text('Check the danger signs'));
       await tester.tap(find.text('Check the danger signs'));
       await tester.pumpAndSettle();
       await _untilVisible(tester, find.text('Awah'));
       await tester.tap(find.text('Awah').last);
-      await tester.pumpAndSettle();
+      await _untilVisible(tester, find.text('What is worrying you about Awah today?'));
+      await tester.tap(find.text('No specific worry — just check'));
       await _untilVisible(tester, find.text('YES'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('YES'));
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pumpAndSettle();
-      for (var i = 0; i < 7; i++) {
-        await _untilVisible(tester, find.text('NO'));
-        await tester.tap(find.text('NO'));
-        await tester.pump(const Duration(milliseconds: 100));
-        await tester.pumpAndSettle();
-      }
-      await tester.ensureVisible(find.text('What should I do?'));
-      await tester.tap(find.text('What should I do?'));
-      await tester.pumpAndSettle();
+      expect(find.text('NO'), findsNothing);
       expect(find.text('Go to the health facility now'), findsOneWidget);
       expect(find.text('Do these now — even on the way'), findsOneWidget);
-      expect(find.textContaining('YOUR WORDS FOR THE NURSE'), findsOneWidget);
-      expect(find.textContaining('What I noticed:'), findsOneWidget);
-      await tester.ensureVisible(find.text('Go to Clinic Now'));
-      await tester.tap(find.text('Go to Clinic Now'));
+      await _untilVisible(tester, find.text('Saved on this phone'));
+      await tester.ensureVisible(find.text('Show the nurse'));
+      await tester.tap(find.text('Show the nurse'));
       await tester.pumpAndSettle();
-      expect(find.text('SCAN AT CLINIC'), findsOneWidget);
+      expect(find.textContaining('What I noticed:'), findsOneWidget);
+      expect(find.textContaining('Unanswered:'), findsOneWidget);
+      expect(find.text('SCAN AT CLINIC'), findsNothing);
+      expect(find.text('Reveal QR to share'), findsOneWidget);
+      await _untilVisible(tester, find.text('I have arrived'));
       await tester.ensureVisible(find.text('I have arrived'));
       await tester.tap(find.text('I have arrived'));
+      await _untilVisible(tester, find.text('Arrival noted on this phone'));
+      await tester.ensureVisible(find.text('Back to guidance'));
+      await tester.tap(find.text('Back to guidance'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Back to home'));
       await tester.tap(find.text('Back to home'));
@@ -359,18 +374,21 @@ void main() {
       await tester.tap(find.text('Grow & Play'));
       await tester.pumpAndSettle();
       expect(find.text('Grow and play'), findsWidgets);
+      // The play card renders only after the real-clock clinical isolate loads.
+      await _untilVisible(tester, find.text('Check the milestones'));
       expect(find.text('Check the milestones'), findsWidgets);
-      expect(find.textContaining('Play today:'), findsOneWidget);
+      expect(find.text('Play together today'), findsOneWidget);
 
       await tester.tap(find.text('Care plan'));
       await tester.pumpAndSettle();
+      await _untilVisible(tester, find.text('Digital Yellow Card'));
       expect(find.text('Digital Yellow Card'), findsWidgets);
-      expect(find.textContaining('doses may be overdue'), findsWidgets);
+      expect(find.textContaining('Due by age'), findsWidgets);
 
       await tester.tap(find.text('Help'));
       await tester.pumpAndSettle();
       expect(find.text('If it is an emergency'), findsWidgets);
-      expect(find.text('Test the voice'), findsWidgets);
+      expect(find.text('Open the voice guide'), findsWidgets);
       await tester.ensureVisible(find.text('Hand the phone back'));
       expect(find.text('Hand the phone back'), findsWidgets);
       await tester.tap(find.text('Hand the phone back'));

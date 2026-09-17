@@ -28,6 +28,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/glass.dart';
+import '../../core/theme/motion.dart';
 import '../assessment/emergency_tunnel.dart';
 import '../shared/ui.dart';
 import 'assess_tab.dart';
@@ -54,105 +56,140 @@ class _FhwHomeState extends ConsumerState<FhwHome> {
     final isOnline = ref.watch(connectivityProvider).valueOrNull ?? false;
     if (user == null) return const SizedBox.shrink();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_titles[_tab], style: AppType.title),
-            const SizedBox(height: 2),
-            Text(
-              user.chpsZone ?? '${user.community}, ${user.district}',
-              style: AppType.caption.copyWith(fontSize: 11.5),
+    return VisualEffectsScope(
+      child: AmbientBackdrop(
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          extendBody: true,
+          appBar: GlassAppBar(
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_titles[_tab], style: AppType.title),
+                const SizedBox(height: 2),
+                Text(
+                  user.chpsZone ?? '${user.community}, ${user.district}',
+                  style: AppType.caption.copyWith(fontSize: 11.5),
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: Gap.md),
-            child: Center(
-              child: ConnectivityDot(isOnline: isOnline),
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: Gap.md),
+                child: Center(child: ConnectivityDot(isOnline: isOnline)),
+              ),
+              IconButton(
+                tooltip: 'Refresh',
+                onPressed: () {
+                  ref.invalidate(dayPlanProvider);
+                  ref.invalidate(visibleHouseholdsProvider);
+                  ref.invalidate(decliningChildrenProvider);
+                  ref.invalidate(barrierPatternsProvider);
+                  ref.invalidate(openReferralsProvider);
+                },
+                icon: const Icon(Icons.refresh_rounded, size: 20),
+              ),
+              const SizedBox(width: Gap.xs),
+            ],
+          ),
+          body: IndexedStack(
+            index: _tab,
+            children: [
+              FhwHomeTab(
+                onOpenFamilies: () => setState(() => _tab = 2),
+                onOpenQueue: () => setState(() => _tab = 1),
+              ),
+              const DayPlanTab(),
+              const AssessTab(),
+              const ReferralsTab(),
+              const ProfileTab(),
+            ],
+          ),
+          // The emergency tunnel: one red button on every tab, because the
+          // convulsing child never arrives while the CHO is on the "right"
+          // screen. It asks for no patient, no household, no network — six
+          // questions and a verdict. Choosing "full assessment" lands the CHO
+          // on the Assess tab. The button is a full-red disc with a white
+          // ring: unmissable, but clean against the glass shell.
+          floatingActionButton: Padding(
+            padding: const EdgeInsets.only(bottom: 72),
+            child: PressScale(
+              onTap: () async {
+                final continueToAssess = await Navigator.of(context).push<bool>(
+                  GlassPageRoute<bool>(
+                    builder: (_) => const EmergencyTunnelScreen(),
+                  ),
+                );
+                if (continueToAssess == true && mounted) {
+                  setState(() => _tab = 2);
+                }
+              },
+              child: Semantics(
+                button: true,
+                label: 'Emergency',
+                child: Container(
+                  width: 58,
+                  height: 58,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        AppColors.triageRed,
+                        AppColors.triageRed.withValues(alpha: 0.82),
+                      ],
+                    ),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.triageRed.withValues(alpha: 0.45),
+                        blurRadius: 26,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.emergency_rounded,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
+              ),
             ),
           ),
-          IconButton(
-            tooltip: 'Refresh',
-            onPressed: () {
-              ref.invalidate(dayPlanProvider);
-              ref.invalidate(visibleHouseholdsProvider);
-              ref.invalidate(decliningChildrenProvider);
-              ref.invalidate(barrierPatternsProvider);
-              ref.invalidate(openReferralsProvider);
-            },
-            icon: const Icon(Icons.refresh_rounded, size: 20),
+          bottomNavigationBar: GlassNavBar(
+            currentIndex: _tab,
+            onTap: (i) => setState(() => _tab = i),
+            items: const [
+              GlassNavItem(
+                icon: Icons.calendar_month_outlined,
+                selectedIcon: Icons.calendar_month_rounded,
+                label: 'Today',
+              ),
+              GlassNavItem(
+                icon: Icons.people_outlined,
+                selectedIcon: Icons.people_rounded,
+                label: 'Visits',
+              ),
+              GlassNavItem(
+                icon: Icons.medical_services_outlined,
+                selectedIcon: Icons.medical_services_rounded,
+                label: 'Assess',
+              ),
+              GlassNavItem(
+                icon: Icons.local_hospital_outlined,
+                selectedIcon: Icons.local_hospital_rounded,
+                label: 'Referrals',
+              ),
+              GlassNavItem(
+                icon: Icons.person_outlined,
+                selectedIcon: Icons.person_rounded,
+                label: 'Profile',
+              ),
+            ],
           ),
-          const SizedBox(width: Gap.xs),
-        ],
-      ),
-      body: IndexedStack(
-        index: _tab,
-        children: [
-          FhwHomeTab(
-            onOpenFamilies: () => setState(() => _tab = 2),
-            onOpenQueue: () => setState(() => _tab = 1),
-          ),
-          const DayPlanTab(),
-          const AssessTab(),
-          const ReferralsTab(),
-          const ProfileTab(),
-        ],
-      ),
-      // The emergency tunnel: one red button on every tab, because the
-      // convulsing child never arrives while the CHO is on the "right"
-      // screen. It asks for no patient, no household, no network — six
-      // questions and a verdict. Choosing "full assessment" lands the CHO
-      // on the Assess tab.
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final continueToAssess = await Navigator.of(context).push<bool>(
-            MaterialPageRoute(builder: (_) => const EmergencyTunnelScreen()),
-          );
-          if (continueToAssess == true && mounted) {
-            setState(() => _tab = 2);
-          }
-        },
-        backgroundColor: AppColors.triageRed,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.warning_amber_rounded),
-        label: const Text(
-          'Emergency',
-          style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0.4),
         ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _tab,
-        onTap: (i) => setState(() => _tab = i),
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_month_outlined),
-            activeIcon: Icon(Icons.calendar_month_rounded),
-            label: 'Today',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.people_outlined),
-            activeIcon: Icon(Icons.people_rounded),
-            label: 'Visits',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.medical_services_outlined),
-            activeIcon: Icon(Icons.medical_services_rounded),
-            label: 'Assess',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.local_hospital_outlined),
-            activeIcon: Icon(Icons.local_hospital_rounded),
-            label: 'Referrals',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outlined),
-            activeIcon: Icon(Icons.person_rounded),
-            label: 'Profile',
-          ),
-        ],
       ),
     );
   }

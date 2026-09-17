@@ -484,9 +484,8 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
   String _region = 'Northern Region';
   String? _district;
   String? _community;
-  final _zone = TextEditingController();
+  String? _zone;
   final _facility = TextEditingController();
-  final _staffId = TextEditingController();
 
   // Caregiver link — two paths to the same place. A family that already
   // exists in the system is found by its code; a family the system has not
@@ -526,9 +525,7 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
       _phone,
       _pin,
       _pinConfirm,
-      _zone,
       _facility,
-      _staffId,
       _familyCode,
       _familyName,
       _landmark,
@@ -722,14 +719,9 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
       community: _isFhw
           ? _community!
           : (household?.community ?? ownHousehold?.community ?? ''),
-      chpsZone: _isFhw && _zone.text.trim().isNotEmpty
-          ? _zone.text.trim()
-          : null,
+      chpsZone: _isFhw ? _zone : null,
       facilityName: _isFhw && _facility.text.trim().isNotEmpty
           ? _facility.text.trim()
-          : null,
-      staffId: _isFhw && _staffId.text.trim().isNotEmpty
-          ? _staffId.text.trim()
           : null,
       preferredLanguage: _language,
       createdAt: DateTime.now(),
@@ -885,8 +877,8 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
           community: _community,
           zone: _zone,
           facility: _facility,
-          staffId: _staffId,
           onCommunityChanged: (v) => setState(() => _community = v),
+          onZoneChanged: (v) => setState(() => _zone = v),
         ),
         _ => const SizedBox.shrink(),
       };
@@ -1223,17 +1215,20 @@ class _CommunityStep extends StatelessWidget {
     required this.community,
     required this.zone,
     required this.facility,
-    required this.staffId,
     required this.onCommunityChanged,
+    required this.onZoneChanged,
   });
 
   final String region;
   final String? district;
   final String? community;
-  final TextEditingController zone;
+
+  /// The CHPS zone is chosen from every community in the five northern
+  /// regions — zones follow care routes, not district lines.
+  final String? zone;
   final TextEditingController facility;
-  final TextEditingController staffId;
   final ValueChanged<String?> onCommunityChanged;
+  final ValueChanged<String?> onZoneChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1270,13 +1265,27 @@ class _CommunityStep extends StatelessWidget {
             onChanged: onCommunityChanged,
           ),
           const SizedBox(height: Gap.lg),
-          const FieldLabel('CHPS zone'),
-          TextField(
-            controller: zone,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              hintText: 'e.g. Kpalsogu CHPS Zone',
+          const FieldLabel(
+            'CHPS zone',
+            why:
+                'Chosen from every community in the northern regions — '
+                'zones follow care routes, not district lines.',
+          ),
+          DropdownButtonFormField<String>(
+            value: zone,
+            isExpanded: true,
+            hint: const Text(
+              'Choose your CHPS zone',
+              overflow: TextOverflow.ellipsis,
             ),
+            items: [
+              for (final z in NorthernGhana.allCommunities)
+                DropdownMenuItem(
+                  value: z,
+                  child: Text(z, overflow: TextOverflow.ellipsis),
+                ),
+            ],
+            onChanged: onZoneChanged,
           ),
           const SizedBox(height: Gap.lg),
           const FieldLabel(
@@ -1289,12 +1298,6 @@ class _CommunityStep extends StatelessWidget {
             decoration: const InputDecoration(
               hintText: 'e.g. Kumbungu District Hospital',
             ),
-          ),
-          const SizedBox(height: Gap.lg),
-          const FieldLabel('Staff ID'),
-          TextField(
-            controller: staffId,
-            decoration: const InputDecoration(hintText: 'e.g. GHS-NR-04821'),
           ),
         ],
       ),

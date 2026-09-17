@@ -15,9 +15,13 @@ library;
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 
 import '../core/auth/session.dart';
 import '../data/local/app_database.dart';
+import '../data/local/household_dao.dart';
 import '../data/local/outbox_dao.dart';
 import '../data/local/preferences_store.dart';
 import '../data/local/sync_state_dao.dart';
@@ -43,15 +47,97 @@ import '../domain/enums.dart';
 /// real use.
 final bootstrapProvider = FutureProvider<void>((ref) async {
   await AppDatabase.instance.database;
+  await _seedTestUser();
   // The sync service starts itself inside [syncServiceProvider], so awaiting
   // it here is enough — and a later invalidation (e.g. the sync-settings
   // screen swapping in a real server) re-creates an already-running service.
   await ref.read(syncServiceProvider.future);
 });
 
+/// Temporary: creates a test FHW account so the app can be exercised without
+/// manual registration. Remove once manual testing is no longer needed.
+Future<void> _seedTestUser() async {
+  const testPhone = '0241234567';
+  const testPin = '2468';
+  final existing = await UserDao.byPhone(testPhone);
+  final prefs = await SharedPreferences.getInstance();
+  if (existing != null) {
+    await prefs.setString('carebridge.session.user_id_fallback', existing.id);
+    await prefs.setString('carebridge.session.last_phone_fallback', existing.phone);
+    // Also seed test household data if not already present
+    await _seedTestData(existing.id);
+    return;
+  }
+  final user = await UserDao.register(
+    user: AppUser(
+      id: const Uuid().v4(),
+      fullName: 'Demo FHW',
+      phone: testPhone,
+      role: UserRole.frontlineHealthWorker,
+      region: 'Northern Region',
+      district: 'Kumbungu',
+      community: 'Kumbungu',
+      preferredLanguage: 'English',
+      createdAt: DateTime.now(),
+    ),
+    pin: testPin,
+  );
+  await prefs.setString('carebridge.session.user_id_fallback', user.id);
+  await prefs.setString('carebridge.session.last_phone_fallback', user.phone);
+  await _seedTestData(user.id);
+}
+
+/// Creates a test household with a pregnant woman for assessment testing.
+Future<void> _seedTestData(String userId) async {
+  final db = await AppDatabase.instance.database;
+  final householdCount = Sqflite.firstIntValue(
+    await db.rawQuery('SELECT COUNT(*) as count FROM households'),
+  );
+  if (householdCount != null && householdCount > 0) return;
+
+  final householdId = const Uuid().v4();
+  await HouseholdDao.upsert(Household(
+    id: householdId,
+    name: "Amina's household",
+    region: 'Northern Region',
+    district: 'Kumbungu',
+    community: 'Kumbungu',
+    createdBy: userId,
+    headName: 'Amina Yusuf',
+    contactPhone: '0241111111',
+    familySize: 3,
+    hasValidNhis: true,
+    walkingMinutesToFacility: 15,
+    landmark: 'Behind the mosque, past the shea tree',
+    createdAt: DateTime.now(),
+    updatedAt: DateTime.now(),
+  ));
+
+  final personId = const Uuid().v4();
+  final db2 = await AppDatabase.instance.database;
+  await db2.insert(
+    Tables.persons,
+    Person(
+      id: personId,
+      householdId: householdId,
+      fullName: 'Amina Yusuf',
+      clientType: ClientType.pregnantWoman,
+      sex: Sex.female,
+      dateOfBirth: DateTime.now().subtract(const Duration(days: 28 * 32)),
+      phone: '0241111111',
+      nhisNumber: 'NHIS-123456',
+      isActive: true,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    ).toMap(),
+  );
+}
+
 // ------------------------------------------------------------------- Repositories
 
-final careRepositoryProvider = Provider<CareRepository>((_) => CareRepository());
+final careRepositoryProvider = Provider<CareRepository>(
+  (_) => CareRepository(),
+);
 
 final insightRepositoryProvider = Provider<InsightRepository>(
   (_) => InsightRepository(),
@@ -147,11 +233,8 @@ Future<void> _pullAndRefresh(Ref ref, {String? userId}) =>
 final pullNowProvider = Provider<Future<PullReport> Function()>((ref) {
   // The user id resolves on this provider's own ref for the same anti-cycle
   // reason [runPull] documents: runPull itself must stay session-blind.
-  return () => runPull(
-        ref,
-        userId: ref.read(currentUserProvider)?.id,
-        force: true,
-      );
+  return () =>
+      runPull(ref, userId: ref.read(currentUserProvider)?.id, force: true);
 });
 
 /// The reads delta pull can change: the five pulled tables (households,
@@ -186,7 +269,8 @@ final lastPullProvider = FutureProvider<String?>((ref) async {
   );
   final t = DateTime.tryParse(at ?? '')?.toLocal();
   if (t == null) return null;
-  final rows = int.tryParse(
+  final rows =
+      int.tryParse(
         await SyncStateDao.read(
               SyncStateKeys.scoped(SyncStateKeys.lastPullRows, user.id),
             ) ??
@@ -198,7 +282,9 @@ final lastPullProvider = FutureProvider<String?>((ref) async {
   final now = DateTime.now();
   final sameDay =
       t.year == now.year && t.month == now.month && t.day == now.day;
-  final when = sameDay ? 'today at $hh:$mm' : 'on ${t.day}/${t.month} at $hh:$mm';
+  final when = sameDay
+      ? 'today at $hh:$mm'
+      : 'on ${t.day}/${t.month} at $hh:$mm';
   return 'Received $rows record${rows == 1 ? '' : 's'} from the server $when';
 });
 
@@ -319,7 +405,10 @@ class SessionNotifier extends Notifier<SessionState> {
     final updated = current.user.copyWith(preferredLanguage: language);
     await UserDao.updateLanguage(updated.id, language);
     await PreferencesStore.setPreferredLanguage(language);
-    state = SessionActive(updated, linkedHouseholdId: current.linkedHouseholdId);
+    state = SessionActive(
+      updated,
+      linkedHouseholdId: current.linkedHouseholdId,
+    );
   }
 }
 
@@ -360,11 +449,9 @@ final dayPlanProvider = FutureProvider<DayPlan>((ref) async {
   if (user == null || !user.can(Permission.planVisitRoute)) {
     throw const AccessDenied('plan the day', Permission.planVisitRoute);
   }
-  return ref.read(insightRepositoryProvider).planDay(
-    workerId: user.id,
-    region: user.region,
-    district: user.district,
-  );
+  return ref
+      .read(insightRepositoryProvider)
+      .planDay(workerId: user.id, region: user.region, district: user.district);
 });
 
 /// Households the signed-in user may see. Different query per role — see
@@ -378,14 +465,14 @@ final visibleHouseholdsProvider = FutureProvider<List<Household>>((ref) async {
 
 /// Everyone in one household, ordered the way care is delivered: mother, then
 /// newborns, then under-fives by age.
-final householdMembersProvider =
-    FutureProvider.family<List<Person>, String>((ref, householdId) async {
-      final user = ref.watch(currentUserProvider);
-      if (user == null) return const [];
-      return ref
-          .read(careRepositoryProvider)
-          .visitQueue(user, householdId);
-    });
+final householdMembersProvider = FutureProvider.family<List<Person>, String>((
+  ref,
+  householdId,
+) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return const [];
+  return ref.read(careRepositoryProvider).visitQueue(user, householdId);
+});
 
 final householdProvider = FutureProvider.family<Household?, String>((
   ref,
@@ -416,12 +503,14 @@ final householdScoreProvider =
 /// The last assessment recorded for one person, or null if never assessed.
 /// Drives the badge on a member tile, so a CHO can see at a glance who was left
 /// amber last time.
-final latestAssessmentProvider =
-    FutureProvider.family<Assessment?, String>((ref, personId) async {
-      final user = ref.watch(currentUserProvider);
-      if (user == null) return null;
-      return ref.read(careRepositoryProvider).latestAssessment(user, personId);
-    });
+final latestAssessmentProvider = FutureProvider.family<Assessment?, String>((
+  ref,
+  personId,
+) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return null;
+  return ref.read(careRepositoryProvider).latestAssessment(user, personId);
+});
 
 /// One person's record, scope-checked. The assessment shell uses this rather
 /// than the household member list so the permission check happens per person.
@@ -435,12 +524,14 @@ final personProvider = FutureProvider.family<Person?, String>((
 });
 
 /// The maternal record (LMP, delivery facts, history) for one mother.
-final maternalRecordProvider =
-    FutureProvider.family<MaternalRecord?, String>((ref, personId) async {
-      final user = ref.watch(currentUserProvider);
-      if (user == null) return null;
-      return ref.read(careRepositoryProvider).maternalRecord(user, personId);
-    });
+final maternalRecordProvider = FutureProvider.family<MaternalRecord?, String>((
+  ref,
+  personId,
+) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return null;
+  return ref.read(careRepositoryProvider).maternalRecord(user, personId);
+});
 
 /// The birth record (weight, gestation, resuscitation) for one newborn.
 final birthRecordProvider = FutureProvider.family<BirthRecord?, String>((
@@ -465,31 +556,33 @@ final growthSeriesProvider =
     });
 
 /// Trajectory analysis for one child.
-final trajectoryProvider =
-    FutureProvider.family<TrajectoryResult, String>((ref, personId) async {
-      final series = await ref.watch(growthSeriesProvider(personId).future);
-      return TrajectoryEngine.analyse(series);
-    });
+final trajectoryProvider = FutureProvider.family<TrajectoryResult, String>((
+  ref,
+  personId,
+) async {
+  final series = await ref.watch(growthSeriesProvider(personId).future);
+  return TrajectoryEngine.analyse(series);
+});
 
 /// Visit history for a compound, newest first.
-final visitHistoryProvider =
-    FutureProvider.family<List<Visit>, String>((ref, householdId) async {
-      final user = ref.watch(currentUserProvider);
-      if (user == null) return const [];
-      return ref.read(careRepositoryProvider).visitHistory(user, householdId);
-    });
+final visitHistoryProvider = FutureProvider.family<List<Visit>, String>((
+  ref,
+  householdId,
+) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return const [];
+  return ref.read(careRepositoryProvider).visitHistory(user, householdId);
+});
 
 /// Why care did not happen here before. Read on the household screen because a
 /// barrier the family already reported should never have to be reported twice.
-final barrierHistoryProvider =
-    FutureProvider.family<List<CareBarrier>, String>((
-      ref,
-      householdId,
-    ) async {
-      final user = ref.watch(currentUserProvider);
-      if (user == null) return const [];
-      return ref.read(careRepositoryProvider).barrierHistory(user, householdId);
-    });
+final barrierHistoryProvider = FutureProvider.family<List<CareBarrier>, String>(
+  (ref, householdId) async {
+    final user = ref.watch(currentUserProvider);
+    if (user == null) return const [];
+    return ref.read(careRepositoryProvider).barrierHistory(user, householdId);
+  },
+);
 
 /// The danger-sign checks this family ran at home, newest first. The caregiver
 /// reads their own history; the FHW reads what the family reported before
@@ -503,12 +596,14 @@ final householdHomeChecksProvider =
 
 /// The most recent home check for one person — the "last checked" line on the
 /// caregiver's family tiles.
-final latestHomeCheckProvider =
-    FutureProvider.family<HomeCheck?, String>((ref, personId) async {
-      final user = ref.watch(currentUserProvider);
-      if (user == null) return null;
-      return ref.read(careRepositoryProvider).latestHomeCheck(user, personId);
-    });
+final latestHomeCheckProvider = FutureProvider.family<HomeCheck?, String>((
+  ref,
+  personId,
+) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return null;
+  return ref.read(careRepositoryProvider).latestHomeCheck(user, personId);
+});
 
 /// The morning briefing on the FHW's Today tab: every family's home check
 /// across the zone in the last week, newest first. FHW-only by permission —
@@ -525,13 +620,14 @@ final zoneHomeChecksProvider = FutureProvider<List<HomeCheck>>((ref) async {
 /// The signed-in worker's own month — assessments written and overrides
 /// recorded. Powers the "your month with this phone" card: impact the worker
 /// can feel, not just numbers the district consumes.
-final workerImpactProvider =
-    FutureProvider<({int assessments, int overrides})>((ref) async {
-      await ref.watch(bootstrapProvider.future);
-      final user = ref.watch(currentUserProvider);
-      if (user == null) return (assessments: 0, overrides: 0);
-      return ref.read(careRepositoryProvider).personalImpact(user);
-    });
+final workerImpactProvider = FutureProvider<({int assessments, int overrides})>(
+  (ref) async {
+    await ref.watch(bootstrapProvider.future);
+    final user = ref.watch(currentUserProvider);
+    if (user == null) return (assessments: 0, overrides: 0);
+    return ref.read(careRepositoryProvider).personalImpact(user);
+  },
+);
 
 /// The milestone checks this family ran at home, newest first — the nurturing
 /// care mirror of [householdHomeChecksProvider].
@@ -583,6 +679,21 @@ final openReferralsProvider = FutureProvider<List<Referral>>((ref) async {
   return ref.read(careRepositoryProvider).openReferrals(user);
 });
 
+/// Distinct households the signed-in worker has visited since local
+/// midnight — the "Today's Impact" figure on the dashboard. Deliberately
+/// visit-based, not edit-based, so an evening of paperwork does not read
+/// as a day of visits.
+final householdsVisitedTodayProvider = FutureProvider<int>((ref) async {
+  await ref.watch(bootstrapProvider.future);
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return 0;
+  final now = DateTime.now();
+  final startOfDay = DateTime(now.year, now.month, now.day);
+  return ref
+      .read(careRepositoryProvider)
+      .householdsVisitedSince(user, startOfDay);
+});
+
 /// Children whose MUAC is falling, worst first. The single most
 /// hackathon-relevant read in the app: every one of these is a child a paper
 /// register would have marked green.
@@ -618,15 +729,26 @@ final referralCompletionProvider =
 
 /// The zone impact summary — what this phone has caught and closed. FHW-only;
 /// a caregiver watching it gets an access-denied error, which is the point.
-final impactSummaryProvider = FutureProvider<
-  ({int issued, int arrived, double rate, int urgentHomeChecks,
-    int flaggedChildren})
->((ref) async {
-  await ref.watch(bootstrapProvider.future);
-  final user = ref.watch(currentUserProvider);
-  if (user == null) {
-    return (issued: 0, arrived: 0, rate: 0.0, urgentHomeChecks: 0,
-      flaggedChildren: 0);
-  }
-  return ref.read(careRepositoryProvider).impactSummary(user);
-});
+final impactSummaryProvider =
+    FutureProvider<
+      ({
+        int issued,
+        int arrived,
+        double rate,
+        int urgentHomeChecks,
+        int flaggedChildren,
+      })
+    >((ref) async {
+      await ref.watch(bootstrapProvider.future);
+      final user = ref.watch(currentUserProvider);
+      if (user == null) {
+        return (
+          issued: 0,
+          arrived: 0,
+          rate: 0.0,
+          urgentHomeChecks: 0,
+          flaggedChildren: 0,
+        );
+      }
+      return ref.read(careRepositoryProvider).impactSummary(user);
+    });

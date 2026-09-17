@@ -30,6 +30,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/glass.dart';
+import '../../core/theme/motion.dart';
 import '../../data/repositories/care_repository.dart';
 import '../../domain/engines/trajectory_engine.dart';
 import '../../domain/engines/vulnerability_engine.dart';
@@ -52,7 +54,8 @@ class HouseholdScreen extends ConsumerWidget {
     final household = ref.watch(householdProvider(householdId));
 
     return Scaffold(
-      appBar: AppBar(
+      backgroundColor: Colors.transparent,
+      appBar: GlassAppBar(
         title: Text(
           household.valueOrNull?.name ?? 'Household',
           overflow: TextOverflow.ellipsis,
@@ -70,21 +73,23 @@ class HouseholdScreen extends ConsumerWidget {
             ),
         ],
       ),
-      body: household.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => ErrorView(
-          error: e is AccessDenied ? e.message : e,
-          onRetry: () => ref.invalidate(householdProvider(householdId)),
+      body: AmbientBackdrop(
+        child: household.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => ErrorView(
+            error: e is AccessDenied ? e.message : e,
+            onRetry: () => ref.invalidate(householdProvider(householdId)),
+          ),
+          data: (h) => h == null
+              ? const EmptyState(
+                  icon: Icons.home_outlined,
+                  title: 'Household not found',
+                  message:
+                      'This record may have been removed, or it belongs to '
+                      'another zone.',
+                )
+              : _Body(h),
         ),
-        data: (h) => h == null
-            ? const EmptyState(
-                icon: Icons.home_outlined,
-                title: 'Household not found',
-                message:
-                    'This record may have been removed, or it belongs to '
-                    'another zone.',
-              )
-            : _Body(h),
       ),
       bottomNavigationBar: household.valueOrNull == null
           ? null
@@ -992,7 +997,7 @@ class _Members extends StatelessWidget {
                 const SizedBox(height: Gap.md),
                 OutlinedButton.icon(
                   onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
+                    GlassPageRoute<void>(
                       builder: (_) => MemberFormScreen(household: household),
                     ),
                   ),
@@ -1250,8 +1255,7 @@ class _Actions extends ConsumerWidget {
     final canRegister = user.can(Permission.registerHousehold);
     if (!canAssess && !canRegister) return const SizedBox.shrink();
 
-    return SafeArea(
-      minimum: const EdgeInsets.all(Gap.lg),
+    return GlassActionBar(
       child: Row(
         children: [
           if (canRegister) ...[
@@ -1259,7 +1263,7 @@ class _Actions extends ConsumerWidget {
               child: OutlinedButton.icon(
                 onPressed: () => Navigator.of(context)
                     .push(
-                      MaterialPageRoute(
+                      GlassPageRoute<void>(
                         builder: (_) => MemberFormScreen(household: household),
                       ),
                     )
@@ -1279,14 +1283,14 @@ class _Actions extends ConsumerWidget {
               child: FilledButton.icon(
                 onPressed: () async {
                   await Navigator.of(context).push<bool>(
-                    MaterialPageRoute(
+                    GlassPageRoute<bool>(
                       builder: (_) =>
                           BarrierCheckScreen(householdId: household.id),
                     ),
                   );
                   if (!context.mounted) return;
                   await Navigator.of(context).push(
-                    MaterialPageRoute(
+                    GlassPageRoute<void>(
                       builder: (_) => RollCallScreen(householdId: household.id),
                     ),
                   );

@@ -124,8 +124,8 @@ class PullService {
   }
 
   Future<PullReport> _pull({String? userId}) async {
-    final base = await PreferencesStore.syncApiUrl();
-    if (base == null || base.trim().isEmpty) {
+    final base = await PreferencesStore.effectiveSyncApiUrl();
+    if (base.trim().isEmpty) {
       return const PullReport(status: PullStatus.notConfigured);
     }
     final baseUrl = base.trim().replaceAll(RegExp(r'/+$'), '');

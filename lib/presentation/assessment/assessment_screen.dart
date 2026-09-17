@@ -18,6 +18,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../core/audio/voice_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/glass.dart';
+import '../../core/theme/motion.dart';
 import '../../data/repositories/care_repository.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
@@ -26,9 +28,13 @@ import '../shared/ui.dart';
 import 'child_form.dart';
 import 'maternal_form.dart';
 import 'result_screen.dart';
+import 'station/vitals_station_screen.dart';
 import 'types.dart';
 
-class AssessmentScreen extends ConsumerWidget {
+/// Where the nurse is: taking vitals at the station, or working the chart.
+enum _Stage { station, chart }
+
+class AssessmentScreen extends ConsumerStatefulWidget {
   const AssessmentScreen({
     super.key,
     required this.visit,
@@ -39,7 +45,34 @@ class AssessmentScreen extends ConsumerWidget {
   final String personId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AssessmentScreen> createState() => _AssessmentScreenState();
+}
+
+class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
+  Visit get visit => widget.visit;
+  String get personId => widget.personId;
+
+  _Stage _stage = _Stage.station;
+
+  /// What the station handed over. Empty when the nurse skipped it.
+  StationResult _vitals = StationResult.empty;
+
+  /// Set when the form sends the nurse back to one vital.
+  String? _retakeKey;
+
+  void _toChart(StationResult result) => setState(() {
+    _vitals = result;
+    _retakeKey = null;
+    _stage = _Stage.chart;
+  });
+
+  void _retake(String key) => setState(() {
+    _retakeKey = key;
+    _stage = _Stage.station;
+  });
+
+  @override
+  Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
     if (user == null || !user.can(Permission.runClinicalAssessment)) {
       return const Scaffold(
@@ -56,94 +89,146 @@ class AssessmentScreen extends ConsumerWidget {
     final maternal = ref.watch(maternalRecordProvider(personId));
     final birth = ref.watch(birthRecordProvider(personId));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Assessment'),
-        actions: [
-          IconButton(
-            tooltip: 'Voice guide',
-            icon: const Icon(Icons.record_voice_over_rounded),
-            onPressed: () => _speakWelcome(person.valueOrNull?.fullName ?? 'the patient'),
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(22),
-          child: Padding(
-            padding: const EdgeInsets.only(
-              left: Gap.lg,
-              right: Gap.lg,
-              bottom: Gap.sm,
-            ),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                household.valueOrNull?.name ?? '',
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  color: AppColors.inkMuted,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-      body: household.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => ErrorView(
-          error: e is AccessDenied ? e.message : e,
-        ),
-        data: (h) => person.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => ErrorView(
-            error: e is AccessDenied ? e.message : e,
-          ),
-          data: (p) {
-            if (h == null || p == null) {
-              return const EmptyState(
+    final body = household.when(
+      loading: () =>
+          _plainShell(const Center(child: CircularProgressIndicator())),
+      error: (e, _) =>
+          _plainShell(ErrorView(error: e is AccessDenied ? e.message : e)),
+      data: (h) => person.when(
+        loading: () =>
+            _plainShell(const Center(child: CircularProgressIndicator())),
+        error: (e, _) =>
+            _plainShell(ErrorView(error: e is AccessDenied ? e.message : e)),
+        data: (p) {
+          if (h == null || p == null) {
+            return _plainShell(
+              const EmptyState(
                 icon: Icons.person_off_outlined,
                 title: 'Record not found',
                 message:
                     'This person or household could not be loaded. It may have '
                     'been removed, or this account may not have access to it.',
-              );
-            }
-
-            final ctx = AssessmentContext(
-              user: user,
-              household: h,
-              person: p,
-              maternal: maternal.valueOrNull,
-              birth: birth.valueOrNull,
+              ),
             );
+          }
 
-            final form = switch (p.effectiveClientType) {
-              ClientType.pregnantWoman ||
-              ClientType.postpartumWoman ||
-              ClientType.womanOfReproductiveAge =>
-                MaternalProtocolForm(
-                  key: ValueKey('maternal-${p.id}'),
-                  input: ctx,
-                  onComplete: (draft) => _showResult(context, ref, ctx, draft),
-                ),
-              ClientType.newborn || ClientType.childUnderFive =>
-                ChildProtocolForm(
-                  key: ValueKey('child-${p.id}'),
-                  input: ctx,
-                  onComplete: (draft) => _showResult(context, ref, ctx, draft),
-                ),
-            };
+          final ctx = AssessmentContext(
+            user: user,
+            household: h,
+            person: p,
+            maternal: maternal.valueOrNull,
+            birth: birth.valueOrNull,
+          );
 
-            return form;
-          },
+          if (_stage == _Stage.station) {
+            return VitalsStationScreen(
+              key: ValueKey('station-${p.id}'),
+              input: ctx,
+              initial: _vitals.isEmpty ? null : _vitals,
+              startAtKey: _retakeKey,
+              onContinue: _toChart,
+              onSkip: () => _toChart(_vitals),
+              onDanger: () => _toChart(_vitals),
+            );
+          }
+
+          final form = switch (p.effectiveClientType) {
+            ClientType.pregnantWoman ||
+            ClientType.postpartumWoman ||
+            ClientType.womanOfReproductiveAge => MaternalProtocolForm(
+              key: ValueKey('maternal-${p.id}'),
+              input: ctx,
+              initialVitals: _vitals,
+              onRetakeVital: _retake,
+              onComplete: (draft) => _showResult(context, ctx, draft),
+            ),
+            ClientType.newborn ||
+            ClientType.childUnderFive => ChildProtocolForm(
+              key: ValueKey('child-${p.id}'),
+              input: ctx,
+              initialVitals: _vitals,
+              onRetakeVital: _retake,
+              onComplete: (draft) => _showResult(context, ctx, draft),
+            ),
+          };
+
+          return Scaffold(
+            backgroundColor: Colors.transparent,
+            appBar: GlassAppBar(
+              title: const Text('Assessment'),
+              actions: [
+                IconButton(
+                  tooltip: 'Voice guide',
+                  icon: const Icon(Icons.record_voice_over_rounded),
+                  onPressed: () => _speakWelcome(p.fullName),
+                ),
+              ],
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(22),
+                child: Padding(
+                  padding: const EdgeInsets.only(
+                    left: Gap.lg,
+                    right: Gap.lg,
+                    bottom: Gap.sm,
+                  ),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      h.name,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.inkMuted,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            body: form,
+          );
+        },
+      ),
+    );
+
+    // Each stage brings its own Scaffold and app bar; the shell only owns the
+    // backdrop, the Lite-mode scope and the cross-fade between stages. The
+    // scope is mounted *here*, so the switcher reads the preference directly.
+    final motion =
+        !ref.watch(visualEffectsProvider) &&
+        !MediaQuery.disableAnimationsOf(context);
+
+    return VisualEffectsScope(
+      child: AmbientBackdrop(
+        child: AnimatedSwitcher(
+          duration: motion ? AppMotion.duration : Duration.zero,
+          switchInCurve: AppMotion.curve,
+          switchOutCurve: AppMotion.curve,
+          transitionBuilder: (child, anim) => FadeTransition(
+            opacity: anim,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.02),
+                end: Offset.zero,
+              ).animate(anim),
+              child: child,
+            ),
+          ),
+          child: KeyedSubtree(key: ValueKey(_stage), child: body),
         ),
       ),
     );
   }
 
+  /// Loading, error and not-found states: a bar so the nurse can go back.
+  Widget _plainShell(Widget child) => Scaffold(
+    backgroundColor: Colors.transparent,
+    appBar: const GlassAppBar(title: Text('Assessment')),
+    body: child,
+  );
+
   Future<void> _showResult(
     BuildContext context,
-    WidgetRef ref,
     AssessmentContext ctx,
     AssessmentDraft draft,
   ) async {
@@ -163,7 +248,7 @@ class AssessmentScreen extends ConsumerWidget {
     }
     if (!context.mounted) return;
     final saved = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
+      GlassPageRoute<bool>(
         builder: (_) => AssessmentResultScreen(
           input: ctx,
           draft: draft,
@@ -178,7 +263,8 @@ class AssessmentScreen extends ConsumerWidget {
   }
 
   Future<void> _speakWelcome(String patientName) async {
-    final message = 'Welcome to the assessment for $patientName. '
+    final message =
+        'Welcome to the assessment for $patientName. '
         'Follow the form sections: first check vital signs, then look for danger signs, '
         'then record measurements. Take your time — the app will guide you.';
     await VoiceService.speakText(

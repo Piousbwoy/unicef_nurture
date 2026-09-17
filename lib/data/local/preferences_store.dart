@@ -22,6 +22,7 @@ abstract final class PreferencesStore {
   static const _kLanguage = 'preferred_language';
   static const _kSyncApiUrl = 'sync_api_url';
   static const _kSyncApiToken = 'sync_api_token';
+  static const _kReducedEffects = 'reduced_effects';
 
   static Future<SharedPreferences> _prefs() => SharedPreferences.getInstance();
 
@@ -59,6 +60,20 @@ abstract final class PreferencesStore {
     // server and bearer token must not survive that handover.
     await prefs.remove(_kSyncApiUrl);
     await prefs.remove(_kSyncApiToken);
+    await prefs.remove(_kReducedEffects);
+  }
+
+  /// Whether the user has chosen the "Lite" visual mode — no backdrop blur
+  /// and no motion. Defaults to off; the choice belongs to the phone, not
+  /// the account, because it is about the handset's GPU.
+  static Future<bool> reducedEffects() async {
+    final prefs = await _prefs();
+    return prefs.getBool(_kReducedEffects) ?? false;
+  }
+
+  static Future<void> setReducedEffects(bool value) async {
+    final prefs = await _prefs();
+    await prefs.setBool(_kReducedEffects, value);
   }
 
   static Future<String?> preferredLanguage() async {
@@ -72,10 +87,16 @@ abstract final class PreferencesStore {
   }
 
   /// The base URL of the MariaDB sync server, e.g. `https://district.example.com`.
-  /// When null, the app uses [LoopbackTransport] and does not attempt real sync.
+  /// Returns null if not explicitly configured.
   static Future<String?> syncApiUrl() async {
     final prefs = await _prefs();
     return prefs.getString(_kSyncApiUrl);
+  }
+
+  /// The effective sync URL, defaulting to `http://localhost:3000` for local
+  /// development when no explicit URL is configured.
+  static Future<String> effectiveSyncApiUrl() async {
+    return await syncApiUrl() ?? 'http://localhost:3000';
   }
 
   static Future<void> setSyncApiUrl(String url) async {

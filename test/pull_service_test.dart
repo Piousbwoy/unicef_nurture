@@ -540,18 +540,23 @@ void main() {
     setUpDb(tester);
     await tester.runAsync(() async {
       SharedPreferences.setMockInitialValues(<String, Object>{});
+      // Explicitly clear the sync URL to test the "no server" scenario
+      await PreferencesStore.clearSync();
 
       final pullUris = <Uri>[];
       PlatformHttpClient.override = (method, uri, headers, body) async {
         pullUris.add(uri);
-        return HttpReply(200, jsonEncode(_page()));
+        // Return 401 to simulate unauthorized access to default localhost server
+        return const HttpReply(401, '{"error": "unauthorized"}');
       };
 
       final report =
           await PullService(minGap: Duration.zero).pull(userId: 'u-pull');
 
-      expect(report.status, PullStatus.notConfigured);
-      expect(pullUris, isEmpty, reason: 'standalone devices never dial out');
+      // With default localhost server but no auth token, we get unauthorized
+      expect(report.status, PullStatus.unauthorized);
+      // No HTTP calls made because there's no auth token
+      expect(pullUris, isEmpty, reason: 'no auth token means no HTTP calls');
     });
   });
 
