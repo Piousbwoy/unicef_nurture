@@ -8,6 +8,7 @@ import '../../../domain/engines/immunisation_engine.dart';
 import '../../../domain/entities/core.dart';
 import '../../../domain/enums.dart';
 import '../../../domain/services/caregiver_today_planner.dart';
+import '../../shared/speakable_text.dart';
 import '../caregiver_providers.dart';
 import '../widgets/companion.dart';
 import 'clinic_sections.dart';
@@ -75,7 +76,7 @@ class CaregiverCarePlanTab extends ConsumerWidget {
                             ],
                           ),
                           SizedBox(height: 14),
-                          Text(
+                          SpeakableText(
                             'Saved requests from your clinic, followed by advice and your preparation. This app does not book appointments.',
                             style: TextStyle(
                               color: AppColors.white85,
@@ -109,7 +110,7 @@ class CaregiverCarePlanTab extends ConsumerWidget {
                             if (steps.isEmpty)
                               const CompanionCard(
                                 title: 'No open clinic step saved',
-                                child: Text(
+                                child: SpeakableText(
                                   'This does not mean no care is needed. Check the paper record or contact your health worker.',
                                 ),
                               ),
@@ -151,7 +152,7 @@ class CaregiverCarePlanTab extends ConsumerWidget {
                 CaregiverPersonSelector(members: data.members),
                 const CompanionCard(
                   title: 'Advice from the clinic',
-                  child: Text(
+                  child: SpeakableText(
                     "Each saved plan keeps its original date. Contact the clinic if advice is unclear or the person's condition changes.",
                   ),
                 ),
@@ -189,7 +190,7 @@ class CaregiverCarePlanTab extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Text(
+                      const SpeakableText(
                         'Due by age—check the paper card. Age cannot tell us which doses were received. Past age windows are not completed vaccinations. A health worker must check dose dates and eligibility.',
                       ),
                       for (final child in people.where(

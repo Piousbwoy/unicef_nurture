@@ -164,12 +164,18 @@ void main() {
     expect(repo.saved, isNull);
   });
 
-  test('one YES shows urgent guidance before storage completes; retry keeps ID/time', () async {
+  test('stopping for urgent guidance does not wait for storage; retry keeps ID/time', () async {
     await controller.load();
     final original = controller.draft!;
     repo.blocked = Completer<void>();
     repo.fail = true;
     controller.answer('feed', CaregiverAnswer.yes);
+    // The YES itself no longer ends the check: it raises the alarm and leaves
+    // her in the battery, where she can answer or choose to go.
+    expect(controller.stage, CaregiverCheckStage.questions);
+    expect(controller.alarmRaised, isTrue);
+    expect(controller.signsNoticed, ['Not feeding well']);
+    controller.stopForVerdict();
     expect(controller.stage, CaregiverCheckStage.result);
     expect(controller.decision, CaregiverCheckDecision.urgent);
     expect(controller.saveState, CaregiverSaveState.saving);
@@ -189,10 +195,20 @@ void main() {
     expect(controller.draft!.answers.keys, ['feed']);
   });
 
+  test('without a danger sign there is no early verdict to stop for', () async {
+    await controller.load();
+    controller.answer('feed', CaregiverAnswer.no);
+    controller.stopForVerdict();
+    expect(controller.stage, CaregiverCheckStage.questions);
+    expect(controller.report, isNull);
+    expect(repo.reports, isEmpty);
+  });
+
   test('urgent answer survives a failed finalization and restart', () async {
     await controller.load();
     repo.failFinalization = true;
     controller.answer('feed', CaregiverAnswer.yes);
+    controller.stopForVerdict();
     await controller.settled;
     expect(controller.saveState, CaregiverSaveState.failed);
     expect(repo.saved!.answers, {'feed': CaregiverAnswer.yes});
@@ -204,6 +220,12 @@ void main() {
     expect(resumed.stage, CaregiverCheckStage.resume);
     repo.failFinalization = false;
     resumed.confirmResume();
+    // The draft stopped after one answer, so the battery continues with the
+    // alarm up rather than a verdict printing on the spot.
+    expect(resumed.stage, CaregiverCheckStage.questions);
+    expect(resumed.alarmRaised, isTrue);
+    expect(resumed.remainingQuestions, 7);
+    resumed.stopForVerdict();
     expect(resumed.stage, CaregiverCheckStage.result);
     await resumed.settled;
     expect(resumed.report!.id, controller.draft!.id);
@@ -266,12 +288,36 @@ void main() {
     expect(resumed.needsConcerns, isFalse);
   });
 
-  test('a YES skips duration and context entirely', () async {
+  test('a danger sign is followed by the questions the nurse asks', () async {
     await controller.load();
     controller.setConcerns(const []);
     controller.answer('feed', CaregiverAnswer.yes);
-    expect(controller.stage, CaregiverCheckStage.result);
+    expect(controller.stage, CaregiverCheckStage.questions);
+    for (final q in controller.questions!.questions) {
+      controller.answer(q.key, q.key == 'feed' ? CaregiverAnswer.yes : CaregiverAnswer.no);
+      controller.next();
+    }
     await controller.settled;
+    // Urgent or not, how long it has been going on and what has been given are
+    // the next two things a health worker asks.
+    expect(controller.stage, CaregiverCheckStage.duration);
+    controller.setDuration('fewDays');
+    controller.finishContext();
+    await controller.settled;
+    expect(controller.report!.verdict, HomeCheckVerdict.urgent);
+    expect(controller.draft!.durationKey, 'fewDays');
+  });
+
+  test('stopping early records what was answered and what was not', () async {
+    await controller.load();
+    controller.setConcerns(const []);
+    controller.answer('feed', CaregiverAnswer.yes);
+    controller.answer('fast', CaregiverAnswer.no);
+    controller.stopForVerdict();
+    await controller.settled;
+    expect(controller.stage, CaregiverCheckStage.result);
+    expect(controller.draft!.answers.length, 2);
+    expect(controller.remainingQuestions, 6);
     expect(controller.report!.verdict, HomeCheckVerdict.urgent);
     expect(controller.draft!.durationKey, isNull);
   });

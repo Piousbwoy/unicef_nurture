@@ -10,28 +10,31 @@ import 'package:carebridge_ai/core/theme/app_theme.dart';
 import 'package:carebridge_ai/domain/enums.dart';
 import 'package:carebridge_ai/presentation/shared/recommendation_kit.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets('accent cards paint without exceptions', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light,
-        home: Scaffold(
-          body: ListView(
-            padding: const EdgeInsets.all(24),
-            children: [
-              CohortCallout(
-                cohort: ClientType.childUnderFive,
-                note: 'Cohort callout note text probe.',
-              ),
-              const SafetyNetNote(text: 'Safety net note probe.'),
-              const KitCard(
-                accent: AppColors.triageAmber,
-                child: Text('KITCARD TEXT PROBE'),
-              ),
-              const KitCard(child: Text('QUIET KITCARD PROBE')),
-            ],
+      ProviderScope(
+        child: MaterialApp(
+          theme: AppTheme.light,
+          home: Scaffold(
+            body: ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                CohortCallout(
+                  cohort: ClientType.childUnderFive,
+                  note: 'Cohort callout note text probe.',
+                ),
+                const SafetyNetNote(text: 'Safety net note probe.'),
+                const KitCard(
+                  accent: AppColors.triageAmber,
+                  child: Text('KITCARD TEXT PROBE'),
+                ),
+                const KitCard(child: Text('QUIET KITCARD PROBE')),
+              ],
+            ),
           ),
         ),
       ),

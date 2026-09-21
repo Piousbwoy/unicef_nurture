@@ -240,7 +240,10 @@ class IPhoneFrame extends StatefulWidget {
 }
 
 class _IPhoneFrameState extends State<IPhoneFrame> {
-  DeviceModel _selectedDevice = DeviceModel.iPhone16Pro;
+  // Open on an Android reference handset — the dominant field device for the
+  // CHPS deployment. All other models (iPhone, Pixel, iPad, Web Responsive)
+  // remain one tap away in the control-dock device dropdown.
+  DeviceModel _selectedDevice = DeviceModel.galaxyS24Ultra;
   ChassisFinish _selectedFinish = ChassisFinish.natural;
   StudioBackdrop _selectedBackdrop = StudioBackdrop.royalStudio;
   bool _isLandscape = false;

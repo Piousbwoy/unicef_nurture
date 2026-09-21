@@ -166,21 +166,42 @@ class _MaternalProtocolFormState extends State<MaternalProtocolForm> {
     _seedFromStation();
   }
 
-  /// The station only pre-fills; every box stays editable and the engines
-  /// read the boxes, never the station.
-  void _seedFromStation() {
+  @override
+  void didUpdateWidget(covariant MaternalProtocolForm oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _seedFromStation(previous: oldWidget.initialVitals);
+  }
+
+  /// Refresh only changed/removed readings or explicit same-value retakes.
+  /// Do not re-seed unrelated edits, history, complaints or signs. BP retake
+  /// counts and missing reasons belong to the systolic key for both readings.
+  /// The engines still read the editable boxes, never the station.
+  void _seedFromStation({StationResult? previous}) {
     final s = _station;
-    if (s == null || s.isEmpty) return;
-    void seed(TextEditingController c, String key, {int decimals = 0}) {
-      final v = s.values[key];
-      if (v == null) return;
-      c.text = decimals == 0
+    void seed(
+      TextEditingController c,
+      String key, {
+      int decimals = 0,
+      String? owner,
+    }) {
+      final vital = owner ?? key;
+      if (previous?.values[key] == s?.values[key] &&
+          previous?.notMeasured[vital] == s?.notMeasured[vital] &&
+          (previous?.retakes[vital] ?? 0) == (s?.retakes[vital] ?? 0)) {
+        return;
+      }
+      final v = s?.notMeasured.containsKey(vital) == true
+          ? null
+          : s?.values[key];
+      c.text = v == null
+          ? ''
+          : decimals == 0
           ? v.round().toString()
           : v.toDouble().toStringAsFixed(decimals);
     }
 
     seed(_systolic, 'systolic');
-    seed(_diastolic, 'diastolic');
+    seed(_diastolic, 'diastolic', owner: 'systolic');
     seed(_hb, 'haemoglobin', decimals: 1);
     seed(_muac, 'muac_cm', decimals: 1);
     seed(_weight, 'weight_kg', decimals: 1);

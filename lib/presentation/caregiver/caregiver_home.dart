@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/glass.dart';
+import '../shared/narration_button.dart';
 import '../shared/ui.dart';
 import 'caregiver_providers.dart';
 import 'care_plan/care_plan_tab.dart';
@@ -34,6 +35,10 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
     final user = ref.watch(currentUserProvider);
     final scope = ref.watch(caregiverScopeProvider);
     final isOnline = ref.watch(connectivityProvider).valueOrNull ?? false;
+    // Trigger neural model loading in background (non-blocking; UI works
+    // with English + dictionary until models are ready, then upgrades).
+    ref.read(neuralTranslationProvider.future);
+    ref.read(piperTtsProvider.future);
     if (user == null) return const SizedBox.shrink();
     if (scope == null) {
       return CompanionTheme(
@@ -129,6 +134,7 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
               ),
             ),
             actions: [
+              const NarrationButton(compact: true),
               const CaregiverEmergencyButton(),
               Padding(
                 padding: const EdgeInsets.only(right: 12),

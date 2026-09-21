@@ -45,23 +45,39 @@ class PendingFollowUpsScreen extends ConsumerWidget {
             onRefresh: () async => ref.invalidate(openReferralsProvider),
             child: ListView.builder(
               padding: const EdgeInsets.all(Gap.lg),
-              itemCount: list.length,
-              itemBuilder: (_, i) => _FollowUpCard(
-                referral: list[i],
-                onTap: () async {
-                  final changed = await Navigator.of(context).push<bool>(
-                    MaterialPageRoute(
-                      builder: (_) => FollowUpCheckInScreen(
-                        referral: list[i],
-                      ),
+              itemCount: list.length + 1,
+              itemBuilder: (_, i) {
+                if (i == 0) {
+                  return const Padding(
+                    padding: EdgeInsets.only(bottom: Gap.lg),
+                    child: LuxeHeroHeader(
+                      compact: true,
+                      eyebrow: 'Referred, not yet arrived',
+                      title: 'Pending follow-ups',
+                      body:
+                          'Everyone referred but not yet confirmed to have '
+                          'reached care. Tap a record to check what happened.',
+                      icon: Icons.fact_check_outlined,
                     ),
                   );
-                  if (changed == true && context.mounted) {
-                    ref.invalidate(openReferralsProvider);
-                    ref.invalidate(dayPlanProvider);
-                  }
-                },
-              ),
+                }
+                final referral = list[i - 1];
+                return _FollowUpCard(
+                  referral: referral,
+                  onTap: () async {
+                    final changed = await Navigator.of(context).push<bool>(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            FollowUpCheckInScreen(referral: referral),
+                      ),
+                    );
+                    if (changed == true && context.mounted) {
+                      ref.invalidate(openReferralsProvider);
+                      ref.invalidate(dayPlanProvider);
+                    }
+                  },
+                );
+              },
             ),
           );
         },

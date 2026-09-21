@@ -1,4 +1,11 @@
-/// A per-message, offline language picker and honest playback control.
+/// A per-message, offline playback control.
+///
+/// Tapping the speaker plays in the language the caller already chose — a
+/// speaker button that opens a form instead of making a sound is the bug this
+/// file used to ship. Holding it opens the per-message language picker, which
+/// is a deliberate, rarer gesture. Screens where the language is already being
+/// chosen on the form itself pass [showLanguagePicker] false and get plain
+/// play/stop.
 library;
 
 import 'dart:async';
@@ -21,6 +28,7 @@ class AudioButton extends StatefulWidget {
     this.id,
     this.compact = false,
     this.bankClips,
+    this.showLanguagePicker = true,
   });
 
   /// The exact English text displayed by the caller, never a bank substitution.
@@ -31,6 +39,9 @@ class AudioButton extends StatefulWidget {
   /// An ordered bank candidate sequence. Only full, exact coverage is eligible.
   final List<String>? bankClips;
   final bool compact;
+
+  /// Whether holding the button may swap the language for this one message.
+  final bool showLanguagePicker;
 
   @override
   State<AudioButton> createState() => _AudioButtonState();
@@ -114,20 +125,27 @@ class _AudioButtonState extends State<AudioButton> {
     super.dispose();
   }
 
-  Future<void> _chooseAndPlay() async {
+  /// Hold: choose a language for this message only, then play it.
+  Future<void> _openPicker() async {
     if (_picking) return;
     if (_active) _stop();
-    final generation = ++_generation;
-    final input = _input;
+    final generation = _generation;
     _picking = true;
     String? selected;
     try {
-      selected = await chooseSpeechLanguage(context, input);
+      selected = await chooseSpeechLanguage(context, _input);
     } finally {
       _picking = false;
     }
     if (!mounted || generation != _generation || selected == null) return;
+    await _play(selected);
+  }
 
+  /// Play [selected], superseding any other button's audio.
+  Future<void> _play(String selected) async {
+    if (_active) _stop();
+    final generation = ++_generation;
+    final input = _input;
     final speech = input.withLanguage(selected);
     _owner?._superseded();
     _owner = this;
@@ -136,7 +154,7 @@ class _AudioButtonState extends State<AudioButton> {
       _playback = CaregiverPlayback(
         phase: CaregiverPlaybackPhase.loading,
         transcript: speech.localizedText ?? speech.english,
-        language: speech.localizedText == null ? 'English' : selected!,
+        language: speech.localizedText == null ? 'English' : selected,
         source: 'Checking offline audio',
       );
     });
@@ -166,7 +184,7 @@ class _AudioButtonState extends State<AudioButton> {
             phase: CaregiverPlaybackPhase.fallback,
             transcript: speech.localizedText ?? speech.english,
             language: outcome.actualLanguage ??
-                (speech.localizedText == null ? 'English' : selected!),
+                (speech.localizedText == null ? 'English' : selected),
             source: 'Readable text • offline audio unavailable',
           );
         });
@@ -177,7 +195,7 @@ class _AudioButtonState extends State<AudioButton> {
         _playback = CaregiverPlayback(
           phase: CaregiverPlaybackPhase.fallback,
           transcript: speech.localizedText ?? speech.english,
-          language: speech.localizedText == null ? 'English' : selected!,
+          language: speech.localizedText == null ? 'English' : selected,
           source: 'Readable text • offline audio unavailable',
         );
       });
@@ -197,9 +215,13 @@ class _AudioButtonState extends State<AudioButton> {
       CaregiverPlaybackPhase.completed => 'Completed',
       CaregiverPlaybackPhase.stopped => 'Stopped',
       CaregiverPlaybackPhase.fallback => 'Audio unavailable',
-      null => 'Choose speech language',
+      null => 'Ready',
     };
-    final label = _active ? 'Stop audio' : 'Choose speech language';
+    final label = _active
+        ? 'Stop audio'
+        : widget.showLanguagePicker
+        ? 'Play audio. Hold to choose another language.'
+        : 'Play audio';
     final playback = _playback;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -215,8 +237,10 @@ class _AudioButtonState extends State<AudioButton> {
               shape: const CircleBorder(),
               child: InkWell(
                 customBorder: const CircleBorder(),
-                onTap: () => _active ? _stop() : unawaited(_chooseAndPlay()),
-                onLongPress: _chooseAndPlay,
+                onTap: () => _active ? _stop() : unawaited(_play(widget.language)),
+                onLongPress: widget.showLanguagePicker
+                    ? () => unawaited(_openPicker())
+                    : null,
                 child: SizedBox(
                   width: 48,
                   height: 48,
@@ -253,7 +277,8 @@ class _AudioButtonState extends State<AudioButton> {
         if (playback != null) ...[
           const SizedBox(height: 4),
           _SourcePill(
-            label: '${playback.language} • $status • ${playback.source}',
+            status: status,
+            detail: '${playback.language} • $status • ${playback.source}',
             compact: widget.compact,
           ),
         ],
@@ -262,16 +287,25 @@ class _AudioButtonState extends State<AudioButton> {
   }
 }
 
+/// The one-word result under the button. The full sentence — which language
+/// actually spoke, and that the voice is bundled and the wording still a
+/// draft — is the tooltip and the screen-reader label, because no pill this
+/// narrow can show it without cutting the honest part off.
 class _SourcePill extends StatelessWidget {
-  const _SourcePill({required this.label, required this.compact});
-  final String label;
+  const _SourcePill({
+    required this.status,
+    required this.detail,
+    required this.compact,
+  });
+  final String status;
+  final String detail;
   final bool compact;
 
   @override
   Widget build(BuildContext context) => Tooltip(
-    message: label,
+    message: detail,
     child: Semantics(
-      label: label,
+      label: detail,
       liveRegion: true,
       excludeSemantics: true,
       child: Container(
@@ -282,8 +316,8 @@ class _SourcePill extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
-          label,
-          maxLines: 3,
+          status,
+          maxLines: 2,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
           style: const TextStyle(

@@ -1,58 +1,79 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// CareBridge AI visual system — "Clinical Luxe".
+/// CareBridge AI visual system — "Clinical Luxe, warm edition".
 ///
-/// White air, royal blue authority. The idiom is premium product design:
-/// pure white surfaces, a single saturated royal-blue brand voice, bold
-/// geometric headlines in **Sora**, warm humanist body text in **Manrope**,
-/// soft blue-tinted shadows and generous radii. Every screen should feel like
-/// a flagship banking app that happens to save children's lives.
+/// Warm ivory air, deep royal-blue authority, a single restrained brass
+/// thread. The
+/// idiom is premium product design for daylight use in a CHPS compound: a warm
+/// ivory canvas with raised near-white surfaces, a deep blue brand voice, brass
+/// used only for premium edges and the active nav marker, bold geometric
+/// headlines in **Sora**, warm humanist body text in **Manrope**, soft
+/// warm-tinted shadows and generous radii. Every screen should feel like a
+/// flagship banking app that happens to save children's lives.
 ///
 /// One rule is load-bearing and must never be relaxed: **the IMCI triage
 /// red / amber / green belong to clinical safety and nothing else.** They are
 /// the colours a Ghanaian CHO already trusts from the IMCI chart booklet, so
 /// they are kept exactly as trained and are never re-purposed for decoration.
-/// The blue luxury palette applies to chrome, surfaces, brand and typography.
+/// Brass and blue are chrome; they never carry a clinical verdict. The warm
+/// luxury palette applies to chrome, surfaces, brand and typography.
 abstract final class AppColors {
-  // ── White & blue neutrals ──────────────────────────────────────────
-  /// Dominant background — pure, clean white.
-  static const Color canvas = Color(0xFFFFFFFF);
+  // ── Warm ivory neutrals ────────────────────────────────────────────
+  /// Dominant background — a warm ivory, never clinical blue-white.
+  static const Color canvas = Color(0xFFFBF8F1);
 
-  /// Raised surfaces — a breath of blue-grey so cards read on white.
-  static const Color surface = Color(0xFFF6F9FE);
+  /// Sunken surfaces — warm sand so raised cards read against the canvas.
+  static const Color surface = Color(0xFFF3EEE3);
 
   /// Tinted hero surfaces (dashboard headers, image scrims).
-  static const Color surfaceTint = Color(0xFFEAF1FD);
+  static const Color surfaceTint = Color(0xFFEAE3D4);
 
-  /// Primary text — a deep navy ink, never pure black.
-  static const Color ink = Color(0xFF0B1B33);
-  static const Color inkMuted = Color(0xFF4A5B76);
-  static const Color inkFaint = Color(0xFF8494AD);
+  /// Primary text — a deep teal-charcoal ink, never pure black.
+  static const Color ink = Color(0xFF1A2A28);
+  static const Color inkMuted = Color(0xFF51615E);
+  static const Color inkFaint = Color(0xFF8A968F);
 
-  /// Borders — cool and quiet.
-  static const Color line = Color(0xFFE3EAF5);
-  static const Color lineStrong = Color(0xFFCBD8EC);
+  /// Borders — warm and quiet.
+  static const Color line = Color(0xFFE7DFCF);
+  static const Color lineStrong = Color(0xFFD3C7AE);
 
-  // ── Brand — royal blue ─────────────────────────────────────────────
+  // ── Brand — deep royal blue ────────────────────────────────────────
   static const Color primary = Color(0xFF1B56DB);
-  static const Color primaryDark = Color(0xFF123FA8);
-  static const Color primaryDeep = Color(0xFF0C2B73);
-  static const Color primaryLight = Color(0xFFE8EFFD);
-  static const Color primaryGlow = Color(0xFF4D82F3);
+  static const Color primaryDark = Color(0xFF123F9E);
+  static const Color primaryDeep = Color(0xFF0B2A6B);
+  static const Color primaryLight = Color(0xFFE3ECFD);
+  static const Color primaryGlow = Color(0xFF3B82F6);
 
   /// Kept as an alias — older screens read `accent`.
   static const Color accent = primary;
 
-  /// The signature brand gradient: deep royal into bright azure.
+  /// The signature brand gradient: navy into a brighter royal blue.
   static const LinearGradient brandGradient = LinearGradient(
-    colors: [Color(0xFF1240C4), Color(0xFF3B76F6)],
+    colors: [Color(0xFF123F9E), Color(0xFF2E6BE6)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
+  /// The dashboard hero: a deep, luxurious midnight-to-royal blue. Deliberately
+  /// dark and rich — it drops the bright sky-blue end so the clinic header reads
+  /// as premium lit glass rather than a flat blue block.
   static const LinearGradient heroGradient = LinearGradient(
-    colors: [Color(0xFF0C2B73), Color(0xFF1B56DB), Color(0xFF3B76F6)],
+    colors: [Color(0xFF081A3A), Color(0xFF0C2E66), Color(0xFF17458F)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  // ── Brass — premium edge only, never a status colour ───────────────
+  /// Restrained brass for premium edges, the active nav indicator and quiet
+  /// hairline accents. It must never be used to signal clinical status.
+  static const Color brass = Color(0xFFB08A4A);
+  static const Color brassDeep = Color(0xFF8A6A34);
+  static const Color brassLight = Color(0xFFEFE3C8);
+
+  /// A hairline brass rule for premium separators.
+  static const LinearGradient brassEdge = LinearGradient(
+    colors: [Color(0xFFC8A45E), Color(0xFF8A6A34)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
@@ -100,6 +121,10 @@ abstract final class AppColors {
 
   /// Subtle blue for caregiver inactive nav icons.
   static const Color caregiverMuted = Color(0xFF8494AD);
+
+  /// The same cool blue, dark enough to read as body text (5.2:1 on white).
+  /// [caregiverMuted] is for icons and chrome; never put a sentence in it.
+  static const Color caregiverFaded = Color(0xFF55677F);
 
   // ── Check tab — deep navy + white premium palette ──────────────────
   /// Darkest navy — hero backgrounds, premium buttons.
@@ -167,8 +192,9 @@ abstract final class Gap {
   /// Minimum interactive height — thumb-first field design.
   static const double tapTarget = 54;
 
-  /// Premium radii — soft, expensive, never bubble-shaped.
-  static const double radius = 18;
+  /// Premium radii — soft, expensive, generous.
+  static const double radius = 20;
+  static const double radiusLg = 28;
   static const double radiusSm = 12;
   static const double radiusXs = 8;
 
@@ -205,20 +231,20 @@ abstract final class AppMotion {
   }
 }
 
-/// Soft, diffuse, blue-tinted shadows — the signature of the premium finish.
+/// Soft, diffuse, warm-tinted shadows — the signature of the premium finish.
 abstract final class AppShadows {
   static const BoxShadow soft = BoxShadow(
-    color: Color(0x14194DBF), // royal blue at ~8%
+    color: Color(0x143D2E12), // warm umber at ~8%
     blurRadius: 32,
     offset: Offset(0, 10),
   );
   static const BoxShadow card = BoxShadow(
-    color: Color(0x0F1B56DB),
+    color: Color(0x105B4620),
     blurRadius: 28,
     offset: Offset(0, 8),
   );
   static const BoxShadow glow = BoxShadow(
-    color: Color(0x381B56DB),
+    color: Color(0x331B56DB),
     blurRadius: 24,
     offset: Offset(0, 8),
   );
@@ -226,7 +252,7 @@ abstract final class AppShadows {
   /// Under a frosted surface: longer, softer and lighter than [card] so the
   /// glass appears to float a few millimetres above the backdrop.
   static const BoxShadow glass = BoxShadow(
-    color: Color(0x1A1B56DB),
+    color: Color(0x143D2E12),
     blurRadius: 40,
     offset: Offset(0, 14),
   );
@@ -289,10 +315,22 @@ abstract final class AppType {
   );
 
   static TextStyle get caption => GoogleFonts.manrope(
-    fontSize: 12.5,
+    fontSize: 13,
     fontWeight: FontWeight.w500,
     height: 1.5,
     color: AppColors.inkMuted,
+  );
+
+  /// A tabular figure for counts, times and measurements — anything that sits
+  /// in a column or updates live. Tabular widths stop digits jittering and keep
+  /// two rows of statistics aligned.
+  static TextStyle get stat => GoogleFonts.sora(
+    fontSize: 22,
+    fontWeight: FontWeight.w700,
+    height: 1.1,
+    letterSpacing: -0.3,
+    color: AppColors.ink,
+    fontFeatures: const [FontFeature.tabularFigures()],
   );
 
   /// A measured value — the big readout on a vitals card. Tabular figures

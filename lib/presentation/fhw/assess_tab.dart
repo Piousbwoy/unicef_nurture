@@ -1,51 +1,39 @@
-/// The Assess tab — the primary launch point for a clinical assessment.
-///
-/// This tab replaces the old Families tab. Assessment is the reason a CHO
-/// browses the register, so the register (search + browse) now lives directly
-/// under a prominent "Start Assessment" action instead of behind a household
-/// detail screen. Two entry depths, both one tap from the bottom nav:
-///
-///  * **Start Assessment** (the signature gradient CTA) — no household is
-///    pre-selected, so the CHO picks a household from a searchable sheet and
-///    is taken through the canonical session flow (barriers check → roll call).
-///  * **Per-row Assess** — when the CHO already knows which household, the
-///    quiet play button on each register row jumps straight into that
-///    household's roll call, skipping the detail screen entirely.
-///
-/// This is a new, faster entry point — it does not replace the household
-/// screen's "Start assessment" button or the roll call's per-person actions,
-/// which all still run the same underlying flow.
-///
-/// The whole tab is gated on `Permission.runClinicalAssessment`. The role
-/// system should never route a user without that capability here, and the
-/// repository re-checks on every write anyway — but defense-in-depth means the
-/// UI degrades to a clear restricted state rather than a broken screen.
-library;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/theme/glass.dart';
-import '../../core/theme/motion.dart';
-import '../../data/repositories/care_repository.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/enums.dart';
 import '../shared/ui.dart';
+import '../visit/roll_call_screen.dart';
+import 'clinic_widgets.dart';
 import 'families_tab.dart';
 import 'home_tab.dart';
 import 'household_screen.dart';
+import 'receive_patient_sheet.dart';
+
+final clinicPeopleProvider =
+    FutureProvider.autoDispose<Map<String, List<Person>>>((ref) async {
+      final user = ref.watch(currentUserProvider);
+      if (user == null || !user.can(Permission.runClinicalAssessment)) {
+        return const {};
+      }
+      await ref.watch(visibleHouseholdsProvider.future);
+      return ref.watch(careRepositoryProvider).visibleHouseholdMembers(user);
+    });
+
+enum _PatientGroup { all, maternal, children }
 
 class AssessTab extends ConsumerStatefulWidget {
   const AssessTab({super.key});
-
   @override
   ConsumerState<AssessTab> createState() => _AssessTabState();
 }
 
 class _AssessTabState extends ConsumerState<AssessTab> {
   final _search = TextEditingController();
+  _PatientGroup _group = _PatientGroup.all;
 
   @override
   void dispose() {
@@ -53,326 +41,426 @@ class _AssessTabState extends ConsumerState<AssessTab> {
     super.dispose();
   }
 
+  void _refresh() {
+    ref.invalidate(visibleHouseholdsProvider);
+    ref.invalidate(clinicPeopleProvider);
+    ref.invalidate(dayPlanProvider);
+    ref.invalidate(activeClinicSessionProvider);
+    ref.invalidate(clinicQueueProvider);
+  }
+
+  bool _inGroup(Person person) => switch (_group) {
+    _PatientGroup.all => true,
+    _PatientGroup.maternal =>
+      person.effectiveClientType == ClientType.pregnantWoman ||
+          person.effectiveClientType == ClientType.postpartumWoman ||
+          person.effectiveClientType == ClientType.womanOfReproductiveAge,
+    _PatientGroup.children =>
+      person.effectiveClientType == ClientType.newborn ||
+          person.effectiveClientType == ClientType.childUnderFive,
+  };
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
     if (user == null) return const SizedBox.shrink();
-
-    // Capability gate: degrade to a clear state, never a broken screen.
     if (!user.can(Permission.runClinicalAssessment)) {
       return const EmptyState(
         icon: Icons.verified_user_outlined,
         title: 'Assessments restricted',
         message:
-            'This account cannot run clinical assessments. Sign in with a '
-            'community health nurse account to run an assessment.',
+            'Sign in with a health-worker account to run a clinical assessment.',
       );
     }
-
     final households = ref.watch(visibleHouseholdsProvider);
+    final people = ref.watch(clinicPeopleProvider);
+    // Households already received with someone still to assess — the living
+    // queue, surfaced right where the nurse is about to search, so a paused
+    // consult is one tap away instead of something to remember.
+    final waiting = (
+          ref.watch(clinicQueueProvider).valueOrNull ?? const <ClinicQueueTicket>[]
+      )
+      .where((t) => t.pending > 0)
+      .toList();
+    final query = _search.text.trim().toLowerCase();
+    final list = households.valueOrNull ?? const <Household>[];
+    final filtered = list.where((household) {
+      final members = people.valueOrNull?[household.id] ?? const <Person>[];
+      final matchingMembers = members.where(_inGroup);
+      if (_group != _PatientGroup.all && matchingMembers.isEmpty) return false;
+      final text =
+          '${household.name} ${household.headName ?? ''} ${household.community} '
+          '${household.landmark ?? ''} ${household.contactPhone ?? ''} '
+          '${matchingMembers.map((p) => p.fullName).join(' ')}';
+      return text.toLowerCase().contains(query);
+    }).toList();
 
-    return Column(
-      children: [
-        // The signature primary action: start an assessment. It sits at the
-        // top so the single most important thing a CHO does is the first
-        // thing they see.
-        Padding(
-          padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.md, Gap.lg, Gap.sm),
-          child: GradientButton(
-            label: 'Start Assessment',
-            icon: Icons.play_circle_outline_rounded,
-            onPressed: _startAssessment,
-          ),
-        ),
-
-        // Register-and-assess in one visit: the family is new, so the CHO
-        // adds the household here and it lands in the register below, ready
-        // to assess in the same sitting.
-        Padding(
-          padding: const EdgeInsets.fromLTRB(Gap.lg, 0, Gap.lg, Gap.sm),
-          child: OutlinedButton.icon(
-            onPressed: _registerHousehold,
-            icon: const Icon(Icons.add_home_work_outlined, size: 18),
-            label: const Text('Register a new household'),
-          ),
-        ),
-
-        // The relocated register: the exact search + browse the Families tab
-        // had, now pinned under the assessment launch point. A glass field
-        // rather than an outlined one so it sits on the ambient backdrop
-        // like the cards below it.
-        Padding(
-          padding: const EdgeInsets.fromLTRB(Gap.lg, 0, Gap.lg, Gap.sm),
-          child: GlassSurface(
-            blur: false,
-            radius: BorderRadius.circular(Gap.radius),
-            padding: const EdgeInsets.symmetric(horizontal: Gap.sm),
-            child: TextField(
-              controller: _search,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                isDense: true,
-                filled: false,
-                prefixIcon: Icon(Icons.search_rounded),
-                hintText:
-                    'Search name, head of household, community, or landmark',
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
+    return RefreshIndicator(
+      onRefresh: () async => _refresh(),
+      child: CustomScrollView(
+        key: const PageStorageKey('fhw-patients'),
+        physics: const AlwaysScrollableScrollPhysics(),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'The person in front of you.',
+                    style: AppType.headline.copyWith(fontSize: 24),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Find their record before adding a new one. People stay linked to their household.',
+                    style: AppType.body.copyWith(
+                      fontSize: 13,
+                      color: AppColors.inkMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  TextField(
+                    controller: _search,
+                    onChanged: (_) => setState(() {}),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.checkNavy,
+                    ),
+                    cursorColor: AppColors.checkBlue,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white,
+                      labelText: 'Find patient or household',
+                      labelStyle: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.inkMuted,
+                      ),
+                      floatingLabelStyle: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.checkBlue,
+                      ),
+                      hintText: 'Name, phone, community or landmark',
+                      hintStyle: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.inkFaint,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 15,
+                      ),
+                      prefixIcon: const Icon(
+                        Icons.search_rounded,
+                        color: AppColors.checkBlue,
+                      ),
+                      suffixIcon: query.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: 'Clear search',
+                              onPressed: () => setState(_search.clear),
+                              icon: const Icon(
+                                Icons.cancel_rounded,
+                                size: 20,
+                                color: AppColors.inkFaint,
+                              ),
+                            ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(
+                          color: AppColors.checkNavy.withValues(alpha: 0.16),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(
+                          color: AppColors.checkBlue,
+                          width: 1.6,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (waiting.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Waiting now',
+                            style: AppType.label.copyWith(
+                              fontSize: 12,
+                              color: AppColors.brassDeep,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final ticket in waiting)
+                                _WaitingChip(
+                                  name: ticket.householdName,
+                                  onTap: () async {
+                                    await Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => RollCallScreen(
+                                          householdId: ticket.visit.householdId,
+                                        ),
+                                      ),
+                                    );
+                                    if (mounted) _refresh();
+                                  },
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      for (final group in _PatientGroup.values)
+                        ChoiceChip(
+                          selected: _group == group,
+                          label: Text(switch (group) {
+                            _PatientGroup.all => 'All',
+                            _PatientGroup.maternal => 'Maternal care',
+                            _PatientGroup.children => 'Child care',
+                          }),
+                          onSelected: (_) => setState(() => _group = group),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: _startAssessment,
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Receive a patient'),
+                  ),
+                  TextButton.icon(
+                    onPressed: _registerHousehold,
+                    icon: const Icon(Icons.add_home_outlined, size: 20),
+                    label: const Text('Register a new household'),
+                  ),
+                  const SizedBox(height: 8),
+                  if (households.isLoading || people.isLoading)
+                    const LinearProgressIndicator(minHeight: 2),
+                  if (households.hasError)
+                    ClinicStatusLine(
+                      text:
+                          'Household records could not be loaded. Tap to retry.',
+                      onTap: _refresh,
+                    )
+                  else if (people.hasError)
+                    ClinicStatusLine(
+                      text:
+                          'Patient names could not be loaded. Household search is still available. Tap to retry.',
+                      onTap: () => ref.invalidate(clinicPeopleProvider),
+                    )
+                  else
+                    Text(
+                      '${filtered.length} household${filtered.length == 1 ? '' : 's'} · records on this phone',
+                      style: AppType.caption.copyWith(
+                        color: AppColors.inkMuted,
+                      ),
+                    ),
+                  const SizedBox(height: 14),
+                ],
               ),
             ),
           ),
-        ),
-
-        Expanded(
-          child: households.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) =>
-                ErrorView(error: e is AccessDenied ? e.message : e),
-            data: (list) {
-              final q = _search.text.trim().toLowerCase();
-              final filtered = q.isEmpty
-                  ? list
-                  : list
-                        .where(
-                          (h) =>
-                              h.name.toLowerCase().contains(q) ||
-                              (h.headName?.toLowerCase().contains(q) ??
-                                  false) ||
-                              h.community.toLowerCase().contains(q) ||
-                              (h.landmark?.toLowerCase().contains(q) ?? false),
-                        )
-                        .toList(growable: false);
-
-              if (filtered.isEmpty) {
-                return EmptyState(
-                  icon: Icons.search_off_rounded,
-                  title: q.isEmpty ? 'No families yet' : 'No match',
-                  message: q.isEmpty
-                      ? 'Tap "Register a new household" above to add the '
-                            'first family.'
-                      : 'Nothing matches "$q". Try a name, the head of the '
-                            'household, or the landmark.',
-                );
-              }
-
-              return ListView.builder(
-                padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.lg, Gap.lg, 96),
-                itemCount: filtered.length,
-                itemBuilder: (_, i) {
-                  final household = filtered[i];
-                  return StaggeredReveal(
-                    index: i,
-                    child: _RegisterRow(
-                      household: household,
-                      onTap: () => _open(household.id),
-                      // The permission gate above means everyone who reaches
-                      // this list can assess, so every row carries the
-                      // shortcut.
-                      onAssess: () => openVisit(context, household),
+          if (filtered.isEmpty && !households.isLoading && !people.isLoading)
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              sliver: SliverToBoxAdapter(
+                child: ClinicCard(
+                  title: list.isEmpty
+                      ? 'No household records yet'
+                      : 'No matching records',
+                  child: Text(
+                    list.isEmpty
+                        ? 'Register a household to begin. Registration and clinical assessments work offline.'
+                        : 'Try another name, clear the care filter, or check the community before registering again.',
+                    style: AppType.body.copyWith(fontSize: 14),
+                  ),
+                ),
+              ),
+            ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+            sliver: SliverList.builder(
+              itemCount: filtered.length,
+              itemBuilder: (context, i) {
+                final household = filtered[i];
+                final members = people.valueOrNull?[household.id];
+                final named = (members ?? const <Person>[])
+                    .where(
+                      (p) =>
+                          _inGroup(p) &&
+                          (query.isEmpty ||
+                              p.fullName.toLowerCase().contains(query)),
+                    )
+                    .toList();
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: ClinicCard(
+                    title: household.name,
+                    subtitle: '${household.community} · ${household.district}',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (named.isNotEmpty) ...[
+                          Text(
+                            named.map((p) => p.fullName).join(' · '),
+                            style: AppType.label.copyWith(fontSize: 13),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        if (household.landmark?.isNotEmpty == true)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Text(
+                              household.landmark!,
+                              style: AppType.caption,
+                            ),
+                          ),
+                        Text(
+                          members == null
+                              ? 'Patient list unavailable'
+                              : '${members.length} registered ${members.length == 1 ? 'person' : 'people'}',
+                          style: AppType.caption,
+                        ),
+                        const SizedBox(height: 14),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final record = OutlinedButton(
+                              onPressed: () async {
+                                await Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => HouseholdScreen(
+                                      householdId: household.id,
+                                    ),
+                                  ),
+                                );
+                                if (mounted) _refresh();
+                              },
+                              child: const Text('Open record'),
+                            );
+                            final assess = FilledButton.icon(
+                              onPressed: () async {
+                                await openVisit(context, household);
+                                if (mounted) _refresh();
+                              },
+                              icon: const Icon(
+                                Icons.arrow_forward_rounded,
+                                size: 18,
+                              ),
+                              label: const Text('Assess'),
+                            );
+                            return constraints.maxWidth < 270 ||
+                                    MediaQuery.textScalerOf(context).scale(14) >
+                                        21
+                                ? Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      assess,
+                                      const SizedBox(height: 8),
+                                      record,
+                                    ],
+                                  )
+                                : Row(
+                                    children: [
+                                      Expanded(child: record),
+                                      const SizedBox(width: 10),
+                                      Expanded(child: assess),
+                                    ],
+                                  );
+                          },
+                        ),
+                      ],
                     ),
-                  );
-                },
-              );
-            },
+                  ),
+                );
+              },
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  void _open(String id) {
-    Navigator.of(context).push(
-      GlassPageRoute<void>(builder: (_) => HouseholdScreen(householdId: id)),
-    );
-  }
-
-  /// The top CTA. No household is pre-selected, so prompt the CHO to pick one
-  /// from the searchable sheet, then run the canonical session flow — the same
-  /// barriers-check → roll-call navigation the household screen's "Start
-  /// assessment" already uses.
   Future<void> _startAssessment() async {
-    final list = ref.read(visibleHouseholdsProvider).valueOrNull;
-    if (list == null || list.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No households yet \u2014 register a household first.'),
-        ),
-      );
-      return;
-    }
-
-    final picked = await showModalBottomSheet<Household>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => HouseholdPicker(list: list),
+    await showReceivePatientSheet(
+      context,
+      knownHouseholds:
+          ref.read(visibleHouseholdsProvider).valueOrNull ?? const [],
     );
-    if (picked != null && mounted) {
-      await openVisit(context, picked);
-    }
+    if (mounted) _refresh();
   }
 
-  /// Opens the shared household form; on success the new family is already
-  /// in the register below, ready to assess in the same sitting.
   Future<void> _registerHousehold() async {
     final created = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       showDragHandle: true,
       builder: (_) => const HouseholdFormSheet(),
     );
-    if (created == true && mounted) {
-      ref.invalidate(visibleHouseholdsProvider);
-      ref.invalidate(dayPlanProvider);
-    }
+    if (created == true && mounted) _refresh();
   }
 }
 
-// ------------------------------------------------------------ Register row
+/// A brass-edged pill for one household already waiting in the clinic queue.
+/// Brass is chrome — it marks a pending consult, never a clinical status.
+class _WaitingChip extends StatelessWidget {
+  const _WaitingChip({required this.name, required this.onTap});
 
-/// One household in the register: glass row, initials disc, member count and
-/// the quiet play button that jumps straight to roll call. Mirrors the
-/// Families tab tile so the two lists read as the same register.
-class _RegisterRow extends ConsumerWidget {
-  const _RegisterRow({
-    required this.household,
-    required this.onTap,
-    required this.onAssess,
-  });
-
-  final Household household;
+  final String name;
   final VoidCallback onTap;
-  final VoidCallback onAssess;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final members = ref.watch(householdMembersProvider(household.id));
-    final count = members.valueOrNull?.length;
-    final radius = BorderRadius.circular(Gap.radius);
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Gap.sm),
-      child: PressScale(
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.brassLight,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
         onTap: onTap,
-        radius: radius,
-        child: GlassSurface(
-          // In a scrolling list: glass look, no per-row blur filter.
-          blur: false,
-          radius: radius,
-          padding: const EdgeInsets.all(Gap.md),
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: AppColors.brass.withValues(alpha: 0.6)),
+          ),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                height: 42,
-                width: 42,
-                alignment: Alignment.center,
-                decoration: const BoxDecoration(
-                  color: AppColors.primaryLight,
-                  shape: BoxShape.circle,
-                ),
+              const Icon(Icons.schedule_rounded, size: 15, color: AppColors.brassDeep),
+              const SizedBox(width: 6),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 180),
                 child: Text(
-                  _initials(household.name),
-                  style: AppType.title.copyWith(
-                    color: AppColors.primaryDark,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.label.copyWith(
+                    fontSize: 13,
+                    color: AppColors.brassDeep,
                   ),
                 ),
-              ),
-              const SizedBox(width: Gap.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      household.name,
-                      style: AppType.label.copyWith(fontSize: 14.5),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${household.community} · ${household.district}',
-                      style: AppType.caption.copyWith(fontSize: 12),
-                    ),
-                    if (household.landmark != null &&
-                        household.landmark!.isNotEmpty)
-                      Text(
-                        household.landmark!,
-                        style: AppType.caption.copyWith(
-                          fontSize: 11.5,
-                          color: AppColors.inkFaint,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              if (count != null) ...[
-                const SizedBox(width: Gap.sm),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: Gap.sm,
-                    vertical: Gap.xs,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.glassFill,
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: AppColors.line),
-                  ),
-                  child: Text(
-                    '$count',
-                    style: AppType.label.copyWith(fontSize: 12),
-                  ),
-                ),
-              ],
-              const SizedBox(width: Gap.sm),
-              Tooltip(
-                message: 'Start assessment',
-                child: Semantics(
-                  button: true,
-                  label: 'Start assessment',
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(Gap.radiusSm),
-                    onTap: onAssess,
-                    child: Container(
-                      width: 48,
-                      height: 48,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryLight,
-                        borderRadius: BorderRadius.circular(Gap.radiusSm),
-                        border: Border.all(
-                          color: AppColors.primary.withValues(alpha: 0.22),
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.play_circle_outline_rounded,
-                        color: AppColors.primary,
-                        size: 22,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: Gap.xs),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: AppColors.inkFaint,
               ),
             ],
           ),
         ),
       ),
     );
-  }
-
-  static String _initials(String name) {
-    final parts = name
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((p) => p.isNotEmpty)
-        .toList(growable: false);
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts.first[0].toUpperCase();
-    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
 }

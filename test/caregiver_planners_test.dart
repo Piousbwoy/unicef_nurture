@@ -159,6 +159,35 @@ void main() {
         expect(policy.decide(null, {}), CaregiverCheckDecision.unsupported);
       }
     });
+    test('each blocked record gets its own reason, supported ones none', () {
+      expect(
+        policy.blockReasonFor(child(unknown: true))!.headline,
+        'A birth date is missing',
+      );
+      expect(
+        policy.blockReasonFor(child(dob: DateTime(2027)))!.headline,
+        'The birth date looks wrong',
+      );
+      final aged = policy.blockReasonFor(child(dob: DateTime(2018)))!;
+      expect(aged.headline, 'Past the under-five window');
+      expect(aged.detail, contains('This check covers children under five'));
+      final general = policy.blockReasonFor(
+        child(type: ClientType.womanOfReproductiveAge),
+      )!;
+      expect(general.headline, 'A different kind of record');
+      expect(
+        general.detail,
+        contains(ClientType.womanOfReproductiveAge.label),
+      );
+      for (final ok in [
+        child(),
+        child(type: ClientType.childUnderFive),
+        child(type: ClientType.pregnantWoman),
+        child(type: ClientType.postpartumWoman),
+      ]) {
+        expect(policy.blockReasonFor(ok), isNull, reason: ok.clientType.name);
+      }
+    });
     test(
       'cohort boundary is 59/60 days and pregnancy-only sign is conditional',
       () {

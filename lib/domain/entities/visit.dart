@@ -90,6 +90,31 @@ class Visit {
   );
 }
 
+/// The front-door pace for one clinic day, computed entirely from existing
+/// visit and assessment rows — nothing extra is captured at the door.
+///
+/// This is the CHPS version of the hospital KPI pair: how many sessions were
+/// received, how many are still open (the local approximation of "left
+/// without being seen"), and the mean minutes from receiving a session to its
+/// first saved assessment (door-to-provider time).
+class ClinicDayStats {
+  const ClinicDayStats({
+    required this.received,
+    required this.openNow,
+    this.avgMinutesToFirstAssessment,
+  });
+
+  final int received;
+  final int openNow;
+
+  /// Mean minutes from `visit.startedAt` to the first assessment saved in
+  /// that visit. Null when no session today has a saved assessment yet —
+  /// an honest "not enough finished consultations" rather than a fabricated 0.
+  final double? avgMinutesToFirstAssessment;
+
+  bool get hasAssessments => avgMinutesToFirstAssessment != null;
+}
+
 /// A single explainable contribution to a decision.
 ///
 /// Every recommendation the app makes is decomposed into these. This is what

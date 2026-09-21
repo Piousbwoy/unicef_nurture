@@ -33,6 +33,7 @@ import '../../domain/enums.dart';
 import '../assessment/form_kit.dart';
 import 'app_image.dart';
 import 'audio_button.dart';
+import 'speakable_text.dart';
 import 'ui.dart';
 
 /// Who is reading the recommendation. Governs what the kit shows and what
@@ -87,7 +88,7 @@ class RecSection extends StatelessWidget {
       ),
       if (subtitle != null) ...[
         const SizedBox(height: Gap.xs),
-        Text(
+        SpeakableText(
           subtitle!,
           style: const TextStyle(
             fontSize: 12,
@@ -269,7 +270,7 @@ class _CollapsibleRecSectionState extends State<CollapsibleRecSection>
                                 ? (16.0 + 12.0 + Gap.sm)
                                 : 0,
                           ),
-                          child: Text(
+                          child: SpeakableText(
                             widget.subtitle!,
                             style: const TextStyle(
                               fontSize: 12.5,
@@ -395,7 +396,7 @@ class SafetyNetNote extends StatelessWidget {
               ),
               const SizedBox(width: Gap.sm),
               Expanded(
-                child: Text(
+                child: SpeakableText(
                   text,
                   style: const TextStyle(
                     fontSize: 12.5,
@@ -496,7 +497,7 @@ class CohortCallout extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
+                SpeakableText(
                   note,
                   style: const TextStyle(
                     fontSize: 12,
@@ -823,7 +824,7 @@ class _WorklistTile extends StatelessWidget {
                           : TextDecoration.none,
                       decorationColor: AppColors.inkFaint,
                     ),
-                    child: Text(action.instruction),
+                    child: SpeakableText(action.instruction, policy: SpeechContentPolicy.clinical),
                   ),
                   if (audience == RecAudience.healthWorker &&
                       (action.rationale != null ||
@@ -845,8 +846,8 @@ class _WorklistTile extends StatelessWidget {
                         expandedCrossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (action.rationale != null)
-                            Text(
-                              action.rationale!,
+                            SpeakableText(
+                              action.rationale!, policy: SpeechContentPolicy.clinical,
                               style: const TextStyle(fontSize: 14, height: 1.5),
                             ),
                           if (action.protocolSource != null)
@@ -863,8 +864,8 @@ class _WorklistTile extends StatelessWidget {
                   else if (action.rationale != null)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Text(
-                        action.rationale!,
+                      child: SpeakableText(
+                        action.rationale!, policy: SpeechContentPolicy.clinical,
                         style: const TextStyle(fontSize: 14, height: 1.5),
                       ),
                     ),
@@ -934,7 +935,7 @@ class NutritionRecSection extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              SpeakableText(
                 plan.headline,
                 style: TextStyle(
                   fontSize: 13.5,
@@ -999,7 +1000,7 @@ class NutritionRecSection extends StatelessWidget {
                 ),
                 const SizedBox(width: Gap.sm),
                 Expanded(
-                  child: Text(
+                  child: SpeakableText(
                     plan.cohortLine!,
                     style: const TextStyle(
                       fontSize: 12.5,
@@ -1014,7 +1015,7 @@ class NutritionRecSection extends StatelessWidget {
           ),
           const SizedBox(height: Gap.md),
         ],
-        Text(
+        SpeakableText(
           plan.seasonNote,
           style: const TextStyle(
             fontSize: 12.5,
@@ -1032,8 +1033,8 @@ class NutritionRecSection extends StatelessWidget {
           const FieldLabel('Therapeutic prescription'),
           if (plan.therapeuticPlan!.counsellingHeadline.isNotEmpty) ...[
             const SizedBox(height: Gap.xs),
-            Text(
-              plan.therapeuticPlan!.counsellingHeadline,
+            SpeakableText(
+              plan.therapeuticPlan!.counsellingHeadline, policy: SpeechContentPolicy.clinical,
               style: const TextStyle(
                 fontSize: 12,
                 color: AppColors.inkMuted,
@@ -1089,7 +1090,7 @@ class NutritionRecSection extends StatelessWidget {
                 ),
                 const SizedBox(width: Gap.sm),
                 Expanded(
-                  child: Text(
+                  child: SpeakableText(
                     'Feeding target: at least ${plan.mealsPerDayTarget} '
                     'times a day, plus snacks.',
                     style: const TextStyle(
@@ -1108,7 +1109,7 @@ class NutritionRecSection extends StatelessWidget {
           const SizedBox(height: Gap.md),
           const FieldLabel("Today's plate"),
           if (plan.dayPlanNote != null) ...[
-            Text(
+            SpeakableText(
               plan.dayPlanNote!,
               style: const TextStyle(
                 fontSize: 12,
@@ -1166,7 +1167,7 @@ class NutritionRecSection extends StatelessWidget {
                   ),
                   const SizedBox(width: Gap.sm),
                   Expanded(
-                    child: Text(
+                    child: SpeakableText(
                       rule,
                       style: const TextStyle(
                         fontSize: 12.5,
@@ -1202,7 +1203,7 @@ class NutritionRecSection extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    const SpeakableText(
                       'BRING BACK IMMEDIATELY IF:',
                       style: TextStyle(
                         fontSize: 10.5,
@@ -1215,7 +1216,7 @@ class NutritionRecSection extends StatelessWidget {
                     for (final sign in plan.escalationSigns)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 1),
-                        child: Text(
+                        child: SpeakableText(
                           '\u2022 $sign',
                           style: const TextStyle(
                             fontSize: 12.5,
@@ -1233,7 +1234,7 @@ class NutritionRecSection extends StatelessWidget {
         ],
         if (plan.reviewInDays != null) ...[
           const SizedBox(height: Gap.sm),
-          Text(
+          SpeakableText(
             'Nutrition review in ${plan.reviewInDays} '
             'day${plan.reviewInDays == 1 ? '' : 's'}.',
             style: const TextStyle(
@@ -1351,7 +1352,7 @@ class _DayPlanCard extends StatelessWidget {
                           ),
                           const SizedBox(width: Gap.sm),
                           Expanded(
-                            child: Text(
+                            child: SpeakableText(
                               slots[i].foods.join(' + '),
                               style: const TextStyle(
                                 fontSize: 12.5,
@@ -1365,7 +1366,7 @@ class _DayPlanCard extends StatelessWidget {
                       ),
                       if (slots[i].note != null) ...[
                         const SizedBox(height: 2),
-                        Text(
+                        SpeakableText(
                           slots[i].note!,
                           style: const TextStyle(
                             fontSize: 11,
@@ -1404,7 +1405,7 @@ class _CoverageChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: AppColors.glassStroke, width: Gap.hairline),
       ),
-      child: Text.rich(
+      child: SpeakableText.rich(
         TextSpan(
           children: [
             TextSpan(
@@ -1540,7 +1541,7 @@ class _FoodTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    SpeakableText(
                       food.localName != null
                           ? '${food.food} (${food.localName})'
                           : food.food,
@@ -1559,7 +1560,7 @@ class _FoodTile extends StatelessWidget {
                         color: AppColors.primaryLight,
                         borderRadius: BorderRadius.circular(999),
                       ),
-                      child: Text(
+                      child: SpeakableText(
                         food.householdMeasure,
                         style: const TextStyle(
                           fontSize: 11,
@@ -1574,7 +1575,7 @@ class _FoodTile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: Gap.xs),
-          Text(
+          SpeakableText(
             food.reason,
             style: const TextStyle(
               fontSize: 12,
@@ -1638,8 +1639,8 @@ class _PrescriptionCard extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: Text(
-            value,
+          child: SpeakableText(
+            value, policy: SpeechContentPolicy.clinical,
             style: const TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w600,
@@ -1696,8 +1697,8 @@ class _PrescriptionCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: Gap.xs),
-          Text(
-            supplement.label,
+          SpeakableText(
+            supplement.label, policy: SpeechContentPolicy.clinical,
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w800,
@@ -1710,8 +1711,8 @@ class _PrescriptionCard extends StatelessWidget {
           _kv('SCHEDULE', supplement.schedule),
           _kv('DURATION', supplement.duration),
           const SizedBox(height: Gap.sm),
-          Text(
-            supplement.counsellingNote,
+          SpeakableText(
+            supplement.counsellingNote, policy: SpeechContentPolicy.clinical,
             style: const TextStyle(
               fontSize: 12,
               color: AppColors.inkMuted,
@@ -1796,8 +1797,8 @@ class _HydrationCard extends StatelessWidget {
                 ),
                 const SizedBox(width: Gap.xs),
                 Expanded(
-                  child: Text(
-                    line,
+                  child: SpeakableText(
+                    line, policy: SpeechContentPolicy.clinical,
                     style: const TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
@@ -1836,7 +1837,7 @@ class _GapLine extends StatelessWidget {
         ),
         const SizedBox(width: Gap.xs),
         Expanded(
-          child: Text.rich(
+          child: SpeakableText.rich(
             TextSpan(
               children: [
                 TextSpan(
@@ -1952,7 +1953,7 @@ class ImmunisationRecSection extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 2),
-                        Text(
+                        SpeakableText(
                           plan.summary,
                           style: const TextStyle(
                             fontSize: 12,
@@ -2046,7 +2047,7 @@ class ImmunisationRecSection extends StatelessWidget {
                       children: [
                         SizedBox(
                           width: 84,
-                          child: Text(
+                          child: SpeakableText(
                             'IN ${s.weeksFromNow} WEEKS',
                             style: const TextStyle(
                               fontSize: 10.5,
@@ -2088,7 +2089,7 @@ class ImmunisationRecSection extends StatelessWidget {
         for (final item in items) _ImmunisationTile(item: item),
         if (plan.nextDueLabel != null && plan.nextDueInDays != null) ...[
           const SizedBox(height: Gap.xs),
-          Text(
+          SpeakableText(
             'Next due: ${plan.nextDueLabel} in about '
             '${plan.nextDueInDays} days — note it on the card before '
             'the family leaves.',
@@ -2216,8 +2217,8 @@ class _ImmunisationTile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 2),
-          Text(
-            item.detail,
+          SpeakableText(
+            item.detail, policy: SpeechContentPolicy.clinical,
             style: const TextStyle(
               fontSize: 11.5,
               color: AppColors.inkMuted,
@@ -2236,7 +2237,7 @@ class _ImmunisationTile extends StatelessWidget {
               ),
               const SizedBox(width: 4),
               Expanded(
-                child: Text(
+                child: SpeakableText(
                   'Why it matters: guards against '
                   '${item.dose.protectsAgainst}.',
                   style: const TextStyle(
@@ -2401,8 +2402,8 @@ class _ProtocolCard extends StatelessWidget {
               ),
               const SizedBox(width: Gap.sm),
               Expanded(
-                child: Text(
-                  protocol.headline,
+                child: SpeakableText(
+                  protocol.headline, policy: SpeechContentPolicy.clinical,
                   style: const TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w800,
@@ -2545,7 +2546,7 @@ class _ProtocolCard extends StatelessWidget {
                 ),
                 const SizedBox(width: Gap.xs),
                 Expanded(
-                  child: Text.rich(
+                  child: SpeakableText.rich(
                     TextSpan(
                       children: [
                         const TextSpan(
@@ -2600,8 +2601,8 @@ class _ProtocolStepTile extends StatelessWidget {
               shape: BoxShape.circle,
             ),
             child: Center(
-              child: Text(
-                '${step.order}',
+              child: SpeakableText(
+                '${step.order}', policy: SpeechContentPolicy.clinical,
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w900,
@@ -2615,8 +2616,8 @@ class _ProtocolStepTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  step.action,
+                SpeakableText(
+                  step.action, policy: SpeechContentPolicy.clinical,
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
@@ -2636,7 +2637,7 @@ class _ProtocolStepTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(Gap.radiusSm),
                     border: Border.all(color: AppColors.line, width: 0.5),
                   ),
-                  child: Text(
+                  child: SpeakableText(
                     'DOSE: ${step.dose}',
                     style: const TextStyle(
                       fontSize: 11.5,
@@ -2648,7 +2649,7 @@ class _ProtocolStepTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
+                SpeakableText(
                   'WHEN: ${step.whenToDo}',
                   style: const TextStyle(
                     fontSize: 11.5,
@@ -2657,7 +2658,7 @@ class _ProtocolStepTile extends StatelessWidget {
                     height: 1.4,
                   ),
                 ),
-                Text(
+                SpeakableText(
                   'WHY: ${step.rationale}',
                   style: const TextStyle(
                     fontSize: 11,
@@ -2667,7 +2668,7 @@ class _ProtocolStepTile extends StatelessWidget {
                 ),
                 if (step.contraindication != null) ...[
                   const SizedBox(height: 2),
-                  Text(
+                  SpeakableText(
                     'CAUTION: ${step.contraindication!}',
                     style: const TextStyle(
                       fontSize: 11,
@@ -2874,7 +2875,7 @@ class _PillarCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(
+                  SpeakableText(
                     style.why,
                     style: const TextStyle(
                       fontSize: 11.5,
@@ -2889,7 +2890,7 @@ class _PillarCard extends StatelessWidget {
         ),
         if (summary.isNotEmpty) ...[
           const SizedBox(height: Gap.sm),
-          Text(
+          SpeakableText(
             summary,
             style: const TextStyle(
               fontSize: 12,
@@ -2962,7 +2963,7 @@ class _NurturingCareActionTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 2),
-              Text(
+              SpeakableText(
                 action.counsellingNote,
                 style: const TextStyle(
                   fontSize: 11.5,
@@ -3157,7 +3158,7 @@ class FamilyCarePlanCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
+                child: SpeakableText(
                   message,
                   style: const TextStyle(
                     fontSize: 13.5,
@@ -3182,7 +3183,7 @@ class FamilyCarePlanCard extends StatelessWidget {
           if (savedAt != null)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(
+              child: SpeakableText(
                 'Saved clinic advice from ${savedAt!.toLocal().toString().split('.').first}. '
                 'Timing such as “now” or “today” refers to that visit. This is historical advice, not a new assessment.',
               ),
@@ -3203,7 +3204,7 @@ class FamilyCarePlanCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      const SpeakableText(
                         'GO TO THE CLINIC IF YOU SEE:',
                         style: TextStyle(
                           fontSize: 10.5,
@@ -3216,7 +3217,7 @@ class FamilyCarePlanCard extends StatelessWidget {
                       for (final d in plan.dangerSigns)
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 1),
-                          child: Text(
+                          child: SpeakableText(
                             '\u2022 $d',
                             style: const TextStyle(
                               fontSize: 12.5,
@@ -3246,14 +3247,14 @@ class FamilyCarePlanCard extends StatelessWidget {
               for (final action in plan.actions.where((a) => !canComplete!(a)))
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
+                  child: SpeakableText(
                     'Clinic decision • read only\n${action.instruction}\nAsk your health worker about treatment; do not start or change medicines from this checklist.',
                   ),
                 ),
           ],
           if (plan.followUpInDays != null) ...[
             const SizedBox(height: Gap.sm),
-            Text(
+            SpeakableText(
               savedAt == null
                   ? 'The health worker asked to see $personName again in ${plan.followUpInDays} day${plan.followUpInDays == 1 ? '' : 's'}.'
                   : 'Requested review date: ${savedAt!.add(Duration(days: plan.followUpInDays!)).toLocal().toString().split(' ').first}. Check the next clinic step for any explicitly scheduled contact.',

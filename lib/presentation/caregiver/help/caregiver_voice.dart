@@ -46,8 +46,8 @@ class CaregiverVoiceController extends ChangeNotifier
     if (_disposed) return;
     final generation = ++_generation;
     speech = item;
-    final localized = item.localizedText;
     final language = OfflineSpeechLanguage.canonical(item.language);
+    final localized = item.localizedText;
     playback = CaregiverPlayback(
       phase: CaregiverPlaybackPhase.loading,
       transcript: localized ?? item.english,
@@ -132,6 +132,7 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
     id: speech.id,
     english: speech.english,
     language: speech.language,
+    policy: speech.policy,
     clipId: speech.clipId,
     clipIds: speech.clipIds == null
         ? null
@@ -141,6 +142,7 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
   bool _sameMessage(CaregiverSpeech a, CaregiverSpeech b) =>
       a.id == b.id &&
       a.english == b.english &&
+      a.policy == b.policy &&
       a.clipId == b.clipId &&
       listEquals(a.clipIds, b.clipIds);
 
@@ -177,6 +179,23 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
     }
   }
 
+  /// Tap: speak in the language this family already uses. A play button that
+  /// opens a form instead of making a sound is the bug this replaced.
+  void _play(
+    CaregiverVoiceController voice,
+    CaregiverScope scope,
+    String language,
+  ) {
+    _generation++;
+    final speech = _input.withLanguage(language);
+    setState(() {
+      _chosenLanguage = language;
+      _ownedSpeech = speech;
+    });
+    unawaited(voice.play(speech));
+  }
+
+  /// Hold: choose a language for this message only, then play it.
   Future<void> _choose(CaregiverVoiceController voice, CaregiverScope scope) async {
     if (_picking) return;
     // Stop any other message in this scope before opening the picker.
@@ -199,12 +218,7 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
         !identical(ref.read(caregiverVoiceProvider(scope)), voice)) {
       return;
     }
-    final speech = input.withLanguage(selected);
-    setState(() {
-      _chosenLanguage = selected;
-      _ownedSpeech = speech;
-    });
-    await voice.play(speech);
+    _play(voice, scope, selected);
   }
 
   @override
@@ -280,14 +294,16 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
                 active: active,
                 loading: isLoading,
                 pulse: animate ? _pulse : null,
+                language: language,
                 onTap: () {
                   if (active) {
                     _generation++;
                     voice.stop();
                   } else {
-                    unawaited(_choose(voice, scope));
+                    _play(voice, scope, language);
                   }
                 },
+                onLongPress: () => unawaited(_choose(voice, scope)),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -367,16 +383,22 @@ class _VoicePlayButton extends StatelessWidget {
     required this.active,
     required this.loading,
     required this.pulse,
+    required this.language,
     required this.onTap,
+    required this.onLongPress,
   });
   final bool active;
   final bool loading;
   final AnimationController? pulse;
+  final String language;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
-    final label = active ? 'Stop audio' : 'Choose speech language';
+    final label = active
+        ? 'Stop audio'
+        : 'Listen in $language. Hold to choose another language.';
     final button = Semantics(
       button: true,
       label: label,
@@ -386,6 +408,7 @@ class _VoicePlayButton extends StatelessWidget {
           color: Colors.transparent,
           child: InkResponse(
             onTap: onTap,
+            onLongPress: onLongPress,
             radius: 30,
             child: Container(
               width: 56,

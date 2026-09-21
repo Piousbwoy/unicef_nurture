@@ -66,6 +66,18 @@ dependencies:
   # preeclampsia_risk, lbw_sga. INT8 quantized, <2 MB each, 10–40 ms ARM64.
   tflite_flutter: ^0.11.0
 
+  # On-device neural translation (MarianMT ONNX: Hausa, Twi).
+  # Runs encoder-decoder seq2seq models offline via ONNX Runtime;
+  # web falls through to the phrase-dictionary backend (no native FFI).
+  # Models: assets/models/translation_hausa/ + translation_twi/
+  onnxruntime: ^1.4.1
+  onnx_translation: ^0.1.2
+
+  # On-device neural TTS using Piper VITS ONNX models.
+  # Runs via the existing onnxruntime bindings (zero extra native deps).
+  # Rule-based phonemizer for Hausa/Twi (both phonemic orthographies).
+  # Models: assets/tts/hausa_piper/ + twi_piper/
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -82,6 +94,10 @@ flutter:
     - assets/images/
     - assets/fonts/
     - assets/models/
+    - assets/models/translation_hausa/
+    - assets/models/translation_twi/
+    - assets/tts/hausa_piper/
+    - assets/tts/twi_piper/
   fonts:
     # The caregiver Check flow styles its premium surfaces with raw
     # `fontFamily: 'Sora'` — these declarations are what make that resolve

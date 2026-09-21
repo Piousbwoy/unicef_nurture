@@ -223,10 +223,14 @@ class _MeasureFieldState extends State<MeasureField> {
 
   @override
   Widget build(BuildContext context) {
+    final hasText = widget.controller.text.trim().isNotEmpty;
     final field = TextField(
       controller: widget.controller,
       focusNode: _focusNode,
-      onChanged: widget.onChanged,
+      onChanged: (value) {
+        setState(() {}); // Re-render the clear affordance.
+        widget.onChanged?.call(value);
+      },
       keyboardType: widget.decimal
           ? const TextInputType.numberWithOptions(decimal: true)
           : TextInputType.number,
@@ -235,16 +239,84 @@ class _MeasureFieldState extends State<MeasureField> {
           widget.decimal ? RegExp(r'[0-9.]') : RegExp(r'[0-9]'),
         ),
       ],
+      style: const TextStyle(
+        fontSize: 19,
+        fontWeight: FontWeight.w800,
+        color: AppColors.checkNavy,
+        fontFeatures: [FontFeature.tabularFigures()],
+      ),
+      cursorColor: AppColors.checkBlue,
       decoration: InputDecoration(
+        filled: true,
+        fillColor: Colors.white,
         isDense: true,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 17,
+        ),
         hintText: widget.example ?? '—',
-        suffixText: widget.unit,
-        helperText: widget.cutoff,
-        helperMaxLines: 3,
-        helperStyle: const TextStyle(
-          fontSize: 11.5,
-          color: AppColors.inkMuted,
-          height: 1.3,
+        hintStyle: TextStyle(
+          fontSize: 19,
+          fontWeight: FontWeight.w800,
+          color: AppColors.inkFaint.withValues(alpha: 0.55),
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+        // The unit rides inside the box as a quiet navy pill — part of the
+        // number's identity, not an afterthought hanging outside it.
+        suffixIcon: (widget.unit != null || hasText)
+            ? Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (widget.unit != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.checkBlueTint,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          widget.unit!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.checkBlue,
+                          ),
+                        ),
+                      ),
+                    if (hasText) ...[
+                      const SizedBox(width: 6),
+                      InkResponse(
+                        onTap: () {
+                          widget.controller.clear();
+                          setState(() {});
+                          widget.onChanged?.call('');
+                        },
+                        radius: 20,
+                        child: const Icon(
+                          Icons.cancel_rounded,
+                          size: 20,
+                          color: AppColors.inkFaint,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              )
+            : null,
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: AppColors.checkNavy.withValues(alpha: 0.16),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.checkBlue, width: 1.6),
         ),
       ),
     );
@@ -258,6 +330,32 @@ class _MeasureFieldState extends State<MeasureField> {
           widget.width == null
               ? field
               : SizedBox(width: widget.width, child: field),
+          // The cut-off is the clinical contract of this box: shown as its
+          // own quiet badge row instead of lost in helper-text grey.
+          if (widget.cutoff != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(
+                  Icons.rule_rounded,
+                  size: 13,
+                  color: AppColors.checkBlue,
+                ),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    widget.cutoff!,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.inkMuted,
+                      height: 1.3,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -318,13 +416,40 @@ class ChoiceChipsField<T> extends StatelessWidget {
           runSpacing: Gap.sm,
           children: [
             for (final o in options)
-              ChoiceChip(
-                label: Text(labelOf(o)),
-                selected: value == o,
-                selectedColor: dangerIf?.call(o) == true
-                    ? AppColors.triageAmberBg
-                    : null,
-                onSelected: (on) => onChanged(on ? o : null),
+              Builder(
+                builder: (context) {
+                  final danger = dangerIf?.call(o) == true;
+                  final selected = value == o;
+                  return ChoiceChip(
+                    label: Text(
+                      labelOf(o),
+                      style: TextStyle(
+                        fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                        color: selected
+                            ? (danger ? AppColors.triageAmber : Colors.white)
+                            : AppColors.ink,
+                      ),
+                    ),
+                    selected: selected,
+                    showCheckmark: false,
+                    materialTapTargetSize: MaterialTapTargetSize.padded,
+                    backgroundColor: Colors.white,
+                    selectedColor: danger
+                        ? AppColors.triageAmber
+                        : AppColors.checkNavy,
+                    side: BorderSide(
+                      color: danger
+                          ? AppColors.triageAmber.withValues(alpha: 0.55)
+                          : selected
+                          ? AppColors.checkNavy
+                          : AppColors.checkNavy.withValues(alpha: 0.2),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    onSelected: (on) => onChanged(on ? o : null),
+                  );
+                },
               ),
           ],
         ),

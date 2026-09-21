@@ -5,7 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
 import '../i18n/speech_bank.dart';
+import '../ml/piper_tts_service.dart';
 import '../ml/translation_service.dart';
+import 'speech_content_policy.dart';
 
 enum CaregiverPlaybackPhase { loading, playing, stopped, completed, fallback }
 
@@ -16,7 +18,9 @@ class CaregiverSpeech {
     required this.language,
     this.clipId,
     this.clipIds,
+    this.policy = SpeechContentPolicy.guidance,
   });
+  final SpeechContentPolicy policy;
   final String id;
   final String english;
   final String language;
@@ -52,6 +56,7 @@ class CaregiverSpeech {
   String? get localizedText {
     final selected = OfflineSpeechLanguage.canonical(language);
     if (selected == 'English') return english;
+    if (SpeechSafety.requiresEnglish(english, policy)) return null;
     final clips = matchingClips;
     if (clips != null) {
       final parts = <String>[];
@@ -70,7 +75,8 @@ class CaregiverSpeech {
     }
     // Pure dynamic text — try the phrase-dictionary translation engine.
     final result = TranslationService.instance.translate(english, selected);
-    return result?.text;
+    return result != null && result.coverage == 1 &&
+        SpeechSafety.preservesTokens(english, result.text) ? result.text : null;
   }
 
   bool get hasTranslation => localizedText != null;
@@ -81,6 +87,7 @@ class CaregiverSpeech {
     language: language,
     clipId: clipId,
     clipIds: clipIds,
+    policy: policy,
   );
 }
 
@@ -170,8 +177,9 @@ class _PlaybackRun {
   final int generation;
   final void Function(CaregiverPlayback) event;
   final cancel = Completer<void>();
-  final String transcript;
-  final String language;
+  String transcript;
+  String language;
+  String provenance = '';
   String source = 'Preparing offline audio';
   bool ended = false;
 
@@ -215,16 +223,25 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
     AudioPlayer Function()? playerFactory,
     FlutterTts Function()? ttsFactory,
     AssetBundle? assets,
+    TranslationService? translation,
+    PiperTtsService? piper,
     this.operationTimeout = const Duration(seconds: 5),
     this.playbackTimeout = const Duration(minutes: 3),
   }) : _playerFactory = playerFactory ?? AudioPlayer.new,
        _ttsFactory = ttsFactory ?? _sharedTts,
-       _assets = assets ?? rootBundle;
+       _assets = assets ?? rootBundle,
+       _translation = translation ?? TranslationService.instance,
+       _piper = piper ?? PiperTtsService.instance;
 
   // Factories/bundle allow focused tests without real audio hardware.
   final AudioPlayer Function() _playerFactory;
   final FlutterTts Function() _ttsFactory;
   final AssetBundle _assets;
+  final TranslationService _translation;
+  final PiperTtsService _piper;
+
+  static Future<void> stopAll() =>
+      _PlaybackCoordinator.current?.stop() ?? Future<void>.value();
   final Duration operationTimeout;
   final Duration playbackTimeout;
   AudioPlayer? _player;
@@ -266,6 +283,11 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
   Future<bool> _stopDevices() async {
     var quiet = true;
     try {
+      await _piper.stop().timeout(operationTimeout);
+    } catch (_) {
+      quiet = false;
+    }
+    try {
       await _player?.stop().timeout(operationTimeout);
     } catch (_) {
       quiet = false;
@@ -293,7 +315,8 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
     // Capture ownership before any await, including asset loads/enumeration.
     final generation = ++_generation;
     final selected = OfflineSpeechLanguage.canonical(speech.language);
-    final localized = speech.localizedText;
+    var localized = speech.matchingClips != null || selected == 'English'
+        ? speech.localizedText : null;
     final run = _PlaybackRun(
       generation,
       localized ?? speech.english,
@@ -308,6 +331,31 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
       // Also wait for a stop queued by a different, superseded owner.
       await _PlaybackCoordinator.tail;
       if (!_current(run)) return;
+      if (selected != 'English' &&
+          SpeechSafety.requiresEnglish(speech.english, speech.policy)) {
+        run.transcript = speech.english;
+        run.language = 'English';
+        run.source = 'English for safety: treatment, measurements and identifiers '
+            'are not machine-translated. Choose English playback.';
+        run.emit(CaregiverPlaybackPhase.fallback);
+        return;
+      }
+      if (localized == null && speech.clipId == null && speech.clipIds == null) {
+        final result = await _wait(
+          _translation.translateAsync(speech.english, selected),
+          run, operationTimeout,
+        );
+        if (!_current(run)) return;
+        if (result != null && result.language == selected &&
+            result.coverage == 1 && result.text.trim().isNotEmpty &&
+            SpeechSafety.preservesTokens(speech.english, result.text)) {
+          localized = result.text;
+          run.transcript = result.text;
+          run.language = selected;
+          run.provenance = result.isNeural
+              ? 'neural model draft' : 'phrase dictionary draft';
+        }
+      }
       if (localized == null) {
         run.source = '$selected translation is not bundled. Choose English or '
             'ask a health worker to read the guidance.';
@@ -352,6 +400,16 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
         }
       }
       if (!_current(run)) return;
+
+      // Piper neural TTS: native-quality speech for dynamic translated text.
+      if (await _piperSpeak(run)) {
+        if (_current(run)) run.emit(CaregiverPlaybackPhase.completed);
+        return;
+      }
+      if (!_current(run)) return;
+
+      if (!_PlaybackCoordinator.quiet) { _fallback(run); return; }
+      // Device fallback requires a proven offline voice in the same language.
       if (await _synthesize(run)) {
         if (_current(run)) run.emit(CaregiverPlaybackPhase.completed);
       } else if (_current(run)) {
@@ -361,7 +419,12 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
         if (_current(run)) _fallback(run);
       }
     } catch (_) {
-      if (_current(run)) _fallback(run);
+      if (_current(run)) {
+        await _PlaybackCoordinator.serialize(() async {
+          if (_current(run)) _PlaybackCoordinator.quiet = await _stopDevices();
+        });
+        if (_current(run)) _fallback(run);
+      }
     } finally {
       if (identical(_run, run)) _run = null;
     }
@@ -437,6 +500,35 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
     }
   }
 
+  /// Synthesize speech via on-device Piper VITS (native-quality Hausa/Twi).
+  /// Returns true if Piper handled playback, false if caller should fall through.
+  Future<bool> _piperSpeak(_PlaybackRun run) async {
+    final service = _piper;
+    if (!service.isConfigured(run.language)) return false;
+    // Only use Piper for non-English text (dynamic translations).
+    if (run.language == 'English') return false;
+    final text = run.transcript;
+    if (text.trim().isEmpty) return false;
+    try {
+      await _wait(service.initializeLanguage(run.language), run, operationTimeout);
+      if (!_current(run) || !service.supportsLanguage(run.language)) return false;
+      run.source = 'Piper offline voice - ${run.provenance.isEmpty ? 'bank draft translation' : run.provenance}';
+      final handled = await _wait(service.speak(text, run.language,
+        onStarted: () {
+          if (_current(run)) run.emit(CaregiverPlaybackPhase.playing);
+        },
+      ), run, playbackTimeout);
+      return handled && _current(run);
+    } catch (_) {
+      if (_current(run)) {
+        await _PlaybackCoordinator.serialize(() async {
+          if (_current(run)) _PlaybackCoordinator.quiet = await _stopDevices();
+        });
+      }
+      return false;
+    }
+  }
+
   Future<bool> _synthesize(_PlaybackRun run) async {
     final failed = Completer<bool>();
     final completedEvent = Completer<void>();
@@ -470,6 +562,7 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
         if (!_current(run)) return;
         run.source = '${run.language} offline device speech'
             '${run.language == 'English' ? '' : ' • draft translation'}';
+        if (run.provenance.isNotEmpty) run.source += ' - ${run.provenance}';
         tts.setStartHandler(() {
           if (!listening()) return;
           started = true;

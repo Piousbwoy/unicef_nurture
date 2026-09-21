@@ -19,7 +19,6 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/glass.dart';
 
 /// A full-width premium action button with deep navy gradient, white text,
 /// and a subtle blue glow shadow.
@@ -28,7 +27,7 @@ class PremiumCheckButton extends StatefulWidget {
     super.key,
     required this.label,
     required this.onPressed,
-    this.icon = Icons.health_and_safety_rounded,
+    this.icon,
     this.trailingIcon = Icons.arrow_forward_rounded,
     this.height = 60,
     this.enabled = true,
@@ -36,7 +35,10 @@ class PremiumCheckButton extends StatefulWidget {
 
   final String label;
   final VoidCallback onPressed;
-  final IconData icon;
+
+  /// Leading icon. Null for pure navigation buttons — a leading arrow next
+  /// to a trailing chevron reads as a mistake, not a style.
+  final IconData? icon;
   final IconData trailingIcon;
   final double height;
   final bool enabled;
@@ -84,8 +86,6 @@ class _PremiumCheckButtonState extends State<PremiumCheckButton>
 
   @override
   Widget build(BuildContext context) {
-    final motion = VisualEffects.of(context);
-    final duration = motion.scale(AppMotion.fast);
     return Semantics(
       button: true,
       enabled: widget.enabled,
@@ -101,16 +101,14 @@ class _PremiumCheckButtonState extends State<PremiumCheckButton>
           onTapDown: _onTapDown,
           onTapUp: _onTapUp,
           onTapCancel: _onTapCancel,
-          child: AnimatedOpacity(
-            // A disabled premium button must LOOK disabled: the glow dies and
-            // the surface dims, so "why won't it press" never happens.
-            duration: duration,
-            opacity: widget.enabled ? 1.0 : 0.45,
-            child: Container(
+          child: Container(
               height: widget.height,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
-                gradient: AppColors.checkButtonGradient,
+                gradient: widget.enabled
+                    ? AppColors.checkButtonGradient
+                    : null,
+                color: widget.enabled ? null : AppColors.checkSilver,
                 boxShadow: widget.enabled
                     ? [
                         BoxShadow(
@@ -120,10 +118,12 @@ class _PremiumCheckButtonState extends State<PremiumCheckButton>
                         ),
                       ]
                     : const [],
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  width: 1,
-                ),
+                border: widget.enabled
+                    ? Border.all(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        width: 1,
+                      )
+                    : null,
               ),
               child: Material(
                 color: Colors.transparent,
@@ -134,20 +134,28 @@ class _PremiumCheckButtonState extends State<PremiumCheckButton>
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Row(
                       children: [
-                        Icon(widget.icon, color: Colors.white, size: 24),
-                        const SizedBox(width: 12),
-                        // Flexible so long labels wrap at large text scales
-                        // instead of pushing the trailing chevron off-card.
+                        if (widget.icon != null) ...[
+                          Icon(
+                            widget.icon,
+                            color: widget.enabled
+                                ? Colors.white
+                                : AppColors.checkNavy.withValues(alpha: 0.5),
+                            size: 24,
+                          ),
+                          const SizedBox(width: 12),
+                        ],
                         Expanded(
                           child: Text(
                             widget.label,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontFamily: 'Sora',
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
-                              color: Colors.white,
+                              color: widget.enabled
+                                  ? Colors.white
+                                  : AppColors.checkNavy.withValues(alpha: 0.55),
                               letterSpacing: 0.2,
                               height: 1.2,
                             ),
@@ -156,13 +164,14 @@ class _PremiumCheckButtonState extends State<PremiumCheckButton>
                         const SizedBox(width: 8),
                         Icon(
                           widget.trailingIcon,
-                          color: Colors.white.withValues(alpha: 0.9),
+                          color: widget.enabled
+                              ? Colors.white.withValues(alpha: 0.9)
+                              : AppColors.checkNavy.withValues(alpha: 0.4),
                           size: 22,
                         ),
                       ],
                     ),
                   ),
-                ),
               ),
             ),
           ),

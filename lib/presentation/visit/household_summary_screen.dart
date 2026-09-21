@@ -1,27 +1,15 @@
-/// The household assessment summary — master flow [47], and the sign-off [58].
-///
-/// This is the screen that makes a multi-person session feel like *one*
-/// encounter rather than three separate ones. After the last person in the
-/// queue is assessed, the CHO lands here and sees the whole household at a
-/// glance: every person seen today with their risk badge, the referrals that
-/// went out, and the clinic note. Only then do they sign the encounter off.
-///
-/// It is deliberately the calmest screen in the app. The clinical work is
-/// done; this is the moment of confirmation. The offline banner is never an
-/// error — "saved locally, will sync when connected" — because a CHO who
-/// just finished a three-person session needs to trust that the record is
-/// safe, not worry about the network.
+/// Review only this clinic session's saved records before closing it.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../data/local/visit_dao.dart' show VisitParticipant;
+import '../../data/repositories/care_repository.dart';
 import '../../domain/entities/visit.dart';
-import '../../domain/enums.dart';
-import '../shared/app_image.dart';
+import '../fhw/clinic_widgets.dart';
 import '../shared/ui.dart';
 
 class HouseholdSummaryScreen extends ConsumerStatefulWidget {
@@ -31,15 +19,25 @@ class HouseholdSummaryScreen extends ConsumerStatefulWidget {
     required this.householdId,
     required this.assessedIds,
     this.notes,
+    this.participants,
+    this.assessments,
+    this.omissionReason,
+    this.onOmissionReasonChanged,
   });
 
   final Visit visit;
   final String householdId;
 
-  /// Everyone assessed in this session, in the order they were seen.
+  /// Retained for existing callers. Never used as proof of a saved assessment.
   final List<String> assessedIds;
-
   final String? notes;
+
+  /// Snapshots read from the repository by the queue. Older entry points can
+  /// omit these; review will fetch the persisted roll and session history.
+  final List<VisitParticipant>? participants;
+  final List<Assessment>? assessments;
+  final String? omissionReason;
+  final ValueChanged<String>? onOmissionReasonChanged;
 
   @override
   ConsumerState<HouseholdSummaryScreen> createState() =>
@@ -48,340 +46,390 @@ class HouseholdSummaryScreen extends ConsumerStatefulWidget {
 
 class _HouseholdSummaryScreenState
     extends ConsumerState<HouseholdSummaryScreen> {
+  final _reason = TextEditingController();
+  List<VisitParticipant> _roll = [];
+  List<Assessment> _assessments = [];
+  bool _loading = true;
   bool _saving = false;
+  bool _loadFailed = false;
+  String? _error;
+
+  Set<String> get _savedIds => _assessments.map((a) => a.personId).toSet();
+  List<VisitParticipant> get _pending => _roll
+      .where((p) => p.wasPresent && !_savedIds.contains(p.personId))
+      .toList();
+  List<VisitParticipant> get _absent =>
+      _roll.where((p) => !p.wasPresent).toList();
+
+  @override
+  void initState() {
+    super.initState();
+    _reason.text = widget.omissionReason ?? '';
+    if (widget.participants != null && widget.assessments != null) {
+      _adopt(widget.participants!, widget.assessments!);
+      _loading = false;
+    } else {
+      Future.microtask(_load);
+    }
+  }
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  void _adopt(List<VisitParticipant> roll, List<Assessment> assessments) {
+    _roll = roll.where((p) => p.visitId == widget.visit.id).toList()
+      ..sort((a, b) => a.queueOrder.compareTo(b.queueOrder));
+    final ids = _roll.map((p) => p.personId).toSet();
+    _assessments =
+        assessments
+            .where(
+              (a) => a.visitId == widget.visit.id && ids.contains(a.personId),
+            )
+            .toList()
+          ..sort((a, b) => b.performedAt.compareTo(a.performedAt));
+  }
+
+  Future<void> _readRecords() async {
+    final user = ref.read(currentUserProvider);
+    if (user == null) throw StateError('Sign in required');
+    final repository = ref.read(careRepositoryProvider);
+    final roll = await repository.rollCall(user, widget.visit.id);
+    final histories = await Future.wait([
+      for (final p in roll) repository.assessmentHistory(user, p.personId),
+    ]);
+    if (mounted)
+      setState(() => _adopt(roll, histories.expand((h) => h).toList()));
+  }
+
+  Future<void> _load() async {
+    if (_saving) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await _readRecords();
+      if (mounted) setState(() => _loadFailed = false);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadFailed = true;
+          _error = e is AccessDenied
+              ? e.message
+              : 'Could not load the session records. Retry before closing.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   Future<void> _save() async {
+    if (_saving || _loading || _loadFailed) return;
     final user = ref.read(currentUserProvider);
-    if (user == null) return;
-
-    setState(() => _saving = true);
-    await ref.read(careRepositoryProvider).completeVisit(
-      user,
-      widget.visit.id,
-      notes: widget.notes?.trim().isEmpty == true ? null : widget.notes?.trim(),
-    );
-
-    // The session is now a closed encounter. Everything downstream — the day
-    // plan, the history, the referral tracker — is stale until it reloads.
-    ref.invalidate(dayPlanProvider);
-    ref.invalidate(visitHistoryProvider(widget.householdId));
-    ref.invalidate(openReferralsProvider);
-    if (!mounted) return;
-    Navigator.of(context).pop(true);
+    if (user == null) {
+      setState(() => _error = 'Sign in again to close this session.');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      // Re-read before closing, including callers that supplied a snapshot.
+      await _readRecords();
+      if (!mounted) return;
+      if (_pending.isNotEmpty && _reason.text.trim().isEmpty) {
+        setState(
+          () => _error =
+              'Add a reason for the people here without a saved assessment, or return to the queue.',
+        );
+        return;
+      }
+      final note = widget.notes ?? widget.visit.notes ?? '';
+      final omissions = _pending.isEmpty
+          ? ''
+          : 'Not assessed this session (${_pending.length} present; person IDs: ${_pending.map((p) => p.personId).join(', ')}): ${_reason.text.trim()}';
+      final combined = [
+        note.trim(),
+        omissions,
+      ].where((s) => s.isNotEmpty).join('\n\n');
+      await ref
+          .read(careRepositoryProvider)
+          .completeVisit(user, widget.visit.id, notes: combined);
+      if (!mounted) return;
+      ref.invalidate(dayPlanProvider);
+      ref.invalidate(visitHistoryProvider(widget.householdId));
+      ref.invalidate(openReferralsProvider);
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted)
+        setState(
+          () => _error = e is AccessDenied
+              ? e.message
+              : 'Could not close the session. It remains open. Your note is still here; retry when ready.',
+        );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final household = ref.watch(householdProvider(widget.householdId));
     final referrals = ref.watch(openReferralsProvider);
-
-    // Referrals issued for anyone seen today. The reference codes reappear
-    // here so the loop is visibly closed: refer → confirm → see it again.
-    final sessionReferrals = referrals.maybeWhen(
-      data: (list) => list
-          .where((r) => widget.assessedIds.contains(r.personId))
-          .toList(growable: false),
-      orElse: () => const <Referral>[],
-    );
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Assessment summary')),
-      body: ListView(
-        padding: const EdgeInsets.all(Gap.lg),
-        children: [
-          _SummaryHero(
-            householdName: household.valueOrNull?.name ?? 'This household',
-            assessedCount: widget.assessedIds.length,
+    final assessmentIds = _assessments.map((a) => a.id).toSet();
+    final sessionReferrals = (referrals.valueOrNull ?? <Referral>[])
+        .where((r) => assessmentIds.contains(r.assessmentId))
+        .toList();
+    final latestByPerson = <String, Assessment>{};
+    for (final assessment in _assessments) {
+      latestByPerson.putIfAbsent(assessment.personId, () => assessment);
+    }
+    return PopScope(
+      canPop: !_saving,
+      child: Scaffold(
+        backgroundColor: AppColors.surface,
+        appBar: AppBar(
+          title: const Text('Review session'),
+          leading: BackButton(
+            onPressed: _saving ? null : () => Navigator.of(context).pop(),
           ),
-          const SizedBox(height: Gap.lg),
-
-          SectionCard(
-            title: 'Everyone seen today',
-            subtitle:
-                'One encounter, ${widget.assessedIds.length} '
-                '${widget.assessedIds.length == 1 ? 'person' : 'people'}. '
-                'Each row is the verdict the protocol reached.',
-            icon: Icons.groups_2_rounded,
-            child: Column(
-              children: [
-                for (final id in widget.assessedIds) _SummaryTile(personId: id),
-              ],
-            ),
-          ),
-          const SizedBox(height: Gap.lg),
-
-          if (sessionReferrals.isNotEmpty) ...[
-            SectionCard(
-              title: 'Referrals issued today',
-              subtitle:
-                  'Show the code at the facility gate. It is also kept in the '
-                  'referral tracker and on this household\u2019s record.',
-              icon: Icons.local_hospital_outlined,
-              accent: AppColors.triageRed,
-              child: Column(
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                padding: const EdgeInsets.all(20),
                 children: [
-                  for (final r in sessionReferrals)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: Gap.sm),
-                      child: Row(
+                  const ClinicStepHeader(
+                    steps: [
+                      'Household record',
+                      'Who is here',
+                      'Assessment queue',
+                      'Review session',
+                    ],
+                    current: 3,
+                  ),
+                  ClinicCard(
+                    title: household.valueOrNull?.name ?? 'Household session',
+                    subtitle: 'Review this clinic encounter before closing.',
+                    child: Text(
+                      '${_savedIds.length} assessment${_savedIds.length == 1 ? '' : 's'} saved\n'
+                      '${_pending.length} pending assessment${_pending.length == 1 ? '' : 's'}\n'
+                      '${_absent.length} not here',
+                      style: AppType.body.copyWith(color: AppColors.ink),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  if (_loadFailed) ...[
+                    ClinicStatusLine(text: _error!, icon: Icons.info_outline),
+                    OutlinedButton(
+                      onPressed: _load,
+                      child: const Text('Retry loading session'),
+                    ),
+                  ] else ...[
+                    ClinicCard(
+                      title: 'Saved assessments',
+                      subtitle:
+                          'Only results saved in this session. Clinical urgency is shown separately.',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: Gap.md,
-                              vertical: Gap.xs,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              r.referenceCode,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 13,
-                                letterSpacing: 1,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: Gap.md),
-                          Expanded(
-                            child: Text(
-                              '${r.facilityName} · ${r.urgency.label}',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.inkMuted,
-                              ),
-                            ),
-                          ),
+                          if (latestByPerson.isEmpty)
+                            const Text('No assessments saved in this session.'),
+                          for (final p in _roll)
+                            if (latestByPerson[p.personId]
+                                case final assessment?)
+                              _SummaryTile(assessment: assessment),
                         ],
                       ),
                     ),
-                ],
-              ),
-            ),
-            const SizedBox(height: Gap.lg),
-          ],
-
-          if (widget.notes?.trim().isNotEmpty == true) ...[
-            SectionCard(
-              title: 'Clinic note',
-              icon: Icons.edit_note_rounded,
-              child: Text(
-                widget.notes!.trim(),
-                style: const TextStyle(fontSize: 13.5, height: 1.5),
-              ),
-            ),
-            const SizedBox(height: Gap.lg),
-          ],
-
-          // Master flow [60] — the offline state is always calm, never an
-          // error. The record is safe on the phone; the network can wait.
-          Container(
-            padding: const EdgeInsets.all(Gap.md),
-            decoration: BoxDecoration(
-              color: AppColors.primaryLight,
-              borderRadius: BorderRadius.circular(Gap.radiusSm),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.cloud_done_rounded, color: AppColors.primary),
-                const SizedBox(width: Gap.md),
-                Expanded(
-                  child: Text(
-                    'Saved on this phone. It will sync to the district system '
-                    'the next time you are connected.',
-                    style: GoogleFonts.manrope(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: Gap.xxl),
-        ],
-      ),
-      bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.all(Gap.lg),
-        child: GradientButton(
-          label: _saving ? 'Saving session…' : 'Save & close session',
-          icon: _saving ? Icons.hourglass_top_rounded : Icons.check_circle_rounded,
-          onPressed: _saving ? null : _save,
-        ),
-      ),
-    );
-  }
-}
-
-/// The gradient header — a quiet "the work is done" banner, not a clinical
-/// table. The household's name is the headline because the session belongs to
-/// the household, not to any single patient.
-class _SummaryHero extends StatelessWidget {
-  const _SummaryHero({
-    required this.householdName,
-    required this.assessedCount,
-  });
-
-  final String householdName;
-  final int assessedCount;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(Gap.lg),
-      decoration: BoxDecoration(
-        gradient: AppColors.heroGradient,
-        borderRadius: BorderRadius.circular(Gap.radius),
-        boxShadow: const [AppShadows.glow],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(Gap.md),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.task_alt_rounded,
-              color: AppColors.primary,
-              size: 30,
-            ),
-          ),
-          const SizedBox(width: Gap.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  householdName,
-                  style: AppType.headline.copyWith(
-                    color: Colors.white,
-                    fontSize: 20,
-                  ),
-                ),
-                const SizedBox(height: Gap.xs),
-                Text(
-                  assessedCount == 1
-                      ? '1 person seen today'
-                      : '$assessedCount people seen today',
-                  style: GoogleFonts.manrope(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white.withValues(alpha: 0.85),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// One row per person seen: category illustration, name, risk badge and the
-/// protocol's classification. The illustration keeps the screen visual — the
-/// CHO has been reading forms for an hour; this is the part they glance at.
-class _SummaryTile extends ConsumerWidget {
-  const _SummaryTile({required this.personId});
-
-  final String personId;
-
-  String _image(ClientType type) => switch (type) {
-    ClientType.newborn => AppImages.cardNewborn,
-    ClientType.childUnderFive => AppImages.cardChild,
-    _ => AppImages.cardMother,
-  };
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final person = ref.watch(personProvider(personId));
-    final latest = ref.watch(latestAssessmentProvider(personId));
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: Gap.sm),
-      padding: const EdgeInsets.all(Gap.md),
-      decoration: BoxDecoration(
-        color: AppColors.canvas,
-        borderRadius: BorderRadius.circular(Gap.radiusSm),
-        border: Border.all(color: AppColors.line),
-      ),
-      child: Row(
-        children: [
-          person.maybeWhen(
-            data: (p) => p == null
-                ? const SizedBox(width: 48, height: 48)
-                : ClipRRect(
-                    borderRadius: BorderRadius.circular(Gap.radiusXs),
-                    child: SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: AppImage(src: _image(p.effectiveClientType)),
-                    ),
-                  ),
-            orElse: () => const SizedBox(width: 48, height: 48),
-          ),
-          const SizedBox(width: Gap.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  person.valueOrNull?.fullName ?? '…',
-                  style: const TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                latest.maybeWhen(
-                  data: (a) => a == null
-                      ? const SizedBox.shrink()
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              a.result.classification,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.inkMuted,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '${a.result.effectiveConfidenceScore}% '
-                              'confidence',
-                              style: const TextStyle(
-                                fontSize: 11.5,
-                                color: AppColors.inkFaint,
-                                fontWeight: FontWeight.w800,
+                    const SizedBox(height: 20),
+                    ClinicCard(
+                      title: 'Pending assessment (${_pending.length})',
+                      subtitle:
+                          'Here today, without a saved assessment. Attendance will remain recorded as present.',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_pending.isEmpty)
+                            const Text('No pending assessments.'),
+                          for (final p in _pending)
+                            _ParticipantLine(participant: p),
+                          if (_pending.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            TextField(
+                              key: const ValueKey('omission-reason'),
+                              controller: _reason,
+                              enabled: !_saving,
+                              minLines: 2,
+                              maxLines: null,
+                              onChanged: widget.onOmissionReasonChanged,
+                              decoration: const InputDecoration(
+                                labelText: 'Reason for omitted assessments',
+                                hintText:
+                                    'Explain why these people were not assessed and any follow-up agreed.',
+                                helperText:
+                                    'Required to close with pending assessments.',
+                                helperMaxLines: 4,
                               ),
                             ),
                           ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    ClinicCard(
+                      title: 'Not here (${_absent.length})',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_absent.isEmpty)
+                            const Text('No absences on the session roll.'),
+                          for (final p in _absent)
+                            _ParticipantLine(participant: p),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    ClinicCard(
+                      title: 'Open referrals from this session',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (referrals.isLoading)
+                            const Text('Loading referrals…')
+                          else if (referrals.hasError) ...[
+                            const Text(
+                              'Could not load referrals. This does not mean there are none.',
+                            ),
+                            OutlinedButton(
+                              onPressed: () =>
+                                  ref.invalidate(openReferralsProvider),
+                              child: const Text('Retry referrals'),
+                            ),
+                          ] else if (sessionReferrals.isEmpty)
+                            const Text(
+                              'No open referrals linked to these assessments.',
+                            ),
+                          for (final referral in sessionReferrals)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    referral.referenceCode,
+                                    style: AppType.label,
+                                  ),
+                                  Text(referral.facilityName),
+                                  Text(referral.urgency.label),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if ((widget.notes ?? widget.visit.notes)
+                            ?.trim()
+                            .isNotEmpty ==
+                        true) ...[
+                      const SizedBox(height: 20),
+                      ClinicCard(
+                        title: 'Clinic note',
+                        child: Text(
+                          (widget.notes ?? widget.visit.notes)!.trim(),
                         ),
-                  orElse: () => const SizedBox.shrink(),
-                ),
-              ],
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    const ClinicStatusLine(
+                      text:
+                          'Saved assessments are kept on this device. The session and clinic note are signed off only after Save & close succeeds.',
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 16),
+                      ClinicStatusLine(text: _error!, icon: Icons.info_outline),
+                    ],
+                    const SizedBox(height: 20),
+                    FilledButton(
+                      onPressed: _saving ? null : _save,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                      ),
+                      child: Text(
+                        _saving ? 'Closing session…' : 'Save & close session',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    OutlinedButton(
+                      onPressed: _saving
+                          ? null
+                          : () => Navigator.of(context).pop(),
+                      child: const Text('Return to assessment queue'),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class _ParticipantLine extends ConsumerWidget {
+  const _ParticipantLine({required this.participant});
+  final VisitParticipant participant;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final person = ref.watch(personProvider(participant.personId));
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Text(
+        '${person.valueOrNull?.fullName ?? 'Household member (${participant.personId})'}${participant.absenceNote?.trim().isNotEmpty == true ? ' — ${participant.absenceNote}' : ''}',
+      ),
+    );
+  }
+}
+
+class _SummaryTile extends ConsumerWidget {
+  const _SummaryTile({required this.assessment});
+  final Assessment assessment;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final person = ref.watch(personProvider(assessment.personId));
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            person.valueOrNull?.fullName ??
+                'Household member (${assessment.personId})',
+            style: AppType.label,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Assessment saved',
+            style: TextStyle(
+              color: AppColors.primaryDark,
+              fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(width: Gap.sm),
-          latest.maybeWhen(
-            data: (a) => a == null
-                ? const SizedBox.shrink()
-                : Flexible(
-                    child: TriageBadge(a.effectiveTriage, compact: true),
-                  ),
-            orElse: () => const SizedBox.shrink(),
-          ),
+          const SizedBox(height: 16),
+          TriageBadge(assessment.effectiveTriage),
+          const SizedBox(height: 8),
+          Text(assessment.result.classification),
         ],
       ),
     );

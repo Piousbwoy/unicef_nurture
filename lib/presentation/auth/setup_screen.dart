@@ -819,7 +819,26 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
           children: [
             _StepIndicator(step: _step, total: _successStep + 1),
             const SizedBox(height: Gap.lg),
-            _buildStep(),
+            // Steps glide in rather than snapping, so the wizard reads as
+            // turning pages.
+            AnimatedSwitcher(
+              duration: AppMotion.duration,
+              switchInCurve: AppMotion.curve,
+              transitionBuilder: (child, anim) => FadeTransition(
+                opacity: anim,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 0.04),
+                    end: Offset.zero,
+                  ).animate(anim),
+                  child: child,
+                ),
+              ),
+              child: KeyedSubtree(
+                key: ValueKey(_step),
+                child: _buildStep(),
+              ),
+            ),
             if (_error != null) ...[
               const SizedBox(height: Gap.lg),
               _ErrorBox(_error!),
@@ -1081,17 +1100,15 @@ class _PersonalDetailsStep extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: Gap.sm),
-              // Hear a sample in the currently selected language before
-              // committing. The pill under the button shows which voice
-              // would be used in real visits — honest, never oversold.
+              // Hear a sample in the language the dropdown already holds.
+              // No language picker here: the dropdown IS the saved-language
+              // choice, so a per-message override would only contradict it.
               AudioButton(
                 text: _sampleScriptFor(language),
                 language: language,
                 id: 'setup_preview_$language',
-                // The preview exists so a new user hears their language
-                // before committing; the bank languages play their own
-                // clip and the sheet shows the words actually spoken.
                 compact: true,
+                showLanguagePicker: false,
               ),
             ],
           ),

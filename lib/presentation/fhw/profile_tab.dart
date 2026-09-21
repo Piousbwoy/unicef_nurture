@@ -96,6 +96,9 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
         _ProfileHeader(user: user),
         const SizedBox(height: Gap.md),
 
+        const _SyncHealthCard(),
+        const SizedBox(height: Gap.md),
+
         SectionCard(
           title: 'Language & voice',
           icon: Icons.translate_rounded,
@@ -213,6 +216,139 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
         ),
         const SizedBox(height: Gap.xl),
       ],
+    );
+  }
+}
+
+/// Sync health, in one honest card: what is waiting, when it last moved,
+/// and a Sync now that runs a real pass and reports the outcome. The
+/// automatic timer keeps retrying in the background either way — the button
+/// exists for the moment the worker has signal NOW and wants closure.
+class _SyncHealthCard extends ConsumerStatefulWidget {
+  const _SyncHealthCard();
+
+  @override
+  ConsumerState<_SyncHealthCard> createState() => _SyncHealthCardState();
+}
+
+class _SyncHealthCardState extends ConsumerState<_SyncHealthCard> {
+  bool _running = false;
+  String? _result;
+
+  Future<void> _syncNow() async {
+    if (_running) return;
+    setState(() {
+      _running = true;
+      _result = null;
+    });
+    try {
+      final service = await ref.read(syncServiceProvider.future);
+      final report = await service.runOnce();
+      if (!mounted) return;
+      setState(() {
+        _result = report.attempted == 0
+            ? 'Everything is already on the server.'
+            : 'Sent ${report.accepted} of ${report.attempted}. '
+                '${report.deferred > 0 ? '${report.deferred} deferred — the app keeps trying.' : 'All clear.'}';
+      });
+      ref.invalidate(syncStatusProvider);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _result =
+            'Could not reach the server. Saved records stay safe on this '
+            'phone and the app keeps retrying.';
+      });
+    } finally {
+      if (mounted) setState(() => _running = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sync = ref.watch(syncStatusProvider);
+    final online = ref.watch(connectivityProvider).valueOrNull ?? false;
+    final pending = sync.valueOrNull?.pending;
+    return SectionCard(
+      title: 'Sync health',
+      subtitle: _result ?? sync.valueOrNull?.detail,
+      icon: _running ? Icons.sync_rounded : Icons.cloud_sync_rounded,
+      accent: online ? AppColors.primary : AppColors.offline,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              _SyncStat(
+                label: 'Waiting',
+                value: pending == null ? '…' : '$pending',
+              ),
+              const SizedBox(width: Gap.md),
+              _SyncStat(
+                label: 'Network',
+                value: online ? 'Online' : 'Offline',
+                colour: online ? AppColors.primary : AppColors.offline,
+              ),
+            ],
+          ),
+          const SizedBox(height: Gap.md),
+          OutlinedButton.icon(
+            onPressed: _running ? null : _syncNow,
+            icon: _running
+                ? const SizedBox(
+                    width: 15,
+                    height: 15,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.flash_on_rounded, size: 17),
+            label: Text(_running ? 'Syncing…' : 'Sync now'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One labelled number in the sync health row.
+class _SyncStat extends StatelessWidget {
+  const _SyncStat({required this.label, required this.value, this.colour});
+
+  final String label;
+  final String value;
+  final Color? colour;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = colour ?? AppColors.ink;
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.sm),
+        decoration: BoxDecoration(
+          color: AppColors.canvas,
+          borderRadius: BorderRadius.circular(Gap.radiusSm),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: c,
+              ),
+            ),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.inkMuted,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

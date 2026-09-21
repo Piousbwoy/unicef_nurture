@@ -91,7 +91,10 @@ class DayPlan {
       priorities.where((p) => p.band == VulnerabilityBand.high).toList();
 
   bool get isEmpty =>
-      priorities.isEmpty && dueContacts.isEmpty && chaseReferrals.isEmpty;
+      priorities.isEmpty &&
+      dueContacts.isEmpty &&
+      overdueContacts.isEmpty &&
+      chaseReferrals.isEmpty;
 
   /// The headline. Written as a sentence rather than a number, because "12" on
   /// its own does not tell a CHO whether to hurry.
@@ -113,7 +116,7 @@ class DayPlan {
       return '${dueContacts.length} scheduled contact'
           '${dueContacts.length == 1 ? '' : 's'} due';
     }
-    return 'Nothing urgent. Use today for routine follow-up.';
+    return 'No care reviews scheduled on this phone';
   }
 }
 
@@ -152,17 +155,42 @@ class InsightRepository {
     final peopleByHousehold = await PersonDao.groupedByHousehold();
     final latestGrowth = await GrowthDao.latestForAll();
     final missedCounts = await ScheduleDao.missedCountsForAll();
-    final openReferrals = await ReferralDao.open();
-    final dueContacts = await ScheduleDao.due(horizonDays: 0);
-    final overdue = await ScheduleDao.overdue();
+    // Match the actual caseload, including households registered by this worker
+    // outside the zone. A contact must also belong to a member of that household.
+    final householdByPerson = <String, String>{
+      for (final h in households)
+        for (final p in peopleByHousehold[h.id] ?? const <Person>[]) p.id: h.id,
+    };
+    final openReferrals = (await ReferralDao.open())
+        .where((r) => householdByPerson.containsKey(r.personId))
+        .toList(growable: false);
+    final contacts = await ScheduleDao.due(horizonDays: 0);
+    // The DAO's rolling horizon includes overdue and part of tomorrow. Partition
+    // once at local calendar boundaries, not at now or in elapsed 24-hour days.
+    final generatedAt = DateTime.now();
+    final today = DateTime(
+      generatedAt.year,
+      generatedAt.month,
+      generatedAt.day,
+    );
+    final tomorrow = DateTime(today.year, today.month, today.day + 1);
+    final dueContacts = <ScheduledContact>[];
+    final overdue = <ScheduledContact>[];
+    for (final c in contacts) {
+      if (c.isDone || householdByPerson[c.personId] != c.householdId) continue;
+      if (c.dueDate.isBefore(today)) {
+        overdue.add(c);
+      } else if (c.dueDate.isBefore(tomorrow)) {
+        dueContacts.add(c);
+      }
+    }
 
     final referralsByPerson = <String, Referral>{};
     for (final r in openReferrals) {
       // Keep the most urgent open referral per person, since that is the one
       // that decides how hard to chase.
       final existing = referralsByPerson[r.personId];
-      if (existing == null ||
-          r.urgency.index < existing.urgency.index) {
+      if (existing == null || r.urgency.index < existing.urgency.index) {
         referralsByPerson[r.personId] = r;
       }
     }
@@ -195,9 +223,7 @@ class InsightRepository {
       final maternal = mother == null
           ? null
           : await MaternalRecordDao.forPerson(mother.id);
-      final births = await BirthRecordDao.forPeople(
-        children.map((c) => c.id),
-      );
+      final births = await BirthRecordDao.forPeople(children.map((c) => c.id));
 
       final openReferral = members
           .map((m) => referralsByPerson[m.id])
@@ -263,7 +289,7 @@ class InsightRepository {
       chaseReferrals: openReferrals
           .where((r) => r.needsEscalation)
           .toList(growable: false),
-      generatedAt: DateTime.now(),
+      generatedAt: generatedAt,
     );
   }
 

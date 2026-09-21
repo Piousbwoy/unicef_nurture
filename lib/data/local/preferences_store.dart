@@ -23,6 +23,7 @@ abstract final class PreferencesStore {
   static const _kSyncApiUrl = 'sync_api_url';
   static const _kSyncApiToken = 'sync_api_token';
   static const _kReducedEffects = 'reduced_effects';
+  static const _kNarrationEnabled = 'narration_enabled';
 
   static Future<SharedPreferences> _prefs() => SharedPreferences.getInstance();
 
@@ -61,6 +62,7 @@ abstract final class PreferencesStore {
     await prefs.remove(_kSyncApiUrl);
     await prefs.remove(_kSyncApiToken);
     await prefs.remove(_kReducedEffects);
+    await prefs.remove(_kNarrationEnabled);
   }
 
   /// Whether the user has chosen the "Lite" visual mode — no backdrop blur
@@ -84,6 +86,20 @@ abstract final class PreferencesStore {
   static Future<void> setPreferredLanguage(String language) async {
     final prefs = await _prefs();
     await prefs.setString(_kLanguage, language);
+  }
+
+  /// Whether universal narration is enabled. When on, any screen that
+  /// opts in via [NarrationSection] auto-reads its content, and every
+  /// [SpeakableText] responds to long-press with speech. Defaults off
+  /// so the app stays silent until the user asks for a voice.
+  static Future<bool> narrationEnabled() async {
+    final prefs = await _prefs();
+    return prefs.getBool(_kNarrationEnabled) ?? false;
+  }
+
+  static Future<void> setNarrationEnabled(bool value) async {
+    final prefs = await _prefs();
+    await prefs.setBool(_kNarrationEnabled, value);
   }
 
   /// The base URL of the MariaDB sync server, e.g. `https://district.example.com`.

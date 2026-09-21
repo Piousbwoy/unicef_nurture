@@ -7,6 +7,7 @@ import '../../../core/theme/motion.dart';
 import '../../../domain/entities/core.dart';
 import '../../../domain/entities/visit.dart';
 import '../../../domain/enums.dart';
+import '../../shared/speakable_text.dart';
 import '../caregiver_providers.dart';
 import '../family/person_detail.dart';
 import '../widgets/companion.dart';
@@ -330,7 +331,7 @@ class _PersonList extends StatelessWidget {
     if (people.isEmpty) {
       return CompanionCard(
         title: 'No family members yet',
-        child: const Text(
+        child: const SpeakableText(
           'Add someone you care for to begin checking danger signs.',
         ),
       );
@@ -565,14 +566,20 @@ class _HistorySection extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'A saved draft does not count as a completed check.',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        color: AppColors.inkMuted,
-                        height: 1.4,
+                    // Force the parent Column's cross-axis to be tight so
+                    // SpeakableText's internal Row sizes correctly and the
+                    // centred hint icon lines up with the wrapped text.
+                    const SizedBox(
+                      width: double.infinity,
+                      child: SpeakableText(
+                        'A saved draft does not count as a completed check.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.inkMuted,
+                          height: 1.4,
+                        ),
                       ),
-                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),

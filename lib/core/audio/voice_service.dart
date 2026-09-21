@@ -132,7 +132,8 @@ abstract final class VoiceService {
     final completed = playback?.phase == CaregiverPlaybackPhase.completed;
     final source = !completed
         ? VoiceSource.readAloud
-        : playback!.source.startsWith('Bundled synthetic voice')
+        : playback!.source.startsWith('Bundled synthetic voice') ||
+            playback.source.startsWith('Piper offline voice')
         ? VoiceSource.synthesized
         : playback.source.contains('offline device speech')
         ? VoiceSource.systemTts

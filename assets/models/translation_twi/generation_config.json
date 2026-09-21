@@ -1,0 +1,16 @@
+{
+  "max_length": 512,
+  "num_beams": 4,
+  "bad_words_ids": [
+    [
+      56999
+    ]
+  ],
+  "renormalize_logits": true,
+  "forced_eos_token_id": 0,
+  "pad_token_id": 56999,
+  "bos_token_id": 0,
+  "eos_token_id": 0,
+  "decoder_start_token_id": 56999,
+  "transformers_version": "5.16.1"
+}

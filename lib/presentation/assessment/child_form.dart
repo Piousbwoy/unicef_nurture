@@ -224,15 +224,31 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     _seedFromStation();
   }
 
-  /// The station only pre-fills; every box stays editable and the engines
-  /// read the boxes, never the station.
-  void _seedFromStation() {
+  @override
+  void didUpdateWidget(covariant ChildProtocolForm oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _seedFromStation(previous: oldWidget.initialVitals);
+  }
+
+  /// Apply only station changes, not every pre-fill on every rebuild. Retake
+  /// counts also identify a deliberate same-value reading. A completion time
+  /// alone does not: it changes for all vitals, including untouched ones.
+  /// The engines still read the editable boxes, never the station.
+  void _seedFromStation({StationResult? previous}) {
     final s = _station;
-    if (s == null || s.isEmpty) return;
+    bool changed(String key, {String? owner}) {
+      final vital = owner ?? key;
+      return previous?.values[key] != s?.values[key] ||
+          previous?.notMeasured[vital] != s?.notMeasured[vital] ||
+          (previous?.retakes[vital] ?? 0) != (s?.retakes[vital] ?? 0);
+    }
+
     void seed(TextEditingController c, String key, {int decimals = 0}) {
-      final v = s.values[key];
-      if (v == null) return;
-      c.text = decimals == 0
+      if (!changed(key)) return;
+      final v = s?.notMeasured.containsKey(key) == true ? null : s?.values[key];
+      c.text = v == null
+          ? ''
+          : decimals == 0
           ? v.round().toString()
           : v.toDouble().toStringAsFixed(decimals);
     }
@@ -244,8 +260,13 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     seed(_muacMm, 'muac_mm');
     seed(_spo2, 'oxygen_saturation');
     seed(_hb, 'haemoglobin', decimals: 1);
-    final secs = s.values['rr_timer_secs'];
-    if (secs != null) _rrTimerSecs = secs.toInt();
+    if (changed('rr_timer_secs', owner: 'respiratory_rate') ||
+        changed('respiratory_rate')) {
+      _rrTimerSecs = s?.values['respiratory_rate'] == null ||
+              s?.notMeasured.containsKey('respiratory_rate') == true
+          ? null
+          : s?.values['rr_timer_secs']?.toInt();
+    }
   }
 
   @override

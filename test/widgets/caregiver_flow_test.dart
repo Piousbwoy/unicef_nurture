@@ -21,6 +21,7 @@ import 'package:carebridge_ai/data/sync/sync_service.dart';
 import 'package:carebridge_ai/presentation/auth/setup_screen.dart';
 import 'package:carebridge_ai/presentation/auth/sign_in_screen.dart';
 import 'package:carebridge_ai/presentation/caregiver/caregiver_home.dart';
+import 'package:carebridge_ai/presentation/caregiver/widgets/companion.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -102,6 +103,23 @@ Future<void> _untilVisible(WidgetTester tester, Finder finder) =>
         await tester.pump(const Duration(milliseconds: 50));
       }
     });
+
+/// Scrolls until [finder] exists and sits clear of the viewport edges, so the
+/// following tap lands on it. The result and nurse-summary screens are lazy
+/// `ListView`s, so their last actions are not even built until the list moves.
+Future<void> _scrollTo(WidgetTester tester, Finder finder) async {
+  final scrollable = find.byType(Scrollable).last;
+  final height = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+  for (var i = 0; i < 30; i++) {
+    if (finder.evaluate().isNotEmpty) {
+      final center = tester.getCenter(finder);
+      if (center.dy > 40 && center.dy < height - 40) return;
+    }
+    await tester.drag(scrollable, const Offset(0, -300));
+    await tester.pumpAndSettle();
+  }
+  await tester.ensureVisible(finder);
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -286,29 +304,33 @@ void main() {
 
       await tester.tap(find.text('Check').first);
       await tester.pumpAndSettle();
-      expect(find.text('Is someone unwell?'), findsWidgets);
-      await tester.ensureVisible(find.text('Check the danger signs'));
-      await tester.tap(find.text('Check the danger signs'));
+      expect(find.text('Danger-sign check'), findsWidgets);
+      await tester.ensureVisible(find.text('Start the check'));
+      await tester.tap(find.text('Start the check'));
       await tester.pumpAndSettle();
       expect(find.text('Who are you checking?'), findsWidgets);
       await _untilVisible(tester, find.text('Awah'));
       await tester.tap(find.text('Awah').last);
       // Step 0: the check opens with her worry, then still asks every sign.
-      await _untilVisible(tester, find.text('What is worrying you about Awah today?'));
+      await _untilVisible(
+        tester,
+        find.text('What is worrying you about Awah today?'),
+      );
       await tester.tap(find.text('No specific worry — just check'));
       await _untilVisible(tester, find.text('What have you noticed?'));
       await tester.pumpAndSettle();
       expect(find.text('What have you noticed?'), findsWidgets);
-      // Each NO stays on its question until the caregiver explicitly taps Next.
+      // Each 'No' stays on its question until the caregiver explicitly taps
+      // Continue — the answer is never a silent auto-advance.
       for (var i = 0; i < 8; i++) {
-        await _untilVisible(tester, find.text('NO'));
-        expect(find.text('NO'), findsOneWidget);
-        await tester.tap(find.text('NO'));
+        await _untilVisible(tester, find.text('No'));
+        expect(find.text('No'), findsOneWidget);
+        await tester.tap(find.text('No'));
         await tester.pump(const Duration(milliseconds: 100));
         await tester.pumpAndSettle();
         if (i < 7) {
-          await tester.ensureVisible(find.text('Next'));
-          await tester.tap(find.text('Next'));
+          await tester.ensureVisible(find.text('Continue'));
+          await tester.tap(find.text('Continue'));
           await tester.pumpAndSettle();
         }
       }
@@ -316,9 +338,15 @@ void main() {
       // pre-care context (skippable), then the verdict.
       await tester.ensureVisible(find.text('Continue — almost done'));
       await tester.tap(find.text('Continue — almost done'));
-      await _untilVisible(tester, find.text('How long has this been going on?'));
+      await _untilVisible(
+        tester,
+        find.text('How long has this been going on?'),
+      );
       await tester.tap(find.text('Started today or yesterday'));
-      await _untilVisible(tester, find.text('Have you already given anything?'));
+      await _untilVisible(
+        tester,
+        find.text('Have you already given anything?'),
+      );
       await tester.ensureVisible(find.text('Skip — just show me what to do'));
       await tester.tap(find.text('Skip — just show me what to do'));
       await _untilVisible(tester, find.textContaining('signs answered'));
@@ -330,30 +358,55 @@ void main() {
       // Even a green verdict leaves the family with something to do.
       expect(find.text('Keep doing these'), findsOneWidget);
       await _untilVisible(tester, find.text('Saved on this phone'));
-      await tester.ensureVisible(find.text('Back to home'));
+      await _scrollTo(tester, find.text('Back to home'));
       await tester.tap(find.text('Back to home'));
       await tester.pumpAndSettle();
-      expect(find.text('Is someone unwell?'), findsWidgets);
+      expect(find.text('Danger-sign check'), findsWidgets);
+      await _scrollTo(tester, find.text('Start the check'));
 
-      // A single YES exits immediately, with readable guidance before saving.
+      // A danger sign raises the alarm; it does not end the check. She is then
+      // free to take the advice, or to finish and hand the nurse more.
       // Sharing remains optional and arrival is only a local caregiver report.
-      await tester.ensureVisible(find.text('Check the danger signs'));
-      await tester.tap(find.text('Check the danger signs'));
+      await tester.ensureVisible(find.text('Start the check'));
+      await tester.tap(find.text('Start the check'));
       await tester.pumpAndSettle();
       await _untilVisible(tester, find.text('Awah'));
       await tester.tap(find.text('Awah').last);
-      await _untilVisible(tester, find.text('What is worrying you about Awah today?'));
+      await _untilVisible(
+        tester,
+        find.text('What is worrying you about Awah today?'),
+      );
       await tester.tap(find.text('No specific worry — just check'));
-      await _untilVisible(tester, find.text('YES'));
+      await _untilVisible(tester, find.text('Yes'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('YES'));
+      await tester.tap(find.text('Yes'));
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pumpAndSettle();
-      expect(find.text('NO'), findsNothing);
+      expect(find.text('No'), findsWidgets);
+      await _untilVisible(tester, find.text('DANGER SIGN NOTED'));
+      expect(find.textContaining('You saw unable to drink.'), findsOneWidget);
+      expect(find.text('Go to the health facility now'), findsNothing);
+      await _untilVisible(tester, find.text('Stop and see what to do'));
+      await tester.tap(find.text('Stop and see what to do'));
+      await tester.pumpAndSettle();
       expect(find.text('Go to the health facility now'), findsOneWidget);
       expect(find.text('Do these now — even on the way'), findsOneWidget);
+      // The plan is a checklist, and the meter counts only what storage has
+      // confirmed. The report itself arrives on the real SQLite isolate, so
+      // the tickable lines appear a moment after the advice does.
+      final meter = find.textContaining(RegExp('^0 of \\d+ done'));
+      await _untilVisible(tester, meter);
+      expect(meter, findsOneWidget);
+      final firstStep = find.byType(CaregiverTaskToggle);
+      expect(firstStep, findsWidgets);
+      await tester.ensureVisible(firstStep.first);
+      await tester.pumpAndSettle();
+      await tester.tap(firstStep.first);
+      await _untilVisible(tester, find.text('Done'));
+      expect(find.text('Done'), findsOneWidget);
+      expect(find.textContaining(RegExp('^1 of \\d+ done')), findsOneWidget);
       await _untilVisible(tester, find.text('Saved on this phone'));
-      await tester.ensureVisible(find.text('Show the nurse'));
+      await _scrollTo(tester, find.text('Show the nurse'));
       await tester.tap(find.text('Show the nurse'));
       await tester.pumpAndSettle();
       expect(find.textContaining('What I noticed:'), findsOneWidget);
@@ -367,7 +420,7 @@ void main() {
       await tester.ensureVisible(find.text('Back to guidance'));
       await tester.tap(find.text('Back to guidance'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Back to home'));
+      await _scrollTo(tester, find.text('Back to home'));
       await tester.tap(find.text('Back to home'));
       await tester.pumpAndSettle();
 

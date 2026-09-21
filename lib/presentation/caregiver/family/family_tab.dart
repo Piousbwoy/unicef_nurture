@@ -909,6 +909,8 @@ class CaregiverFocusCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isUrgent = focus.priority <= 1;
     final accent = isUrgent ? AppColors.triageRed : AppColors.primary;
+    final overdue = focus.dueDate != null &&
+        focus.dueDate!.isBefore(DateTime.now());
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Container(
@@ -917,149 +919,146 @@ class CaregiverFocusCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(Gap.radius),
           border: Border.all(
             color: isUrgent
-                ? accent.withValues(alpha: 0.25)
+                ? accent.withValues(alpha: 0.35)
                 : AppColors.line,
             width: isUrgent ? 1.2 : 1,
           ),
+          boxShadow: const [AppShadows.card],
         ),
-        child: IntrinsicHeight(
-          child: Row(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(Gap.radius),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                width: 4,
-                decoration: BoxDecoration(
-                  color: accent,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(Gap.radius),
-                    bottomLeft: Radius.circular(Gap.radius),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
+              // Colour rides the top edge as a slim band — visible, but it
+              // can never squeeze content the way a side bar could.
+              Container(height: 3, color: accent),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            focus.source.label,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: accent,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        if (overdue)
                           Container(
+                            margin: const EdgeInsets.only(right: 6),
                             padding: const EdgeInsets.symmetric(
                               horizontal: 8,
                               vertical: 3,
                             ),
                             decoration: BoxDecoration(
-                              color: accent.withValues(alpha: 0.1),
+                              color: AppColors.triageRedBg,
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
-                              focus.source.label,
-                              style: TextStyle(
+                              'Overdue',
+                              style: const TextStyle(
                                 fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: accent,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.triageRed,
                                 letterSpacing: 0.3,
                               ),
                             ),
                           ),
-                          const Spacer(),
-                          if (focus.dueDate != null)
-                            Text(
-                              'Due ${DateFormat('d MMM').format(focus.dueDate!)}',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.inkMuted,
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        focus.title,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.ink,
-                          height: 1.25,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
+                        if (focus.dueDate != null)
                           Text(
-                            person?.fullName ?? 'Family member',
+                            'Due ${DateFormat('d MMM').format(focus.dueDate!)}',
                             style: const TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.ink,
-                            ),
-                          ),
-                          Text(
-                            ' \u2022 ${person == null ? 'Age unavailable' : caregiverAge(person!)}',
-                            style: const TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w500,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
                               color: AppColors.inkMuted,
                             ),
                           ),
-                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      focus.title,
+                      style: const TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.ink,
+                        height: 1.25,
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        focus.detail,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.inkMuted,
-                          height: 1.45,
-                        ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${person?.fullName ?? 'Family member'}'
+                      ' \u2022 ${person == null ? 'Age unavailable' : caregiverAge(person!)}',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.inkMuted,
                       ),
-                      const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: onOpen,
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: accent,
-                                side: BorderSide(
-                                  color: accent.withValues(alpha: 0.4),
-                                  width: 1,
-                                ),
-                                minimumSize: const Size.fromHeight(40),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              icon: const Icon(
-                                Icons.arrow_forward_rounded,
-                                size: 16,
-                              ),
-                              label: const Text(
-                                'Open guidance',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      focus.detail,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.inkMuted,
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    // Actions stack, never share a row: two buttons of
+                    // unknown width side by side is exactly how labels end
+                    // up wrapping one letter per line on a narrow screen.
+                    SizedBox(
+                      height: 44,
+                      child: FilledButton.icon(
+                        onPressed: () => onOpen(),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: accent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          if (focus.canComplete) ...[
-                            const SizedBox(width: 8),
-                            CaregiverTaskToggle(
-                              personId: focus.personId,
-                              kind: CaregiverActivityKind.dailyTask,
-                              sourceId: focus.sourceId,
-                              itemKey: focus.itemKey,
-                              occurrenceKey: dateKey,
-                              label: "Today's activity",
-                            ),
-                          ],
-                        ],
+                          textStyle: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        icon: const Icon(
+                          Icons.arrow_forward_rounded,
+                          size: 17,
+                        ),
+                        label: const Text('Open guidance'),
+                      ),
+                    ),
+                    if (focus.canComplete) ...[
+                      const SizedBox(height: 8),
+                      CaregiverTaskToggle(
+                        personId: focus.personId,
+                        kind: CaregiverActivityKind.dailyTask,
+                        sourceId: focus.sourceId,
+                        itemKey: focus.itemKey,
+                        occurrenceKey: dateKey,
+                        label: "Today's activity",
                       ),
                     ],
-                  ),
+                  ],
                 ),
               ),
             ],

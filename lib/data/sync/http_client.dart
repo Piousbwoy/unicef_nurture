@@ -95,7 +95,12 @@ abstract final class PlatformHttpClient {
       final request = http.Request(method, uri)..headers.addAll(headers);
       if (body != null) {
         request.bodyBytes = utf8.encode(body);
-        request.contentLength = request.bodyBytes.length;
+        // Do NOT set request.contentLength here. package:http derives
+        // Content-Length from bodyBytes when the request is sent, and the
+        // setter on a non-streaming http.Request throws UnsupportedError
+        // ("Cannot set the contentLength property of non-streaming Request
+        // objects") — which broke every POST from the web/browser build
+        // (e.g. /api/auth/login), while GETs (no body) sailed through.
       }
       final streamed = await client.send(request).timeout(timeout);
       final text = await streamed.stream

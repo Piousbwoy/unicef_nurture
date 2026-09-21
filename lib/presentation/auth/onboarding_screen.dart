@@ -31,6 +31,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final _controller = PageController();
   int _index = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    // Rebuild on every scroll frame so the slides can parallax — image and
+    // text drift at different rates as the page turns.
+    _controller.addListener(() => setState(() {}));
+  }
+
   static const _slides = <_OnboardingSlide>[
     _OnboardingSlide(
       image: AppImages.onboardingMaternal,
@@ -99,7 +107,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 physics: const BouncingScrollPhysics(),
                 onPageChanged: (i) => setState(() => _index = i),
                 itemCount: _slides.length,
-                itemBuilder: (_, i) => _SlideView(slide: _slides[i]),
+                itemBuilder: (_, i) => _SlideView(
+                  slide: _slides[i],
+                  index: i,
+                  page: _controller.hasClients
+                      ? (_controller.page ?? _index.toDouble())
+                      : _index.toDouble(),
+                ),
               ),
             ),
             _BottomBar(
@@ -130,12 +144,23 @@ class _OnboardingSlide {
 }
 
 class _SlideView extends StatelessWidget {
-  const _SlideView({required this.slide});
+  const _SlideView({
+    required this.slide,
+    required this.index,
+    required this.page,
+  });
 
   final _OnboardingSlide slide;
+  final int index;
+
+  /// The live page position, so this slide can drift as it enters/leaves.
+  final double page;
 
   @override
   Widget build(BuildContext context) {
+    // -1 when this slide is a full page to the left, 0 centred, +1 right.
+    final delta = (page - index).clamp(-1.0, 1.0);
+    final fade = 1 - delta.abs() * 0.35;
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: Gap.lg),
@@ -144,36 +169,78 @@ class _SlideView extends StatelessWidget {
         children: [
           const SizedBox(height: Gap.md),
           // The illustration is the hero — Northern users respond to images
-          // first, text second.
-          ClipRRect(
-            borderRadius: BorderRadius.circular(Gap.radius),
-            child: AspectRatio(
-              aspectRatio: 4 / 4.4,
-              child: AppImage(src: slide.image),
+          // first, text second. It floats in a soft halo and glides slower
+          // than the text beneath it.
+          Transform.translate(
+            offset: Offset(48 * delta, 0),
+            child: Opacity(
+              opacity: fade,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: 220,
+                    height: 220,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          AppColors.primaryGlow.withValues(alpha: 0.20),
+                          AppColors.primaryGlow.withValues(alpha: 0),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(Gap.radius + 6),
+                      border: Border.all(color: Colors.white, width: 4),
+                      boxShadow: const [AppShadows.soft],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(Gap.radius),
+                      child: AspectRatio(
+                        aspectRatio: 4 / 4.4,
+                        child: AppImage(src: slide.image),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: Gap.xl),
-          Text(
-            slide.eyebrow.toUpperCase(),
-            textAlign: TextAlign.center,
-            style: AppType.eyebrow.copyWith(
-              color: AppColors.primary,
-              letterSpacing: 2,
-            ),
-          ),
-          const SizedBox(height: Gap.sm),
-          Text(
-            slide.title,
-            textAlign: TextAlign.center,
-            style: AppType.headline.copyWith(fontSize: 25),
-          ),
-          const SizedBox(height: Gap.md),
-          Text(
-            slide.body,
-            textAlign: TextAlign.center,
-            style: AppType.body.copyWith(
-              color: AppColors.inkMuted,
-              height: 1.65,
+          Transform.translate(
+            offset: Offset(72 * delta, 0),
+            child: Opacity(
+              opacity: fade,
+              child: Column(
+                children: [
+                  Text(
+                    slide.eyebrow.toUpperCase(),
+                    textAlign: TextAlign.center,
+                    style: AppType.eyebrow.copyWith(
+                      color: AppColors.primary,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                  const SizedBox(height: Gap.sm),
+                  Text(
+                    slide.title,
+                    textAlign: TextAlign.center,
+                    style: AppType.headline.copyWith(fontSize: 25),
+                  ),
+                  const SizedBox(height: Gap.md),
+                  Text(
+                    slide.body,
+                    textAlign: TextAlign.center,
+                    style: AppType.body.copyWith(
+                      color: AppColors.inkMuted,
+                      height: 1.65,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: Gap.lg),

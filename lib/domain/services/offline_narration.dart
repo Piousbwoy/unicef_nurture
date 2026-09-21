@@ -235,12 +235,13 @@ abstract final class OfflineNarrator {
     required String advice,
     String? onsetNote,
   }) {
+    final name = _displayName(personName);
     final seed = '$personName|${steps.length}';
     final parts = <String>[
       _pick([
-        'This home check is for $personName.',
-        'Home check for $personName.',
-        'Here is the home check for $personName.',
+        'This home check is for $name.',
+        'Home check for $name.',
+        'Here is the home check for $name.',
       ], seed),
       observations.english,
       _pick(const [
@@ -271,5 +272,22 @@ abstract final class OfflineNarrator {
     final trimmed = text.trim();
     if (trimmed.isEmpty || RegExp(r'[.!?:]$').hasMatch(trimmed)) return trimmed;
     return '$trimmed.';
+  }
+
+  /// Names arrive from the register in whatever case the health worker
+  /// typed them — "cee" must read as "Cee" when the phone speaks to the
+  /// family. Title-cases the first letter of every word without touching
+  /// the rest (names like "Abdul-Rahman" keep their inner capitals).
+  static String _displayName(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return trimmed;
+    return trimmed
+        .split(RegExp(r'\s+'))
+        .map(
+          (word) => word.isEmpty
+              ? word
+              : '${word[0].toUpperCase()}${word.substring(1)}',
+        )
+        .join(' ');
   }
 }

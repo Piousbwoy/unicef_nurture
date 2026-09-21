@@ -18,12 +18,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../core/audio/voice_service.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/theme/glass.dart';
-import '../../core/theme/motion.dart';
 import '../../data/repositories/care_repository.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
 import '../../domain/enums.dart';
+import '../fhw/clinic_widgets.dart';
 import '../shared/ui.dart';
 import 'child_form.dart';
 import 'maternal_form.dart';
@@ -53,6 +52,10 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
   String get personId => widget.personId;
 
   _Stage _stage = _Stage.station;
+  bool _chartStarted = false;
+  bool _allowExit = false;
+  bool _confirmingExit = false;
+  bool _openingResult = false;
 
   /// What the station handed over. Empty when the nurse skipped it.
   StationResult _vitals = StationResult.empty;
@@ -63,13 +66,54 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
   void _toChart(StationResult result) => setState(() {
     _vitals = result;
     _retakeKey = null;
+    _chartStarted = true;
     _stage = _Stage.chart;
   });
 
-  void _retake(String key) => setState(() {
-    _retakeKey = key;
-    _stage = _Stage.station;
-  });
+  void _retake(String key) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _retakeKey = key;
+      _stage = _Stage.station;
+    });
+  }
+
+  Future<void> _confirmExit() async {
+    if (_confirmingExit || _allowExit) return;
+    _confirmingExit = true;
+    try {
+      final discard = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Unsaved assessment'),
+          content: const Text(
+            'Leaving will discard the measurements and clinical assessment '
+            'entered here. Only saved assessments are kept.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Keep assessing'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Discard and leave'),
+            ),
+          ],
+        ),
+      );
+      if (discard == true && mounted) await _leave(false);
+    } finally {
+      _confirmingExit = false;
+    }
+  }
+
+  Future<void> _leave(bool saved) async {
+    setState(() => _allowExit = true);
+    // Let PopScope observe the authorized exit before popping the route.
+    await WidgetsBinding.instance.endOfFrame;
+    if (mounted) Navigator.of(context).pop(saved);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -120,18 +164,6 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
             birth: birth.valueOrNull,
           );
 
-          if (_stage == _Stage.station) {
-            return VitalsStationScreen(
-              key: ValueKey('station-${p.id}'),
-              input: ctx,
-              initial: _vitals.isEmpty ? null : _vitals,
-              startAtKey: _retakeKey,
-              onContinue: _toChart,
-              onSkip: () => _toChart(_vitals),
-              onDanger: () => _toChart(_vitals),
-            );
-          }
-
           final form = switch (p.effectiveClientType) {
             ClientType.pregnantWoman ||
             ClientType.postpartumWoman ||
@@ -152,78 +184,109 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
             ),
           };
 
-          return Scaffold(
-            backgroundColor: Colors.transparent,
-            appBar: GlassAppBar(
-              title: const Text('Assessment'),
-              actions: [
-                IconButton(
-                  tooltip: 'Voice guide',
-                  icon: const Icon(Icons.record_voice_over_rounded),
-                  onPressed: () => _speakWelcome(p.fullName),
-                ),
-              ],
-              bottom: PreferredSize(
-                preferredSize: const Size.fromHeight(22),
-                child: Padding(
-                  padding: const EdgeInsets.only(
-                    left: Gap.lg,
-                    right: Gap.lg,
-                    bottom: Gap.sm,
-                  ),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      h.name,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        color: AppColors.inkMuted,
-                        fontWeight: FontWeight.w600,
-                      ),
+          return ColoredBox(
+            color: AppColors.surface,
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.sm, Gap.lg, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          p.fullName,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppType.title.copyWith(color: AppColors.primaryDark),
+                        ),
+                        Text(
+                          '${p.ageLabel} · ${h.name}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppType.caption.copyWith(color: AppColors.ink),
+                        ),
+                        ClinicStepHeader(
+                          steps: const ['Measurements', 'Clinical assessment'],
+                          current: _stage == _Stage.station ? 0 : 1,
+                        ),
+                      ],
                     ),
                   ),
-                ),
+                  Expanded(
+                    child: IndexedStack(
+                      index: _stage == _Stage.station ? 0 : 1,
+                      children: [
+                        // Only the station is remounted: its initial values and
+                        // startAtKey are consumed in initState on every retake.
+                        if (_stage == _Stage.station)
+                          VitalsStationScreen(
+                            key: ValueKey('station-${p.id}'),
+                            input: ctx,
+                            initial: _vitals,
+                            startAtKey: _retakeKey,
+                            onContinue: _toChart,
+                            onSkip: () => _toChart(_vitals),
+                            onDanger: () => _toChart(_vitals),
+                          )
+                        else
+                          const SizedBox.shrink(),
+                        // Once begun, the same chart State survives every trip
+                        // back to measurements, including its signs and edits.
+                        if (_chartStarted)
+                          TickerMode(
+                            enabled: _stage == _Stage.chart,
+                            child: Scaffold(
+                              backgroundColor: AppColors.surface,
+                              appBar: AppBar(
+                                backgroundColor: AppColors.surface,
+                                foregroundColor: AppColors.primaryDark,
+                                surfaceTintColor: Colors.transparent,
+                                elevation: 0,
+                                title: const Text('Assessment'),
+                                actions: [
+                                  IconButton(
+                                    tooltip: 'Voice guide',
+                                    icon: const Icon(Icons.record_voice_over_rounded),
+                                    onPressed: () => _speakWelcome(p.fullName),
+                                  ),
+                                ],
+                              ),
+                              body: form,
+                            ),
+                          )
+                        else
+                          const SizedBox.shrink(),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-            body: form,
           );
         },
       ),
     );
 
-    // Each stage brings its own Scaffold and app bar; the shell only owns the
-    // backdrop, the Lite-mode scope and the cross-fade between stages. The
-    // scope is mounted *here*, so the switcher reads the preference directly.
-    final motion =
-        !ref.watch(visualEffectsProvider) &&
-        !MediaQuery.disableAnimationsOf(context);
-
-    return VisualEffectsScope(
-      child: AmbientBackdrop(
-        child: AnimatedSwitcher(
-          duration: motion ? AppMotion.duration : Duration.zero,
-          switchInCurve: AppMotion.curve,
-          switchOutCurve: AppMotion.curve,
-          transitionBuilder: (child, anim) => FadeTransition(
-            opacity: anim,
-            child: SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0, 0.02),
-                end: Offset.zero,
-              ).animate(anim),
-              child: child,
-            ),
-          ),
-          child: KeyedSubtree(key: ValueKey(_stage), child: body),
-        ),
-      ),
+    return PopScope<bool>(
+      canPop: _allowExit,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _confirmExit();
+      },
+      child: body,
     );
   }
 
   /// Loading, error and not-found states: a bar so the nurse can go back.
   Widget _plainShell(Widget child) => Scaffold(
-    backgroundColor: Colors.transparent,
-    appBar: const GlassAppBar(title: Text('Assessment')),
+    backgroundColor: AppColors.surface,
+    appBar: AppBar(
+      backgroundColor: AppColors.surface,
+      foregroundColor: AppColors.primaryDark,
+      surfaceTintColor: Colors.transparent,
+      title: const Text('Assessment'),
+    ),
     body: child,
   );
 
@@ -232,33 +295,49 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
     AssessmentContext ctx,
     AssessmentDraft draft,
   ) async {
-    // Load the child's saved growth series now, before navigation, so the
-    // result screen can compute treatment response (weight-gain rate)
-    // synchronously. The verdict that seeds the referral toggle must already
-    // know whether a child on feeding is losing weight — that cannot wait on
-    // an async load after the screen is built.
-    var priorGrowth = const <GrowthMeasurement>[];
+    if (_openingResult) return;
+    _openingResult = true;
     try {
-      priorGrowth = await ref
-          .read(careRepositoryProvider)
-          .growthSeries(ctx.user, ctx.person.id);
-    } on AccessDenied {
-      // No growth history this account may see; treatment response simply
-      // does not run. The assessment itself is unaffected.
-    }
-    if (!context.mounted) return;
-    final saved = await Navigator.of(context).push<bool>(
-      GlassPageRoute<bool>(
-        builder: (_) => AssessmentResultScreen(
-          input: ctx,
-          draft: draft,
-          visitId: visit.id,
-          priorGrowth: priorGrowth,
+      // Load history before navigation: treatment-response rules and the
+      // referral toggle must see the saved growth trend from the outset.
+      var priorGrowth = const <GrowthMeasurement>[];
+      try {
+        priorGrowth = await ref
+            .read(careRepositoryProvider)
+            .growthSeries(ctx.user, ctx.person.id);
+      } on AccessDenied {
+        // Preserve the existing permission rule: inaccessible history is not
+        // used, but the assessment itself can continue.
+      } catch (_) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Could not load previous growth measurements. '
+                'Your assessment is still open. Try again.',
+              ),
+            ),
+          );
+        }
+        // Do not silently drop history and change treatment-response input.
+        return;
+      }
+      if (!context.mounted) return;
+      final saved = await Navigator.of(context).push<bool>(
+        MaterialPageRoute<bool>(
+          builder: (_) => AssessmentResultScreen(
+            input: ctx,
+            draft: draft,
+            visitId: visit.id,
+            priorGrowth: priorGrowth,
+          ),
         ),
-      ),
-    );
-    if (saved == true && context.mounted) {
-      Navigator.of(context).pop(true);
+      );
+      if (saved == true && mounted) await _leave(true);
+    } finally {
+      // Forms own their busy state. This only prevents duplicate result
+      // routes while loading/navigating, and must be released on failure too.
+      _openingResult = false;
     }
   }
 

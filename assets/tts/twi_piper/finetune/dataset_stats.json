@@ -1,0 +1,19 @@
+{
+ "sample_rate": 22050,
+ "num_speakers": 1555,
+ "num_symbols": 256,
+ "phoneme_symbols_used": 198,
+ "speakers_in_manifest": 1560,
+ "by_language": {
+  "eng": {
+   "clips": 43384,
+   "hours": 163.9
+  },
+  "twi": {
+   "clips": 151488,
+   "hours": 163.72
+  }
+ },
+ "audio_dataset": "ghanaopendata/new-twi-tts-aligned-ipa",
+ "checkpoint": "epoch=7-val_mos=3.0179.ckpt"
+}

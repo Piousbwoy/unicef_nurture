@@ -466,6 +466,7 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.actions,
     this.bottom,
     this.automaticallyImplyLeading = true,
+    this.hero = false,
   });
 
   final Widget? title;
@@ -474,6 +475,13 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   final PreferredSizeWidget? bottom;
   final bool automaticallyImplyLeading;
 
+  /// Deep, luxurious blue header — the same midnight-to-royal gradient as the
+  /// dashboard hero. When true the bar renders as an *opaque* blue panel with
+  /// white content, a soft radial sheen and rounded bottom corners instead of
+  /// translucent glass, so the top of the page reads as an intentional header
+  /// rather than glass floating over the (dark) device viewport.
+  final bool hero;
+
   @override
   Size get preferredSize =>
       Size.fromHeight(kToolbarHeight + (bottom?.preferredSize.height ?? 0));
@@ -481,6 +489,7 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final fx = VisualEffects.of(context);
+    if (hero) return _buildHero(context);
     final bar = AppBar(
       title: title,
       leading: leading,
@@ -505,13 +514,78 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       ),
     );
   }
+
+  /// The opaque deep-blue header variant. The [AppBar] is laid out on top of a
+  /// full-bleed gradient so the blue also paints behind the status bar; a
+  /// radial sheen adds depth and the bottom corners round to meet the page.
+  Widget _buildHero(BuildContext context) {
+    const radius = BorderRadius.only(
+      bottomLeft: Radius.circular(28),
+      bottomRight: Radius.circular(28),
+    );
+
+    final bar = AppBar(
+      title: title,
+      leading: leading,
+      actions: actions,
+      bottom: bottom,
+      automaticallyImplyLeading: automaticallyImplyLeading,
+      backgroundColor: Colors.transparent,
+      foregroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      titleTextStyle: AppType.title.copyWith(color: Colors.white),
+      iconTheme: const IconThemeData(color: Colors.white),
+      actionsIconTheme: const IconThemeData(color: Colors.white),
+    );
+
+    return Container(
+      decoration: const BoxDecoration(
+        borderRadius: radius,
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x59050F26),
+            blurRadius: 30,
+            offset: Offset(0, 14),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: Stack(
+          children: [
+            const Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(gradient: AppColors.heroGradient),
+              ),
+            ),
+            const Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: Alignment(0.9, -0.7),
+                    radius: 1.0,
+                    colors: [Color(0x33A9C8FF), Color(0x00000000)],
+                  ),
+                ),
+              ),
+            ),
+            bar,
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-/// A floating bar for the primary action(s) at the foot of a screen (save,
-/// continue). Bright white frosted glass, deliberately lighter than the
-/// content above it: this is the one surface that must read as the clear
-/// exit door, never as a dark scrim. Degrades to an opaque white panel
-/// when the platform asks for reduced effects.
+/// A full-bleed frosted footer for the primary action(s) at the foot of a
+/// screen (save, continue). Bright white frosted glass, deliberately lighter
+/// than the content above it: this is the one surface that must read as the
+/// clear exit door, never as a dark scrim. It paints *into* the bottom safe
+/// area (a floating pill left the inset transparent, so the dark device
+/// viewport bled through beneath it). Degrades to an opaque white panel when
+/// the platform asks for reduced effects.
 class GlassActionBar extends StatelessWidget {
   const GlassActionBar({super.key, required this.child});
 
@@ -520,36 +594,53 @@ class GlassActionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fx = VisualEffects.of(context);
-    final r = BorderRadius.circular(26);
 
-    final decorated = DecoratedBox(
+    final frosted = DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: fx.blur ? 0.86 : 0.97),
-        borderRadius: r,
-        border: Border.all(color: AppColors.glassStroke, width: Gap.hairline),
-      ),
-      child: Padding(padding: const EdgeInsets.all(Gap.md), child: child),
-    );
-
-    final surface = ClipRRect(
-      borderRadius: r,
-      child: fx.blur
-          ? BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-              child: decorated,
-            )
-          : decorated,
-    );
-
-    return SafeArea(
-      top: false,
-      minimum: const EdgeInsets.fromLTRB(Gap.md, 0, Gap.md, Gap.md),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: r,
-          boxShadow: const [AppShadows.glass],
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.white.withValues(alpha: fx.blur ? 0.82 : 0.96),
+            Colors.white.withValues(alpha: fx.blur ? 0.94 : 0.99),
+          ],
         ),
-        child: surface,
+        border: const Border(
+          top: BorderSide(
+            color: AppColors.glassStroke,
+            width: Gap.hairline,
+          ),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.md, Gap.lg, Gap.md),
+        child: child,
+      ),
+    );
+
+    final surface = fx.blur
+        ? ClipRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: frosted,
+            ),
+          )
+        : frosted;
+
+    // SafeArea is *inside* the decorated surface so the frosted background
+    // fills the bottom inset rather than leaving it transparent.
+    return RepaintBoundary(
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Color(0x1A0B2A6B),
+              blurRadius: 24,
+              offset: Offset(0, -6),
+            ),
+          ],
+        ),
+        child: SafeArea(top: false, child: surface),
       ),
     );
   }

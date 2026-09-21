@@ -1,10 +1,4 @@
-/// Barriers to Care check (Screen 23).
-///
-/// Asked once per household assessment session, directly from the gaps
-/// diagram: "What makes it hard for this family to get care when it's
-/// needed?" Multi-select, non-judgmental, and written to the real
-/// [BarrierDao] so the answer shapes referral guidance and zone-level
-/// pattern detection.
+/// An optional clinic conversation. Skip continues; back leaves the session open.
 library;
 
 import 'package:flutter/material.dart';
@@ -13,14 +7,13 @@ import 'package:uuid/uuid.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
-import '../../data/local/visit_dao.dart';
+import '../../data/repositories/care_repository.dart';
 import '../../domain/entities/visit.dart';
 import '../../domain/enums.dart';
-import '../shared/ui.dart';
+import '../fhw/clinic_widgets.dart';
 
 class BarrierCheckScreen extends ConsumerStatefulWidget {
   const BarrierCheckScreen({super.key, required this.householdId});
-
   final String householdId;
 
   @override
@@ -30,6 +23,8 @@ class BarrierCheckScreen extends ConsumerStatefulWidget {
 class _BarrierCheckScreenState extends ConsumerState<BarrierCheckScreen> {
   final Set<CareBarrier> _selected = {};
   final _notes = TextEditingController();
+  // Reuse the same ID when retrying a possibly committed write.
+  final _reportId = const Uuid().v4();
   bool _busy = false;
   String? _error;
 
@@ -40,227 +35,149 @@ class _BarrierCheckScreenState extends ConsumerState<BarrierCheckScreen> {
   }
 
   Future<void> _save() async {
+    if (_busy) return;
+    if (_selected.isEmpty && _notes.text.trim().isEmpty) {
+      // An empty response is not evidence of a barrier report.
+      Navigator.of(context).pop(true);
+      return;
+    }
     final user = ref.read(currentUserProvider);
-    if (user == null) return;
-
+    if (user == null) {
+      setState(
+        () => _error = 'Sign in again to record barriers, or skip for now.',
+      );
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
     });
-
     try {
-      await BarrierDao.save(
-        BarrierReport(
-          id: const Uuid().v4(),
-          householdId: widget.householdId,
-          barriers: _selected.toList(),
-          recordedBy: user.id,
-          recordedAt: DateTime.now(),
-          notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
-        ),
-      );
-      if (mounted) Navigator.of(context).pop(true);
-    } catch (e) {
+      await ref
+          .read(careRepositoryProvider)
+          .recordBarrier(
+            user,
+            BarrierReport(
+              id: _reportId,
+              householdId: widget.householdId,
+              barriers: _selected.toList(),
+              recordedBy: user.id,
+              recordedAt: DateTime.now(),
+              notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+            ),
+          );
       if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _error = 'Could not save barriers: $e';
-      });
+      ref.invalidate(barrierHistoryProvider(widget.householdId));
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        setState(
+          () => _error = e is AccessDenied
+              ? e.message
+              : 'Could not save barriers. Retry or skip to continue care.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final household = ref.watch(householdProvider(widget.householdId));
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("What's getting in the way?"),
-        leading: BackButton(
-          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+    return PopScope(
+      canPop: !_busy,
+      child: Scaffold(
+        backgroundColor: AppColors.surface,
+        appBar: AppBar(
+          title: const Text('Care barriers'),
+          leading: BackButton(
+            onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+          ),
         ),
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(Gap.lg),
+        body: ListView(
+          padding: const EdgeInsets.all(20),
           children: [
-            SectionCard(
-              title: 'What makes it hard for this family to get care?',
+            const ClinicStepHeader(
+              steps: [
+                'Household record',
+                'Who is here',
+                'Assessment queue',
+                'Review session',
+              ],
+              current: 1,
+            ),
+            ClinicCard(
+              title: 'Anything making care difficult?',
               subtitle:
-                  'Ask once, before you see the family. If you know what stops '
-                  'them, you can fix it before you leave — and many similar '
-                  'answers show your supervisor a problem to act on.',
-              icon: Icons.signpost_outlined,
+                  'Optional · ${household.valueOrNull?.name ?? 'This household'}. Ask about support needed for clinic care or referrals.',
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    household.valueOrNull?.name ?? 'This household',
-                    style: AppType.label.copyWith(fontSize: 15),
-                  ),
-                  const SizedBox(height: Gap.lg),
                   for (final barrier in CareBarrier.values)
-                    _BarrierTile(
-                      barrier: barrier,
-                      selected: _selected.contains(barrier),
-                      onToggle: () {
-                        setState(() {
-                          if (_selected.contains(barrier)) {
-                            _selected.remove(barrier);
-                          } else {
-                            _selected.add(barrier);
-                          }
-                        });
-                      },
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      value: _selected.contains(barrier),
+                      title: Text(
+                        barrier.label,
+                        style: const TextStyle(
+                          color: AppColors.ink,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      subtitle: Text(barrier.suggestedAction),
+                      onChanged: _busy
+                          ? null
+                          : (on) => setState(() {
+                              if (on == true) {
+                                _selected.add(barrier);
+                              } else {
+                                _selected.remove(barrier);
+                              }
+                            }),
                     ),
                 ],
               ),
             ),
-            const SizedBox(height: Gap.lg),
-            SectionCard(
-              title: 'Anything else to explain?',
-              icon: Icons.notes_outlined,
+            const SizedBox(height: 20),
+            ClinicCard(
+              title: 'Additional context',
               child: TextField(
                 controller: _notes,
-                maxLines: 3,
-                textCapitalization: TextCapitalization.sentences,
+                enabled: !_busy,
+                minLines: 3,
+                maxLines: null,
                 decoration: const InputDecoration(
-                  hintText: 'Optional context, e.g. road flooded after rain',
+                  hintText: 'Optional notes or support discussed',
                 ),
               ),
             ),
+            const SizedBox(height: 20),
+            const ClinicStatusLine(
+              text:
+                  'Skipping does not create a barrier report. Going back keeps any session already opened available to resume.',
+            ),
             if (_error != null) ...[
-              const SizedBox(height: Gap.lg),
-              _ErrorBox(_error!),
+              const SizedBox(height: 16),
+              ClinicStatusLine(text: _error!, icon: Icons.info_outline),
             ],
-            const SizedBox(height: Gap.xl),
+            const SizedBox(height: 20),
             FilledButton(
               onPressed: _busy ? null : _save,
-              child: _busy
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text('Save & continue'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+              child: Text(_busy ? 'Saving…' : 'Save & continue'),
             ),
-            const SizedBox(height: Gap.md),
-            // Skipping still continues to the session — barriers inform
-            // care, they never block it. (Backing out through the app bar
-            // is the abort path, and that one returns false.)
-            TextButton(
+            const SizedBox(height: 16),
+            OutlinedButton(
               onPressed: _busy ? null : () => Navigator.of(context).pop(true),
-              child: const Text('Skip — continue'),
+              child: const Text('Skip for now'),
             ),
-            const SizedBox(height: Gap.xl),
+            const SizedBox(height: 20),
           ],
         ),
       ),
     );
   }
-}
-
-class _BarrierTile extends StatelessWidget {
-  const _BarrierTile({
-    required this.barrier,
-    required this.selected,
-    required this.onToggle,
-  });
-
-  final CareBarrier barrier;
-  final bool selected;
-  final VoidCallback onToggle;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: Gap.sm),
-    child: Material(
-      color: selected ? AppColors.primaryLight : AppColors.canvas,
-      borderRadius: BorderRadius.circular(Gap.radiusSm),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(Gap.radiusSm),
-        onTap: onToggle,
-        child: Container(
-          padding: const EdgeInsets.all(Gap.md),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(Gap.radiusSm),
-            border: Border.all(
-              color: selected ? AppColors.accent : AppColors.line,
-            ),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: Checkbox(
-                  value: selected,
-                  onChanged: (_) => onToggle(),
-                  activeColor: AppColors.accent,
-                ),
-              ),
-              const SizedBox(width: Gap.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      barrier.label,
-                      style: AppType.label.copyWith(fontSize: 14.5),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      barrier.suggestedAction,
-                      style: AppType.caption.copyWith(height: 1.35),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-class _ErrorBox extends StatelessWidget {
-  const _ErrorBox(this.message);
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(Gap.md),
-    decoration: BoxDecoration(
-      color: AppColors.triageRedBg,
-      borderRadius: BorderRadius.circular(Gap.radiusSm),
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Icon(
-          Icons.error_outline_rounded,
-          size: 18,
-          color: AppColors.triageRed,
-        ),
-        const SizedBox(width: Gap.sm),
-        Expanded(
-          child: Text(
-            message,
-            style: const TextStyle(
-              color: AppColors.triageRed,
-              fontSize: 13.5,
-              height: 1.35,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
 }

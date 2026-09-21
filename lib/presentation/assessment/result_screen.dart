@@ -740,9 +740,10 @@ class _AssessmentResultScreenState
     final motion = !MediaQuery.disableAnimationsOf(context);
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.canvas,
       appBar: _view == 0
           ? GlassAppBar(
+              hero: true,
               title: Text(input.person.fullName),
               bottom: PreferredSize(
                 preferredSize: Size.fromHeight(
@@ -763,7 +764,7 @@ class _AssessmentResultScreenState
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 11.5,
-                        color: AppColors.inkMuted,
+                        color: Colors.white70,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.5,
                       ),
@@ -773,6 +774,7 @@ class _AssessmentResultScreenState
               ),
             )
           : GlassAppBar(
+              hero: true,
               leading: BackButton(
                 // The nutrition page backs into the care plan that opened
                 // it; everything else backs into the verdict.

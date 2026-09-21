@@ -45,11 +45,11 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
   CaregiverVoiceController? _voice;
   String? _spokenKey;
 
-  /// The speech language chosen for this check session. The FIRST "hear this
-  /// question" asks once; after that, questions speak immediately in the
-  /// remembered language — a worried caregiver should not re-negotiate a
-  /// picker eight times.
+  /// The speech language for this check session. It starts as the account's
+  /// own preference and only changes when she picks another one from the word
+  /// rail — the play button never interrupts her with a question.
   String? _speechLanguage;
+  bool _railOpen = false;
   Timer? _noteDebounce;
   bool _reviewing = false;
   bool _confirmed = false;
@@ -114,6 +114,14 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
     );
   }
 
+  /// The language this check speaks in: her pick for the session, otherwise
+  /// the language already on her account.
+  String get _voiceLanguage => OfflineSpeechLanguage.canonical(
+    _speechLanguage ??
+        ref.read(currentUserProvider)?.preferredLanguage ??
+        'English',
+  );
+
   Future<void> _listenToQuestion(CaregiverCheckController check) async {
     final voice = _voice;
     if (voice == null) return;
@@ -121,15 +129,22 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
       voice.stop();
       return;
     }
+    // Tap always means "say it", in the language she already has. Changing
+    // language is a separate, visible control — never a question asked by the
+    // play button.
+    await _speakQuestion(check, _voiceLanguage);
+  }
+
+  Future<void> _speakQuestion(
+    CaregiverCheckController check,
+    String language,
+  ) async {
+    final voice = _voice;
+    if (voice == null) return;
     final speech = _questionSpeech(check);
     final scope = ref.read(caregiverScopeProvider);
     final user = ref.read(currentUserProvider);
-    // The first ask in this session picks a language; every later question
-    // speaks straight away in the remembered one.
-    final chosen =
-        _speechLanguage ?? await chooseSpeechLanguage(context, speech);
     if (!mounted ||
-        chosen == null ||
         _check != check ||
         ref.read(caregiverScopeProvider) != scope ||
         ref.read(currentUserProvider) != user ||
@@ -137,8 +152,8 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
         _questionSpeech(check).id != speech.id) {
       return;
     }
-    setState(() => _speechLanguage = chosen);
-    await voice.play(speech.withLanguage(chosen));
+    setState(() => _speechLanguage = language);
+    await voice.play(speech.withLanguage(language));
   }
 
   void _changed() {
@@ -176,6 +191,7 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
         (_check != null && _check!.scope != scope)) {
       return const CompanionPage(
         title: 'Danger-sign check',
+        heroChrome: false,
         child: Center(
           child: Text('Reopen the check from your current family.'),
         ),
@@ -189,14 +205,17 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
           ? 'Who are you checking?'
           : switch (check.stage) {
               CaregiverCheckStage.result => 'What to do now',
-              CaregiverCheckStage.questions => check.needsConcerns
-                  ? 'What is worrying you?'
-                  : 'What have you noticed?',
-              CaregiverCheckStage.duration =>
-                'How long has it been like this?',
+              CaregiverCheckStage.questions =>
+                check.needsConcerns
+                    ? 'What is worrying you?'
+                    : 'What have you noticed?',
+              CaregiverCheckStage.duration => 'How long has it been like this?',
               CaregiverCheckStage.context => 'Before you see the nurse',
               _ => 'Danger-sign check',
             },
+      // The check opens with its own navy hero card; a gradient bar above it
+      // would stack two blue bands.
+      heroChrome: false,
       child: check == null
           ? _picker()
           : switch (check.stage) {
@@ -210,7 +229,7 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
               CaregiverCheckStage.context => _context(check),
               CaregiverCheckStage.result => _result(check),
               CaregiverCheckStage.unsupported ||
-              CaregiverCheckStage.loadFailed => _limitation(check),
+              CaregiverCheckStage.loadFailed => _blocked(check),
             },
     );
   }
@@ -298,10 +317,7 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
               ),
               const SizedBox(height: 24),
               for (final person in members)
-                CaregiverPersonCard(
-                  person: person,
-                  onTap: () => _pick(person),
-                ),
+                CaregiverPersonCard(person: person, onTap: () => _pick(person)),
               if (members.isEmpty)
                 CompanionCard(
                   title: 'No family members yet',
@@ -374,33 +390,122 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
     ],
   );
 
-  Widget _limitation(CaregiverCheckController check) => ListView(
+  void _chooseSomeoneElse() {
+    _voice?.stop();
+    _check?.removeListener(_changed);
+    _check?.dispose();
+    setState(() => _check = null);
+  }
+
+  /// The person is outside the check's scope, or their saved answers could
+  /// not be read. Either way the caregiver needs the specific reason, what
+  /// the record actually says, and a way forward — a paragraph and a "Get
+  /// help" button reads as a broken app.
+  Widget _blocked(CaregiverCheckController check) =>
+      check.stage == CaregiverCheckStage.loadFailed
+      ? _loadFailed(check)
+      : _outOfScope(check);
+
+  Widget _outOfScope(CaregiverCheckController check) {
+    final person = check.person;
+    final reason =
+        check.blockReason ??
+        const (
+          headline: 'This check cannot cover them yet',
+          detail:
+              'The danger-sign check covers children under five, pregnancy, '
+              'and the six weeks after birth.',
+        );
+    final dob = person.dateOfBirth;
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        _BlockedHero(headline: reason.headline, detail: reason.detail),
+        const SizedBox(height: 16),
+        CompanionCard(
+          title: 'What the record says',
+          eyebrow: 'THE RECORD',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _RecordRow(label: 'Name', value: person.fullName),
+              _RecordRow(label: 'Recorded as', value: person.clientType.label),
+              _RecordRow(
+                label: 'Birth date',
+                value: dob == null ? 'Not recorded' : caregiverDateLabel(dob),
+                missing: dob == null,
+              ),
+              _RecordRow(label: 'Age', value: caregiverAge(person)),
+            ],
+          ),
+        ),
+        CompanionCard(
+          title: 'Who this check is for',
+          eyebrow: 'COVERAGE',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: const [
+              _CoverRow('A child under five, with a birth date on the record'),
+              _CoverRow('A woman recorded as pregnant'),
+              _CoverRow('A mother in the six weeks after giving birth'),
+            ],
+          ),
+        ),
+        FilledButton.icon(
+          onPressed: _chooseSomeoneElse,
+          icon: const Icon(Icons.groups_rounded),
+          label: const Text('Check someone else'),
+        ),
+        const SizedBox(height: 12),
+        CaregiverAddMemberButton(householdId: widget.householdId),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: () => showCaregiverEmergency(context),
+          icon: const Icon(Icons.emergency_outlined),
+          label: const Text('Emergency — do not wait for a check'),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Nothing was saved. No danger-sign check was done and no health '
+          'conclusion has been made for ${person.fullName}.',
+          style: caregiverBody(
+            size: 12.5,
+            height: 1.45,
+            color: CompanionColors.muted,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _loadFailed(CaregiverCheckController check) => ListView(
     padding: const EdgeInsets.all(20),
     children: [
-      CompanionCard(
-        title: 'A check cannot be completed yet',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              check.stage == CaregiverCheckStage.unsupported
-                  ? 'This check supports children under five with a recorded birth date, and people recorded as pregnant or postpartum. Confirm missing or incorrect details with a health worker. No health conclusion has been made for ${check.person.fullName}.'
-                  : check.notice!,
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton(
-              onPressed: () => showCaregiverEmergency(context),
-              child: const Text('Get help'),
-            ),
-            if (check.stage == CaregiverCheckStage.loadFailed) ...[
-              const SizedBox(height: 8),
-              CaregiverSaveAction(
-                label: 'Start a new check',
-                onSave: check.startNew,
-              ),
-            ],
-          ],
-        ),
+      _BlockedHero(
+        headline: 'Saved answers could not be read',
+        detail:
+            '${check.notice ?? 'This phone holds the answers, not the network.'} '
+            'The check can start again from the first question.',
+      ),
+      const SizedBox(height: 16),
+      FilledButton.icon(
+        onPressed: () => unawaited(check.load()),
+        icon: const Icon(Icons.refresh_rounded),
+        label: const Text('Try reading them again'),
+      ),
+      const SizedBox(height: 12),
+      CaregiverSaveAction(label: 'Start a new check', onSave: check.startNew),
+      const SizedBox(height: 12),
+      OutlinedButton.icon(
+        onPressed: _chooseSomeoneElse,
+        icon: const Icon(Icons.groups_rounded),
+        label: const Text('Check someone else'),
+      ),
+      const SizedBox(height: 12),
+      OutlinedButton.icon(
+        onPressed: () => showCaregiverEmergency(context),
+        icon: const Icon(Icons.emergency_outlined),
+        label: const Text('Emergency — do not wait for a check'),
       ),
     ],
   );
@@ -464,10 +569,7 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
             ),
           ),
           if (isFailed)
-            TextButton(
-              onPressed: check.retry,
-              child: const Text('Retry'),
-            ),
+            TextButton(onPressed: check.retry, child: const Text('Retry')),
         ],
       ),
     );
@@ -510,7 +612,8 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
           _ConcernPicker(options: options, onChosen: check.setConcerns),
           const SizedBox(height: 24),
           const Text(
-            'A YES at any point takes you straight to what to do.',
+            'If a danger sign comes up, the screen turns red and tells you — '
+            'then you decide whether to go now or finish the check first.',
             style: TextStyle(
               fontSize: 12.5,
               color: AppColors.inkMuted,
@@ -524,154 +627,110 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
 
   // ---------------------------------------------------- Question screen
 
+  /// The alarm belongs to the check, not to the question screen: once she
+  /// leaves the battery, the way out has to travel with her.
+  Widget _alarm(CaregiverCheckController check) => _DangerAlarm(
+    signs: check.signsNoticed,
+    remaining: check.remainingQuestions,
+    onAct: () {
+      _voice?.stop();
+      check.stopForVerdict();
+    },
+  );
+
   Widget _questions(CaregiverCheckController check) {
     final draft = check.draft!;
     final questions = check.questions!.questions;
     final index = draft.questionIndex;
     final question = questions[index];
-    final progress = (index + 1) / questions.length;
     final answered = draft.answers[question.key];
+    final speech = _questionSpeech(check);
+    final language = _voiceLanguage;
+    final localized = language == 'English'
+        ? null
+        : speech.withLanguage(language).localizedText;
+    final answeredTicks = {
+      for (var i = 0; i < questions.length; i++)
+        if (draft.answers[questions[i].key] != null) i,
+    };
+    final noticedTicks = {
+      for (var i = 0; i < questions.length; i++)
+        if (draft.answers[questions[i].key] == CaregiverAnswer.yes) i,
+    };
     return ListView(
       key: ValueKey('question:$index'),
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 28),
       children: [
-        _CheckStepHeader(
-          stepLabel: 'Question ${index + 1} of ${questions.length}',
+        _QuestionHero(
+          index: index,
+          total: questions.length,
+          answered: answeredTicks,
+          noticed: noticedTicks,
           personName: check.person.fullName,
-          language: _speechLanguage,
-          onPickLanguage: () async {
-            final speech = _questionSpeech(check);
-            final chosen = await chooseSpeechLanguage(context, speech);
-            if (chosen != null && mounted) {
-              setState(() => _speechLanguage = chosen);
-            }
+          question: question.label,
+          speech: speech,
+          language: language,
+          localized: localized,
+          playing: _voice?.active ?? false,
+          railOpen: _railOpen,
+          onOpenRail: () => setState(() => _railOpen = !_railOpen),
+          onSpeak: () => unawaited(_listenToQuestion(check)),
+          onLanguage: (chosen) {
+            setState(() => _railOpen = false);
+            unawaited(_speakQuestion(check, chosen));
           },
-          progress: progress,
+          onPrevious: index == 0
+              ? null
+              : () {
+                  _voice?.stop();
+                  check.back();
+                },
         ),
-        if (check.notice != null) ...[
-          const SizedBox(height: 16),
-          _NoticeBanner(message: check.notice!),
-        ],
-        const SizedBox(height: 24),
-        Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.checkNavyDeep.withValues(alpha: 0.08),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (check.alarmRaised) ...[
+                _alarm(check),
+                const SizedBox(height: 16),
+              ],
+              if (check.notice != null) ...[
+                _NoticeBanner(message: check.notice!),
+                const SizedBox(height: 16),
+              ],
+              _AnswerDeck(
+                answered: answered,
+                continueLabel: index == questions.length - 1
+                    ? 'Continue — almost done'
+                    : 'Continue',
+                onAnswer: (answer) {
+                  _voice?.stop();
+                  check.answer(question.key, answer);
+                },
+                onContinue: () {
+                  _voice?.stop();
+                  check.next();
+                },
+              ),
+              const SizedBox(height: 18),
+              _saveStatus(check),
+              const SizedBox(height: 14),
               Text(
-                question.label,
-                style: const TextStyle(
-                  fontFamily: 'Sora',
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  height: 1.35,
-                  color: AppColors.checkNavy,
+                check.alarmRaised
+                    ? 'The alarm stays while you finish. Nothing is taken '
+                          'away from you, and nothing is decided for you.'
+                    : 'Everything waits for you — you control the pace. A '
+                          'danger sign raises an alarm you can act on at once; '
+                          'it does not end the check. These are your '
+                          'observations, not an examination.',
+                style: caregiverBody(
+                  size: 12.5,
+                  height: 1.5,
+                  color: CompanionColors.muted,
                 ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                height: 50,
-                child: OutlinedButton.icon(
-                  onPressed: () => unawaited(_listenToQuestion(check)),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.checkBlue,
-                    side: const BorderSide(
-                      color: AppColors.checkNavy,
-                      width: 1.5,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  icon: const Icon(Icons.volume_up_rounded, size: 20),
-                  label: const Text(
-                    'Hear this question',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              _PremiumAnswerButton(
-                label: 'YES',
-                icon: Icons.check_rounded,
-                selected: answered == CaregiverAnswer.yes,
-                onTap: () {
-                  _voice?.stop();
-                  check.answer(question.key, CaregiverAnswer.yes);
-                },
-              ),
-              const SizedBox(height: 12),
-              _PremiumAnswerButton(
-                label: 'NO',
-                icon: Icons.close_rounded,
-                selected: answered == CaregiverAnswer.no,
-                onTap: () {
-                  _voice?.stop();
-                  check.answer(question.key, CaregiverAnswer.no);
-                },
-              ),
-              const SizedBox(height: 12),
-              _PremiumAnswerButton(
-                label: 'NOT SURE',
-                icon: Icons.help_rounded,
-                selected: answered == CaregiverAnswer.unsure,
-                onTap: () {
-                  _voice?.stop();
-                  check.answer(question.key, CaregiverAnswer.unsure);
-                },
               ),
             ],
-          ),
-        ),
-        const SizedBox(height: 24),
-        PremiumCheckButton(
-          label: index == questions.length - 1
-              ? 'Continue — almost done'
-              : 'Next',
-          icon: Icons.arrow_forward_rounded,
-          trailingIcon: Icons.arrow_forward_rounded,
-          height: 56,
-          enabled: answered != null,
-          onPressed: () {
-            _voice?.stop();
-            check.next();
-          },
-        ),
-        if (index > 0) ...[
-          const SizedBox(height: 10),
-          TextButton(
-            onPressed: () {
-              _voice?.stop();
-              check.back();
-            },
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.checkNavy,
-            ),
-            child: const Text('Back to previous question'),
-          ),
-        ],
-        const SizedBox(height: 16),
-        _saveStatus(check),
-        const SizedBox(height: 16),
-        const Text(
-          'A YES takes you straight to what to do. Everything else waits '
-          'for you — you control the pace. These are your observations, '
-          'not an examination.',
-          style: TextStyle(
-            fontSize: 12.5,
-            color: AppColors.inkMuted,
-            height: 1.5,
           ),
         ),
       ],
@@ -683,8 +742,9 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
   Widget _duration(CaregiverCheckController check) {
     final selected = check.draft!.durationKey;
     return _CheckStepScaffold(
-      progressLabel: 'LAST STEP',
+      progressLabel: check.alarmRaised ? 'ALMOST DONE' : 'LAST STEP',
       personName: check.person.fullName,
+      alarm: check.alarmRaised ? _alarm(check) : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -733,9 +793,7 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
               _voice?.stop();
               check.back();
             },
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.checkNavy,
-            ),
+            style: TextButton.styleFrom(foregroundColor: AppColors.checkNavy),
             child: const Text('Back to the signs'),
           ),
           const SizedBox(height: 16),
@@ -751,6 +809,7 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
     return _CheckStepScaffold(
       progressLabel: 'FOR THE NURSE',
       personName: check.person.fullName,
+      alarm: check.alarmRaised ? _alarm(check) : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -794,9 +853,7 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
               _voice?.stop();
               check.back();
             },
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.inkMuted,
-            ),
+            style: TextButton.styleFrom(foregroundColor: AppColors.inkMuted),
             child: const Text('Back'),
           ),
           const SizedBox(height: 8),
@@ -811,7 +868,13 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
   Widget _result(CaregiverCheckController check) {
     final urgent = check.decision == CaregiverCheckDecision.urgent;
     final routine = check.decision == CaregiverCheckDecision.routine;
-    final first = check.person.fullName.split(' ').first;
+    final first = check.person.fullName
+        .split(' ')
+        .first
+        .replaceFirstMapped(
+          RegExp(r'^[a-z]'),
+          (m) => m.group(0)!.toUpperCase(),
+        );
     final mother =
         check.person.effectiveClientType != ClientType.newborn &&
         check.person.effectiveClientType != ClientType.childUnderFive;
@@ -831,7 +894,8 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
       answers: check.draft!.answers,
       decision: check.decision,
     );
-    final nurseMsg = 'For ${check.person.fullName}. ${observations.english}'
+    final nurseMsg =
+        'For ${check.person.fullName}. ${observations.english}'
         '${check.draft!.onsetNote.trim().isEmpty ? '' : ' Note: ${check.draft!.onsetNote}'}';
     final language =
         ref.watch(currentUserProvider)?.preferredLanguage ?? 'English';
@@ -887,31 +951,25 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
 
     final Widget whatToDo = routine
         ? // A green verdict stays calm: the plan folds away until asked.
-        Theme(
-          data: Theme.of(
-            context,
-          ).copyWith(dividerColor: Colors.transparent),
-          child: ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            initiallyExpanded: false,
-            iconColor: AppColors.checkNavy,
-            collapsedIconColor: AppColors.checkNavy,
-            title: const Text(
-              'What should I do?',
-              style: TextStyle(
-                fontFamily: 'Sora',
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: AppColors.checkNavy,
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              initiallyExpanded: false,
+              iconColor: AppColors.checkNavy,
+              collapsedIconColor: AppColors.checkNavy,
+              title: const Text(
+                'What should I do?',
+                style: TextStyle(
+                  fontFamily: 'Sora',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.checkNavy,
+                ),
               ),
+              children: [adviceCard, const SizedBox(height: 12), stepsCard],
             ),
-            children: [
-              adviceCard,
-              const SizedBox(height: 12),
-              stepsCard,
-            ],
-          ),
-        )
+          )
         : Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [adviceCard, const SizedBox(height: 12), stepsCard],
@@ -929,15 +987,30 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
         const SizedBox(height: 12),
         Text(
           '$answeredCount of $totalCount danger signs answered'
-          '${check.draft!.durationKey == null
-              ? ''
-              : ' — started ${_durationPhrase(check.draft!.durationKey)}'}',
+          '${check.draft!.durationKey == null ? '' : ' — started ${_durationPhrase(check.draft!.durationKey)}'}',
           style: const TextStyle(
             fontSize: 12.5,
             fontWeight: FontWeight.w600,
             color: AppColors.inkMuted,
           ),
         ),
+        const SizedBox(height: 12),
+        // The verdict in her own words: this listen is wired to the
+        // registered verdict clip in the speech bank, so Twi, Dagbani and
+        // Hausa speakers hear the one sentence that matters in their
+        // language — reviewed wording, not machine output.
+        if (_verdictClipId(check.decision) != null)
+          CaregiverListen(
+            label: 'Hear the verdict in your language',
+            speech: CaregiverSpeech(
+              id: 'check_verdict:${check.draft!.id}',
+              english: SpeechBank.byId(
+                _verdictClipId(check.decision)!,
+              )!.english,
+              language: language,
+              clipId: _verdictClipId(check.decision),
+            ),
+          ),
         const SizedBox(height: 16),
         _saveStatus(check),
         const SizedBox(height: 20),
@@ -1019,10 +1092,7 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
           ),
           const SizedBox(height: 16),
         ],
-        CompanionCard(
-          title: 'Feeding and comfort',
-          child: Text(feedingAdvice),
-        ),
+        CompanionCard(title: 'Feeding and comfort', child: Text(feedingAdvice)),
         const SizedBox(height: 16),
         CaregiverListen(
           label: 'Hear the complete guidance',
@@ -1086,10 +1156,7 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        CaregiverSaveAction(
-          label: 'Start a new check',
-          onSave: check.startNew,
-        ),
+        CaregiverSaveAction(label: 'Start a new check', onSave: check.startNew),
         const SizedBox(height: 8),
         OutlinedButton(
           onPressed: () {
@@ -1123,175 +1190,142 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
     }
     if (urgent) {
       return {
-        'book': 'Carry the health record book \u2014 the nurse will ask for it.',
-        'ride': 'Arrange a ride now. A neighbour\u2019s motorbike is fine \u2014 do not wait for a better one.',
+        'book':
+            'Carry the health record book \u2014 the nurse will ask for it.',
+        'ride':
+            'Arrange a ride now. A neighbour\u2019s motorbike is fine \u2014 do not wait for a better one.',
         'feed': mother
             ? 'If she can swallow, give sips of water. If not, do not force anything by mouth.'
             : 'If $first can swallow, keep breastfeeding or give sips of fluid. If not, do not force anything by mouth.',
-        'company': 'Go with someone if you can \u2014 a second person helps to carry and to explain.',
-        'words': 'At the gate, say what you noticed and when it started \u2014 or show the message above.',
+        'company':
+            'Go with someone if you can \u2014 a second person helps to carry and to explain.',
+        'words':
+            'At the gate, say what you noticed and when it started \u2014 or show the message above.',
       };
     }
     return {
-      'see': 'Show $first to your health worker or CHPS compound today \u2014 do not wait for the next scheduled visit.',
-      'watch': 'Watch morning and evening. If any danger sign appears, go to the facility the same day.',
-      'feed': 'Keep feeding and drinking as normal \u2014 small amounts, often.',
+      'see':
+          'Show $first to your health worker or CHPS compound today \u2014 do not wait for the next scheduled visit.',
+      'watch':
+          'Watch morning and evening. If any danger sign appears, go to the facility the same day.',
+      'feed':
+          'Keep feeding and drinking as normal \u2014 small amounts, often.',
       'note': 'Remember when each sign started \u2014 the nurse will ask.',
     };
   }
 }
 
-/// Shared scaffold for the worry, duration and pre-care screens — one calm
-/// card per step, in the same navy-on-white language as the questions.
+/// Shared scaffold for the worry, duration and pre-care screens: the same navy
+/// band the questions open with, then one calm white card.
 class _CheckStepScaffold extends StatelessWidget {
   const _CheckStepScaffold({
     required this.progressLabel,
     required this.personName,
     required this.child,
+    this.alarm,
   });
 
   final String progressLabel;
   final String personName;
   final Widget child;
 
+  /// The danger-sign alarm rides above the step card, so a family that is
+  /// part-way through a serious check never loses the way out.
+  final Widget? alarm;
+
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 24),
       children: [
-        _CheckStepHeader(stepLabel: progressLabel, personName: personName),
-        const SizedBox(height: 24),
-        Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.checkNavyDeep.withValues(alpha: 0.08),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
-              ),
-            ],
+        _StepBand(label: progressLabel, personName: personName),
+        if (alarm != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+            child: alarm!,
           ),
-          child: child,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
+          child: Container(
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: AppColors.checkNavy.withValues(alpha: 0.07),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.checkNavyDeep.withValues(alpha: 0.08),
+                  blurRadius: 22,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: child,
+          ),
         ),
       ],
     );
   }
 }
 
-/// Progress header shared by every step, with the language affordance.
-class _CheckStepHeader extends StatelessWidget {
-  const _CheckStepHeader({
-    required this.stepLabel,
-    required this.personName,
-    this.language,
-    this.onPickLanguage,
-    this.progress = 1,
-  });
+/// The navy band that opens every non-question step, so the check reads as one
+/// system rather than a hero screen followed by plain cards.
+class _StepBand extends StatelessWidget {
+  const _StepBand({required this.label, required this.personName});
 
-  final String stepLabel;
+  final String label;
   final String personName;
-  final String? language;
-  final VoidCallback? onPickLanguage;
-  final double progress;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 20, bottom: 4),
-      child: Column(
-        children: [
-          Row(
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      gradient: const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          AppColors.checkNavyDeep,
+          AppColors.checkNavy,
+          AppColors.checkNavyMid,
+        ],
+        stops: [0, 0.58, 1],
+      ),
+      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
+      boxShadow: [
+        BoxShadow(
+          color: AppColors.checkNavyDeep.withValues(alpha: 0.3),
+          blurRadius: 26,
+          offset: const Offset(0, 12),
+        ),
+      ],
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: Stack(
+      children: [
+        Positioned(
+          top: -88,
+          right: -58,
+          child: _Glow(210, AppColors.checkBlue, 0.45),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 26),
+          child: Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.checkNavy,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  stepLabel,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    fontFamily: 'Sora',
-                  ),
-                ),
-              ),
-              const Spacer(),
+              Flexible(child: _GlassPill(label: label)),
+              const SizedBox(width: 8),
               Flexible(
-                child: Text(
-                  personName,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.inkMuted,
-                  ),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: _PersonChip(name: personName),
                 ),
               ),
-              if (onPickLanguage != null) ...[
-                const SizedBox(width: 8),
-                InkWell(
-                  onTap: onPickLanguage,
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.translate_rounded,
-                          size: 15,
-                          color: AppColors.checkBlue,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          language ?? 'Language',
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.checkBlue,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
-          const SizedBox(height: 10),
-          Container(
-            height: 4,
-            decoration: BoxDecoration(
-              color: AppColors.checkNavy.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(2),
-            ),
-            child: FractionallySizedBox(
-              alignment: Alignment.centerLeft,
-              widthFactor: progress.clamp(0.0, 1.0),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.checkBlue,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
 }
 
 /// The worry grid: multi-select chips, plus an explicit no-worry path so
@@ -1352,7 +1386,11 @@ class _ConcernPickerState extends State<_ConcernPicker> {
 /// Pre-care picker: multi-select chips with an exclusive "nothing yet", and
 /// an explicit skip so context never blocks guidance.
 class _GivenCarePicker extends StatefulWidget {
-  const _GivenCarePicker({required this.initial, required this.onDone, required this.onSkip});
+  const _GivenCarePicker({
+    required this.initial,
+    required this.onDone,
+    required this.onSkip,
+  });
 
   final Set<String> initial;
   final ValueChanged<Set<String>> onDone;
@@ -1608,24 +1646,720 @@ IconData _concernIcon(String key) => switch (key) {
 String _durationPhrase(String? key) =>
     CaregiverDuration.byKey(key)?.label.toLowerCase() ?? 'today';
 
-/// Premium answer button — navy border, fills navy on selection with blue
-/// glow. Semantics + ink ripple so assistive tech and a worried thumb both
-/// get confirmation.
-class _PremiumAnswerButton extends StatelessWidget {
-  const _PremiumAnswerButton({
-    required this.label,
+/// The registered verdict clip for a decision, or null when the decision
+/// cannot produce a verdict.
+String? _verdictClipId(CaregiverCheckDecision decision) => switch (decision) {
+  CaregiverCheckDecision.urgent => 'caregiver_verdict_urgent',
+  CaregiverCheckDecision.contactToday => 'caregiver_verdict_caution',
+  CaregiverCheckDecision.routine => 'caregiver_verdict_fine',
+  _ => null,
+};
+
+/// The question stage: a full-bleed navy panel that owns the reading — the
+/// question, the voice control and the word-first language rail — so the
+/// answer tiles below never compete with the words for the same white card.
+class _QuestionHero extends StatelessWidget {
+  const _QuestionHero({
+    required this.index,
+    required this.total,
+    required this.answered,
+    required this.noticed,
+    required this.personName,
+    required this.question,
+    required this.speech,
+    required this.language,
+    required this.localized,
+    required this.playing,
+    required this.railOpen,
+    required this.onOpenRail,
+    required this.onSpeak,
+    required this.onLanguage,
+    this.onPrevious,
+  });
+
+  final int index;
+  final int total;
+
+  /// Which positions she has answered, and which of those are a YES, so the
+  /// progress bar can show the picture filling in as she goes.
+  final Set<int> answered;
+  final Set<int> noticed;
+  final String personName;
+  final String question;
+  final CaregiverSpeech speech;
+  final String language;
+  final String? localized;
+  final bool playing;
+  final bool railOpen;
+  final VoidCallback onOpenRail;
+  final VoidCallback onSpeak;
+  final ValueChanged<String> onLanguage;
+  final VoidCallback? onPrevious;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.checkNavyDeep,
+            AppColors.checkNavy,
+            AppColors.checkNavyMid,
+          ],
+          stops: [0, 0.58, 1],
+        ),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.checkNavyDeep.withValues(alpha: 0.32),
+            blurRadius: 28,
+            offset: Offset(0, 12),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          Positioned(
+            top: -96,
+            right: -64,
+            child: _Glow(230, AppColors.checkBlue, 0.5),
+          ),
+          Positioned(
+            bottom: -120,
+            left: -78,
+            child: _Glow(250, AppColors.checkBlueLight, 0.24),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 26),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    if (onPrevious != null) ...[
+                      _GlassButton(
+                        icon: Icons.chevron_left_rounded,
+                        tooltip: 'Previous question',
+                        onTap: onPrevious!,
+                      ),
+                      const SizedBox(width: 10),
+                    ],
+                    Flexible(
+                      child: _GlassPill(
+                        label: 'QUESTION ${index + 1} OF $total',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: _PersonChip(name: personName),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                _ProgressTicks(
+                  index: index,
+                  total: total,
+                  answered: answered,
+                  noticed: noticed,
+                ),
+                const SizedBox(height: 24),
+                AnimatedSwitcher(
+                  duration: reduced
+                      ? Duration.zero
+                      : const Duration(milliseconds: 340),
+                  switchInCurve: Curves.easeOutCubic,
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween(
+                        begin: const Offset(0, 0.10),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  ),
+                  child: Text(
+                    key: ValueKey(question),
+                    question,
+                    style: const TextStyle(
+                      fontFamily: 'Sora',
+                      fontSize: 27,
+                      fontWeight: FontWeight.w800,
+                      height: 1.18,
+                      letterSpacing: -0.5,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                if (localized != null) ...[
+                  const SizedBox(height: 16),
+                  _GlassQuote(language: language, words: localized!),
+                ],
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    _PlayDial(playing: playing, onTap: onSpeak),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            playing ? 'Playing…' : 'Hear this question',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            playing
+                                ? 'Tap the button to stop'
+                                : 'Spoken on this phone, in $language',
+                            style: TextStyle(
+                              fontSize: 12,
+                              height: 1.35,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white.withValues(alpha: 0.66),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _GlassButton(
+                      icon: railOpen
+                          ? Icons.close_rounded
+                          : Icons.translate_rounded,
+                      tooltip: railOpen
+                          ? 'Close the language list'
+                          : 'Read this in another language',
+                      onTap: onOpenRail,
+                      active: railOpen,
+                    ),
+                  ],
+                ),
+                if (railOpen) ...[
+                  const SizedBox(height: 16),
+                  SpeechLanguageRail(
+                    speech: speech,
+                    selected: language,
+                    onSelected: onLanguage,
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Each card shows the words that language can give for '
+                    'this question. Tap one and it reads it out.',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      height: 1.4,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A soft radial light on the navy — depth without decoration.
+class _Glow extends StatelessWidget {
+  const _Glow(this.size, this.color, this.opacity);
+
+  final double size;
+  final Color color;
+  final double opacity;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      gradient: RadialGradient(
+        colors: [
+          color.withValues(alpha: opacity),
+          color.withValues(alpha: 0),
+        ],
+      ),
+    ),
+  );
+}
+
+class _GlassPill extends StatelessWidget {
+  const _GlassPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.13),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+    ),
+    child: Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 1.2,
+        color: Colors.white,
+      ),
+    ),
+  );
+}
+
+class _GlassButton extends StatelessWidget {
+  const _GlassButton({
     required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.active = false,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: tooltip,
+    child: Material(
+      color: active ? Colors.white : Colors.white.withValues(alpha: 0.13),
+      shape: const CircleBorder(
+        side: BorderSide(color: Color(0x38FFFFFF), width: 1),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Icon(
+            icon,
+            size: 21,
+            color: active ? AppColors.checkNavy : Colors.white,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _PersonChip extends StatelessWidget {
+  const _PersonChip({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 26,
+          height: 26,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white.withValues(alpha: 0.16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.26)),
+          ),
+          child: Text(
+            initial,
+            style: const TextStyle(
+              fontFamily: 'Sora',
+              fontSize: 12.5,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.86),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One tick per question: answered, current, still to come. A rail of ticks
+/// tells her how much is left faster than a bar does.
+class _ProgressTicks extends StatelessWidget {
+  const _ProgressTicks({
+    required this.index,
+    required this.total,
+    required this.answered,
+    required this.noticed,
+  });
+
+  final int index;
+  final int total;
+
+  /// Question positions she has answered, and the ones answered YES — so the
+  /// bar shows a picture being filled in, not a countdown to a verdict.
+  final Set<int> answered;
+  final Set<int> noticed;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    return Row(
+      children: [
+        for (var tick = 0; tick < total; tick++)
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(right: tick == total - 1 ? 0 : 4),
+              child: AnimatedContainer(
+                duration: reduced
+                    ? Duration.zero
+                    : const Duration(milliseconds: 280),
+                curve: Curves.easeOut,
+                height: tick == index ? 6 : 4,
+                decoration: BoxDecoration(
+                  color: noticed.contains(tick)
+                      ? AppColors.triageRed
+                      : tick == index
+                      ? Colors.white
+                      : answered.contains(tick)
+                      ? Colors.white.withValues(alpha: 0.85)
+                      : Colors.white.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(999),
+                  boxShadow: [
+                    if (tick == index)
+                      BoxShadow(
+                        color: AppColors.checkBlueLight.withValues(alpha: 0.75),
+                        blurRadius: 10,
+                      ),
+                    if (noticed.contains(tick))
+                      BoxShadow(
+                        color: AppColors.triageRed.withValues(alpha: 0.8),
+                        blurRadius: 10,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// The question in her language, sitting under the English so the two read as
+/// one message rather than a translation footnote.
+class _GlassQuote extends StatelessWidget {
+  const _GlassQuote({required this.language, required this.words});
+
+  final String language;
+  final String words;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(14, 11, 14, 13),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          language.toUpperCase(),
+          style: TextStyle(
+            fontSize: 9.5,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.1,
+            color: Colors.white.withValues(alpha: 0.6),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          words,
+          style: const TextStyle(
+            fontSize: 15,
+            height: 1.4,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// The play control. It is a play button, so a tap plays — the language lives
+/// on its own control beside it.
+class _PlayDial extends StatelessWidget {
+  const _PlayDial({required this.playing, required this.onTap});
+
+  final bool playing;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    return AnimatedScale(
+      duration: reduced ? Duration.zero : const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+      scale: playing ? 1.06 : 1,
+      child: Material(
+        color: Colors.white,
+        shape: const CircleBorder(),
+        elevation: 0,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: Container(
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const RadialGradient(
+                center: Alignment(-0.5, -0.6),
+                colors: [AppColors.checkBlue, AppColors.checkNavyMid],
+              ),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.35),
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.checkBlue.withValues(
+                    alpha: playing ? 0.6 : 0.32,
+                  ),
+                  blurRadius: playing ? 26 : 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Icon(
+              playing ? Icons.stop_rounded : Icons.play_arrow_rounded,
+              size: 30,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The three answers plus the step control. The step control is never dead:
+/// with no answer yet it asks for one and pulses the tiles instead of
+/// greying out.
+class _AnswerDeck extends StatefulWidget {
+  const _AnswerDeck({
+    required this.answered,
+    required this.continueLabel,
+    required this.onAnswer,
+    required this.onContinue,
+  });
+
+  final CaregiverAnswer? answered;
+  final String continueLabel;
+  final ValueChanged<CaregiverAnswer> onAnswer;
+  final VoidCallback onContinue;
+
+  @override
+  State<_AnswerDeck> createState() => _AnswerDeckState();
+}
+
+class _AnswerDeckState extends State<_AnswerDeck>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 620),
+  );
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final answered = widget.answered;
+    final glow = Curves.easeOutSine.transform(
+      _pulse.value < 0.5 ? _pulse.value * 2 : (1 - _pulse.value) * 2,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 18,
+              height: 2,
+              decoration: BoxDecoration(
+                color: AppColors.checkBlue,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'YOUR ANSWER',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.3,
+                color: CompanionColors.muted,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        AnimatedBuilder(
+          animation: _pulse,
+          builder: (context, child) => Transform.translate(
+            offset: Offset(4 * glow * glow - 4 * glow, 0),
+            child: child,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _AnswerTile(
+                label: 'Yes',
+                hint: 'This is happening',
+                icon: Icons.check_rounded,
+                tone: AppColors.checkBlue,
+                selected: answered == CaregiverAnswer.yes,
+                onTap: () => widget.onAnswer(CaregiverAnswer.yes),
+              ),
+              const SizedBox(height: 12),
+              _AnswerTile(
+                label: 'No',
+                hint: 'Not happening',
+                icon: Icons.close_rounded,
+                tone: AppColors.checkNavy,
+                selected: answered == CaregiverAnswer.no,
+                onTap: () => widget.onAnswer(CaregiverAnswer.no),
+              ),
+              const SizedBox(height: 12),
+              _AnswerTile(
+                label: 'Not sure',
+                hint: 'I cannot tell',
+                icon: Icons.help_rounded,
+                tone: AppColors.caregiverMuted,
+                selected: answered == CaregiverAnswer.unsure,
+                onTap: () => widget.onAnswer(CaregiverAnswer.unsure),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        if (answered != null)
+          PremiumCheckButton(
+            label: widget.continueLabel,
+            trailingIcon: Icons.arrow_forward_rounded,
+            height: 58,
+            onPressed: widget.onContinue,
+          )
+        else
+          Material(
+            color: AppColors.checkBlueTint,
+            borderRadius: BorderRadius.circular(18),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: () {
+                if (MediaQuery.disableAnimationsOf(context)) return;
+                _pulse.forward(from: 0);
+              },
+              child: Container(
+                height: 58,
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: AppColors.checkNavy.withValues(alpha: 0.14),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.touch_app_rounded,
+                      size: 20,
+                      color: AppColors.checkBlue,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Choose one to continue',
+                        style: const TextStyle(
+                          fontFamily: 'Sora',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.checkNavy,
+                        ),
+                      ),
+                    ),
+                    const Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 20,
+                      color: AppColors.checkNavy,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// One answer: a medallion, the word, what the word means, and a state ring.
+class _AnswerTile extends StatelessWidget {
+  const _AnswerTile({
+    required this.label,
+    required this.hint,
+    required this.icon,
+    required this.tone,
     required this.selected,
     required this.onTap,
   });
 
   final String label;
+  final String hint;
   final IconData icon;
+  final Color tone;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final reduced = MediaQuery.disableAnimationsOf(context);
     return Semantics(
       button: true,
       selected: selected,
@@ -1633,56 +2367,300 @@ class _PremiumAnswerButton extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          splashColor: AppColors.checkBlue.withValues(alpha: 0.15),
-          highlightColor: AppColors.checkBlue.withValues(alpha: 0.08),
-          child: Ink(
+          borderRadius: BorderRadius.circular(22),
+          splashColor: AppColors.checkBlue.withValues(alpha: 0.12),
+          child: AnimatedContainer(
+            duration: reduced
+                ? Duration.zero
+                : const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            // A floor, not a fixed height: at 200% text the answer and its
+            // hint need the room, and a clipped answer is the worst place to
+            // clip it.
+            constraints: const BoxConstraints(minHeight: 78),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
             decoration: BoxDecoration(
-              color: selected ? AppColors.checkNavy : Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              gradient: selected
+                  ? const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [AppColors.checkNavyDeep, AppColors.checkNavy],
+                    )
+                  : null,
+              color: selected ? null : Colors.white,
+              borderRadius: BorderRadius.circular(22),
               border: Border.all(
                 color: selected
                     ? AppColors.checkNavy
-                    : AppColors.checkNavy.withValues(alpha: 0.3),
-                width: selected ? 2 : 1.5,
+                    : AppColors.checkNavy.withValues(alpha: 0.10),
+                width: selected ? 1.4 : 1.2,
               ),
-              boxShadow: selected
-                  ? [
-                      BoxShadow(
-                        color: AppColors.checkBlue.withValues(alpha: 0.2),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ]
-                  : const [],
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.checkNavyDeep.withValues(
+                    alpha: selected ? 0.26 : 0.05,
+                  ),
+                  blurRadius: selected ? 22 : 12,
+                  offset: Offset(0, selected ? 10 : 4),
+                ),
+              ],
             ),
-            child: Container(
-              height: 72,
-              alignment: Alignment.center,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
+            child: Row(
+              children: [
+                AnimatedContainer(
+                  duration: reduced
+                      ? Duration.zero
+                      : const Duration(milliseconds: 220),
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: selected
+                        ? Colors.white.withValues(alpha: 0.16)
+                        : tone.withValues(alpha: 0.10),
+                  ),
+                  child: Icon(
                     icon,
-                    size: 24,
-                    color: selected ? Colors.white : AppColors.checkNavy,
+                    size: 23,
+                    color: selected ? Colors.white : tone,
                   ),
-                  const SizedBox(width: 12),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                      color: selected ? Colors.white : AppColors.checkNavy,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontFamily: 'Sora',
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.2,
+                          color: selected ? Colors.white : AppColors.checkNavy,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        hint,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
+                          color: selected
+                              ? Colors.white.withValues(alpha: 0.78)
+                              : CompanionColors.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                AnimatedContainer(
+                  duration: reduced
+                      ? Duration.zero
+                      : const Duration(milliseconds: 220),
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: selected
+                          ? Colors.white
+                          : AppColors.checkNavy.withValues(alpha: 0.22),
+                      width: 1.8,
                     ),
+                    color: selected
+                        ? Colors.white.withValues(alpha: 0.14)
+                        : null,
                   ),
-                ],
-              ),
+                  child: selected
+                      ? const Icon(
+                          Icons.check_rounded,
+                          size: 17,
+                          color: Colors.white,
+                        )
+                      : null,
+                ),
+              ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The answer the check gives to a danger sign is not a screen change — it is
+/// something she can act on. This band appears the moment a YES lands and stays
+/// for the rest of the check: it names what she saw, keeps the remaining
+/// questions in front of her because the nurse will ask them, and puts the way
+/// out one tap away. Red is used because it means danger, never because it
+/// looks urgent.
+class _DangerAlarm extends StatelessWidget {
+  const _DangerAlarm({
+    required this.signs,
+    required this.remaining,
+    required this.onAct,
+  });
+
+  final List<String> signs;
+  final int remaining;
+  final VoidCallback onAct;
+
+  static String _alarmBody(String named, int remaining) {
+    final choice = remaining > 0
+        ? 'Go now, or answer the $remaining '
+              '${remaining == 1 ? "question" : "questions"} left first'
+        : 'Go now, or finish what is left first';
+    return 'You saw $named. $choice — the nurse will ask either way.';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    final seen = [
+      for (final s in signs)
+        '${s.substring(0, 1).toLowerCase()}${s.substring(1)}',
+    ];
+    final named = seen.length == 1
+        ? seen.single
+        : '${seen.take(seen.length - 1).join(', ')} and ${seen.last}';
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF7C1A16), AppColors.triageRed],
+          stops: [0, 0.82],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.triageRed.withValues(alpha: 0.30),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          Positioned(
+            top: -70,
+            right: -46,
+            child: _Glow(170, Colors.white, reduced ? 0.10 : 0.20),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withValues(alpha: 0.16),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.30),
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.emergency_share_rounded,
+                        size: 20,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'DANGER SIGN NOTED',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.1,
+                              color: Colors.white.withValues(alpha: 0.78),
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            signs.length == 1
+                                ? 'This needs attention now.'
+                                : '${signs.length} signs need attention now.',
+                            style: const TextStyle(
+                              fontFamily: 'Sora',
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              height: 1.25,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _alarmBody(named, remaining),
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.45,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white.withValues(alpha: 0.93),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Semantics(
+                  button: true,
+                  child: Material(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: onAct,
+                      child: SizedBox(
+                        height: 52,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.directions_walk_rounded,
+                              size: 20,
+                              color: Color(0xFF7C1A16),
+                            ),
+                            const SizedBox(width: 10),
+                            Flexible(
+                              child: Text(
+                                remaining > 0
+                                    ? 'Stop and see what to do'
+                                    : 'See what to do now',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontFamily: 'Sora',
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF7C1A16),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1805,6 +2783,147 @@ class _VerdictHero extends StatelessWidget {
   }
 }
 
+/// The navy hero for a check that cannot go ahead. Same visual language as
+/// the verdict hero, so a blocked screen still looks like the app rather
+/// than an error dialog.
+class _BlockedHero extends StatelessWidget {
+  const _BlockedHero({required this.headline, required this.detail});
+
+  final String headline;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(24),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(20),
+      gradient: AppColors.checkHeroGradient,
+      boxShadow: [
+        BoxShadow(
+          color: AppColors.checkNavyDeep.withValues(alpha: 0.18),
+          blurRadius: 20,
+          offset: const Offset(0, 8),
+        ),
+      ],
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 52,
+          height: 52,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.info_outline_rounded,
+            color: AppColors.checkBlue,
+            size: 26,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                headline,
+                style: const TextStyle(
+                  fontFamily: 'Sora',
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  height: 1.25,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                detail,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xE6FFFFFF),
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// One line of the record the caregiver can compare against reality.
+class _RecordRow extends StatelessWidget {
+  const _RecordRow({
+    required this.label,
+    required this.value,
+    this.missing = false,
+  });
+
+  final String label;
+  final String value;
+  final bool missing;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 92,
+          child: Text(
+            label,
+            style: caregiverBody(
+              size: 13,
+              height: 1.35,
+              color: CompanionColors.muted,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: caregiverBody(
+              size: 14.5,
+              height: 1.35,
+              color: missing ? AppColors.triageAmber : CompanionColors.ink,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _CoverRow extends StatelessWidget {
+  const _CoverRow(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(
+          Icons.check_circle_outline_rounded,
+          size: 18,
+          color: AppColors.checkBlue,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(text, style: caregiverBody(size: 14, height: 1.4)),
+        ),
+      ],
+    ),
+  );
+}
+
 /// The advice card with the found signs and, where it adds information, the
 /// one-line verdict word.
 class _AdviceCard extends StatelessWidget {
@@ -1921,7 +3040,12 @@ class _AdviceCard extends StatelessWidget {
   }
 }
 
-class _ActionStepsCard extends StatelessWidget {
+/// The plan she can work through. Each line is one tap, the thread between the
+/// markers is the order, and the meter counts only what storage has confirmed —
+/// so "3 of 4" means three things she can prove, not three things she meant to
+/// do. The card itself stays plain: the steps are the content, and a box around
+/// every step would bury them.
+class _ActionStepsCard extends ConsumerWidget {
   const _ActionStepsCard({
     required this.routine,
     required this.verdictColor,
@@ -1937,98 +3061,162 @@ class _ActionStepsCard extends StatelessWidget {
   final String personId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final saved = report;
+    final scope = ref.watch(caregiverScopeProvider);
+    final entries = scope == null
+        ? null
+        : ref.watch(caregiverActivityProvider(scope)).valueOrNull;
+    final done = saved == null || entries == null
+        ? 0
+        : entries
+              .where(
+                (a) =>
+                    a.kind == CaregiverActivityKind.preparation &&
+                    a.personId == personId &&
+                    a.sourceId == saved.id &&
+                    a.occurrenceKey == saved.id &&
+                    a.done &&
+                    steps.keys.contains(a.itemKey),
+              )
+              .length;
+    final items = steps.entries.toList();
+
     return CompanionCard(
-      title: routine ? 'Keep doing these' : 'Do these now \u2014 even on the way',
+      title: routine
+          ? 'Keep doing these'
+          : 'Do these now \u2014 even on the way',
       eyebrow: routine ? 'ROUTINE' : 'ACTION STEPS',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (int i = 0; i < steps.entries.length; i++) ...[
-            if (i > 0) const SizedBox(height: 12),
-            Builder(builder: (_) {
-              final entry = steps.entries.elementAt(i);
-              return Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.checkSilver, width: 1),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.checkNavyDeep.withValues(alpha: 0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+          if (saved != null) ...[
+            _StepMeter(
+              done: done,
+              total: items.length,
+              tone: verdictColor,
+              routine: routine,
+            ),
+            const SizedBox(height: 14),
+          ],
+          for (var i = 0; i < items.length; i++)
+            if (saved == null)
+              Padding(
+                padding: EdgeInsets.only(
+                  bottom: i == items.length - 1 ? 0 : 10,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 5, right: 12),
+                      child: Icon(
+                        Icons.circle,
+                        size: 7,
+                        color: AppColors.checkBlueLight,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        items[i].value,
+                        style: caregiverBody(size: 15, height: 1.45),
+                      ),
                     ),
                   ],
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 4,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: AppColors.checkBlue,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: const BoxDecoration(
-                          color: AppColors.checkNavy,
-                          shape: BoxShape.circle,
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          '${i + 1}',
-                          style: const TextStyle(
-                            fontFamily: 'Sora',
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (report != null)
-                              CaregiverTaskToggle(
-                                personId: personId,
-                                kind: CaregiverActivityKind.preparation,
-                                sourceId: report!.id,
-                                itemKey: entry.key,
-                                occurrenceKey: report!.id,
-                                label: entry.value,
-                              )
-                            else
-                              Text(
-                                entry.value,
-                                style: const TextStyle(
-                                  fontSize: 14.5,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppColors.checkNavy,
-                                  height: 1.45,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }),
-          ],
+              )
+            else
+              CaregiverTaskToggle(
+                personId: personId,
+                kind: CaregiverActivityKind.preparation,
+                sourceId: saved.id,
+                itemKey: items[i].key,
+                occurrenceKey: saved.id,
+                label: items[i].value,
+                step: i + 1,
+                totalSteps: items.length,
+                tone: verdictColor,
+              ),
         ],
       ),
+    );
+  }
+}
+
+/// Confirmed progress, in the verdict's own colour. Nothing moves until the
+/// write lands, so the bar is a record rather than a reward.
+class _StepMeter extends StatelessWidget {
+  const _StepMeter({
+    required this.done,
+    required this.total,
+    required this.tone,
+    required this.routine,
+  });
+
+  final int done;
+  final int total;
+  final Color tone;
+  final bool routine;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    final allDone = total > 0 && done >= total;
+    final fraction = total == 0 ? 0.0 : (done / total).clamp(0.0, 1.0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                allDone
+                    ? (routine
+                          ? 'All $total done — keep going tomorrow'
+                          : 'All $total done — take them and go')
+                    : '$done of $total done',
+                style: TextStyle(
+                  fontFamily: 'Sora',
+                  fontSize: 13,
+                  fontWeight: allDone ? FontWeight.w800 : FontWeight.w700,
+                  height: 1.3,
+                  color: allDone
+                      ? AppColors.checkNavy
+                      : AppColors.caregiverFaded,
+                ),
+              ),
+            ),
+            if (allDone) Icon(Icons.verified_rounded, size: 18, color: tone),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(5),
+          child: Container(
+            height: 7,
+            color: AppColors.checkSilver,
+            alignment: Alignment.centerLeft,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 0, end: fraction),
+              duration: reduced
+                  ? Duration.zero
+                  : const Duration(milliseconds: 420),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, _) => FractionallySizedBox(
+                widthFactor: value,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(5),
+                    gradient: LinearGradient(
+                      colors: [tone.withValues(alpha: 0.75), tone],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -2045,11 +3233,10 @@ class _GettingThereCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final now = ref.watch(caregiverClockProvider)();
     final isNight = now.hour >= 19 || now.hour < 6;
-    final walking =
-        ref
-            .watch(householdProvider(report.householdId))
-            .valueOrNull
-            ?.walkingMinutesToFacility;
+    final walking = ref
+        .watch(householdProvider(report.householdId))
+        .valueOrNull
+        ?.walkingMinutesToFacility;
     const prepItems = [
       ('prep-book', 'Health record book'),
       ('prep-nhis', 'NHIS card'),
@@ -2215,7 +3402,11 @@ class _TellSomeoneCard extends ConsumerWidget {
               'CareBridge sends nothing itself \u2014 this opens your own '
               'messages with the words ready. Sending never replaces going: '
               'if the verdict says go, go.',
-              style: TextStyle(fontSize: 12.5, color: AppColors.inkMuted, height: 1.4),
+              style: TextStyle(
+                fontSize: 12.5,
+                color: AppColors.inkMuted,
+                height: 1.4,
+              ),
             ),
             const SizedBox(height: 12),
             for (final contact in contacts)
@@ -2318,13 +3509,17 @@ Future<void> _launch(BuildContext context, String uri) async {
     );
     if (!ok && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open messaging on this phone.')),
+        const SnackBar(
+          content: Text('Could not open messaging on this phone.'),
+        ),
       );
     }
   } catch (_) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open messaging on this phone.')),
+        const SnackBar(
+          content: Text('Could not open messaging on this phone.'),
+        ),
       );
     }
   }

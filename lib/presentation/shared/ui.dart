@@ -963,3 +963,171 @@ class BrandAccent extends StatelessWidget {
     return ClipRRect(borderRadius: radius!, child: line);
   }
 }
+
+/// The signature deep-royal hero panel that opens a screen.
+///
+/// Every primary surface in the app opens with the same gesture: a deep
+/// navy-to-azure gradient, two soft light blooms, an eyebrow, a Sora headline
+/// and one supporting line. It is the visual handshake that tells the user
+/// "this screen matters" — the same language the caregiver check tab and the
+/// FHW Today board already speak, available here to every other screen so no
+/// flow reads as the poor cousin.
+///
+/// Colour discipline still applies: the hero is brand blue, never triage
+/// red/amber/green — clinical meaning stays with clinical widgets.
+class LuxeHeroHeader extends StatelessWidget {
+  const LuxeHeroHeader({
+    super.key,
+    required this.eyebrow,
+    required this.title,
+    this.body,
+    this.icon = Icons.auto_awesome_rounded,
+    this.stats = const [],
+    this.compact = false,
+  });
+
+  final String eyebrow;
+  final String title;
+  final String? body;
+  final IconData icon;
+
+  /// Optional frosted stat pills along the bottom (see [LuxeStatPill]).
+  final List<Widget> stats;
+
+  /// A shorter panel for pushed secondary screens, where a full hero would
+  /// shout over the work below it.
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(Gap.radius);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: AppColors.checkHeroGradient,
+        borderRadius: radius,
+        boxShadow: const [AppShadows.glow],
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: Stack(
+          children: [
+            // Two light blooms — felt as depth, never seen as shapes.
+            Positioned(
+              top: -46,
+              right: -30,
+              child: _bloom(150, 0.10),
+            ),
+            Positioned(
+              bottom: -60,
+              left: -40,
+              child: _bloom(170, 0.07),
+            ),
+            Padding(
+              padding: EdgeInsets.all(compact ? Gap.lg : Gap.xl),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          eyebrow.toUpperCase(),
+                          style: AppType.eyebrow.copyWith(
+                            color: AppColors.white80,
+                            letterSpacing: 2,
+                            fontSize: 10.5,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.25),
+                          ),
+                        ),
+                        child: Icon(icon, size: 18, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: compact ? Gap.xs : Gap.sm),
+                  Text(
+                    title,
+                    style: AppType.headline.copyWith(
+                      color: Colors.white,
+                      fontSize: compact ? 20 : 24,
+                      height: 1.18,
+                    ),
+                  ),
+                  if (body != null) ...[
+                    const SizedBox(height: Gap.sm),
+                    Text(
+                      body!,
+                      style: AppType.caption.copyWith(
+                        color: AppColors.white85,
+                        fontSize: 13,
+                        height: 1.55,
+                      ),
+                    ),
+                  ],
+                  if (stats.isNotEmpty) ...[
+                    const SizedBox(height: Gap.lg),
+                    Wrap(spacing: Gap.sm, runSpacing: Gap.sm, children: stats),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static Widget _bloom(double size, double opacity) => Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      color: Colors.white.withValues(alpha: opacity),
+    ),
+  );
+}
+
+/// A frosted figure inside a [LuxeHeroHeader] — white glass on the gradient.
+class LuxeStatPill extends StatelessWidget {
+  const LuxeStatPill({super.key, required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.sm),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(Gap.radiusSm),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: AppType.title.copyWith(
+            color: Colors.white,
+            fontSize: 18,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+        Text(
+          label,
+          style: AppType.caption.copyWith(color: AppColors.white80, fontSize: 11),
+        ),
+      ],
+    ),
+  );
+}

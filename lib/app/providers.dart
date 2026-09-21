@@ -15,13 +15,13 @@ library;
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sqflite/sqflite.dart';
-import 'package:uuid/uuid.dart';
 
 import '../core/auth/session.dart';
+import '../core/audio/caregiver_playback.dart' show OfflineSpeechLanguage;
+import '../core/audio/speakable_service.dart';
+import '../core/ml/neural_translation_service.dart';
+import '../core/ml/piper_tts_service.dart';
 import '../data/local/app_database.dart';
-import '../data/local/household_dao.dart';
 import '../data/local/outbox_dao.dart';
 import '../data/local/preferences_store.dart';
 import '../data/local/sync_state_dao.dart';
@@ -47,91 +47,97 @@ import '../domain/enums.dart';
 /// real use.
 final bootstrapProvider = FutureProvider<void>((ref) async {
   await AppDatabase.instance.database;
-  await _seedTestUser();
   // The sync service starts itself inside [syncServiceProvider], so awaiting
   // it here is enough — and a later invalidation (e.g. the sync-settings
   // screen swapping in a real server) re-creates an already-running service.
   await ref.read(syncServiceProvider.future);
 });
 
-/// Temporary: creates a test FHW account so the app can be exercised without
-/// manual registration. Remove once manual testing is no longer needed.
-Future<void> _seedTestUser() async {
-  const testPhone = '0241234567';
-  const testPin = '2468';
-  final existing = await UserDao.byPhone(testPhone);
-  final prefs = await SharedPreferences.getInstance();
-  if (existing != null) {
-    await prefs.setString('carebridge.session.user_id_fallback', existing.id);
-    await prefs.setString('carebridge.session.last_phone_fallback', existing.phone);
-    // Also seed test household data if not already present
-    await _seedTestData(existing.id);
-    return;
+/// Loads ONNX neural translation models in the background after bootstrap.
+/// Non-blocking: the app functions fully (English + dictionary) while models
+/// load. Caregiver voice uses cached results as soon as they arrive.
+final neuralTranslationProvider = FutureProvider<void>((ref) async {
+  await NeuralTranslationService.instance.initialize();
+});
+
+// ---------------------------------------------------------------------------
+// On-device Piper neural TTS (native-quality Hausa/Twi voice synthesis).
+// Loaded at first caregiver navigation; gracefully skips if model files
+// are not present. Web: no-op (falls through to system TTS).
+// ---------------------------------------------------------------------------
+final piperTtsProvider = FutureProvider<void>((ref) async {
+  await PiperTtsService.instance.initialize();
+});
+
+// ---------------------------------------------------------------------------
+// Universal "speak in my language" narration.
+// Toggled by the NarrationButton in either shell's app bar. When on, every
+// SpeakableText long-press and every NarrationSection mount routes through
+// SpeakableService (translation → Piper TTS → system TTS).
+// ---------------------------------------------------------------------------
+
+/// Whether universal voice narration is enabled on this device.
+final narrationEnabledProvider = NotifierProvider<NarrationNotifier, bool>(
+  NarrationNotifier.new,
+);
+
+final speakableServiceProvider = Provider<SpeakableService>((ref) {
+  final service = SpeakableService();
+  ref.listen(currentUserProvider, (previous, next) {
+    if (previous?.id != next?.id ||
+        previous?.preferredLanguage != next?.preferredLanguage) {
+      unawaited(service.stop());
+    }
+  });
+  ref.onDispose(() => unawaited(service.dispose()));
+  return service;
+});
+
+final narrationPreferenceReaderProvider = Provider<Future<bool> Function()>(
+  (_) => PreferencesStore.narrationEnabled,
+);
+final narrationPreferenceWriterProvider = Provider<Future<void> Function(bool)>(
+  (_) => PreferencesStore.setNarrationEnabled,
+);
+
+class NarrationNotifier extends Notifier<bool> {
+  int _revision = 0;
+  Future<void> _writes = Future.value();
+
+  @override
+  bool build() {
+    var disposed = false;
+    final revision = _revision;
+    final read = ref.read(narrationPreferenceReaderProvider);
+    ref.onDispose(() => disposed = true);
+    Future.microtask(() async {
+      try {
+        final stored = await read();
+        if (!disposed && revision == _revision && stored != state) state = stored;
+      } catch (_) { /* A failed preference read leaves narration off. */ }
+    });
+    return false;
   }
-  final user = await UserDao.register(
-    user: AppUser(
-      id: const Uuid().v4(),
-      fullName: 'Demo FHW',
-      phone: testPhone,
-      role: UserRole.frontlineHealthWorker,
-      region: 'Northern Region',
-      district: 'Kumbungu',
-      community: 'Kumbungu',
-      preferredLanguage: 'English',
-      createdAt: DateTime.now(),
-    ),
-    pin: testPin,
-  );
-  await prefs.setString('carebridge.session.user_id_fallback', user.id);
-  await prefs.setString('carebridge.session.last_phone_fallback', user.phone);
-  await _seedTestData(user.id);
+
+  Future<void> setEnabled(bool value) async {
+    ++_revision;
+    state = value;
+    final write = ref.read(narrationPreferenceWriterProvider);
+    final stopped = !value ? ref.read(speakableServiceProvider).stop() : Future<void>.value();
+    _writes = _writes.then((_) => write(value)).catchError((Object _) {});
+    await stopped;
+    await _writes;
+  }
+
+  Future<void> toggle() => setEnabled(!state);
 }
 
-/// Creates a test household with a pregnant woman for assessment testing.
-Future<void> _seedTestData(String userId) async {
-  final db = await AppDatabase.instance.database;
-  final householdCount = Sqflite.firstIntValue(
-    await db.rawQuery('SELECT COUNT(*) as count FROM households'),
-  );
-  if (householdCount != null && householdCount > 0) return;
-
-  final householdId = const Uuid().v4();
-  await HouseholdDao.upsert(Household(
-    id: householdId,
-    name: "Amina's household",
-    region: 'Northern Region',
-    district: 'Kumbungu',
-    community: 'Kumbungu',
-    createdBy: userId,
-    headName: 'Amina Yusuf',
-    contactPhone: '0241111111',
-    familySize: 3,
-    hasValidNhis: true,
-    walkingMinutesToFacility: 15,
-    landmark: 'Behind the mosque, past the shea tree',
-    createdAt: DateTime.now(),
-    updatedAt: DateTime.now(),
-  ));
-
-  final personId = const Uuid().v4();
-  final db2 = await AppDatabase.instance.database;
-  await db2.insert(
-    Tables.persons,
-    Person(
-      id: personId,
-      householdId: householdId,
-      fullName: 'Amina Yusuf',
-      clientType: ClientType.pregnantWoman,
-      sex: Sex.female,
-      dateOfBirth: DateTime.now().subtract(const Duration(days: 28 * 32)),
-      phone: '0241111111',
-      nhisNumber: 'NHIS-123456',
-      isActive: true,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    ).toMap(),
-  );
-}
+/// The language narration uses — derived from the signed-in user's
+/// preferred guidance language so both shells share one source of truth.
+final narrationLanguageProvider = Provider<String>((ref) {
+  final user = ref.watch(currentUserProvider);
+  return OfflineSpeechLanguage.canonical(user?.preferredLanguage ?? 'English');
+});
 
 // ------------------------------------------------------------------- Repositories
 
@@ -629,6 +635,18 @@ final workerImpactProvider = FutureProvider<({int assessments, int overrides})>(
   },
 );
 
+/// Today's front-door pace: sessions received, still open, and the mean wait
+/// from receiving a session to its first saved assessment. FHW-only, the same
+/// permission that runs the queue.
+final clinicDayStatsProvider = FutureProvider<ClinicDayStats>((ref) async {
+  await ref.watch(bootstrapProvider.future);
+  final user = ref.watch(currentUserProvider);
+  if (user == null) {
+    return const ClinicDayStats(received: 0, openNow: 0);
+  }
+  return ref.read(careRepositoryProvider).clinicDayStats(user);
+});
+
 /// The milestone checks this family ran at home, newest first — the nurturing
 /// care mirror of [householdHomeChecksProvider].
 final householdMilestoneChecksProvider =
@@ -677,21 +695,6 @@ final openReferralsProvider = FutureProvider<List<Referral>>((ref) async {
   final user = ref.watch(currentUserProvider);
   if (user == null) return const [];
   return ref.read(careRepositoryProvider).openReferrals(user);
-});
-
-/// Distinct households the signed-in worker has visited since local
-/// midnight — the "Today's Impact" figure on the dashboard. Deliberately
-/// visit-based, not edit-based, so an evening of paperwork does not read
-/// as a day of visits.
-final householdsVisitedTodayProvider = FutureProvider<int>((ref) async {
-  await ref.watch(bootstrapProvider.future);
-  final user = ref.watch(currentUserProvider);
-  if (user == null) return 0;
-  final now = DateTime.now();
-  final startOfDay = DateTime(now.year, now.month, now.day);
-  return ref
-      .read(careRepositoryProvider)
-      .householdsVisitedSince(user, startOfDay);
 });
 
 /// Children whose MUAC is falling, worst first. The single most

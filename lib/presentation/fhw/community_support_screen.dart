@@ -104,6 +104,17 @@ class _CommunitySupportScreenState
         child: ListView(
           padding: const EdgeInsets.all(Gap.lg),
           children: [
+            const LuxeHeroHeader(
+              compact: true,
+              eyebrow: 'Community support',
+              title: 'Loop in support',
+              body:
+                  'Someone who can help with transport or go with the family '
+                  '— recorded on the referral, handed off by SMS you send '
+                  'yourself.',
+              icon: Icons.handshake_outlined,
+            ),
+            const SizedBox(height: Gap.lg),
             SectionCard(
               title: 'Who can help this family follow through?',
               subtitle:
@@ -125,9 +136,15 @@ class _CommunitySupportScreenState
                   const FieldLabel('Role'),
                   DropdownButtonFormField<String>(
                     initialValue: _role,
+                    // 'Traditional birth attendant' is the longest role and a
+                    // narrow phone at 200% text gives the row ~266px.
+                    isExpanded: true,
                     items: [
                       for (final r in _roles)
-                        DropdownMenuItem(value: r, child: Text(r)),
+                        DropdownMenuItem(
+                          value: r,
+                          child: Text(r, overflow: TextOverflow.ellipsis),
+                        ),
                     ],
                     onChanged: (v) => setState(() => _role = v ?? _role),
                   ),

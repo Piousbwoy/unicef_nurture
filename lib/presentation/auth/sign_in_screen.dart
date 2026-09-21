@@ -165,7 +165,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _Brand(role: pendingRole),
+                  AppMotion.reveal(
+                    _Brand(role: pendingRole),
+                    distance: 14,
+                  ),
                   const SizedBox(height: Gap.xxl),
 
                   const FieldLabel('Phone number'),
@@ -314,22 +317,34 @@ class _Brand extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(
     children: [
+      // Medallion inside a quiet brand ring — the same layered-mark language
+      // as the check-tab hero.
       Container(
-        width: 84,
-        height: 84,
+        width: 100,
+        height: 100,
         decoration: BoxDecoration(
-          gradient: AppColors.brandGradient,
           shape: BoxShape.circle,
-          boxShadow: const [AppShadows.glow],
+          border: Border.all(color: AppColors.primaryLight, width: 3),
         ),
-        child: Icon(
-          role == null
-              ? Icons.favorite_rounded
-              : (role!.isFhw
-                    ? Icons.medical_services_rounded
-                    : Icons.family_restroom_rounded),
-          color: Colors.white,
-          size: 42,
+        child: Center(
+          child: Container(
+            width: 84,
+            height: 84,
+            decoration: BoxDecoration(
+              gradient: AppColors.brandGradient,
+              shape: BoxShape.circle,
+              boxShadow: const [AppShadows.glow],
+            ),
+            child: Icon(
+              role == null
+                  ? Icons.favorite_rounded
+                  : (role!.isFhw
+                        ? Icons.medical_services_rounded
+                        : Icons.family_restroom_rounded),
+              color: Colors.white,
+              size: 42,
+            ),
+          ),
         ),
       ),
       const SizedBox(height: Gap.lg),

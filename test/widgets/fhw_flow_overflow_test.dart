@@ -11,6 +11,7 @@
 library;
 
 import 'package:carebridge_ai/app/providers.dart';
+import 'package:carebridge_ai/data/local/visit_dao.dart' show VisitParticipant;
 import 'package:carebridge_ai/domain/engines/vulnerability_engine.dart';
 import 'package:carebridge_ai/domain/entities/core.dart';
 import 'package:carebridge_ai/domain/entities/visit.dart';
@@ -263,6 +264,38 @@ void main() {
             ),
             householdId: _household.id,
             assessedIds: [mother.id, child.id],
+            // The review screen reads the persisted roll when the queue does
+            // not hand it a snapshot; there is no database in a widget test,
+            // so pass the snapshots and exercise the populated layout.
+            participants: [
+              VisitParticipant(
+                visitId: 'v-1',
+                personId: mother.id,
+                wasPresent: true,
+                queueOrder: 0,
+                assessed: true,
+              ),
+              VisitParticipant(
+                visitId: 'v-1',
+                personId: child.id,
+                wasPresent: true,
+                queueOrder: 1,
+              ),
+              const VisitParticipant(
+                visitId: 'v-1',
+                personId: 'p-absent',
+                wasPresent: false,
+                absenceNote: 'With her uncle at the farm',
+                queueOrder: 2,
+              ),
+            ],
+            assessments: [
+              _assessment(
+                mother,
+                TriageLevel.priority,
+                'PREGNANCY WITH RISK FACTORS',
+              ),
+            ],
             notes:
                 'Husband away in Kumasi until harvest; grandmother is the '
                 'decision-maker and needs the referral explained in Dagbani.',

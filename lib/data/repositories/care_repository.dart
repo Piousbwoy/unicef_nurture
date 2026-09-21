@@ -270,6 +270,16 @@ class CareRepository {
     return PersonDao.inHousehold(householdId);
   }
 
+  Future<Map<String, List<Person>>> visibleHouseholdMembers(AppUser user) async {
+    await _require(user, Permission.viewAllHouseholds, 'search patient records');
+    final households = await visibleHouseholds(user);
+    final grouped = await PersonDao.groupedByHousehold();
+    return {
+      for (final household in households)
+        household.id: grouped[household.id] ?? const <Person>[],
+    };
+  }
+
   /// The multi-client queue: mother first, then newborns, then under-fives.
   ///
   /// This is the answer to "she arrived with a newborn twin and a three-year-old"
@@ -408,6 +418,38 @@ class CareRepository {
 
   Future<Visit?> resumableVisit(AppUser user) => VisitDao.openVisitFor(user.id);
 
+  /// Every session this worker has left open — the clinic queue. Scoped to the
+  /// clinical role, the same permission that lets them start one.
+  Future<List<Visit>> openClinicVisits(AppUser user) async {
+    await _require(
+      user,
+      Permission.runClinicalAssessment,
+      'view the clinic queue',
+      entityTable: 'visits',
+    );
+    return VisitDao.openVisitsFor(user.id);
+  }
+
+  /// The front-door pace for one clinic day (defaults to today). Derived from
+  /// existing rows — no extra is captured at the door.
+  Future<ClinicDayStats> clinicDayStats(AppUser user, {DateTime? day}) async {
+    await _require(
+      user,
+      Permission.runClinicalAssessment,
+      'view clinic day stats',
+      entityTable: 'visits',
+    );
+    return VisitDao.clinicDayStats(user.id, day ?? DateTime.now());
+  }
+
+  /// The open session for one household, if there is one. Intake joins this
+  /// ticket instead of starting a duplicate, while a different household is
+  /// still free to open its own.
+  Future<Visit?> openVisitForHousehold(AppUser user, String householdId) async {
+    await _requireHouseholdScope(user, householdId, 'resume a session here');
+    return VisitDao.openVisitForHousehold(user.id, householdId);
+  }
+
   Future<void> completeVisit(AppUser user, String visitId, {String? notes}) =>
       VisitDao.complete(visitId, notes: notes);
 
@@ -420,15 +462,6 @@ class CareRepository {
   Future<List<Visit>> visitHistory(AppUser user, String householdId) async {
     await _requireHouseholdScope(user, householdId, 'view visit history');
     return VisitDao.forHousehold(householdId);
-  }
-
-  /// Distinct households this worker has visited since [since] — the
-  /// dashboard's "households visited today" figure. Deliberately visit-based:
-  /// a household row edited without a visit (phone number fixed, member
-  /// added) must not inflate it.
-  Future<int> householdsVisitedSince(AppUser user, DateTime since) async {
-    await _require(user, Permission.runClinicalAssessment, 'review your day');
-    return VisitDao.countDistinctHouseholdsVisitedSince(user.id, since);
   }
 
   // ---------------------------------------------------------------------------

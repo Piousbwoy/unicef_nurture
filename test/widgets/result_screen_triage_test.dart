@@ -652,33 +652,35 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(
-            textScaler: TextScaler.linear(2),
-            disableAnimations: true,
-          ),
-          child: Scaffold(
-            body: SingleChildScrollView(
-              child: Column(
-                children: [
-                  ClinicalDecisionHeader(
-                    classification: 'URGENT REFERRAL',
-                    level: TriageLevel.urgent,
-                    missingCount: 1,
-                    rationale: 'Convulsions observed during this visit.',
-                    onNext: () {},
-                  ),
-                  const ActionWorklist(
-                    actions: [
-                      RecommendedAction(
-                        instruction: 'Arrange referral now',
-                        urgency: ReferralUrgency.immediate,
-                        rationale: 'Observed danger sign',
-                        protocolSource: 'Existing protocol',
-                      ),
-                    ],
-                  ),
-                ],
+        home: ProviderScope(
+          child: MediaQuery(
+            data: const MediaQueryData(
+              textScaler: TextScaler.linear(2),
+              disableAnimations: true,
+            ),
+            child: Scaffold(
+              body: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    ClinicalDecisionHeader(
+                      classification: 'URGENT REFERRAL',
+                      level: TriageLevel.urgent,
+                      missingCount: 1,
+                      rationale: 'Convulsions observed during this visit.',
+                      onNext: () {},
+                    ),
+                    const ActionWorklist(
+                      actions: [
+                        RecommendedAction(
+                          instruction: 'Arrange referral now',
+                          urgency: ReferralUrgency.immediate,
+                          rationale: 'Observed danger sign',
+                          protocolSource: 'Existing protocol',
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -710,8 +712,13 @@ void main() {
       );
       Future<void> render(List<RecommendedAction> actions) => tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: ActionWorklist(key: const ValueKey('work'), actions: actions),
+          home: ProviderScope(
+            child: Scaffold(
+              body: ActionWorklist(
+                key: const ValueKey('work'),
+                actions: actions,
+              ),
+            ),
           ),
         ),
       );

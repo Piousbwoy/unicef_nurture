@@ -101,12 +101,24 @@ class CaregiverCheckPolicy {
   final DateTime Function() clock;
   static const questionVersion = 1;
   static const newbornQuestions = [
-    CaregiverQuestion('feed', 'Is the baby not breastfeeding or feeding poorly?'),
-    CaregiverQuestion('fast', 'Is the baby breathing fast or making grunting sounds?'),
+    CaregiverQuestion(
+      'feed',
+      'Is the baby not breastfeeding or feeding poorly?',
+    ),
+    CaregiverQuestion(
+      'fast',
+      'Is the baby breathing fast or making grunting sounds?',
+    ),
     CaregiverQuestion('fits', 'Has the baby had any fits or convulsions?'),
-    CaregiverQuestion('sleepy', 'Is the baby unusually sleepy or hard to wake?'),
+    CaregiverQuestion(
+      'sleepy',
+      'Is the baby unusually sleepy or hard to wake?',
+    ),
     CaregiverQuestion('temp', 'Does the baby feel very hot or very cold?'),
-    CaregiverQuestion('yellow', 'Do the baby\u2019s hands or feet look yellow?'),
+    CaregiverQuestion(
+      'yellow',
+      'Do the baby\u2019s hands or feet look yellow?',
+    ),
     CaregiverQuestion('cord', 'Is the umbilical cord red, swollen, or smelly?'),
     CaregiverQuestion('vomit', 'Is the baby vomiting everything?'),
   ];
@@ -114,15 +126,30 @@ class CaregiverCheckPolicy {
     CaregiverQuestion('drink', 'Is the child unable to drink or breastfeed?'),
     CaregiverQuestion('vomit', 'Is the child vomiting everything?'),
     CaregiverQuestion('fits', 'Has the child had any fits or convulsions?'),
-    CaregiverQuestion('sleepy', 'Is the child unusually sleepy or hard to wake?'),
-    CaregiverQuestion('breath', 'Is the child breathing fast or struggling to breathe?'),
+    CaregiverQuestion(
+      'sleepy',
+      'Is the child unusually sleepy or hard to wake?',
+    ),
+    CaregiverQuestion(
+      'breath',
+      'Is the child breathing fast or struggling to breathe?',
+    ),
     CaregiverQuestion('blood', 'Is there blood in the child\u2019s stool?'),
-    CaregiverQuestion('thin', 'Is the child becoming very thin or are the feet swollen?'),
-    CaregiverQuestion('fever', 'Has the child had fever for more than three days?'),
+    CaregiverQuestion(
+      'thin',
+      'Is the child becoming very thin or are the feet swollen?',
+    ),
+    CaregiverQuestion(
+      'fever',
+      'Has the child had fever for more than three days?',
+    ),
   ];
   static const maternalQuestions = [
     CaregiverQuestion('bleed', 'Is there heavy bleeding?'),
-    CaregiverQuestion('head', 'Is there a severe headache with blurred vision?'),
+    CaregiverQuestion(
+      'head',
+      'Is there a severe headache with blurred vision?',
+    ),
     CaregiverQuestion('fever', 'Is there a high fever?'),
     CaregiverQuestion('pain', 'Is there severe belly pain?'),
     CaregiverQuestion('fits', 'Have there been any fits or convulsions?'),
@@ -216,7 +243,8 @@ class CaregiverCheckPolicy {
       'Offer a feed when calm. Refusing twice in a row is a danger sign.',
     'fast' || 'breath' =>
       'Watch the chest between the ribs while calm. If the skin pulls in, or breathing looks fast, go the same day.',
-    'fits' => 'Any fit, however short, means the facility now — note the time it started.',
+    'fits' =>
+      'Any fit, however short, means the facility now — note the time it started.',
     'sleepy' =>
       'Try to wake them gently for a feed. Hard to wake, or floppy, is a danger sign.',
     'temp' =>
@@ -227,7 +255,8 @@ class CaregiverCheckPolicy {
       'Look at the cord base each change. Redness spreading, pus, or smell needs the compound same day.',
     'vomit' =>
       'Give small sips often. If everything comes back up, the facility today.',
-    'blood' => 'Any blood in the stool needs to be shown to a health worker today.',
+    'blood' =>
+      'Any blood in the stool needs to be shown to a health worker today.',
     'thin' =>
       'Check the arms and feet this week. Swelling of both feet, or visible wasting, needs the clinic.',
     'fever' =>
@@ -236,7 +265,8 @@ class CaregiverCheckPolicy {
       'Change pads on a schedule and count. Soaking more than one pad an hour is heavy bleeding.',
     'head' =>
       'Ask her to describe it. Headache with blurred vision or swelling means come in now.',
-    'pain' => 'Watch where it sits and what makes it worse. Sudden severe pain needs the clinic.',
+    'pain' =>
+      'Watch where it sits and what makes it worse. Sudden severe pain needs the clinic.',
     'smell' =>
       'Any foul smell from the discharge means the compound today — do not wait.',
     'move' =>
@@ -259,21 +289,24 @@ class CaregiverCheckPolicy {
     return null;
   }
 
-  CaregiverQuestionSet? questionsFor(
-    Person person, {
-    List<String>? concerns,
-  }) {
+  /// Whole days between a recorded birth date and today, counted on calendar
+  /// days so a time-of-day in the stored date cannot shift the cohort.
+  int _daysOld(DateTime dob) {
+    final now = clock().toLocal();
+    final born = dob.toLocal();
+    return DateTime.utc(
+      now.year,
+      now.month,
+      now.day,
+    ).difference(DateTime.utc(born.year, born.month, born.day)).inDays;
+  }
+
+  CaregiverQuestionSet? questionsFor(Person person, {List<String>? concerns}) {
     final type = person.clientType;
     if (type == ClientType.newborn || type == ClientType.childUnderFive) {
       final dob = person.dateOfBirth;
       if (dob == null) return null;
-      final now = clock().toLocal();
-      final born = dob.toLocal();
-      final days = DateTime.utc(
-        now.year,
-        now.month,
-        now.day,
-      ).difference(DateTime.utc(born.year, born.month, born.day)).inDays;
+      final days = _daysOld(dob);
       final valid = ClientType.forChildAgeInDays(days);
       if (valid == null) return null;
       final group = valid == ClientType.newborn ? 'newborn' : 'child';
@@ -303,6 +336,52 @@ class CaregiverCheckPolicy {
         ),
       ),
       concerns ?? const [],
+    );
+  }
+
+  /// Why [questionsFor] refuses this person, or null when a check is possible.
+  ///
+  /// Kept beside [questionsFor] so the two can never disagree. The blocked
+  /// screen has to be specific: a missing birth date, a child who has aged
+  /// out and a record of the wrong kind each need a different fix, and a
+  /// generic "not supported" reads as a broken app.
+  ({String headline, String detail})? blockReasonFor(Person person) {
+    final type = person.clientType;
+    if (type == ClientType.pregnantWoman ||
+        type == ClientType.postpartumWoman) {
+      return null;
+    }
+    if (type == ClientType.newborn || type == ClientType.childUnderFive) {
+      final dob = person.dateOfBirth;
+      if (dob == null) {
+        return (
+          headline: 'A birth date is missing',
+          detail: person.ageYearsApprox == null
+              ? '${person.fullName} has no birth date and no age on the record, so the app cannot work out which questions fit.'
+              : 'Only an approximate age (about ${person.ageYearsApprox} years) is recorded for ${person.fullName}. This check needs a birth date.',
+        );
+      }
+      final days = _daysOld(dob);
+      if (days < 0) {
+        return (
+          headline: 'The birth date looks wrong',
+          detail:
+              "The birth date on ${person.fullName}'s record is in the future, so no age can be worked out.",
+        );
+      }
+      if (ClientType.forChildAgeInDays(days) == null) {
+        return (
+          headline: 'Past the under-five window',
+          detail:
+              '${person.fullName} is ${person.ageLabel} old. This check covers children under five, pregnancy, and the six weeks after birth.',
+        );
+      }
+      return null;
+    }
+    return (
+      headline: 'A different kind of record',
+      detail:
+          '${person.fullName} is recorded as "${type.label}". This check covers children under five, pregnancy, and the six weeks after birth.',
     );
   }
 
@@ -352,6 +431,30 @@ class CaregiverCheckPolicy {
     return "Eat regular meals and seek individual feeding advice if you need support. Follow any advice given by your clinician.";
   }
 
+  /// The danger signs answered YES to, in three or four words each. The alarm
+  /// has to name a sign in a line, where the full question would read like a
+  /// form field shouted back at her.
+  static const shortSigns = {
+    'feed': 'Not feeding well',
+    'fast': 'Fast breathing or grunting',
+    'fits': 'Fits or convulsions',
+    'sleepy': 'Hard to wake',
+    'temp': 'Very hot or very cold',
+    'yellow': 'Looking yellow',
+    'cord': 'Cord looks infected',
+    'vomit': 'Vomiting everything',
+    'drink': 'Unable to drink',
+    'breath': 'Struggling to breathe',
+    'blood': 'Blood in the stool',
+    'thin': 'Very thin or swollen feet',
+    'fever': 'Fever past three days',
+    'bleed': 'Heavy bleeding',
+    'head': 'Headache with blurred vision',
+    'pain': 'Severe belly pain',
+    'smell': 'Foul-smelling discharge',
+    'move': 'Baby moving less',
+  };
+
   /// The danger-sign labels the caregiver answered YES to, in question order.
   static List<String> signsFound(
     CaregiverQuestionSet set,
@@ -371,7 +474,7 @@ class CaregiverCheckPolicy {
     required Map<String, CaregiverAnswer> answers,
     required DateTime now,
   }) {
-    final first = person.fullName.split(" ").first;
+    final first = _displayName(person.fullName.split(" ").first);
     final yesSigns = signsFound(set, answers);
     final unsureSigns = [
       for (final q in set.questions)
@@ -408,7 +511,7 @@ class CaregiverCheckPolicy {
     required CaregiverQuestionSet set,
     required Map<String, CaregiverAnswer> answers,
   }) {
-    final first = person.fullName.split(" ").first;
+    final first = _displayName(person.fullName.split(" ").first);
     final yesSigns = signsFound(set, answers);
     final hasUnsure = answers.values.contains(CaregiverAnswer.unsure);
     final mother =
@@ -457,5 +560,20 @@ class CaregiverCheckPolicy {
       default:
         return "Please check again or contact your health worker.";
     }
+  }
+
+  /// Names arrive in whatever case the register holds — "cee" must read as
+  /// "Cee" in words spoken to the family.
+  static String _displayName(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return trimmed;
+    return trimmed
+        .split(RegExp(r'\s+'))
+        .map(
+          (word) => word.isEmpty
+              ? word
+              : '${word[0].toUpperCase()}${word.substring(1)}',
+        )
+        .join(' ');
   }
 }

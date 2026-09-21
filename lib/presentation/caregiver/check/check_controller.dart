@@ -46,6 +46,10 @@ class CaregiverCheckController extends ChangeNotifier {
   CaregiverDraft? draft;
   HomeCheck? report;
   CaregiverCheckStage stage = CaregiverCheckStage.loading;
+
+  /// Set with [stage] when a person falls outside the check's scope — the
+  /// blocked screen reads it instead of guessing at the cause.
+  ({String headline, String detail})? blockReason;
   CaregiverSaveState saveState = CaregiverSaveState.unsaved;
   String? notice;
   Future<void> _tail = Future.value();
@@ -55,10 +59,36 @@ class CaregiverCheckController extends ChangeNotifier {
   CaregiverCheckDecision get decision =>
       policy.decide(questions, draft?.answers ?? {});
 
+  /// The danger signs she has already said YES to, in the order the battery
+  /// asks them, in the short form an alarm can speak. The alarm names them so
+  /// the check reads as building a picture rather than springing a verdict.
+  List<String> get signsNoticed {
+    final set = questions;
+    final answers = draft?.answers;
+    if (set == null || answers == null) return const [];
+    return [
+      for (final q in set.questions)
+        if (answers[q.key] == CaregiverAnswer.yes)
+          CaregiverCheckPolicy.shortSigns[q.key] ?? q.label,
+    ];
+  }
+
+  /// A YES is enough to fix the verdict, so the questions left after it are
+  /// evidence for the nurse and not a delay — and they stay hers to skip.
+  bool get alarmRaised => decision == CaregiverCheckDecision.urgent;
+
+  /// Questions she has not answered yet.
+  int get remainingQuestions {
+    final set = questions;
+    final answers = draft?.answers;
+    if (set == null || answers == null) return 0;
+    return set.questions.where((q) => answers[q.key] == null).length;
+  }
+
   /// True while the worry screen has not been answered for a fresh session.
-  /// The concern picker is a presentation step inside the questions stage:
-  /// it must never delay a YES, because answering is guarded to the
-  /// questions stage and the picker sits before question 1 only.
+  /// The concern picker is a presentation step inside the questions stage: it
+  /// sits before question 1 and only while no answer exists, so the order can
+  /// never shuffle under an answered session.
   bool get needsConcerns =>
       stage == CaregiverCheckStage.questions &&
       draft != null &&
@@ -81,6 +111,7 @@ class CaregiverCheckController extends ChangeNotifier {
       person = fresh;
       questions = policy.questionsFor(person);
       if (questions == null) {
+        blockReason = policy.blockReasonFor(person);
         stage = CaregiverCheckStage.unsupported;
         _notify();
         return;
@@ -123,6 +154,7 @@ class CaregiverCheckController extends ChangeNotifier {
     if (!_live) return;
     questions = policy.questionsFor(person);
     if (questions == null) {
+      blockReason = policy.blockReasonFor(person);
       stage = CaregiverCheckStage.unsupported;
       _notify();
       return;
@@ -199,10 +231,13 @@ class CaregiverCheckController extends ChangeNotifier {
     if (!policy.compatible(draft!, person)) {
       notice = 'The age group changed. Start a new check.';
       stage = CaregiverCheckStage.loadFailed;
-    } else if (decision == CaregiverCheckDecision.urgent) {
+    } else if (decision == CaregiverCheckDecision.urgent &&
+        remainingQuestions == 0) {
       stage = CaregiverCheckStage.result;
       _persist(finalize: true);
     } else {
+      // Including a saved YES: she picks up where the draft stopped, with the
+      // alarm already up so the advice is one tap away.
       stage = CaregiverCheckStage.questions;
       _change(index: 0);
     }
@@ -293,8 +328,7 @@ class CaregiverCheckController extends ChangeNotifier {
       return;
     }
     final d = decision;
-    if (d == CaregiverCheckDecision.routine ||
-        d == CaregiverCheckDecision.contactToday) {
+    if (d != CaregiverCheckDecision.incomplete) {
       stage = CaregiverCheckStage.result;
       _persist(finalize: true);
     } else {
@@ -312,9 +346,29 @@ class CaregiverCheckController extends ChangeNotifier {
     }
     if (!_currentCohort()) return;
     _change(answers: {...draft!.answers, key: answer});
-    final urgent = decision == CaregiverCheckDecision.urgent;
-    if (urgent) stage = CaregiverCheckStage.result;
-    _persist(finalize: urgent);
+    // A YES used to end the check on the spot. It no longer does: the nurse at
+    // the facility asks which signs, for how long, and what has already been
+    // given, and those answers only exist if she finishes. Urgency is carried
+    // by [stopForVerdict] instead — one tap for as long as the alarm is up —
+    // so advice is never withheld behind questions she has already answered.
+    _persist();
+    _notify();
+  }
+
+  /// Leave the check for the advice with the answers on hand. Only offered
+  /// once a YES has fixed the verdict: stopping earlier could print a
+  /// conclusion the unanswered questions contradict.
+  void stopForVerdict() {
+    if (!_live ||
+        !alarmRaised ||
+        (stage != CaregiverCheckStage.questions &&
+            stage != CaregiverCheckStage.duration &&
+            stage != CaregiverCheckStage.context) ||
+        !_currentCohort()) {
+      return;
+    }
+    stage = CaregiverCheckStage.result;
+    _persist(finalize: true);
     _notify();
   }
 
@@ -338,13 +392,15 @@ class CaregiverCheckController extends ChangeNotifier {
     if (index + 1 < questions!.questions.length) {
       _change(index: index + 1);
       _persist();
-    } else if (decision == CaregiverCheckDecision.routine ||
-        decision == CaregiverCheckDecision.contactToday) {
-      // The battery is complete without urgency: ask how long, and what has
-      // been tried, before the verdict. A YES never reaches here — it jumps
-      // straight to the result the moment it is answered.
-      stage = CaregiverCheckStage.duration;
-      _persist();
+    } else {
+      final verdict = decision;
+      if (verdict != CaregiverCheckDecision.incomplete) {
+        // The battery is complete. How long this has been going on, and what
+        // the family already tried, are the nurse's next two questions — a
+        // danger sign needs those answers as much as a routine one does.
+        stage = CaregiverCheckStage.duration;
+        _persist();
+      }
     }
     _notify();
   }

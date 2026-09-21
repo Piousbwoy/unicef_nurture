@@ -1,13 +1,4 @@
-/// Follow-up check-in (Screen 75).
-///
-/// Records whether a referred family reached the facility, and if not, why.
-/// A "No" or "Partially" answer updates the referral status and re-flags the
-/// household on the priority list instead of letting it quietly disappear.
-///
-/// The screen opens with the closed loop: the verdict that issued the
-/// referral, any re-assessment since, and any new measurements — so the
-/// question "did they reach the facility?" is asked about a story the CHO
-/// can see, not a code they have to remember.
+/// Records a family's report, separately from staff-verified arrival.
 library;
 
 import 'package:flutter/material.dart';
@@ -17,12 +8,11 @@ import 'package:uuid/uuid.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
-import '../../data/local/household_dao.dart';
-import '../../data/local/visit_dao.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
 import '../../domain/enums.dart';
 import '../shared/ui.dart';
+import 'clinic_widgets.dart';
 
 class FollowUpCheckInScreen extends ConsumerStatefulWidget {
   const FollowUpCheckInScreen({super.key, required this.referral});
@@ -39,12 +29,9 @@ class _FollowUpCheckInScreenState extends ConsumerState<FollowUpCheckInScreen> {
   final Set<CareBarrier> _barriers = {};
   final _notes = TextEditingController();
   bool _busy = false;
+  bool _statusSaved = false;
+  BarrierReport? _pendingBarrier;
   String? _error;
-
-  /// The closed loop behind this referral: the assessment that issued it,
-  /// any re-assessment since, and the newest measurements on either side
-  /// of the referral date. Loaded once, read-only, best-effort — a missing
-  /// record quietly narrows the card instead of blocking the check-in.
   late final Future<_LoopContext> _loop;
 
   @override
@@ -61,228 +48,305 @@ class _FollowUpCheckInScreenState extends ConsumerState<FollowUpCheckInScreen> {
 
   Future<_LoopContext> _loadLoop() async {
     Assessment? origin;
-    try {
-      origin = await AssessmentDao.byId(widget.referral.assessmentId);
-    } catch (_) {}
     Assessment? reassessment;
-    try {
-      final latest = await AssessmentDao.latestForPerson(
-        widget.referral.personId,
-      );
-      if (latest != null &&
-          latest.id != widget.referral.assessmentId &&
-          latest.performedAt.isAfter(widget.referral.issuedAt)) {
-        reassessment = latest;
-      }
-    } catch (_) {}
     GrowthMeasurement? baseline;
     GrowthMeasurement? since;
     final user = ref.read(currentUserProvider);
     if (user != null) {
+      final repository = ref.read(careRepositoryProvider);
       try {
-        final series = await ref
-            .read(careRepositoryProvider)
-            .growthSeries(user, widget.referral.personId);
-        for (final m in series) {
-          if (m.takenAt.isAfter(widget.referral.issuedAt)) {
-            since = m;
-          } else {
-            baseline = m;
+        final history = await repository.assessmentHistory(
+          user,
+          widget.referral.personId,
+        );
+        for (final assessment in history) {
+          if (assessment.id == widget.referral.assessmentId) {
+            origin = assessment;
+          }
+          if (assessment.id != widget.referral.assessmentId &&
+              assessment.performedAt.isAfter(widget.referral.issuedAt) &&
+              (reassessment == null ||
+                  assessment.performedAt.isAfter(reassessment.performedAt))) {
+            reassessment = assessment;
           }
         }
       } catch (_) {
-        // No growth history this account may see; the loop card simply
-        // shows the verdicts without the numbers.
+        // Context is best-effort; missing history must not block a report.
+      }
+      try {
+        final series = await repository.growthSeries(
+          user,
+          widget.referral.personId,
+        );
+        for (final measurement in series) {
+          if (measurement.takenAt.isAfter(widget.referral.issuedAt)) {
+            if (since == null || measurement.takenAt.isAfter(since.takenAt)) {
+              since = measurement;
+            }
+          } else if (baseline == null ||
+              measurement.takenAt.isAfter(baseline.takenAt)) {
+            baseline = measurement;
+          }
+        }
+      } catch (_) {
+        // Only show measurements this account can read.
       }
     }
-    return _LoopContext(
-      origin: origin,
-      reassessment: reassessment,
-      baselineGrowth: baseline,
-      sinceGrowth: since,
-    );
+    return _LoopContext(origin, reassessment, baseline, since);
+  }
+
+  void _refresh() {
+    ref.invalidate(openReferralsProvider);
+    ref.invalidate(dayPlanProvider);
+    ref.invalidate(referralCompletionProvider);
+    final householdId = _pendingBarrier?.householdId;
+    if (householdId != null) {
+      ref.invalidate(barrierHistoryProvider(householdId));
+    }
   }
 
   Future<void> _save() async {
+    if (_busy || _outcome == null) return;
     final user = ref.read(currentUserProvider);
-    if (user == null || _outcome == null) return;
-
+    if (user == null) {
+      setState(() => _error = 'Sign in again before saving this follow-up.');
+      return;
+    }
+    final outcome = _outcome!;
     setState(() {
       _busy = true;
       _error = null;
     });
 
     try {
-      final status = _outcome!.status;
-      await ReferralDao.updateStatus(
-        referralId: widget.referral.id,
-        status: status,
-        outcomeNotes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
-      );
-
-      // If the family did not fully attend, capture the barriers so the next
-      // contact can address them and the household stays visible.
-      if (status.isFailure && _barriers.isNotEmpty) {
-        final person = await PersonDao.byId(widget.referral.personId);
-        final householdId = person?.householdId;
-        if (householdId != null) {
-          await BarrierDao.save(
-            BarrierReport(
-              id: const Uuid().v4(),
-              householdId: householdId,
-              referralId: widget.referral.id,
-              barriers: _barriers.toList(),
-              recordedBy: user.id,
-              recordedAt: DateTime.now(),
-              notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
-            ),
+      final repository = ref.read(careRepositoryProvider);
+      if (!_statusSaved) {
+        final reportNotes = [
+          'Self-reported, not facility-verified.',
+          'Outcome: ${outcome.label}',
+          if (_notes.text.trim().isNotEmpty) 'Notes: ${_notes.text.trim()}',
+        ].join('\n');
+        _pendingBarrier = null;
+        // Resolve the household before writing anything: never silently drop
+        // selected barriers when the patient record is unavailable.
+        if (outcome.collectBarriers && _barriers.isNotEmpty) {
+          final person = await repository.person(
+            user,
+            widget.referral.personId,
+          );
+          if (person == null) {
+            throw StateError(
+              'Patient record unavailable; barriers were not saved.',
+            );
+          }
+          _pendingBarrier = BarrierReport(
+            id: const Uuid().v4(),
+            householdId: person.householdId,
+            personId: person.id,
+            referralId: widget.referral.id,
+            barriers: _barriers.toList(),
+            recordedBy: user.id,
+            recordedAt: DateTime.now(),
+            notes: reportNotes,
           );
         }
+        await repository.updateReferralStatus(
+          user,
+          referralId: widget.referral.id,
+          status: outcome.status ?? widget.referral.status,
+          outcomeNotes: [
+            if (widget.referral.outcomeNotes?.trim().isNotEmpty ?? false)
+              widget.referral.outcomeNotes!,
+            reportNotes,
+          ].join('\n\n'),
+        );
+        _statusSaved = true;
+        if (mounted) _refresh();
       }
-
-      // Celebrate successful referral completion — the family reached care.
+      // These APIs are separate writes. Keep the report ID and form frozen
+      // after the first write so a retry does not duplicate the outcome.
+      if (_pendingBarrier != null) {
+        await repository.recordBarrier(user, _pendingBarrier!);
+      }
       if (!mounted) return;
-      if (status == ReferralStatus.arrived || status == ReferralStatus.treated) {
-        await _showCelebration(status);
-      }
-
+      _refresh();
+      setState(() => _busy = false);
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          backgroundColor: Colors.white,
+          scrollable: true,
+          title: Text(outcome.confirmationTitle),
+          content: Text(
+            'Saved locally. Self-reported, not facility-verified.\n\n'
+            '${outcome.confirmationDetail}',
+          ),
+          actions: [
+            TextButton(
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      );
       if (mounted) Navigator.of(context).pop(true);
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = 'Could not save follow-up: $e';
+        _error = _statusSaved
+            ? 'Follow-up saved locally, but barriers were not saved. '
+                  'Retry to save the barriers; your choices are kept.'
+            : 'Could not save follow-up. Your answers are kept. Please retry.';
       });
     }
   }
 
-  Future<void> _showCelebration(ReferralStatus status) async {
-    final message = status == ReferralStatus.treated
-        ? 'The family received treatment. This is what referrals are for.'
-        : 'The family reached the facility. The loop is closed.';
-
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => _CelebrationDialog(message: message),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Follow-up check-in')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(Gap.lg),
-          children: [
-            // The closed loop first: what this referral set out to do, and
-            // what has happened since — so the check-in reads as the end
-            // of a story, not the start of a form.
-            FutureBuilder<_LoopContext>(
-              future: _loop,
-              builder: (context, snapshot) {
-                final loop = snapshot.data;
-                if (loop == null) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: Gap.md),
-                    child: Center(
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2.2),
-                      ),
-                    ),
-                  );
-                }
-                return _ClosedLoopCard(referral: widget.referral, loop: loop);
-              },
-            ),
-            const SizedBox(height: Gap.lg),
-            SectionCard(
-              title: 'Did the family reach the facility?',
-              subtitle:
-                  '${widget.referral.referenceCode} · ${widget.referral.facilityName}',
-              icon: Icons.contact_phone_outlined,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (final o in _FollowUpOutcome.values)
-                    _OutcomeTile(
-                      outcome: o,
-                      selected: _outcome == o,
-                      onTap: () => setState(() => _outcome = o),
-                    ),
-                ],
-              ),
-            ),
-            if (_outcome != null && _outcome!.status.isFailure) ...[
-              const SizedBox(height: Gap.lg),
-              SectionCard(
-                title: 'What made it hard this time?',
+    final person = ref.watch(personProvider(widget.referral.personId));
+    final locked = _busy || _statusSaved;
+    return PopScope(
+      canPop: !_busy,
+      child: Scaffold(
+        backgroundColor: AppColors.surface,
+        appBar: AppBar(title: const Text('Record follow-up')),
+        body: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(Gap.md),
+            children: [
+              ClinicCard(
+                title: person.valueOrNull?.fullName ?? 'Referral follow-up',
                 subtitle:
-                    'Choose the barriers that apply. This re-flags the household '
-                    'on the priority list.',
-                icon: Icons.signpost_outlined,
+                    '${widget.referral.referenceCode} · ${widget.referral.facilityName}',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    for (final barrier in CareBarrier.values)
-                      _BarrierChip(
-                        barrier: barrier,
-                        selected: _barriers.contains(barrier),
-                        onTap: () {
-                          setState(() {
-                            if (_barriers.contains(barrier)) {
-                              _barriers.remove(barrier);
-                            } else {
-                              _barriers.add(barrier);
-                            }
-                          });
-                        },
+                    Text(widget.referral.reason, style: AppType.body),
+                    const SizedBox(height: Gap.sm),
+                    const ClinicStatusLine(
+                      text:
+                          'Record what the family reports. This does not verify '
+                          'arrival or treatment with the facility.',
+                      icon: Icons.info_outline_rounded,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: Gap.md),
+              FutureBuilder<_LoopContext>(
+                future: _loop,
+                builder: (context, snapshot) => snapshot.hasData
+                    ? _ReferralContextCard(
+                        referral: widget.referral,
+                        loop: snapshot.data!,
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              const SizedBox(height: Gap.md),
+              ClinicCard(
+                title: 'What did the family report?',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final outcome in _FollowUpOutcome.values)
+                      _ChoiceTile(
+                        label: outcome.label,
+                        selected: _outcome == outcome,
+                        onTap: locked
+                            ? null
+                            : () => setState(() => _outcome = outcome),
+                      ),
+                    if (_outcome == _FollowUpOutcome.unknown)
+                      const Text(
+                        'Status stays unchanged. Follow up again when '
+                        'the outcome is known; no travel or arrival is assumed.',
                       ),
                   ],
                 ),
               ),
-            ],
-            const SizedBox(height: Gap.lg),
-            SectionCard(
-              title: 'Notes',
-              icon: Icons.notes_outlined,
-              child: TextField(
-                controller: _notes,
-                maxLines: 3,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  hintText: 'Optional: who you spoke to, what they said',
+              if (_outcome?.collectBarriers ?? false) ...[
+                const SizedBox(height: Gap.md),
+                ClinicCard(
+                  title: 'What made care difficult?',
+                  subtitle:
+                      'Select any reported barriers to help plan the next contact.',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final barrier in CareBarrier.values)
+                        _ChoiceTile(
+                          label: barrier.label,
+                          selected: _barriers.contains(barrier),
+                          multiple: true,
+                          onTap: locked
+                              ? null
+                              : () => setState(() {
+                                  if (!_barriers.add(barrier)) {
+                                    _barriers.remove(barrier);
+                                  }
+                                }),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: Gap.md),
+              ClinicCard(
+                title: 'Notes',
+                child: TextField(
+                  controller: _notes,
+                  enabled: !locked,
+                  minLines: 3,
+                  maxLines: 6,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(
+                    hintText:
+                        'Optional: who you spoke to, what they said, next contact',
+                  ),
                 ),
               ),
-            ),
-            if (_error != null) ...[
+              if (_error != null) ...[
+                const SizedBox(height: Gap.md),
+                Semantics(
+                  liveRegion: true,
+                  child: ClinicStatusLine(
+                    text: _error!,
+                    icon: Icons.error_outline_rounded,
+                  ),
+                ),
+              ],
               const SizedBox(height: Gap.lg),
-              _ErrorBox(_error!),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(48, 48),
+                  padding: const EdgeInsets.all(Gap.md),
+                ),
+                onPressed: _busy || _outcome == null ? null : _save,
+                child: Text(
+                  _busy
+                      ? 'Saving…'
+                      : _error != null
+                      ? 'Retry save'
+                      : 'Save follow-up',
+                ),
+              ),
+              const SizedBox(height: Gap.sm),
+              TextButton(
+                style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                onPressed: _busy
+                    ? null
+                    : () => Navigator.of(context).pop(_statusSaved),
+                child: Text(
+                  _statusSaved ? 'Close (barriers not saved)' : 'Cancel',
+                ),
+              ),
             ],
-            const SizedBox(height: Gap.xl),
-            FilledButton(
-              onPressed: _busy || _outcome == null ? null : _save,
-              child: _busy
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text('Save follow-up'),
-            ),
-            const SizedBox(height: Gap.md),
-            TextButton(
-              onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            const SizedBox(height: Gap.xl),
-          ],
+          ),
         ),
       ),
     );
@@ -290,70 +354,102 @@ class _FollowUpCheckInScreenState extends ConsumerState<FollowUpCheckInScreen> {
 }
 
 enum _FollowUpOutcome {
-  yes('Yes — reached the facility', ReferralStatus.arrived),
-  partially(
-    'Partially — went but did not get treated',
-    ReferralStatus.didNotAttend,
+  arrived(
+    'Yes — reached the facility',
+    ReferralStatus.arrived,
+    'Arrival reported',
+    'Treatment has not been established. Follow up on care received.',
   ),
-  no('No — did not go', ReferralStatus.didNotAttend),
-  unknown('Don\'t know yet', ReferralStatus.travelling);
+  untreated(
+    'Reached the facility — not treated',
+    ReferralStatus.arrived,
+    'Arrival reported',
+    'No treatment reported. Follow up on barriers and care still needed.',
+  ),
+  treated(
+    'Treatment received — reported by family',
+    ReferralStatus.treated,
+    'Treatment reported',
+    'Treatment was reported by the family, not verified by facility staff.',
+  ),
+  no(
+    'No — did not go',
+    ReferralStatus.didNotAttend,
+    'Nonattendance reported',
+    'Plan another contact and address any reported barriers.',
+  ),
+  unknown(
+    "Don't know yet",
+    null,
+    'Follow-up recorded',
+    'Referral status unchanged. The outcome still needs follow-up.',
+  );
 
-  const _FollowUpOutcome(this.label, this.status);
+  const _FollowUpOutcome(
+    this.label,
+    this.status,
+    this.confirmationTitle,
+    this.confirmationDetail,
+  );
   final String label;
-  final ReferralStatus status;
+  final ReferralStatus? status;
+  final String confirmationTitle;
+  final String confirmationDetail;
+  bool get collectBarriers => this == untreated || this == no;
 }
 
-class _OutcomeTile extends StatelessWidget {
-  const _OutcomeTile({
-    required this.outcome,
+class _ChoiceTile extends StatelessWidget {
+  const _ChoiceTile({
+    required this.label,
     required this.selected,
-    required this.onTap,
+    this.onTap,
+    this.multiple = false,
   });
 
-  final _FollowUpOutcome outcome;
+  final String label;
   final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool multiple;
 
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: Gap.sm),
-    child: Material(
-      color: selected ? AppColors.primaryLight : AppColors.canvas,
-      borderRadius: BorderRadius.circular(Gap.radiusSm),
-      child: InkWell(
+    child: Semantics(
+      checked: selected,
+      inMutuallyExclusiveGroup: !multiple,
+      enabled: onTap != null,
+      child: Material(
+        color: selected ? AppColors.primaryLight : Colors.white,
         borderRadius: BorderRadius.circular(Gap.radiusSm),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(Gap.md),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(Gap.radiusSm),
-            border: Border.all(
-              color: selected ? AppColors.accent : AppColors.line,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(Gap.radiusSm),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 48),
+            padding: const EdgeInsets.all(Gap.md),
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: selected ? AppColors.primary : AppColors.line,
+              ),
+              borderRadius: BorderRadius.circular(Gap.radiusSm),
             ),
-          ),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: selected
-                    ? Icon(
-                        Icons.radio_button_checked_rounded,
-                        color: AppColors.accent,
-                      )
-                    : Icon(
-                        Icons.radio_button_unchecked_rounded,
-                        color: AppColors.inkFaint,
-                      ),
-              ),
-              const SizedBox(width: Gap.sm),
-              Expanded(
-                child: Text(
-                  outcome.label,
-                  style: AppType.label.copyWith(fontSize: 14.5),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  multiple
+                      ? (selected
+                            ? Icons.check_box
+                            : Icons.check_box_outline_blank)
+                      : (selected
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_unchecked),
+                  color: selected ? AppColors.primary : AppColors.inkMuted,
                 ),
-              ),
-            ],
+                const SizedBox(width: Gap.sm),
+                Expanded(child: Text(label, style: AppType.body)),
+              ],
+            ),
           ),
         ),
       ),
@@ -361,475 +457,85 @@ class _OutcomeTile extends StatelessWidget {
   );
 }
 
-class _BarrierChip extends StatelessWidget {
-  const _BarrierChip({
-    required this.barrier,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final CareBarrier barrier;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: Gap.xs),
-    child: FilterChip(
-      label: Text(barrier.label),
-      selected: selected,
-      onSelected: (_) => onTap(),
-      selectedColor: AppColors.primaryLight,
-      checkmarkColor: AppColors.accent,
-      side: BorderSide(color: selected ? AppColors.accent : AppColors.line),
-    ),
-  );
-}
-
-class _ErrorBox extends StatelessWidget {
-  const _ErrorBox(this.message);
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(Gap.md),
-    decoration: BoxDecoration(
-      color: AppColors.triageRedBg,
-      borderRadius: BorderRadius.circular(Gap.radiusSm),
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Icon(
-          Icons.error_outline_rounded,
-          size: 18,
-          color: AppColors.triageRed,
-        ),
-        const SizedBox(width: Gap.sm),
-        Expanded(
-          child: Text(
-            message,
-            style: const TextStyle(
-              color: AppColors.triageRed,
-              fontSize: 13.5,
-              height: 1.35,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-/// Everything the check-in needs to close the loop, loaded best-effort.
 class _LoopContext {
-  const _LoopContext({
-    required this.origin,
-    required this.reassessment,
-    required this.baselineGrowth,
-    required this.sinceGrowth,
-  });
-
-  /// The assessment that issued the referral.
+  const _LoopContext(
+    this.origin,
+    this.reassessment,
+    this.baselineGrowth,
+    this.sinceGrowth,
+  );
   final Assessment? origin;
-
-  /// A newer assessment for this person since the referral, if any.
   final Assessment? reassessment;
-
-  /// Last measurement on or before the referral date.
   final GrowthMeasurement? baselineGrowth;
-
-  /// Newest measurement after the referral date.
   final GrowthMeasurement? sinceGrowth;
 }
 
-/// The story this check-in closes: the verdict that issued the referral,
-/// any re-assessment since (improving or not), and the measurements on
-/// either side of the referral date. A referral nobody checks is a
-/// referral into the void — this card makes the loop visible.
-class _ClosedLoopCard extends StatelessWidget {
-  const _ClosedLoopCard({required this.referral, required this.loop});
-
+/// Read-only assessment and growth context, not evidence of referral completion.
+class _ReferralContextCard extends StatelessWidget {
+  const _ReferralContextCard({required this.referral, required this.loop});
   final Referral referral;
   final _LoopContext loop;
-
-  static String _day(DateTime d) => DateFormat('d MMM yyyy').format(d);
-
-  static Widget _pill(TriageLevel level) {
-    final c = triageColours(level);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: c.fg,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        level.name.toUpperCase(),
-        style: const TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.8,
-          color: Colors.white,
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     final origin = loop.origin;
-    final accent = origin == null
-        ? AppColors.primary
-        : triageColours(origin.effectiveTriage).fg;
     final reassessed = loop.reassessment;
-    final improving =
-        reassessed != null &&
-        origin != null &&
-        reassessed.effectiveTriage.index > origin.effectiveTriage.index;
-    final worsening =
-        reassessed != null &&
-        origin != null &&
-        reassessed.effectiveTriage.index < origin.effectiveTriage.index;
     final base = loop.baselineGrowth;
     final since = loop.sinceGrowth;
-    final hasWeight = base?.weightKg != null && since?.weightKg != null;
-    final hasMuac = base?.muacCm != null && since?.muacCm != null;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(Gap.radius),
-        border: Border.all(color: AppColors.line, width: Gap.hairline),
-        boxShadow: const [AppShadows.card],
-      ),
-      child: AccentEdge(
-        accent: accent,
-        width: 3,
-        borderRadius: BorderRadius.circular(Gap.radius),
-        child: Padding(
-          padding: const EdgeInsets.all(Gap.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceTint,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.loop_rounded,
-                      size: 20,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(width: Gap.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'THE LOOP THIS CHECK-IN CLOSES',
-                          style: TextStyle(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.8,
-                            color: AppColors.inkMuted,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Referral ${referral.referenceCode} · issued '
-                          '${_day(referral.issuedAt)}',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.ink,
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-
-              // ---- The verdict that started the loop
-              const SizedBox(height: Gap.sm),
-              Row(
-                children: [
-                  if (origin != null) _pill(origin.effectiveTriage),
-                  const SizedBox(width: Gap.sm),
-                  Expanded(
-                    child: Text(
-                      referral.reason,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.ink,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Sent to ${referral.facilityName} · '
-                '${referral.urgency.label.toLowerCase()}',
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  color: AppColors.inkMuted,
-                  height: 1.4,
-                ),
-              ),
-
-              // ---- Any re-assessment since
-              if (reassessed != null) ...[
-                const SizedBox(height: Gap.md),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(Gap.sm + 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.canvas,
-                    borderRadius: BorderRadius.circular(Gap.radiusSm),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.event_repeat_outlined,
-                            size: 15,
-                            color: AppColors.inkMuted,
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              'Re-assessed ${_day(reassessed.performedAt)}',
-                              style: const TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.inkMuted,
-                              ),
-                            ),
-                          ),
-                          _pill(reassessed.effectiveTriage),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        improving
-                            ? 'The verdict has eased since the referral — '
-                                  'check what the facility did and keep the '
-                                  'follow-up.'
-                            : worsening
-                            ? 'The verdict has worsened since the referral — '
-                                  'if the family has not been treated, this '
-                                  'visit is the safety net.'
-                            : 'The verdict is unchanged since the referral — '
-                                  'whether the family got treated is what '
-                                  'this check-in decides.',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.ink,
-                          height: 1.45,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-
-              // ---- Measurements on either side of the referral
-              if (hasWeight || hasMuac) ...[
-                const SizedBox(height: Gap.sm),
-                if (hasWeight)
-                  _deltaRow(
-                    'Weight',
-                    '${base!.weightKg!.toStringAsFixed(1)} kg',
-                    '${since!.weightKg!.toStringAsFixed(1)} kg',
-                    since.weightKg! - base.weightKg!,
-                    1,
-                    'kg',
-                  ),
-                if (hasMuac)
-                  _deltaRow(
-                    'MUAC',
-                    '${base!.muacCm!.toStringAsFixed(1)} cm',
-                    '${since!.muacCm!.toStringAsFixed(1)} cm',
-                    since.muacCm! - base.muacCm!,
-                    1,
-                    'cm',
-                  ),
-              ],
-
-              // ---- The honest quiet line
-              if (reassessed == null && !hasWeight && !hasMuac) ...[
-                const SizedBox(height: Gap.md),
-                const Text(
-                  'No re-assessment recorded since — what you learn today '
-                  'is the only follow-up this referral gets.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontStyle: FontStyle.italic,
-                    color: AppColors.inkMuted,
-                    height: 1.45,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// One before → after measurement line with the honest arithmetic.
-  Widget _deltaRow(
-    String label,
-    String before,
-    String after,
-    double delta,
-    int decimals,
-    String unit,
-  ) {
-    final gain = delta >= 0;
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Row(
+    return ClinicCard(
+      title: 'Referral context',
+      subtitle:
+          'Issued ${DateFormat('d MMM yyyy, HH:mm').format(referral.issuedAt.toLocal())}',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            width: 56,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-                color: AppColors.inkMuted,
+          if (origin != null) ...[
+            Text(
+              'Original assessment: ${origin.result.classification}',
+              style: AppType.body,
+            ),
+            Text(
+              origin.effectiveTriage.label,
+              style: AppType.label.copyWith(
+                color: triageColours(origin.effectiveTriage).fg,
               ),
             ),
-          ),
-          Expanded(
-            child: Text.rich(
-              TextSpan(
-                text: '$before  →  $after',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.ink,
-                ),
+          ],
+          if (reassessed != null) ...[
+            const SizedBox(height: Gap.sm),
+            Text(
+              'Re-assessed ${DateFormat('d MMM yyyy').format(reassessed.performedAt)}: '
+              '${reassessed.result.classification}',
+              style: AppType.body,
+            ),
+            Text(
+              reassessed.effectiveTriage.label,
+              style: AppType.label.copyWith(
+                color: triageColours(reassessed.effectiveTriage).fg,
               ),
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: (gain ? AppColors.triageGreen : AppColors.triageRed)
-                  .withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Text(
-              '${gain ? '+' : ''}${delta.toStringAsFixed(decimals)} $unit',
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w800,
-                color: gain ? AppColors.triageGreen : AppColors.triageRed,
-              ),
-            ),
-          ),
+          ] else
+            const Text('No re-assessment available since referral.'),
+          if (base?.weightKg != null && since?.weightKg != null)
+            _measurement('Weight', base!.weightKg!, since!.weightKg!, 'kg'),
+          if (base?.muacCm != null && since?.muacCm != null)
+            _measurement('MUAC', base!.muacCm!, since!.muacCm!, 'cm'),
         ],
       ),
     );
   }
-}
 
-/// A celebration dialog shown when a referral reaches a successful outcome.
-/// Features an animated checkmark and a message acknowledging the health
-/// worker's impact.
-class _CelebrationDialog extends StatefulWidget {
-  const _CelebrationDialog({required this.message});
-
-  final String message;
-
-  @override
-  State<_CelebrationDialog> createState() => _CelebrationDialogState();
-}
-
-class _CelebrationDialogState extends State<_CelebrationDialog>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    )..forward();
-    _scaleAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.elasticOut,
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      child: Padding(
-        padding: const EdgeInsets.all(Gap.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ScaleTransition(
-              scale: _scaleAnimation,
-              child: Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: AppColors.triageGreen.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.check_circle_rounded,
-                  size: 60,
-                  color: AppColors.triageGreen,
-                ),
-              ),
-            ),
-            const SizedBox(height: Gap.lg),
-            Text(
-              'Referral Complete',
-              style: AppType.headline.copyWith(fontSize: 20),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: Gap.sm),
-            Text(
-              widget.message,
-              style: AppType.body.copyWith(color: AppColors.inkMuted),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: Gap.xl),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Continue'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _measurement(
+    String label,
+    double before,
+    double after,
+    String unit,
+  ) => Padding(
+    padding: const EdgeInsets.only(top: Gap.sm),
+    child: Text(
+      '$label: ${before.toStringAsFixed(1)} → ${after.toStringAsFixed(1)} $unit '
+      '(change ${(after - before).toStringAsFixed(1)} $unit)',
+      style: AppType.body,
+    ),
+  );
 }

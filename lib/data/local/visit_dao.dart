@@ -160,6 +160,40 @@ abstract final class VisitDao {
     return rows.isEmpty ? null : Visit.fromMap(rows.first);
   }
 
+  /// Every session this worker has left open, newest first. The real CHPS
+  /// workload is a queue, not a single thread: several households received
+  /// today, a routine consult paused while an urgent arrival is pulled forward.
+  /// The schema already allows many `completed_at IS NULL` rows per worker —
+  /// only the single-resume UI used to pretend otherwise.
+  static Future<List<Visit>> openVisitsFor(String workerId) async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query(
+      Tables.visits,
+      where: 'conducted_by = ? AND completed_at IS NULL',
+      whereArgs: [workerId],
+      orderBy: 'started_at DESC',
+    );
+    return rows.map(Visit.fromMap).toList(growable: false);
+  }
+
+  /// The one open session for a specific household, if any. Intake uses this to
+  /// join an existing ticket instead of starting a duplicate for the same
+  /// family, while still allowing a second household its own open visit.
+  static Future<Visit?> openVisitForHousehold(
+    String workerId,
+    String householdId,
+  ) async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query(
+      Tables.visits,
+      where: 'conducted_by = ? AND household_id = ? AND completed_at IS NULL',
+      whereArgs: [workerId, householdId],
+      orderBy: 'started_at DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : Visit.fromMap(rows.first);
+  }
+
   static Future<List<Visit>> forHousehold(String householdId) async {
     final db = await AppDatabase.instance.database;
     final rows = await db.query(
@@ -188,20 +222,47 @@ abstract final class VisitDao {
     return rows.map(Visit.fromMap).toList(growable: false);
   }
 
-  /// Distinct households this worker has visited since [since]. The
-  /// dashboard's truthful "households visited today" count — a visit row is
-  /// proof of contact; an edited household row is not.
-  static Future<int> countDistinctHouseholdsVisitedSince(
+  /// The front-door pace for one clinic day. One pass over the day's visits
+  /// left-joined to their assessments: received count, still-open count, and
+  /// the mean minutes from receiving a session to its first saved assessment.
+  static Future<ClinicDayStats> clinicDayStats(
     String workerId,
-    DateTime since,
+    DateTime day,
   ) async {
     final db = await AppDatabase.instance.database;
+    final start = DateTime(day.year, day.month, day.day).toIso8601String();
+    final end = DateTime(
+      day.year,
+      day.month,
+      day.day,
+    ).add(const Duration(days: 1)).toIso8601String();
     final rows = await db.rawQuery(
-      'SELECT COUNT(DISTINCT household_id) AS c FROM ${Tables.visits} '
-      'WHERE conducted_by = ? AND started_at >= ?',
-      [workerId, since.toIso8601String()],
+      'SELECT v.started_at AS started_at, v.completed_at AS completed_at, '
+      'MIN(a.performed_at) AS first_assessed_at '
+      'FROM ${Tables.visits} v '
+      'LEFT JOIN ${Tables.assessments} a ON a.visit_id = v.id '
+      'WHERE v.conducted_by = ? AND v.started_at >= ? AND v.started_at < ? '
+      'GROUP BY v.id',
+      [workerId, start, end],
     );
-    return (rows.first['c'] as num).toInt();
+    var open = 0;
+    var assessed = 0;
+    var totalMinutes = 0;
+    for (final row in rows) {
+      if (row['completed_at'] == null) open++;
+      final first = row['first_assessed_at'] as String?;
+      if (first != null) {
+        assessed++;
+        totalMinutes += DateTime.parse(
+          first,
+        ).difference(DateTime.parse(row['started_at'] as String)).inMinutes;
+      }
+    }
+    return ClinicDayStats(
+      received: rows.length,
+      openNow: open,
+      avgMinutesToFirstAssessment: assessed == 0 ? null : totalMinutes / assessed,
+    );
   }
 
   static Future<void> complete(String visitId, {String? notes}) async {

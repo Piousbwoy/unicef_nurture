@@ -1,23 +1,28 @@
-/// The referrals the worker has issued and has not yet seen completed.
-///
-/// Three lanes, in the order that maps onto the worker's afternoon:
-///
-/// 1. **Urgent and unconfirmed** — somebody was told to go to a facility today,
-///    and nobody knows whether they did. Nothing else outranks this.
-/// 2. **Open (not urgent)** — the routine referrals still in flight.
-/// 3. **Recently closed** — last thirty days of completions, so the worker
-///    can see their own throughput without leaving the screen.
+/// Referral follow-up: family reports and staff confirmation are distinct actions.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../domain/entities/visit.dart';
 import '../../domain/enums.dart';
 import '../shared/ui.dart';
+import '../visit/sbar_card.dart';
+import 'clinic_widgets.dart';
+import 'community_support_screen.dart';
+import 'follow_up_check_in_screen.dart';
 import 'household_screen.dart';
+import 'pending_followups_screen.dart';
+
+void _refreshReferrals(WidgetRef ref) {
+  ref.invalidate(openReferralsProvider);
+  ref.invalidate(dayPlanProvider);
+  ref.invalidate(referralCompletionProvider);
+}
 
 class ReferralsTab extends ConsumerWidget {
   const ReferralsTab({super.key});
@@ -26,327 +31,591 @@ class ReferralsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
     if (user == null) return const SizedBox.shrink();
-
     final open = ref.watch(openReferralsProvider);
     final completion = ref.watch(referralCompletionProvider);
 
-    return RefreshIndicator(
-      onRefresh: () async {
-        ref.invalidate(openReferralsProvider);
-        ref.invalidate(referralCompletionProvider);
-      },
-      child: ListView(
-        padding: const EdgeInsets.all(Gap.lg),
-        children: [
-          completion.when(
-            loading: () => const SizedBox.shrink(),
-            error: (e, _) => const SizedBox.shrink(),
-            data: (c) => _CompletionCard(issued: c.issued, arrived: c.arrived, rate: c.rate),
-          ),
-          const SizedBox(height: Gap.lg),
-          open.when(
-            loading: () => const Center(
-              child: Padding(
-                padding: EdgeInsets.all(Gap.xl),
-                child: CircularProgressIndicator(),
+    return ColoredBox(
+      color: AppColors.surface,
+      child: RefreshIndicator(
+        onRefresh: () async {
+          _refreshReferrals(ref);
+          await ref.read(openReferralsProvider.future);
+        },
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(Gap.md),
+          children: [
+            const LuxeHeroHeader(
+              eyebrow: 'Follow-up desk',
+              title: 'Referral follow-up',
+              body:
+                  'Record what happened after referral. Arrival is not '
+                  'treatment.',
+              icon: Icons.fact_check_outlined,
+            ),
+            const SizedBox(height: Gap.lg),
+            completion.when(
+              loading: () => const SizedBox.shrink(),
+              error: (_, _) => const ClinicStatusLine(
+                text: 'Referral summary unavailable. Pull down to retry.',
+                icon: Icons.info_outline_rounded,
+              ),
+              data: (c) => ClinicCard(
+                title: 'Arrival records · last 90 days',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      '${c.arrived} of ${c.issued} referrals recorded as arrived or treated',
+                      style: AppType.body,
+                    ),
+                    const SizedBox(height: Gap.sm),
+                    Text(
+                      '${(c.rate * 100).round()}% · Includes family reports. '
+                      'Not a measure of verified treatment.',
+                      style: AppType.caption,
+                    ),
+                  ],
+                ),
               ),
             ),
-            error: (e, _) => ErrorView(error: e),
-            data: (list) {
-              if (list.isEmpty) {
-                return SectionCard(
-                  title: 'No open referrals',
-                  subtitle:
-                      'When you issue a referral from an assessment it will '
-                      'appear here, with the code, the urgency and the facility.',
-                  icon: Icons.local_hospital_outlined,
-                  child: const SizedBox.shrink(),
+            const SizedBox(height: Gap.md),
+            if (user.can(Permission.confirmReferralArrival)) ...[
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  minimumSize: const Size(48, 48),
+                  padding: const EdgeInsets.all(Gap.md),
+                ),
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (_) => const _ConfirmArrivalDialog(),
+                ),
+                child: const Text('Confirm code · verified staff action'),
+              ),
+              const SizedBox(height: Gap.md),
+            ],
+            open.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, _) => ErrorView(
+                error: error,
+                onRetry: () => _refreshReferrals(ref),
+              ),
+              data: (list) {
+                if (list.isEmpty) {
+                  return const ClinicCard(
+                    title: 'No pending arrival records',
+                    child: Text(
+                      'No referrals are currently recorded as issued or travelling. '
+                      'This does not mean all patients received treatment.',
+                    ),
+                  );
+                }
+                final urgent =
+                    list
+                        .where(
+                          (r) =>
+                              r.urgency == ReferralUrgency.immediate ||
+                              r.urgency == ReferralUrgency.sameDay,
+                        )
+                        .toList()
+                      ..sort((a, b) => a.issuedAt.compareTo(b.issuedAt));
+                final routine =
+                    list
+                        .where(
+                          (r) =>
+                              r.urgency != ReferralUrgency.immediate &&
+                              r.urgency != ReferralUrgency.sameDay,
+                        )
+                        .toList()
+                      ..sort((a, b) => a.issuedAt.compareTo(b.issuedAt));
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (urgent.isNotEmpty) ...[
+                      _LaneHeader(
+                        title: 'Urgent follow-up',
+                        count: urgent.length,
+                        subtitle:
+                            'Immediate and same-day referrals, oldest first.',
+                      ),
+                      for (final referral in urgent)
+                        _ReferralTile(referral: referral),
+                    ],
+                    if (routine.isNotEmpty) ...[
+                      _LaneHeader(
+                        title: 'Other pending arrivals',
+                        count: routine.length,
+                        subtitle: 'Check arrival and ask about care received.',
+                      ),
+                      for (final referral in routine)
+                        _ReferralTile(referral: referral),
+                    ],
+                  ],
                 );
-              }
-              final urgent = list
-                  .where(
-                    (r) =>
-                        r.urgency == ReferralUrgency.immediate ||
-                        r.urgency == ReferralUrgency.sameDay,
-                  )
-                  .toList(growable: false);
-              final routine = list
-                  .where(
-                    (r) =>
-                        r.urgency != ReferralUrgency.immediate &&
-                        r.urgency != ReferralUrgency.sameDay,
-                  )
-                  .toList(growable: false);
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (urgent.isNotEmpty) ...[
-                    SectionCard(
-                      title: 'Urgent — confirm they arrived',
-                      subtitle:
-                          'Sent immediately or the same day. Every unconfirmed hour is risk.',
-                      icon: Icons.crisis_alert_rounded,
-                      accent: AppColors.triageRed,
-                      child: Column(
-                        children: [
-                          for (final r in urgent) _ReferralTile(referral: r),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: Gap.lg),
-                  ],
-                  if (routine.isNotEmpty) ...[
-                    SectionCard(
-                      title: 'Other open referrals',
-                      subtitle:
-                          'Referred for further care. Confirm when the family returns or calls.',
-                      icon: Icons.local_hospital_outlined,
-                      child: Column(
-                        children: [
-                          for (final r in routine) _ReferralTile(referral: r),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: Gap.lg),
-                  ],
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: Gap.xxl),
-        ],
+              },
+            ),
+            const SizedBox(height: Gap.md),
+            TextButton(
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const PendingFollowUpsScreen(),
+                ),
+              ),
+              child: const Text('Open pending follow-ups'),
+            ),
+            const SizedBox(height: Gap.lg),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _CompletionCard extends StatelessWidget {
-  const _CompletionCard({
-    required this.issued,
-    required this.arrived,
-    required this.rate,
+class _LaneHeader extends StatelessWidget {
+  const _LaneHeader({
+    required this.title,
+    required this.count,
+    required this.subtitle,
   });
-
-  final int issued;
-  final int arrived;
-  final double rate;
+  final String title;
+  final int count;
+  final String subtitle;
 
   @override
-  Widget build(BuildContext context) {
-    final colour = rate >= 0.7
-        ? AppColors.triageGreen
-        : rate >= 0.4
-        ? AppColors.triageAmber
-        : AppColors.triageRed;
-    return SectionCard(
-      title: 'Referral completion',
-      subtitle:
-          'Of the referrals you have issued in the last 90 days, how many '
-          'have been confirmed as arrived at the facility.',
-      icon: Icons.analytics_rounded,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: colour.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(Gap.radiusSm),
-                ),
-                child: Text(
-                  '${(rate * 100).round()}%',
-                  style: TextStyle(
-                    color: colour,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              const SizedBox(width: Gap.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '$arrived of $issued arrived',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      rate >= 0.7
-                          ? 'Strong follow-through.'
-                          : rate >= 0.4
-                          ? 'Some families are not making it. Look at the '
-                                'barriers section for the commonest reasons.'
-                          : 'A large share are not arriving. The day plan '
-                                'should favour these families.',
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        color: AppColors.inkMuted,
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: Gap.md),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: rate.clamp(0, 1),
-              minHeight: 8,
-              backgroundColor: AppColors.canvas,
-              valueColor: AlwaysStoppedAnimation(colour),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: Gap.md),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('$title ($count)', style: AppType.title.copyWith(fontSize: 17)),
+        const SizedBox(height: Gap.xs),
+        Text(subtitle, style: AppType.caption),
+      ],
+    ),
+  );
 }
 
 class _ReferralTile extends ConsumerWidget {
   const _ReferralTile({required this.referral});
   final Referral referral;
 
+  String get _arrivalState {
+    if (referral.status == ReferralStatus.arrived ||
+        referral.status == ReferralStatus.treated) {
+      return referral.arrivalConfirmedBy != null
+          ? 'Arrival confirmed by staff. Treatment is a separate outcome.'
+          : 'Arrival reported — not facility-verified.';
+    }
+    if (referral.status == ReferralStatus.travelling) {
+      return 'Arrival pending — previously reported travelling. Check the current outcome.';
+    }
+    if (referral.status == ReferralStatus.issued) {
+      return 'Arrival pending — no arrival recorded. Follow-up needed.';
+    }
+    return 'Arrival not established · ${referral.status.label}';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final person = ref.watch(personProvider(referral.personId));
-    final household = person.maybeWhen(
-      data: (p) => p?.householdId,
-      orElse: () => null,
-    );
-
-    final urgent = referral.urgency == ReferralUrgency.immediate ||
-        referral.urgency == ReferralUrgency.sameDay;
-    final overdue = referral.status != ReferralStatus.arrived &&
-        referral.hoursOpen > (urgent ? 12 : 72);
-
+    final patient = person.valueOrNull;
+    final phone = patient?.phone;
+    final urgencyColor = switch (referral.urgency) {
+      ReferralUrgency.immediate => AppColors.triageRed,
+      ReferralUrgency.sameDay => AppColors.triageAmber,
+      _ => AppColors.inkMuted,
+    };
     return Padding(
-      padding: const EdgeInsets.only(bottom: Gap.sm),
-      child: Material(
-        color: urgent ? AppColors.triageRedBg : AppColors.canvas,
-        borderRadius: BorderRadius.circular(Gap.radiusSm),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(Gap.radiusSm),
-          onTap: household == null
-              ? null
-              : () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => HouseholdScreen(householdId: household),
-                  ),
+      padding: const EdgeInsets.only(bottom: Gap.md),
+      child: ClinicCard(
+        title:
+            patient?.fullName ??
+            (person.isLoading
+                ? 'Loading patient…'
+                : 'Patient name unavailable'),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (person.hasError)
+              TextButton(
+                style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                onPressed: () =>
+                    ref.invalidate(personProvider(referral.personId)),
+                child: const Text('Retry patient details'),
+              ),
+            Text(referral.facilityName, style: AppType.label),
+            const SizedBox(height: Gap.sm),
+            Text(referral.reason, style: AppType.body),
+            const SizedBox(height: Gap.sm),
+            Text(
+              referral.urgency.label,
+              style: AppType.label.copyWith(color: urgencyColor),
+            ),
+            const SizedBox(height: Gap.sm),
+            Text(
+              'Issued ${DateFormat('d MMM yyyy, HH:mm').format(referral.issuedAt.toLocal())}',
+              style: AppType.caption,
+            ),
+            const SizedBox(height: Gap.md),
+            if (referral.needsEscalation)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Gap.sm),
+                child: ClinicStatusLine(
+                  text:
+                      'Urgent referral open over 48 hours with no confirmed '
+                      'arrival — trace now.',
+                  icon: Icons.crisis_alert_rounded,
                 ),
-          child: Padding(
-            padding: const EdgeInsets.all(Gap.md),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              ),
+            _StatusTimeline(referral: referral),
+            const SizedBox(height: Gap.sm),
+            ClinicStatusLine(text: _arrivalState, icon: Icons.schedule_rounded),
+            const SizedBox(height: Gap.md),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(48, 48),
+                padding: const EdgeInsets.all(Gap.md),
+              ),
+              onPressed: () => Navigator.of(context).push<bool>(
+                MaterialPageRoute(
+                  builder: (_) => FollowUpCheckInScreen(referral: referral),
+                ),
+              ),
+              child: const Text('Record follow-up'),
+            ),
+            const SizedBox(height: Gap.sm),
+            if (phone != null && phone.trim().isNotEmpty)
+              _CallButton(number: phone)
+            else
+              const Text('No family phone number on record.'),
+            const SizedBox(height: Gap.sm),
+            const Text(
+              'Calling requires telephone service and cellular signal. '
+              'It does not work offline without signal. Opening the dialler '
+              'does not change the referral status.',
+            ),
+            const SizedBox(height: Gap.sm),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              minTileHeight: 48,
+              title: const Text('Record details and support'),
               children: [
-                Row(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: Gap.sm,
-                        vertical: Gap.xs,
+                    SelectableText('Referral code: ${referral.referenceCode}'),
+                    if (referral.clinicalSummary?.isNotEmpty ?? false) ...[
+                      const SizedBox(height: Gap.sm),
+                      Text(referral.clinicalSummary!),
+                    ],
+                    if (referral.outcomeNotes?.isNotEmpty ?? false) ...[
+                      const SizedBox(height: Gap.sm),
+                      Text('Recorded notes\n${referral.outcomeNotes!}'),
+                    ],
+                    const SizedBox(height: Gap.sm),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(48, 48),
                       ),
-                      decoration: BoxDecoration(
-                        color: urgent
-                            ? AppColors.triageRed
-                            : AppColors.primary,
-                        borderRadius: BorderRadius.circular(6),
+                      onPressed: () => showSbarSheet(
+                        context,
+                        SbarCard.fromReferral(referral, patient),
                       ),
-                      child: Text(
-                        referral.referenceCode,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12.5,
-                          letterSpacing: 1,
-                        ),
-                      ),
+                      child: const Text('Handover note (SBAR)'),
                     ),
-                    const SizedBox(width: Gap.sm),
-                    Expanded(
-                      child: Text(
-                        person.valueOrNull?.fullName ?? '…',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14.5,
-                        ),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(48, 48),
                       ),
+                      onPressed: patient == null
+                          ? null
+                          : () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => HouseholdScreen(
+                                  householdId: patient.householdId,
+                                ),
+                              ),
+                            ),
+                      child: const Text('Open household record'),
                     ),
-                    if (overdue)
-                      const Icon(
-                        Icons.schedule_rounded,
-                        size: 16,
-                        color: AppColors.triageRed,
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(48, 48),
                       ),
-                  ],
-                ),
-                const SizedBox(height: Gap.xs),
-                Text(
-                  referral.reason,
-                  style: const TextStyle(fontSize: 13.5, height: 1.35),
-                ),
-                const SizedBox(height: Gap.xs),
-                Wrap(
-                  spacing: Gap.sm,
-                  runSpacing: Gap.xs,
-                  children: [
-                    _MetaChip(
-                      icon: Icons.local_hospital_rounded,
-                      label: referral.facilityName,
-                    ),
-                    _MetaChip(
-                      icon: Icons.timer_rounded,
-                      label:
-                          '${referral.urgency.label} · open ${referral.hoursOpen}h',
-                      colour: urgent
-                          ? AppColors.triageRed
-                          : AppColors.inkMuted,
+                      onPressed: () async {
+                        final changed = await Navigator.of(context).push<bool>(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                CommunitySupportScreen(referral: referral),
+                          ),
+                        );
+                        if (changed == true && context.mounted) {
+                          _refreshReferrals(ref);
+                        }
+                      },
+                      child: const Text('Loop in support'),
                     ),
                   ],
                 ),
               ],
             ),
-          ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _MetaChip extends StatelessWidget {
-  const _MetaChip({required this.icon, required this.label, this.colour});
-  final IconData icon;
-  final String label;
-  final Color? colour;
+/// Launches the dialler only; never records contact, travel or arrival.
+class _CallButton extends StatelessWidget {
+  const _CallButton({required this.number});
+  final String number;
+
+  Future<void> _call(BuildContext context) async {
+    final clean = number.replaceAll(RegExp(r'[^0-9+]'), '');
+    try {
+      if (clean.isNotEmpty &&
+          await launchUrl(
+            Uri(scheme: 'tel', path: clean),
+            mode: LaunchMode.externalApplication,
+          )) {
+        return;
+      }
+    } catch (_) {
+      // The same actionable feedback covers unavailable diallers and errors.
+    }
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not open the dialler. Dial $number directly when telephone service is available.',
+          ),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton(
+    style: OutlinedButton.styleFrom(
+      foregroundColor: AppColors.primary,
+      minimumSize: const Size(48, 48),
+      padding: const EdgeInsets.all(Gap.md),
+    ),
+    onPressed: () => _call(context),
+    child: const Text('Call family'),
+  );
+}
+
+/// The referral's journey as a four-node track: issued → travelling →
+/// arrived → treated. Family reports move a referral along it; only the
+/// staff code confirmation marks arrival as facility-verified. Off-ramps
+/// (did not attend, declined, cancelled) render as a plain honest line
+/// instead of a track that implies the loop can still complete.
+class _StatusTimeline extends StatelessWidget {
+  const _StatusTimeline({required this.referral});
+
+  final Referral referral;
+
+  static const _nodes = ['Issued', 'Travelling', 'Arrived', 'Treated'];
 
   @override
   Widget build(BuildContext context) {
-    final c = colour ?? AppColors.inkMuted;
+    if (referral.status.isFailure || referral.status == ReferralStatus.cancelled) {
+      return ClinicStatusLine(
+        text:
+            '${referral.status.label} — the arrival loop did not complete.',
+        icon: Icons.error_outline_rounded,
+      );
+    }
+    final reached = switch (referral.status) {
+      ReferralStatus.issued => 0,
+      ReferralStatus.travelling => 1,
+      ReferralStatus.arrived => 2,
+      ReferralStatus.treated => 3,
+      _ => 0,
+    };
+    String? stamp(int i) {
+      final at = i == 0
+          ? referral.issuedAt
+          : (i <= reached ? referral.statusUpdatedAt : null);
+      return at == null ? null : DateFormat('d MMM, HH:mm').format(at.toLocal());
+    }
+
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 13, color: c),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11.5,
-            color: c,
-            fontWeight: FontWeight.w600,
+        for (var i = 0; i < _nodes.length; i++) ...[
+          if (i > 0)
+            Expanded(
+              flex: 1,
+              child: Container(
+                height: 2,
+                color: i <= reached ? AppColors.primary : AppColors.line,
+              ),
+            ),
+          Expanded(
+            flex: 3,
+            child: Column(
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: i < reached
+                        ? AppColors.primary
+                        : (i == reached ? AppColors.canvas : AppColors.line),
+                    border: Border.all(
+                      color: i <= reached ? AppColors.primary : AppColors.line,
+                      width: i == reached ? 3 : 1,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                // FittedBox keeps the track intact at 320px / 200% text:
+                // labels shrink rather than overflow.
+                FittedBox(
+                  child: Text(
+                    _nodes[i],
+                    style: AppType.label.copyWith(
+                      fontSize: 11,
+                      color: i <= reached ? AppColors.ink : AppColors.inkFaint,
+                    ),
+                  ),
+                ),
+                FittedBox(
+                  child: Text(
+                    stamp(i) ?? ' ',
+                    style: AppType.caption.copyWith(fontSize: 10),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
+}
+
+class _ConfirmArrivalDialog extends ConsumerStatefulWidget {
+  const _ConfirmArrivalDialog();
+  @override
+  ConsumerState<_ConfirmArrivalDialog> createState() =>
+      _ConfirmArrivalDialogState();
+}
+
+class _ConfirmArrivalDialogState extends ConsumerState<_ConfirmArrivalDialog> {
+  final _code = TextEditingController();
+  bool _verified = false;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  Future<void> _confirm() async {
+    final user = ref.read(currentUserProvider);
+    if (_busy || !_verified || user == null) return;
+    if (_code.text.trim().isEmpty) {
+      setState(() => _error = 'Enter the referral code.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final referral = await ref
+          .read(careRepositoryProvider)
+          .confirmArrival(user, _code.text.trim());
+      if (!mounted) return;
+      if (referral == null) {
+        setState(() {
+          _busy = false;
+          _error = 'Code not found. Check the code and retry.';
+        });
+        return;
+      }
+      _refreshReferrals(ref);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Staff-confirmed arrival saved locally. This does not confirm treatment.',
+          ),
+        ),
+      );
+      setState(() => _busy = false);
+      Navigator.of(context).pop();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = 'Could not save confirmation. Check and retry.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+    canPop: !_busy,
+    child: AlertDialog(
+      backgroundColor: Colors.white,
+      scrollable: true,
+      title: const Text('Confirm arrival code'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Verified staff action only. For a family report, use Record follow-up. '
+            'Arrival confirmation does not confirm treatment.',
+          ),
+          const SizedBox(height: Gap.md),
+          TextField(
+            controller: _code,
+            enabled: !_busy,
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(labelText: 'Referral code'),
+          ),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: const Text(
+              'I have verified arrival with facility staff or in person.',
+            ),
+            value: _verified,
+            onChanged: _busy
+                ? null
+                : (value) => setState(() => _verified = value ?? false),
+          ),
+          if (_error != null) Semantics(liveRegion: true, child: Text(_error!)),
+        ],
+      ),
+      actions: [
+        TextButton(
+          style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(48, 48),
+          ),
+          onPressed: _busy || !_verified ? null : _confirm,
+          child: Text(_busy ? 'Saving…' : 'Confirm arrival'),
+        ),
+      ],
+    ),
+  );
 }

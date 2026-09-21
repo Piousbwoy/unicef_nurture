@@ -1,3 +1,10 @@
+/// The language choice is made from the words themselves: every card shows
+/// what that language can actually say for this message, and one press both
+/// picks and plays it. These tests hold that contract — no confirm step, no
+/// Cancel-only escape, no disabled control — plus the stale-result guards
+/// around the audio buttons that open it.
+library;
+
 import 'dart:async';
 
 import 'package:carebridge_ai/app/providers.dart';
@@ -9,6 +16,7 @@ import 'package:carebridge_ai/presentation/caregiver/help/caregiver_voice.dart';
 import 'package:carebridge_ai/presentation/shared/audio_button.dart';
 import 'package:carebridge_ai/presentation/shared/speech_language_sheet.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -51,7 +59,8 @@ Widget _pickerApp(
   Builder(
     builder: (context) => Center(
       child: TextButton(
-        onPressed: () async => onResult(await chooseSpeechLanguage(context, speech)),
+        onPressed: () async =>
+            onResult(await chooseSpeechLanguage(context, speech)),
         child: const Text('Open picker'),
       ),
     ),
@@ -65,7 +74,43 @@ Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
   await tester.pumpAndSettle();
 }
 
-Finder _choice(String language) => find.byKey(ValueKey('speech-language-$language'));
+Finder _choice(String language) =>
+    find.byKey(ValueKey('speech-language-$language'));
+
+SpeechLanguageTile _tile(WidgetTester tester, String language) =>
+    tester.widget<SpeechLanguageTile>(_choice(language));
+
+bool _selected(WidgetTester tester, String language) =>
+    _tile(tester, language).selected;
+
+/// The caregiver play button. Its label names the hold gesture because the
+/// picker is a long press — a tap only ever means "speak this".
+Finder _playButton(String language) => find.byTooltip(
+  'Listen in $language. Hold to choose another language.',
+);
+
+Future<void> _holdToPick(WidgetTester tester, {String language = 'Dagbani'}) async {
+  await tester.longPress(_playButton(language));
+  await tester.pumpAndSettle();
+}
+
+/// Makes every audio plugin resolve immediately: a real playback attempt with
+/// no voice installed, which is exactly what a test device is.
+void _stubSilentAudio(WidgetTester tester) {
+  const tts = MethodChannel('flutter_tts');
+  final messenger = tester.binding.defaultBinaryMessenger;
+  messenger.setMockMethodCallHandler(tts, (call) async {
+    if (call.method == 'getVoices' || call.method == 'getLanguages') {
+      throw PlatformException(code: 'unavailable');
+    }
+    return 1;
+  });
+  messenger.setMockMessageHandler('flutter/assets', (message) async => null);
+  addTearDown(() {
+    messenger.setMockMethodCallHandler(tts, null);
+    messenger.setMockMessageHandler('flutter/assets', null);
+  });
+}
 
 class _RecordingVoice implements CaregiverVoiceBackend {
   final requests = <CaregiverSpeech>[];
@@ -127,7 +172,7 @@ Widget _listenApp(
 );
 
 void main() {
-  testWidgets('picker offers four accessible choices and canonical saved locale', (tester) async {
+  testWidgets('every language card shows the words it can actually give', (tester) async {
     final results = <String?>[];
     await tester.pumpWidget(_pickerApp(
       const CaregiverSpeech(id: 'plain', english: 'Original message.', language: 'en_GH'),
@@ -135,45 +180,41 @@ void main() {
     ));
     await _tapVisible(tester, find.text('Open picker'));
 
-    expect(find.byType(ChoiceChip), findsNWidgets(4));
-    for (final language in ['English', 'Twi', 'Dagbani', 'Hausa']) {
-      final chip = tester.widget<ChoiceChip>(_choice(language));
-      expect(chip.selected, language == 'English');
-      expect(chip.onSelected, isNotNull);
-      expect(chip.materialTapTargetSize, MaterialTapTargetSize.padded);
-    }
-    expect(find.textContaining('installed offline English voice'), findsOneWidget);
+    expect(find.byType(SpeechLanguageTile), findsNWidgets(4));
+    // The saved locale is canonicalised, so 'en_GH' opens on English.
+    expect(_selected(tester, 'English'), isTrue);
+    expect(_selected(tester, 'Twi'), isFalse);
+    // Availability is on the card before the tap, not discovered after it.
+    expect(find.text('NEEDS A PHONE VOICE'), findsOneWidget);
+    expect(find.text('ENGLISH WORDS ONLY'), findsWidgets);
+    expect(find.textContaining("native speaker's ear and clinical review"), findsOneWidget);
+    // A real tap target for a worried thumb, and nothing chosen yet.
+    expect(tester.getRect(_choice('Hausa')).height, greaterThanOrEqualTo(44));
     expect(results, isEmpty);
-    await _tapVisible(tester, find.text('Cancel'));
+
+    await _tapVisible(tester, find.byTooltip('Close'));
     expect(results, [null]);
   });
 
-  testWidgets('draft preview changes language without changing the saved default', (tester) async {
+  testWidgets('one press on a card is the whole choice', (tester) async {
     final speech = _bankSpeech(language: 'tw');
     final results = <String?>[];
     await tester.pumpWidget(_pickerApp(speech, results.add));
     await _tapVisible(tester, find.text('Open picker'));
-    expect(tester.widget<ChoiceChip>(_choice('Twi')).selected, isTrue);
+
+    expect(_selected(tester, 'Twi'), isTrue);
     expect(find.text(SpeechBank.qNewbornFeed.twi), findsOneWidget);
-    expect(find.text(speech.english), findsOneWidget);
-    expect(find.textContaining('Draft Twi translation'), findsOneWidget);
-    expect(find.textContaining('native-speaker and clinical review'), findsOneWidget);
+    expect(find.text('READY ON THIS PHONE'), findsWidgets);
 
+    // No confirm button exists: the card IS the request to hear it.
     await _tapVisible(tester, _choice('Hausa'));
-    expect(find.text(SpeechBank.qNewbornFeed.hausa), findsOneWidget);
-    expect(find.text(SpeechBank.qNewbornFeed.twi), findsNothing);
-    expect(results, isEmpty);
-    await _tapVisible(tester, find.text('Listen in Hausa'));
     expect(results, ['Hausa']);
+    // Choosing for one message never rewrites the account default.
     expect(speech.language, 'tw');
-
-    await _tapVisible(tester, find.text('Open picker'));
-    expect(tester.widget<ChoiceChip>(_choice('Twi')).selected, isTrue);
-    await _tapVisible(tester, find.text('Cancel'));
-    expect(results, ['Hausa', null]);
+    expect(_user.preferredLanguage, 'Dagbani');
   });
 
-  testWidgets('uncovered long message remains scrollable at large text size', (tester) async {
+  testWidgets('a language with no words says so on its own card', (tester) async {
     tester.view.physicalSize = const Size(320, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -192,23 +233,25 @@ void main() {
     ));
     await _tapVisible(tester, find.text('Open picker'));
     expect(tester.takeException(), isNull);
-    expect(find.textContaining('No Hausa translation is available offline for this exact message'), findsOneWidget);
-    expect(find.text(original), findsOneWidget);
-    expect(find.text(SpeechBank.qNewbornFeed.english), findsNothing);
-    expect(tester.widget<FilledButton>(find.byKey(const ValueKey('speech-language-listen'))).onPressed, isNull);
+
+    // The Hausa card admits it has no Hausa words, and shows what it will do.
+    expect(find.text('ENGLISH WORDS ONLY'), findsWidgets);
+    expect(find.text(original), findsWidgets);
+    // English is always offered, so there is no dead end and no disabled card.
+    expect(tester.widget<SpeechLanguageTile>(_choice('English')).onSelected, isNotNull);
+    expect(find.byKey(const ValueKey('speech-language-listen')), findsNothing);
+
     await tester.drag(find.byType(SingleChildScrollView), const Offset(0, -400));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
 
-    await _tapVisible(tester, find.text('Choose English'));
-    expect(results, isEmpty); // Choosing English is not a playback request.
-    expect(find.textContaining('installed offline English voice'), findsOneWidget);
-    await _tapVisible(tester, find.text('Listen in English'));
+    await _tapVisible(tester, _choice('English'));
     expect(results, ['English']);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('AudioButton tap and long press preview exact input and cancel silently', (tester) async {
+  testWidgets('AudioButton hold picks a language and tap plays', (tester) async {
+    _stubSilentAudio(tester);
     const original = 'A different message, not the registered bank wording.';
     await tester.pumpWidget(_app(const Center(
       child: AudioButton(
@@ -218,51 +261,87 @@ void main() {
         compact: true,
       ),
     )));
-    await tester.tap(find.byType(AudioButton));
-    await tester.pumpAndSettle();
-    expect(find.byType(ChoiceChip), findsNWidgets(4));
-    expect(find.text(original), findsOneWidget);
-    expect(find.text(SpeechBank.qNewbornFeed.english), findsNothing);
-    expect(find.textContaining('No Dagbani translation'), findsOneWidget);
-    await _tapVisible(tester, find.text('Cancel'));
-    expect(find.byIcon(Icons.stop_rounded), findsNothing);
+    expect(find.byTooltip('Play audio. Hold to choose another language.'), findsOneWidget);
 
     await tester.longPress(find.byType(AudioButton));
     await tester.pumpAndSettle();
-    expect(find.byType(ChoiceChip), findsNWidgets(4));
-    expect(find.text(original), findsOneWidget);
+    expect(find.byType(SpeechLanguageTile), findsNWidgets(4));
+    expect(find.text(original), findsWidgets);
+    expect(find.text(SpeechBank.qNewbornFeed.english), findsNothing);
+    expect(find.text('ENGLISH WORDS ONLY'), findsWidgets);
     await tester.tapAt(const Offset(5, 5));
     await tester.pumpAndSettle();
-    expect(find.byType(ChoiceChip), findsNothing);
-    expect(tester.takeException(), isNull); // No platform audio call on preview.
+    expect(find.byType(SpeechLanguageTile), findsNothing);
+    expect(find.textContaining('Audio unavailable'), findsNothing);
+
+    // Tapping the same button goes straight to the words the caller chose.
+    await tester.tap(find.byType(AudioButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(SpeechLanguageTile), findsNothing);
+    // A real attempt, honestly reported: no Dagbani words for this text and
+    // no voice on a test device, so the button says so instead of guessing.
+    expect(find.textContaining('Audio unavailable'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('caregiver cancellation and barrier dismissal never play audio', (tester) async {
+  testWidgets('a play button with no picker never opens a sheet', (tester) async {
+    await tester.pumpWidget(_app(const Center(
+      child: AudioButton(
+        id: 'setup_preview_English',
+        text: 'Breastfeed on demand, day and night.',
+        language: 'English',
+        compact: true,
+        showLanguagePicker: false,
+      ),
+    )));
+    expect(find.byTooltip('Play audio'), findsOneWidget);
+    await tester.longPress(find.byType(AudioButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(SpeechLanguageTile), findsNothing);
+    // A held button that does nothing must not pretend to have played.
+    expect(find.textContaining('Audio unavailable'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('caregiver tap speaks the family language without a sheet', (tester) async {
     final backend = _RecordingVoice();
     final container = _container(() => backend);
     addTearDown(container.dispose);
     await tester.pumpWidget(_listenApp(container, CaregiverListen(speech: _bankSpeech())));
-    await _tapVisible(tester, find.byTooltip('Choose speech language'));
-    await _tapVisible(tester, _choice('Twi'));
-    await _tapVisible(tester, find.text('Cancel'));
+    await _tapVisible(tester, _playButton('Dagbani'));
+    expect(find.byType(SpeechLanguageTile), findsNothing);
+    expect(backend.requests.single.language, 'Dagbani');
+    expect(find.text('Loading'), findsOneWidget);
+    expect(find.text('Selected: Dagbani'), findsOneWidget);
+  });
+
+  testWidgets('caregiver dismissal never plays audio', (tester) async {
+    final backend = _RecordingVoice();
+    final container = _container(() => backend);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(_listenApp(container, CaregiverListen(speech: _bankSpeech())));
+    await _holdToPick(tester);
+    await _tapVisible(tester, find.byTooltip('Close'));
     expect(backend.requests, isEmpty);
     expect(container.read(currentUserProvider)!.preferredLanguage, 'Dagbani');
-    await _tapVisible(tester, find.byTooltip('Choose speech language'));
+    await _holdToPick(tester);
     await tester.tapAt(const Offset(5, 5));
     await tester.pumpAndSettle();
     expect(backend.requests, isEmpty);
     expect(find.text('Selected: Dagbani'), findsOneWidget);
   });
 
-  testWidgets('caregiver shows chosen language, real phases and no reduced-motion ticker', (tester) async {
+  testWidgets('caregiver card press plays that language and real phases', (tester) async {
     final backend = _RecordingVoice();
     final container = _container(() => backend);
     addTearDown(container.dispose);
     await tester.pumpWidget(_listenApp(container, CaregiverListen(speech: _bankSpeech())));
     expect(backend.requests, isEmpty);
-    await _tapVisible(tester, find.byTooltip('Choose speech language'));
+    await _holdToPick(tester);
     await _tapVisible(tester, _choice('Hausa'));
-    await _tapVisible(tester, find.text('Listen in Hausa'));
+
+    // One press chose Hausa and started it; the sheet is gone.
+    expect(find.byType(SpeechLanguageTile), findsNothing);
     expect(backend.requests.single.language, 'Hausa');
     expect(container.read(currentUserProvider)!.preferredLanguage, 'Dagbani');
     expect(find.text('Selected: Hausa'), findsOneWidget);
@@ -281,9 +360,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Playback complete'), findsOneWidget);
     expect(find.byTooltip('Stop audio'), findsNothing);
-    await _tapVisible(tester, find.byTooltip('Choose speech language'));
-    expect(tester.widget<ChoiceChip>(_choice('Dagbani')).selected, isTrue);
-    await _tapVisible(tester, find.text('Cancel'));
   });
 
   testWidgets('loading can be stopped and stale playback events stay stopped', (tester) async {
@@ -291,8 +367,7 @@ void main() {
     final container = _container(() => backend);
     addTearDown(container.dispose);
     await tester.pumpWidget(_listenApp(container, CaregiverListen(speech: _bankSpeech())));
-    await _tapVisible(tester, find.byTooltip('Choose speech language'));
-    await _tapVisible(tester, find.text('Listen in Dagbani'));
+    await _tapVisible(tester, _playButton('Dagbani'));
     expect(find.text('Loading'), findsOneWidget);
     await _tapVisible(tester, find.byTooltip('Stop audio'));
     expect(backend.stops, 1);
@@ -308,8 +383,7 @@ void main() {
     final container = _container(() => backend);
     addTearDown(container.dispose);
     await tester.pumpWidget(_listenApp(container, CaregiverListen(speech: _bankSpeech())));
-    await _tapVisible(tester, find.byTooltip('Choose speech language'));
-    await _tapVisible(tester, find.text('Listen in Dagbani'));
+    await _tapVisible(tester, _playButton('Dagbani'));
     expect(find.text('Audio unavailable'), findsOneWidget);
     expect(find.text('Dagbani transcript'), findsOneWidget);
     expect(find.textContaining('Dagbani offline audio unavailable'), findsOneWidget);
@@ -328,7 +402,7 @@ void main() {
         valueListenable: speech,
         builder: (context, value, _) => CaregiverListen(speech: value),
       )));
-      await _tapVisible(tester, find.byTooltip('Choose speech language'));
+      await _holdToPick(tester);
       speech.value = CaregiverSpeech(
         id: 'message',
         english: change == 'text' ? 'Updated original message.' : speech.value.english,
@@ -337,7 +411,8 @@ void main() {
         clipIds: change == 'clips' ? [SpeechBank.qNewbornFast.id] : null,
       );
       await tester.pump();
-      await _tapVisible(tester, find.text('Listen in Dagbani'));
+      // The card press returns the stale sheet's language.
+      await _tapVisible(tester, _choice('Dagbani'));
       expect(backend.requests, isEmpty);
       expect(find.text('Loading'), findsNothing);
     });
@@ -353,8 +428,7 @@ void main() {
       valueListenable: speech,
       builder: (context, value, _) => CaregiverListen(speech: value),
     )));
-    await _tapVisible(tester, find.byTooltip('Choose speech language'));
-    await _tapVisible(tester, find.text('Listen in Dagbani'));
+    await _tapVisible(tester, _playButton('Dagbani'));
     speech.value = const CaregiverSpeech(id: 'message', english: 'Updated original message.', language: 'Dagbani');
     await tester.pumpAndSettle();
     expect(backend.stops, 1);
@@ -374,12 +448,12 @@ void main() {
     });
     addTearDown(container.dispose);
     await tester.pumpWidget(_listenApp(container, CaregiverListen(speech: _bankSpeech())));
-    await _tapVisible(tester, find.byTooltip('Choose speech language'));
+    await _holdToPick(tester);
     container.read(_accountProvider.notifier).state = null;
     await tester.pump();
     container.read(_accountProvider.notifier).state = _user;
     await tester.pump();
-    await _tapVisible(tester, find.text('Listen in Dagbani'));
+    await _tapVisible(tester, _choice('Dagbani'));
     expect(backends.expand((backend) => backend.requests), isEmpty);
     expect(find.text('Loading'), findsNothing);
     expect(find.text('Playing'), findsNothing);

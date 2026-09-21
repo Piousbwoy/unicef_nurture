@@ -12,7 +12,10 @@ import '../caregiver_providers.dart';
 abstract final class CompanionColors {
   static const canvas = AppColors.caregiverCanvas;
   static const blue = AppColors.primary;
-  static const ink = AppColors.ink;
+
+  /// Cool navy, not the app-wide warm teal ink: every caregiver surface is
+  /// blue-tinted, and warm text on a cool ground reads green and muddy.
+  static const ink = AppColors.checkNavy;
   static const bronze = AppColors.caregiverWarm;
   static const muted = AppColors.caregiverMuted;
   static const accent = AppColors.caregiverAccent;
@@ -21,8 +24,20 @@ abstract final class CompanionColors {
 
 String caregiverWhen(DateTime time) =>
     DateFormat('d MMM y, h:mm a').format(time.toLocal());
+String caregiverDateLabel(DateTime day) =>
+    DateFormat('d MMMM y').format(day.toLocal());
 String caregiverAge(Person person) =>
     '${person.ageLabel}${person.isDobEstimated ? ' (estimated)' : ''}';
+
+/// The caregiver body voice. The theme's default is the app-wide warm ink at
+/// 1.6 leading; on these blue-tinted cards that reads green and floats apart,
+/// so caregiver surfaces set their own: cool navy, 15px, 1.5 leading.
+TextStyle caregiverBody({Color? color, double? size, double? height}) =>
+    AppType.body.copyWith(
+      fontSize: size ?? 15,
+      height: height ?? 1.5,
+      color: color ?? CompanionColors.ink,
+    );
 
 class CompanionCard extends StatelessWidget {
   const CompanionCard({
@@ -49,9 +64,11 @@ class CompanionCard extends StatelessWidget {
           if (eyebrow != null) ...[
             Text(
               eyebrow!,
-              style: const TextStyle(
-                color: AppColors.caregiverAccent,
-                fontWeight: FontWeight.w700,
+              style: AppType.eyebrow.copyWith(
+                fontSize: 11,
+                letterSpacing: 1.1,
+                height: 1.2,
+                color: CompanionColors.accent,
               ),
             ),
             const SizedBox(height: 8),
@@ -62,12 +79,13 @@ class CompanionCard extends StatelessWidget {
               fontFamily: 'Sora',
               fontWeight: FontWeight.w700,
               fontSize: 20,
-              height: 1.3,
+              height: 1.25,
+              letterSpacing: -0.2,
               color: tone ?? CompanionColors.ink,
             ),
           ),
           const SizedBox(height: 12),
-          child,
+          DefaultTextStyle.merge(style: caregiverBody(), child: child),
         ],
       ),
     ),
@@ -115,7 +133,7 @@ class CompanionTheme extends StatelessWidget {
             primary: AppColors.primary,
             onPrimary: Colors.white,
             surface: AppColors.caregiverSurface,
-            onSurface: AppColors.ink,
+            onSurface: CompanionColors.ink,
           ),
           filledButtonTheme: FilledButtonThemeData(
             style: FilledButton.styleFrom(
@@ -155,10 +173,15 @@ class CompanionPage extends ConsumerStatefulWidget {
     required this.title,
     required this.child,
     this.actions,
+    this.heroChrome = true,
   });
   final String title;
   final Widget child;
   final List<Widget>? actions;
+
+  /// The caregiver gradient bar. Screens that already open with their own
+  /// navy hero pass false so two blue bands never stack.
+  final bool heroChrome;
   @override
   ConsumerState<CompanionPage> createState() => _CompanionPageState();
 }
@@ -169,16 +192,34 @@ class _CompanionPageState extends ConsumerState<CompanionPage> {
   Widget build(BuildContext context) {
     final scope = ref.watch(caregiverScopeProvider);
     _owner ??= scope;
+    final hero = widget.heroChrome;
     return CompanionTheme(
       child: Scaffold(
         appBar: AppBar(
           toolbarHeight: 56 + MediaQuery.textScalerOf(context).scale(16),
+          // The bar and the page are one ground: the caregiver body is cool
+          // blue, so a warm ivory bar above it reads as a different app.
+          backgroundColor: hero
+              ? Colors.transparent
+              : AppColors.caregiverCanvas,
+          foregroundColor: hero ? Colors.white : CompanionColors.ink,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          flexibleSpace: hero
+              ? const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: AppColors.caregiverGradient,
+                  ),
+                  child: SizedBox.expand(),
+                )
+              : null,
           title: Text(
             widget.title,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Sora',
               fontWeight: FontWeight.w700,
               fontSize: 18,
+              color: hero ? Colors.white : CompanionColors.ink,
             ),
           ),
           actions: widget.actions ?? [const CaregiverEmergencyButton()],
@@ -187,7 +228,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage> {
             ? const Center(
                 child: Text('Your account changed. Reopen your family.'),
               )
-            : widget.child,
+            : DefaultTextStyle.merge(
+                style: caregiverBody(),
+                child: widget.child,
+              ),
       ),
     );
   }
@@ -196,10 +240,23 @@ class _CompanionPageState extends ConsumerState<CompanionPage> {
 class CaregiverEmergencyButton extends StatelessWidget {
   const CaregiverEmergencyButton({super.key});
   @override
-  Widget build(BuildContext context) => IconButton(
-    tooltip: 'Emergency help',
-    icon: const Icon(Icons.emergency_outlined, color: Color(0xFFAA2929)),
-    onPressed: () => showCaregiverEmergency(context),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(right: 8),
+    // A white safety chip: the red emergency mark stays legible on both the
+    // gradient bar and the plain one, and red keeps meaning "danger" only.
+    child: IconButton(
+      tooltip: 'Emergency help',
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+      style: IconButton.styleFrom(
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFFAA2929),
+        side: const BorderSide(color: Color(0x1A0B1B33)),
+        shape: const CircleBorder(),
+      ),
+      icon: const Icon(Icons.emergency_outlined, size: 22),
+      onPressed: () => showCaregiverEmergency(context),
+    ),
   );
 }
 
@@ -305,7 +362,18 @@ class _CaregiverSaveActionState extends State<CaregiverSaveAction> {
   }
 }
 
-class CaregiverTaskToggle extends ConsumerWidget {
+/// One line of a caregiver checklist.
+///
+/// The tick is decided by the write, never by the tap: the marker changes only
+/// once storage confirms, so a ticked box is evidence she can show the nurse
+/// rather than a wish. While the write is in flight the line says so, and a
+/// failed write keeps the tap available as the retry — nothing is disabled and
+/// nothing is claimed.
+///
+/// [step] turns the line into a sequence: a number inside the marker until it
+/// is done, and the thread that runs from one marker to the next. Without it
+/// the line is a plain box, which is what a shopping list wants to be.
+class CaregiverTaskToggle extends ConsumerStatefulWidget {
   const CaregiverTaskToggle({
     super.key,
     required this.personId,
@@ -314,6 +382,9 @@ class CaregiverTaskToggle extends ConsumerWidget {
     required this.itemKey,
     required this.occurrenceKey,
     required this.label,
+    this.step,
+    this.totalSteps,
+    this.tone,
   });
   final String? personId;
   final CaregiverActivityKind kind;
@@ -321,51 +392,329 @@ class CaregiverTaskToggle extends ConsumerWidget {
   final String itemKey;
   final String occurrenceKey;
   final String label;
+  final int? step;
+  final int? totalSteps;
+
+  /// Colour of the thread and the pending ring — the verdict's own colour, so
+  /// the plan reads as part of the answer it came from.
+  final Color? tone;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CaregiverTaskToggle> createState() =>
+      _CaregiverTaskToggleState();
+}
+
+class _CaregiverTaskToggleState extends ConsumerState<CaregiverTaskToggle> {
+  bool _busy = false;
+  bool _failed = false;
+
+  Future<void> _write(CaregiverWriter writer, {required bool done}) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _failed = false;
+    });
+    try {
+      await writer.activity(
+        writer.entry(
+          kind: widget.kind,
+          personId: widget.personId,
+          sourceId: widget.sourceId,
+          itemKey: widget.itemKey,
+          occurrenceKey: widget.occurrenceKey,
+          done: done,
+        ),
+      );
+    } catch (_) {
+      if (mounted) setState(() => _failed = true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final scope = ref.watch(caregiverScopeProvider);
     if (scope == null) return const SizedBox.shrink();
+    // Watched, not read: the writer is auto-disposed, and a queue that dies
+    // mid-write never tells the list the saved state changed.
     final writer = ref.watch(caregiverWriterProvider(scope));
-    return ref
-        .watch(caregiverActivityProvider(scope))
-        .when(
-          loading: () => Text('$label — loading saved state…'),
-          error: (_, _) => CaregiverSaveAction(
-            label: 'Retry saved progress',
-            onSave: () async {
-              ref.invalidate(caregiverActivityProvider(scope));
-              await ref.read(caregiverActivityProvider(scope).future);
-            },
-          ),
-          data: (activities) {
-            final done = activities.any(
-              (a) =>
-                  a.personId == personId &&
-                  a.kind == kind &&
-                  a.sourceId == sourceId &&
-                  a.itemKey == itemKey &&
-                  a.occurrenceKey == occurrenceKey &&
-                  a.done,
-            );
-            return CaregiverSaveAction(
-              label: '$label • ${done ? 'Done — Undo' : 'Mark done'}',
-              icon: done
-                  ? Icons.check_box_outlined
-                  : Icons.check_box_outline_blank,
-              onSave: () => writer.activity(
-                writer.entry(
-                  kind: kind,
-                  personId: personId,
-                  sourceId: sourceId,
-                  itemKey: itemKey,
-                  occurrenceKey: occurrenceKey,
-                  done: !done,
-                ),
-              ),
-            );
-          },
+    final activity = ref.watch(caregiverActivityProvider(scope));
+    return activity.when(
+      loading: () => _line(note: 'Reading what you saved\u2026', onTap: null),
+      error: (_, _) => _line(
+        note: 'Saved state unavailable \u2014 tap to try again',
+        failed: true,
+        onTap: () => ref.invalidate(caregiverActivityProvider(scope)),
+      ),
+      data: (entries) {
+        final done = entries.any(
+          (a) =>
+              a.personId == widget.personId &&
+              a.kind == widget.kind &&
+              a.sourceId == widget.sourceId &&
+              a.itemKey == widget.itemKey &&
+              a.occurrenceKey == widget.occurrenceKey &&
+              a.done,
         );
+        return _line(
+          done: done,
+          busy: _busy,
+          failed: _failed,
+          note: _failed
+              ? 'Could not save \u2014 tap to try again'
+              : _busy
+              ? 'Saving\u2026'
+              : null,
+          onTap: () => _write(writer, done: !done),
+        );
+      },
+    );
   }
+
+  Widget _line({
+    required GestureTapCallback? onTap,
+    bool done = false,
+    bool busy = false,
+    bool failed = false,
+    String? note,
+  }) {
+    final tone = widget.tone ?? AppColors.checkBlue;
+    final step = widget.step;
+    final total = widget.totalSteps ?? 0;
+    final first = step == null || step <= 1;
+    final last = step == null || step >= total;
+    return Semantics(
+      button: true,
+      checked: done,
+      label: '${done ? 'Done' : 'Not done yet'}: ${widget.label}',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(2, 0, 6, 0),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    width: 34,
+                    child: Column(
+                      children: [
+                        if (first)
+                          const Spacer()
+                        else
+                          Expanded(
+                            child: _Thread(tone: tone, complete: done),
+                          ),
+                        _StepMarker(
+                          step: step,
+                          done: done,
+                          busy: busy,
+                          failed: failed,
+                          tone: tone,
+                        ),
+                        if (last)
+                          const Spacer()
+                        else
+                          Expanded(
+                            child: _Thread(tone: tone, complete: done),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  widget.label,
+                                  style:
+                                      caregiverBody(
+                                        size: 15,
+                                        height: 1.4,
+                                        color: done
+                                            ? AppColors.caregiverFaded
+                                            : CompanionColors.ink,
+                                      ).copyWith(
+                                        fontWeight: done
+                                            ? FontWeight.w500
+                                            : FontWeight.w600,
+                                      ),
+                                ),
+                              ),
+                              if (done) ...[
+                                const SizedBox(width: 8),
+                                const _DoneChip(),
+                              ],
+                            ],
+                          ),
+                          if (note != null) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              note,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                                height: 1.3,
+                                letterSpacing: 0.1,
+                                color: failed
+                                    ? AppColors.triageRed
+                                    : AppColors.caregiverFaded,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The 2px line between two markers. It is the spine of the whole plan: quiet
+/// ahead of her, solid once the step behind it is confirmed, so the path she
+/// has walked fills in as she walks it.
+class _Thread extends StatelessWidget {
+  const _Thread({required this.tone, required this.complete});
+  final Color tone;
+  final bool complete;
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Container(
+      width: 2.5,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(2),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: complete
+              ? [tone.withValues(alpha: 0.55), tone.withValues(alpha: 0.85)]
+              : [
+                  tone.withValues(alpha: 0.16),
+                  tone.withValues(alpha: 0.36),
+                  tone.withValues(alpha: 0.16),
+                ],
+          stops: complete ? const [0, 1] : const [0, 0.5, 1],
+        ),
+      ),
+    ),
+  );
+}
+
+class _StepMarker extends StatelessWidget {
+  const _StepMarker({
+    required this.step,
+    required this.done,
+    required this.busy,
+    required this.failed,
+    required this.tone,
+  });
+  final int? step;
+  final bool done;
+  final bool busy;
+  final bool failed;
+  final Color tone;
+
+  @override
+  Widget build(BuildContext context) {
+    if (done) {
+      return Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [AppColors.checkBlueLight, AppColors.checkBlue],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: tone.withValues(alpha: 0.32),
+              blurRadius: 14,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: const Icon(Icons.check_rounded, size: 19, color: Colors.white),
+      );
+    }
+    return Container(
+      width: 30,
+      height: 30,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.white,
+        border: Border.all(
+          color: failed ? AppColors.triageRed : tone.withValues(alpha: 0.42),
+          width: 2,
+        ),
+      ),
+      child: busy
+          ? SizedBox(
+              width: 15,
+              height: 15,
+              child: CircularProgressIndicator(strokeWidth: 2.2, color: tone),
+            )
+          : failed
+          ? const Icon(
+              Icons.priority_high_rounded,
+              size: 16,
+              color: AppColors.triageRed,
+            )
+          : step == null
+          ? null
+          : Text(
+              '$step',
+              style: const TextStyle(
+                fontFamily: 'Sora',
+                fontSize: 13.5,
+                fontWeight: FontWeight.w800,
+                color: AppColors.checkNavy,
+              ),
+            ),
+    );
+  }
+}
+
+class _DoneChip extends StatelessWidget {
+  const _DoneChip();
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+    decoration: BoxDecoration(
+      color: AppColors.checkBlueTint,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: AppColors.checkBlue.withValues(alpha: 0.16)),
+    ),
+    child: const Text(
+      'Done',
+      style: TextStyle(
+        fontSize: 10.5,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0.4,
+        color: AppColors.checkBlue,
+      ),
+    ),
+  );
 }
 
 class CompanionLoadError extends StatelessWidget {
