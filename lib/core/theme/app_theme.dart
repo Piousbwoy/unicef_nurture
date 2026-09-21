@@ -142,6 +142,10 @@ abstract final class AppColors {
   /// Bright blue — active states, glows.
   static const Color checkBlueLight = Color(0xFF3B82F6);
 
+  /// Blue that clears AA on navy surfaces (5.7:1 on [checkNavyMid]) for
+  /// accents, chips and micro-labels that sit on dark blue instead of white.
+  static const Color checkBlueBright = Color(0xFF7FA9FF);
+
   /// Off-white — background canvas for check screens.
   static const Color checkIvory = Color(0xFFF8FAFF);
 
@@ -177,6 +181,8 @@ abstract final class AppColors {
   /// quiet fills. Const tokens so they stay legal inside const expressions.
   static const Color white85 = Color(0xD9FFFFFF);
   static const Color white80 = Color(0xCCFFFFFF);
+  static const Color white70 = Color(0xB3FFFFFF);
+  static const Color white60 = Color(0x99FFFFFF);
 }
 
 /// Strict 8px baseline grid with generous premium radii.

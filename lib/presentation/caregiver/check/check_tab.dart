@@ -81,9 +81,7 @@ class _CheckHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final person = members
-        .where((p) => p.id == selectedPersonId)
-        .firstOrNull;
+    final person = members.where((p) => p.id == selectedPersonId).firstOrNull;
     final today = DateTime.now();
     final dayLabel = _dayLabel(today);
     final dateStr = _formatDate(today);
@@ -93,7 +91,9 @@ class _CheckHero extends StatelessWidget {
         ? checks
         : checks.where((c) => c.personId == selectedPersonId);
     final lastCheck = relevantChecks.isNotEmpty
-        ? relevantChecks.reduce((a, b) => a.checkedAt.isAfter(b.checkedAt) ? a : b)
+        ? relevantChecks.reduce(
+            (a, b) => a.checkedAt.isAfter(b.checkedAt) ? a : b,
+          )
         : null;
     final statusLine = lastCheck == null
         ? (person == null
@@ -116,7 +116,11 @@ class _CheckHero extends StatelessWidget {
           height: 2,
           decoration: const BoxDecoration(
             gradient: LinearGradient(
-              colors: [Colors.transparent, AppColors.checkBlueLight, Colors.transparent],
+              colors: [
+                Colors.transparent,
+                AppColors.checkBlueLight,
+                Colors.transparent,
+              ],
             ),
           ),
         ),
@@ -124,6 +128,17 @@ class _CheckHero extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(24),
             color: AppColors.checkNavyDeep,
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.08),
+              width: 1,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x59000000),
+                blurRadius: 24,
+                offset: Offset(0, 10),
+              ),
+            ],
           ),
           child: Stack(
             children: [
@@ -150,7 +165,10 @@ class _CheckHero extends StatelessWidget {
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(20),
@@ -158,19 +176,26 @@ class _CheckHero extends StatelessWidget {
                           child: Text(
                             '$dayLabel \u2022 $dateStr',
                             style: const TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.w700,
-                              color: Colors.white, letterSpacing: 0.3,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              letterSpacing: 0.3,
                             ),
                           ),
                         ),
                         const Spacer(),
                         Container(
-                          width: 44, height: 44,
+                          width: 44,
+                          height: 44,
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.15),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.shield_outlined, color: Colors.white, size: 24),
+                          child: const Icon(
+                            Icons.shield_outlined,
+                            color: Colors.white,
+                            size: 24,
+                          ),
                         ),
                       ],
                     ),
@@ -178,24 +203,33 @@ class _CheckHero extends StatelessWidget {
                     const Text(
                       'Danger-sign check',
                       style: TextStyle(
-                        fontFamily: 'Sora', fontSize: 26, fontWeight: FontWeight.w800,
-                        color: Colors.white, height: 1.15,
+                        fontFamily: 'Sora',
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        height: 1.15,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Row(
                       children: [
                         Container(
-                          width: 8, height: 8,
-                          decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            shape: BoxShape.circle,
+                          ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             statusLine,
                             style: TextStyle(
-                              fontSize: 13.5, fontWeight: FontWeight.w600,
-                              color: AppColors.white85, height: 1.3,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.white85,
+                              height: 1.3,
                             ),
                           ),
                         ),
@@ -235,14 +269,20 @@ class _CheckHero extends StatelessWidget {
                             color: Colors.white.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
-                              color: const Color(0xFFFF6B6B).withValues(alpha: 0.45),
+                              color: const Color(
+                                0xFFFF6B6B,
+                              ).withValues(alpha: 0.45),
                             ),
                           ),
                           child: const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.warning_amber_rounded, color: Color(0xFFFF6B6B), size: 18),
+                              Icon(
+                                Icons.warning_amber_rounded,
+                                color: Color(0xFFFF6B6B),
+                                size: 18,
+                              ),
                               SizedBox(width: 8),
                               Flexible(
                                 child: Text(
@@ -306,7 +346,8 @@ class _CheckHero extends StatelessWidget {
   String _statusSummary(HomeCheck check) {
     final when = caregiverWhen(check.checkedAt);
     return switch (check.verdict) {
-      HomeCheckVerdict.urgent => 'Last check $when \u2014 a danger sign was found',
+      HomeCheckVerdict.urgent =>
+        'Last check $when \u2014 a danger sign was found',
       HomeCheckVerdict.caution => 'Last check $when \u2014 some uncertainty',
       HomeCheckVerdict.fine => 'Last check $when \u2014 all clear',
     };
@@ -627,8 +668,7 @@ class _HistoryTile extends StatelessWidget {
       child: InkWell(
         onTap: () => Navigator.of(context).push(
           GlassPageRoute<void>(
-            builder: (_) =>
-                CaregiverPersonDetail(personId: check.personId),
+            builder: (_) => CaregiverPersonDetail(personId: check.personId),
           ),
         ),
         borderRadius: BorderRadius.circular(Gap.radius),

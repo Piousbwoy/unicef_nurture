@@ -31,6 +31,7 @@ class PremiumCheckButton extends StatefulWidget {
     this.trailingIcon = Icons.arrow_forward_rounded,
     this.height = 60,
     this.enabled = true,
+    this.bright = false,
   });
 
   final String label;
@@ -42,6 +43,10 @@ class PremiumCheckButton extends StatefulWidget {
   final IconData trailingIcon;
   final double height;
   final bool enabled;
+
+  /// Royal-blue gradient instead of deep navy — the choice when the button
+  /// sits on a navy page and a navy button would disappear into it.
+  final bool bright;
 
   @override
   State<PremiumCheckButton> createState() => _PremiumCheckButtonState();
@@ -60,9 +65,10 @@ class _PremiumCheckButtonState extends State<PremiumCheckButton>
       duration: const Duration(milliseconds: 150),
       reverseDuration: const Duration(milliseconds: 200),
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.97).animate(
-      CurvedAnimation(parent: _pressController, curve: Curves.easeOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.97,
+    ).animate(CurvedAnimation(parent: _pressController, curve: Curves.easeOut));
   }
 
   @override
@@ -92,86 +98,96 @@ class _PremiumCheckButtonState extends State<PremiumCheckButton>
       child: AnimatedBuilder(
         animation: _scaleAnimation,
         builder: (context, child) {
-          return Transform.scale(
-            scale: _scaleAnimation.value,
-            child: child,
-          );
+          return Transform.scale(scale: _scaleAnimation.value, child: child);
         },
         child: GestureDetector(
           onTapDown: _onTapDown,
           onTapUp: _onTapUp,
           onTapCancel: _onTapCancel,
           child: Container(
-              height: widget.height,
-              decoration: BoxDecoration(
+            height: widget.height,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: widget.enabled
+                  ? (widget.bright
+                        ? const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              AppColors.checkBlue,
+                              AppColors.checkBlueLight,
+                            ],
+                          )
+                        : AppColors.checkButtonGradient)
+                  : null,
+              color: widget.enabled ? null : AppColors.checkSilver,
+              boxShadow: widget.enabled
+                  ? [
+                      BoxShadow(
+                        color:
+                            (widget.bright
+                                    ? AppColors.checkBlueLight
+                                    : AppColors.checkBlue)
+                                .withValues(alpha: widget.bright ? 0.35 : 0.2),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ]
+                  : const [],
+              border: widget.enabled
+                  ? Border.all(
+                      color: Colors.white.withValues(alpha: 0.1),
+                      width: 1,
+                    )
+                  : null,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
                 borderRadius: BorderRadius.circular(20),
-                gradient: widget.enabled
-                    ? AppColors.checkButtonGradient
-                    : null,
-                color: widget.enabled ? null : AppColors.checkSilver,
-                boxShadow: widget.enabled
-                    ? [
-                        BoxShadow(
-                          color: AppColors.checkBlue.withValues(alpha: 0.2),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
+                onTap: widget.enabled ? widget.onPressed : null,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      if (widget.icon != null) ...[
+                        Icon(
+                          widget.icon,
+                          color: widget.enabled
+                              ? Colors.white
+                              : AppColors.checkNavy.withValues(alpha: 0.5),
+                          size: 24,
                         ),
-                      ]
-                    : const [],
-                border: widget.enabled
-                    ? Border.all(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        width: 1,
-                      )
-                    : null,
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: widget.enabled ? widget.onPressed : null,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Row(
-                      children: [
-                        if (widget.icon != null) ...[
-                          Icon(
-                            widget.icon,
+                        const SizedBox(width: 12),
+                      ],
+                      Expanded(
+                        child: Text(
+                          widget.label,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'Sora',
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
                             color: widget.enabled
                                 ? Colors.white
-                                : AppColors.checkNavy.withValues(alpha: 0.5),
-                            size: 24,
-                          ),
-                          const SizedBox(width: 12),
-                        ],
-                        Expanded(
-                          child: Text(
-                            widget.label,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontFamily: 'Sora',
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: widget.enabled
-                                  ? Colors.white
-                                  : AppColors.checkNavy.withValues(alpha: 0.55),
-                              letterSpacing: 0.2,
-                              height: 1.2,
-                            ),
+                                : AppColors.checkNavy.withValues(alpha: 0.55),
+                            letterSpacing: 0.2,
+                            height: 1.2,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Icon(
-                          widget.trailingIcon,
-                          color: widget.enabled
-                              ? Colors.white.withValues(alpha: 0.9)
-                              : AppColors.checkNavy.withValues(alpha: 0.4),
-                          size: 22,
-                        ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        widget.trailingIcon,
+                        color: widget.enabled
+                            ? Colors.white.withValues(alpha: 0.9)
+                            : AppColors.checkNavy.withValues(alpha: 0.4),
+                        size: 22,
+                      ),
+                    ],
                   ),
+                ),
               ),
             ),
           ),

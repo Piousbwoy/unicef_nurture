@@ -47,10 +47,7 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
           appBar: AppBar(
             title: const Text(
               'CareBridge AI',
-              style: TextStyle(
-                fontFamily: 'Sora',
-                fontWeight: FontWeight.w700,
-              ),
+              style: TextStyle(fontFamily: 'Sora', fontWeight: FontWeight.w700),
             ),
             backgroundColor: Colors.transparent,
             elevation: 0,
@@ -121,10 +118,15 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
     ref.watch(caregiverVoiceProvider(scope));
     final household = scope.householdId;
     return CompanionTheme(
+      // The caregiver identity is dark blue, end to end: a deep-navy ground
+      // with a navy hero header and navy navigation, so the whole flow reads
+      // as one premium surface instead of light-blue cards on cream.
       child: AmbientBackdrop(
+        variant: AmbientVariant.caregiver,
         child: Scaffold(
           backgroundColor: Colors.transparent,
           appBar: GlassAppBar(
+            hero: true,
             title: const Text(
               'My family',
               style: TextStyle(
@@ -134,7 +136,7 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
               ),
             ),
             actions: [
-              const NarrationButton(compact: true),
+              const NarrationButton(compact: true, iconColor: Colors.white),
               const CaregiverEmergencyButton(),
               Padding(
                 padding: const EdgeInsets.only(right: 12),
@@ -146,10 +148,8 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
             duration: const Duration(milliseconds: 220),
             switchInCurve: Curves.easeOut,
             switchOutCurve: Curves.easeIn,
-            transitionBuilder: (child, animation) => FadeTransition(
-              opacity: animation,
-              child: child,
-            ),
+            transitionBuilder: (child, animation) =>
+                FadeTransition(opacity: animation, child: child),
             child: KeyedSubtree(
               key: ValueKey('$identity/$_tab'),
               child: switch (_tab) {
@@ -192,11 +192,20 @@ class CaregiverNavigation extends StatelessWidget {
   ];
   @override
   Widget build(BuildContext context) => Container(
-    decoration: BoxDecoration(
-      color: AppColors.caregiverCanvas,
-      border: Border(
-        top: BorderSide(color: AppColors.line, width: 1),
+    decoration: const BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [AppColors.checkNavy, AppColors.checkNavyDeep],
       ),
+      border: Border(top: BorderSide(color: Color(0x14FFFFFF), width: 1)),
+      boxShadow: [
+        BoxShadow(
+          color: Color(0x59000000),
+          blurRadius: 24,
+          offset: Offset(0, -8),
+        ),
+      ],
     ),
     child: SafeArea(
       top: false,
@@ -235,9 +244,21 @@ class CaregiverNavigation extends StatelessWidget {
                                   padding: const EdgeInsets.all(6),
                                   decoration: BoxDecoration(
                                     color: index == i
-                                        ? AppColors.primary.withValues(alpha: 0.12)
+                                        ? AppColors.checkBlue.withValues(
+                                            alpha: 0.28,
+                                          )
                                         : Colors.transparent,
                                     borderRadius: BorderRadius.circular(12),
+                                    boxShadow: index == i
+                                        ? [
+                                            BoxShadow(
+                                              color: AppColors.checkBlueLight
+                                                  .withValues(alpha: 0.28),
+                                              blurRadius: 10,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ]
+                                        : null,
                                   ),
                                   child: AnimatedSwitcher(
                                     duration: const Duration(milliseconds: 200),
@@ -245,8 +266,8 @@ class CaregiverNavigation extends StatelessWidget {
                                       icons[i],
                                       key: ValueKey('${icons[i]}_$i'),
                                       color: index == i
-                                          ? AppColors.primary
-                                          : AppColors.caregiverMuted,
+                                          ? AppColors.checkBlueBright
+                                          : AppColors.white60,
                                       size: index == i ? 24 : 22,
                                     ),
                                   ),
@@ -261,10 +282,13 @@ class CaregiverNavigation extends StatelessWidget {
                                         ? FontWeight.w800
                                         : FontWeight.w500,
                                     color: index == i
-                                        ? AppColors.primary
-                                        : AppColors.caregiverMuted,
+                                        ? AppColors.checkBlueBright
+                                        : AppColors.white60,
                                   ),
-                                  child: Text(labels[i], textAlign: TextAlign.center),
+                                  child: Text(
+                                    labels[i],
+                                    textAlign: TextAlign.center,
+                                  ),
                                 ),
                               ],
                             ),

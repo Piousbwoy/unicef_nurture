@@ -13,16 +13,29 @@ import 'package:carebridge_ai/domain/enums.dart';
 /// the family card, and the same affordance must exist wherever the family
 /// list is empty.
 class CaregiverAddMemberButton extends StatelessWidget {
-  const CaregiverAddMemberButton({super.key, required this.householdId});
+  const CaregiverAddMemberButton({
+    super.key,
+    required this.householdId,
+    this.dark = false,
+  });
 
   final String householdId;
+
+  /// On a navy surface the outline turns white so it keeps its contrast.
+  final bool dark;
 
   @override
   Widget build(BuildContext context) => OutlinedButton.icon(
     onPressed: () => _openAddMember(context, householdId),
     icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
     label: const Text('Add a family member'),
-    style: OutlinedButton.styleFrom(minimumSize: const Size(0, Gap.tapTarget)),
+    style: OutlinedButton.styleFrom(
+      minimumSize: const Size(0, Gap.tapTarget),
+      foregroundColor: dark ? Colors.white : AppColors.primary,
+      side: dark
+          ? const BorderSide(color: AppColors.white70, width: 1.4)
+          : const BorderSide(color: AppColors.primary, width: 1.4),
+    ),
   );
 }
 

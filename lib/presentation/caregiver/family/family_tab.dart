@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../app/providers.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/glass.dart';
 import '../../../core/theme/motion.dart';
 import '../../../domain/entities/caregiver.dart';
 import '../../../domain/entities/core.dart';
@@ -21,6 +21,11 @@ import '../widgets/premium_button.dart';
 import 'add_member.dart';
 import 'person_detail.dart';
 
+/// The caregiver dashboard, dressed in the flow's one identity: deep navy.
+///
+/// Every card here is a shade of the same dark blue — navy glass, white ink,
+/// one royal-blue accent — so the screen reads as a single premium surface.
+/// Red appears for danger only, exactly as IMCI training expects.
 class CaregiverFamilyTab extends ConsumerWidget {
   const CaregiverFamilyTab({
     super.key,
@@ -95,7 +100,7 @@ class CaregiverFamilyTab extends ConsumerWidget {
           onOpen: () => open(focus),
         );
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
       children: [
         _FamilyHero(part: part, name: name, now: now),
         const SizedBox(height: 24),
@@ -113,31 +118,7 @@ class CaregiverFamilyTab extends ConsumerWidget {
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 14, left: 2),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: AppColors.triageRed,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Needs attention',
-                            style: TextStyle(
-                              fontFamily: 'Sora',
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.ink,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    const _SectionHeader(attention: true),
                     for (final focus in d.attention)
                       focusCard(focus, d.dateKey),
                     const SizedBox(height: 8),
@@ -151,7 +132,7 @@ class CaregiverFamilyTab extends ConsumerWidget {
             onRetry: () =>
                 ref.invalidate(householdMembersProvider(householdId)),
           ),
-          data: (people) => CaregiverPersonSelector(members: people),
+          data: (people) => _CaringCard(members: people),
         ),
         const SizedBox(height: 8),
         _QuickActions(
@@ -173,7 +154,7 @@ class CaregiverFamilyTab extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 28),
-        CompanionCard(
+        _NavyCard(
           title: 'Today for your family',
           eyebrow: 'DAILY GUIDANCE',
           child: day.when(
@@ -188,6 +169,7 @@ class CaregiverFamilyTab extends ConsumerWidget {
                   _EmptyRoutine(
                     onAdd: () => CaregiverAddMemberButton(
                       householdId: householdId,
+                      dark: true,
                     ),
                   ),
                 for (final focus in d.focus) focusCard(focus, d.dateKey),
@@ -242,16 +224,20 @@ class CaregiverFamilyTab extends ConsumerWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryLight.withValues(alpha: 0.5),
+                    color: Colors.white.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(Gap.radiusSm),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      width: 1,
+                    ),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.info_outline_rounded,
                         size: 16,
-                        color: AppColors.primary.withValues(alpha: 0.7),
+                        color: AppColors.checkBlueBright,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -260,7 +246,7 @@ class CaregiverFamilyTab extends ConsumerWidget {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
-                            color: AppColors.primary.withValues(alpha: 0.75),
+                            color: AppColors.white70,
                             height: 1.45,
                           ),
                         ),
@@ -281,6 +267,122 @@ class CaregiverFamilyTab extends ConsumerWidget {
   }
 }
 
+/// A section heading on the navy ground: white Sora with an optional red
+/// pulse for the one section that is allowed to say "danger".
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({this.attention = false});
+  final bool attention;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14, left: 2),
+      child: Row(
+        children: [
+          if (attention) ...[
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: AppColors.triageRed,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.triageRed.withValues(alpha: 0.5),
+                    blurRadius: 6,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Text(
+            attention ? 'Needs attention' : '',
+            style: GoogleFonts.sora(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The navy card body shared by every dashboard card: the same midnight
+/// gradient, the same hairline catch-light, the same white ink.
+class _NavyCard extends StatelessWidget {
+  const _NavyCard({required this.title, this.eyebrow, required this.child});
+  final String title;
+  final String? eyebrow;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [AppColors.checkNavyMid, AppColors.checkNavy],
+          ),
+          borderRadius: BorderRadius.circular(Gap.radius),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.08),
+            width: 1,
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x59000000),
+              blurRadius: 24,
+              offset: Offset(0, 10),
+            ),
+          ],
+        ),
+        child: DefaultTextStyle.merge(
+          style: caregiverBody(color: AppColors.white70),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (eyebrow != null) ...[
+                Text(
+                  eyebrow!,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.1,
+                    height: 1.2,
+                    color: AppColors.checkBlueBright,
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+              Text(
+                title,
+                style: GoogleFonts.sora(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 20,
+                  height: 1.25,
+                  letterSpacing: -0.2,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 12),
+              child,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ShimmerLine extends StatelessWidget {
   const _ShimmerLine();
 
@@ -290,7 +392,7 @@ class _ShimmerLine extends StatelessWidget {
       height: 16,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppColors.line.withValues(alpha: 0.5),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
       ),
     );
@@ -307,9 +409,12 @@ class _EmptyRoutine extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.caregiverSurface,
+        color: Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(Gap.radius),
-        border: Border.all(color: AppColors.line, width: 1),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
       ),
       child: Column(
         children: [
@@ -317,13 +422,13 @@ class _EmptyRoutine extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: AppColors.primaryLight,
+              color: AppColors.checkBlue.withValues(alpha: 0.22),
               shape: BoxShape.circle,
             ),
-            child: Icon(
+            child: const Icon(
               Icons.group_add_outlined,
               size: 24,
-              color: AppColors.primary,
+              color: AppColors.checkBlueBright,
             ),
           ),
           const SizedBox(height: 12),
@@ -332,7 +437,7 @@ class _EmptyRoutine extends StatelessWidget {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: AppColors.ink,
+              color: Colors.white,
             ),
             textAlign: TextAlign.center,
           ),
@@ -341,7 +446,7 @@ class _EmptyRoutine extends StatelessWidget {
             'Unknown ages need confirmation before age-specific guidance.',
             style: TextStyle(
               fontSize: 12.5,
-              color: AppColors.inkMuted,
+              color: AppColors.white60,
               height: 1.4,
             ),
             textAlign: TextAlign.center,
@@ -362,12 +467,10 @@ class _SeeAllButton extends StatelessWidget {
     return OutlinedButton.icon(
       onPressed: onPressed,
       style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.primary,
-        side: const BorderSide(color: AppColors.primary, width: 1.2),
+        foregroundColor: Colors.white,
+        side: const BorderSide(color: AppColors.white70, width: 1.2),
         minimumSize: const Size.fromHeight(48),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       icon: const Icon(Icons.view_list_rounded, size: 18),
       label: Text(
@@ -378,6 +481,9 @@ class _SeeAllButton extends StatelessWidget {
   }
 }
 
+/// The greeting hero — midnight navy glass with two quiet glows, the date,
+/// the greeting and the family picture. It is the deepest, richest blue on
+/// the screen, so the page reads as one dark jewel rather than a banner.
 class _FamilyHero extends StatelessWidget {
   const _FamilyHero({
     required this.part,
@@ -390,64 +496,75 @@ class _FamilyHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassSurface(
-      tier: GlassTier.hero,
-      blur: false,
-      padding: EdgeInsets.zero,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(GlassTier.hero.radius),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.checkNavy,
-              AppColors.checkBlue,
-              AppColors.checkBlueLight,
-            ],
-            stops: [0.0, 0.55, 1.0],
-          ),
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF061023), Color(0xFF0C2E66), Color(0xFF1B4FB0)],
+          stops: [0.0, 0.5, 1.0],
         ),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.12),
+          width: 1,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x66000000),
+            blurRadius: 30,
+            offset: Offset(0, 14),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
         child: Stack(
           children: [
-            Positioned(
-              right: -40,
-              top: -40,
-              child: Container(
-                width: 180,
-                height: 180,
+            const Positioned.fill(
+              child: DecoratedBox(
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.05),
+                  gradient: RadialGradient(
+                    center: Alignment(0.95, -0.6),
+                    radius: 1.3,
+                    colors: [Color(0x383B82F6), Color(0x00000000)],
+                  ),
                 ),
               ),
             ),
-            Positioned(
-              right: 30,
-              bottom: -50,
-              child: Container(
-                width: 140,
-                height: 140,
+            const Positioned.fill(
+              child: DecoratedBox(
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.04),
+                  gradient: RadialGradient(
+                    center: Alignment(-0.5, 1.25),
+                    radius: 1.1,
+                    colors: [Color(0x2E1B56DB), Color(0x00000000)],
+                  ),
                 ),
               ),
             ),
+            // The catch-light: a thin bright line across the top edge.
             Positioned(
-              left: -20,
-              bottom: -20,
-              child: Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.03),
+              top: 0,
+              left: 20,
+              right: 20,
+              child: IgnorePointer(
+                child: Container(
+                  height: 1,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.white.withValues(alpha: 0),
+                        Colors.white.withValues(alpha: 0.35),
+                        Colors.white.withValues(alpha: 0),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+              padding: const EdgeInsets.all(24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -459,8 +576,12 @@ class _FamilyHero extends StatelessWidget {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
+                          color: Colors.white.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            width: 1,
+                          ),
                         ),
                         child: Text(
                           DateFormat('EEEE, d MMMM').format(now),
@@ -477,8 +598,12 @@ class _FamilyHero extends StatelessWidget {
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
+                          color: Colors.white.withValues(alpha: 0.12),
                           shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            width: 1,
+                          ),
                         ),
                         child: const Icon(
                           Icons.family_restroom_rounded,
@@ -491,8 +616,7 @@ class _FamilyHero extends StatelessWidget {
                   const SizedBox(height: 22),
                   Text(
                     '$part, $name',
-                    style: const TextStyle(
-                      fontFamily: 'Sora',
+                    style: GoogleFonts.sora(
                       fontSize: 26,
                       fontWeight: FontWeight.w800,
                       color: Colors.white,
@@ -503,30 +627,39 @@ class _FamilyHero extends StatelessWidget {
                   const Text(
                     'Small moments of care. A place for everyone in your family.',
                     style: TextStyle(
-                      color: AppColors.white80,
+                      color: AppColors.white70,
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                       height: 1.45,
                     ),
                   ),
                   const SizedBox(height: 18),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Image.asset(
-                      AppImages.caregiverHero,
-                      height: 110,
-                      fit: BoxFit.cover,
-                      excludeFromSemantics: true,
-                      errorBuilder: (_, _, _) => Container(
-                        height: 80,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: const Icon(
-                          Icons.family_restroom,
-                          size: 40,
-                          color: Colors.white38,
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        width: 1,
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(15),
+                      child: Image.asset(
+                        AppImages.caregiverHero,
+                        height: 110,
+                        fit: BoxFit.cover,
+                        excludeFromSemantics: true,
+                        errorBuilder: (_, _, _) => Container(
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                          child: const Icon(
+                            Icons.family_restroom,
+                            size: 40,
+                            color: Colors.white38,
+                          ),
                         ),
                       ),
                     ),
@@ -537,6 +670,112 @@ class _FamilyHero extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The family selection card — same job and behaviour as the old light
+/// selector, dressed in navy and themed so its outlined buttons read white.
+class _CaringCard extends ConsumerWidget {
+  const _CaringCard({required this.members});
+  final List<Person> members;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scope = ref.watch(caregiverScopeProvider);
+    if (scope == null) return const SizedBox.shrink();
+    final writer = ref.watch(caregiverWriterProvider(scope));
+    return Theme(
+      // Outlined controls on this navy card keep their contrast.
+      data: Theme.of(context).copyWith(
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(48, 48),
+            foregroundColor: Colors.white,
+            side: const BorderSide(color: AppColors.white70, width: 1.4),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            minimumSize: const Size(48, 48),
+            foregroundColor: Colors.white,
+          ),
+        ),
+      ),
+      child: ref
+          .watch(caregiverSettingsProvider(scope))
+          .when(
+            loading: () => const _NavyCard(
+              title: 'All family',
+              eyebrow: 'CARING FOR',
+              child: Text('Loading your family selection\u2026'),
+            ),
+            error: (_, _) => _NavyCard(
+              title: 'All family',
+              eyebrow: 'CARING FOR',
+              child: CaregiverSaveAction(
+                label: 'Retry family selection',
+                onSave: () async {
+                  ref.invalidate(caregiverSettingsProvider(scope));
+                  await ref.read(caregiverSettingsProvider(scope).future);
+                },
+              ),
+            ),
+            data: (settings) {
+              final selected = members
+                  .where((p) => p.id == settings.selectedPersonId)
+                  .firstOrNull;
+              return _NavyCard(
+                title: selected?.fullName ?? 'All family',
+                eyebrow: 'CARING FOR',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (selected != null)
+                      Text(
+                        caregiverAge(selected),
+                        style: const TextStyle(color: AppColors.white60),
+                      ),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.people_outline),
+                      label: const Text('Choose family member'),
+                      onPressed: () => showModalBottomSheet<void>(
+                        context: context,
+                        isScrollControlled: true,
+                        builder: (context) => SafeArea(
+                          child: ListView(
+                            shrinkWrap: true,
+                            padding: const EdgeInsets.all(20),
+                            children: [
+                              CaregiverSaveAction(
+                                label: 'All family',
+                                onSave: () async {
+                                  await writer.settings(
+                                    (s) => s.copyWith(allFamily: true),
+                                  );
+                                  if (context.mounted) Navigator.pop(context);
+                                },
+                              ),
+                              for (final p in members)
+                                CaregiverSaveAction(
+                                  label: '${p.fullName} • ${caregiverAge(p)}',
+                                  onSave: () async {
+                                    await writer.settings(
+                                      (s) => s.copyWith(selectedPersonId: p.id),
+                                    );
+                                    if (context.mounted) Navigator.pop(context);
+                                  },
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
     );
   }
 }
@@ -562,6 +801,7 @@ class _QuickActions extends StatelessWidget {
           label: 'Check on someone now',
           icon: Icons.health_and_safety_outlined,
           height: 58,
+          bright: true,
           onPressed: onCheck,
         ),
         const SizedBox(height: 12),
@@ -620,9 +860,23 @@ class _QuickTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
         decoration: BoxDecoration(
-          color: AppColors.caregiverSurface,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [AppColors.checkNavyMid, AppColors.checkNavy],
+          ),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.line, width: 1),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.08),
+            width: 1,
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x40000000),
+              blurRadius: 16,
+              offset: Offset(0, 6),
+            ),
+          ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -631,10 +885,10 @@ class _QuickTile extends StatelessWidget {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: AppColors.primaryLight,
+                color: AppColors.checkBlue.withValues(alpha: 0.22),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, color: AppColors.primary, size: 20),
+              child: Icon(icon, color: AppColors.checkBlueBright, size: 20),
             ),
             const SizedBox(height: 10),
             Text(
@@ -642,7 +896,7 @@ class _QuickTile extends StatelessWidget {
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w800,
-                color: AppColors.ink,
+                color: Colors.white,
               ),
             ),
             const SizedBox(height: 2),
@@ -651,7 +905,7 @@ class _QuickTile extends StatelessWidget {
               style: const TextStyle(
                 fontSize: 10.5,
                 fontWeight: FontWeight.w500,
-                color: AppColors.inkMuted,
+                color: AppColors.white60,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -678,11 +932,10 @@ class _FamilySection extends ConsumerWidget {
           padding: const EdgeInsets.only(bottom: 14, left: 2),
           child: Text(
             'Our family',
-            style: TextStyle(
-              fontFamily: 'Sora',
+            style: GoogleFonts.sora(
               fontSize: 17,
               fontWeight: FontWeight.w700,
-              color: AppColors.ink,
+              color: Colors.white,
             ),
           ),
         ),
@@ -696,15 +949,14 @@ class _FamilySection extends ConsumerWidget {
                   child: Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          AppColors.primaryLight.withValues(alpha: 0.6),
-                          AppColors.primaryLight.withValues(alpha: 0.2),
-                        ],
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [AppColors.checkNavyMid, AppColors.checkNavy],
                       ),
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: AppColors.primary.withValues(alpha: 0.12),
+                        color: Colors.white.withValues(alpha: 0.08),
                         width: 1,
                       ),
                     ),
@@ -714,12 +966,12 @@ class _FamilySection extends ConsumerWidget {
                           width: 36,
                           height: 36,
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.1),
+                            color: AppColors.checkBlue.withValues(alpha: 0.22),
                             shape: BoxShape.circle,
                           ),
-                          child: Icon(
+                          child: const Icon(
                             Icons.home_outlined,
-                            color: AppColors.primary,
+                            color: AppColors.checkBlueBright,
                             size: 18,
                           ),
                         ),
@@ -733,7 +985,7 @@ class _FamilySection extends ConsumerWidget {
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w800,
                                   fontSize: 14,
-                                  color: AppColors.ink,
+                                  color: Colors.white,
                                 ),
                               ),
                               const SizedBox(height: 1),
@@ -742,7 +994,7 @@ class _FamilySection extends ConsumerWidget {
                                 style: const TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
-                                  color: AppColors.inkMuted,
+                                  color: AppColors.white60,
                                 ),
                               ),
                             ],
@@ -755,7 +1007,10 @@ class _FamilySection extends ConsumerWidget {
         ),
         members.when(
           loading: () => const SizedBox.shrink(),
-          error: (_, _) => const Text('Family members could not be loaded.'),
+          error: (_, _) => const Text(
+            'Family members could not be loaded.',
+            style: TextStyle(color: AppColors.white60),
+          ),
           data: (people) => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -764,16 +1019,19 @@ class _FamilySection extends ConsumerWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: AppColors.caregiverSurface,
+                    color: Colors.white.withValues(alpha: 0.04),
                     borderRadius: BorderRadius.circular(Gap.radius),
-                    border: Border.all(color: AppColors.line, width: 1),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.1),
+                      width: 1,
+                    ),
                   ),
                   child: const Text(
                     'No one is on your family list yet. Add the people you care for to get started.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 13,
-                      color: AppColors.inkMuted,
+                      color: AppColors.white60,
                       height: 1.5,
                     ),
                   ),
@@ -781,14 +1039,14 @@ class _FamilySection extends ConsumerWidget {
               for (final p in people)
                 CaregiverPersonCard(
                   person: p,
+                  dark: true,
                   onTap: () => Navigator.of(context).push(
                     GlassPageRoute<void>(
-                      builder: (_) =>
-                          CaregiverPersonDetail(personId: p.id),
+                      builder: (_) => CaregiverPersonDetail(personId: p.id),
                     ),
                   ),
                 ),
-              CaregiverAddMemberButton(householdId: householdId),
+              CaregiverAddMemberButton(householdId: householdId, dark: true),
             ],
           ),
         ),
@@ -806,9 +1064,23 @@ class _FamilyCodeCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.checkNavyMid, AppColors.checkNavy],
+        ),
         borderRadius: BorderRadius.circular(Gap.radius),
-        border: Border.all(color: AppColors.line, width: 1),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.08),
+          width: 1,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x59000000),
+            blurRadius: 24,
+            offset: Offset(0, 10),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -819,13 +1091,13 @@ class _FamilyCodeCard extends StatelessWidget {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
+                  color: AppColors.checkBlue.withValues(alpha: 0.22),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.key_outlined,
                   size: 16,
-                  color: AppColors.primary,
+                  color: AppColors.checkBlueBright,
                 ),
               ),
               const SizedBox(width: 10),
@@ -835,11 +1107,10 @@ class _FamilyCodeCard extends StatelessWidget {
                   children: [
                     Text(
                       'Your family code',
-                      style: const TextStyle(
-                        fontFamily: 'Sora',
+                      style: GoogleFonts.sora(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.ink,
+                        color: Colors.white,
                       ),
                     ),
                     const Text(
@@ -847,7 +1118,7 @@ class _FamilyCodeCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.inkMuted,
+                        color: AppColors.white60,
                         letterSpacing: 0.8,
                       ),
                     ),
@@ -861,7 +1132,7 @@ class _FamilyCodeCard extends StatelessWidget {
             'Show this code when discussing your family record with a health worker. Local-only notes and home checks are not automatically uploaded.',
             style: TextStyle(
               fontSize: 12.5,
-              color: AppColors.inkMuted,
+              color: AppColors.white60,
               height: 1.45,
             ),
           ),
@@ -869,20 +1140,20 @@ class _FamilyCodeCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.primaryLight.withValues(alpha: 0.5),
+              color: AppColors.checkNavyDeep,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: AppColors.primary.withValues(alpha: 0.15),
+                color: Colors.white.withValues(alpha: 0.12),
                 width: 1,
               ),
             ),
             child: SelectableText(
               FamilyCode.pretty(householdId),
-              style: const TextStyle(
-                fontFamily: 'Sora',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.sora(
                 fontWeight: FontWeight.w800,
                 fontSize: 24,
-                color: AppColors.primaryDeep,
+                color: AppColors.checkBlueBright,
                 letterSpacing: 1.5,
               ),
             ),
@@ -893,6 +1164,8 @@ class _FamilyCodeCard extends StatelessWidget {
   }
 }
 
+/// One family priority as a navy card. Urgent stays red — the IMCI red is the
+/// one colour allowed to break the navy — and the tap opens the guidance.
 class CaregiverFocusCard extends StatelessWidget {
   const CaregiverFocusCard({
     super.key,
@@ -908,22 +1181,37 @@ class CaregiverFocusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUrgent = focus.priority <= 1;
-    final accent = isUrgent ? AppColors.triageRed : AppColors.primary;
-    final overdue = focus.dueDate != null &&
-        focus.dueDate!.isBefore(DateTime.now());
+    final accent = isUrgent ? AppColors.triageRed : AppColors.checkBlue;
+    // The ink used for the accent's text and top band: the pure triage red
+    // and royal blue are too dark to read on navy, so they brighten here.
+    final accentText = isUrgent
+        ? const Color(0xFFFF8A80)
+        : AppColors.checkBlueBright;
+    final overdue =
+        focus.dueDate != null && focus.dueDate!.isBefore(DateTime.now());
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Container(
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [AppColors.checkNavyMid, AppColors.checkNavy],
+          ),
           borderRadius: BorderRadius.circular(Gap.radius),
           border: Border.all(
             color: isUrgent
-                ? accent.withValues(alpha: 0.35)
-                : AppColors.line,
+                ? accentText.withValues(alpha: 0.3)
+                : Colors.white.withValues(alpha: 0.08),
             width: isUrgent ? 1.2 : 1,
           ),
-          boxShadow: const [AppShadows.card],
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x59000000),
+              blurRadius: 24,
+              offset: Offset(0, 10),
+            ),
+          ],
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(Gap.radius),
@@ -932,7 +1220,7 @@ class CaregiverFocusCard extends StatelessWidget {
             children: [
               // Colour rides the top edge as a slim band — visible, but it
               // can never squeeze content the way a side bar could.
-              Container(height: 3, color: accent),
+              Container(height: 3, color: accentText),
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -946,7 +1234,7 @@ class CaregiverFocusCard extends StatelessWidget {
                             vertical: 3,
                           ),
                           decoration: BoxDecoration(
-                            color: accent.withValues(alpha: 0.1),
+                            color: accent.withValues(alpha: 0.16),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
@@ -954,7 +1242,7 @@ class CaregiverFocusCard extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
-                              color: accent,
+                              color: accentText,
                               letterSpacing: 0.3,
                             ),
                           ),
@@ -968,15 +1256,17 @@ class CaregiverFocusCard extends StatelessWidget {
                               vertical: 3,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.triageRedBg,
+                              color: AppColors.triageRed.withValues(
+                                alpha: 0.18,
+                              ),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Text(
+                            child: const Text(
                               'Overdue',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w800,
-                                color: AppColors.triageRed,
+                                color: Color(0xFFFF8A80),
                                 letterSpacing: 0.3,
                               ),
                             ),
@@ -987,7 +1277,7 @@ class CaregiverFocusCard extends StatelessWidget {
                             style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.inkMuted,
+                              color: AppColors.white60,
                             ),
                           ),
                       ],
@@ -998,7 +1288,7 @@ class CaregiverFocusCard extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 15.5,
                         fontWeight: FontWeight.w800,
-                        color: AppColors.ink,
+                        color: Colors.white,
                         height: 1.25,
                       ),
                     ),
@@ -1009,7 +1299,7 @@ class CaregiverFocusCard extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.inkMuted,
+                        color: AppColors.white60,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -1017,7 +1307,7 @@ class CaregiverFocusCard extends StatelessWidget {
                       focus.detail,
                       style: const TextStyle(
                         fontSize: 13,
-                        color: AppColors.inkMuted,
+                        color: AppColors.white60,
                         height: 1.45,
                       ),
                     ),
@@ -1040,10 +1330,7 @@ class CaregiverFocusCard extends StatelessWidget {
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        icon: const Icon(
-                          Icons.arrow_forward_rounded,
-                          size: 17,
-                        ),
+                        icon: const Icon(Icons.arrow_forward_rounded, size: 17),
                         label: const Text('Open guidance'),
                       ),
                     ),
@@ -1056,6 +1343,8 @@ class CaregiverFocusCard extends StatelessWidget {
                         itemKey: focus.itemKey,
                         occurrenceKey: dateKey,
                         label: "Today's activity",
+                        light: true,
+                        tone: accentText,
                       ),
                     ],
                   ],

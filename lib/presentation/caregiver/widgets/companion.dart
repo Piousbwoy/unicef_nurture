@@ -385,6 +385,7 @@ class CaregiverTaskToggle extends ConsumerStatefulWidget {
     this.step,
     this.totalSteps,
     this.tone,
+    this.light = false,
   });
   final String? personId;
   final CaregiverActivityKind kind;
@@ -398,6 +399,10 @@ class CaregiverTaskToggle extends ConsumerStatefulWidget {
   /// Colour of the thread and the pending ring — the verdict's own colour, so
   /// the plan reads as part of the answer it came from.
   final Color? tone;
+
+  /// The line sits on a navy card instead of a white one: labels, notes and
+  /// marker numbers switch to light ink so they stay legible.
+  final bool light;
 
   @override
   ConsumerState<CaregiverTaskToggle> createState() =>
@@ -484,6 +489,7 @@ class _CaregiverTaskToggleState extends ConsumerState<CaregiverTaskToggle> {
     final total = widget.totalSteps ?? 0;
     final first = step == null || step <= 1;
     final last = step == null || step >= total;
+    final light = widget.light;
     return Semantics(
       button: true,
       checked: done,
@@ -515,6 +521,7 @@ class _CaregiverTaskToggleState extends ConsumerState<CaregiverTaskToggle> {
                           busy: busy,
                           failed: failed,
                           tone: tone,
+                          light: light,
                         ),
                         if (last)
                           const Spacer()
@@ -544,7 +551,11 @@ class _CaregiverTaskToggleState extends ConsumerState<CaregiverTaskToggle> {
                                         size: 15,
                                         height: 1.4,
                                         color: done
-                                            ? AppColors.caregiverFaded
+                                            ? light
+                                                  ? AppColors.white60
+                                                  : AppColors.caregiverFaded
+                                            : light
+                                            ? AppColors.white85
                                             : CompanionColors.ink,
                                       ).copyWith(
                                         fontWeight: done
@@ -555,7 +566,7 @@ class _CaregiverTaskToggleState extends ConsumerState<CaregiverTaskToggle> {
                               ),
                               if (done) ...[
                                 const SizedBox(width: 8),
-                                const _DoneChip(),
+                                _DoneChip(light: light),
                               ],
                             ],
                           ),
@@ -569,7 +580,11 @@ class _CaregiverTaskToggleState extends ConsumerState<CaregiverTaskToggle> {
                                 height: 1.3,
                                 letterSpacing: 0.1,
                                 color: failed
-                                    ? AppColors.triageRed
+                                    ? light
+                                          ? const Color(0xFFFF8A80)
+                                          : AppColors.triageRed
+                                    : light
+                                    ? AppColors.white60
                                     : AppColors.caregiverFaded,
                               ),
                             ),
@@ -625,12 +640,14 @@ class _StepMarker extends StatelessWidget {
     required this.busy,
     required this.failed,
     required this.tone,
+    this.light = false,
   });
   final int? step;
   final bool done;
   final bool busy;
   final bool failed;
   final Color tone;
+  final bool light;
 
   @override
   Widget build(BuildContext context) {
@@ -662,9 +679,13 @@ class _StepMarker extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.white,
+        color: light ? Colors.white.withValues(alpha: 0.08) : Colors.white,
         border: Border.all(
-          color: failed ? AppColors.triageRed : tone.withValues(alpha: 0.42),
+          color: failed
+              ? (light ? const Color(0xFFFF8A80) : AppColors.triageRed)
+              : light
+              ? Colors.white.withValues(alpha: 0.45)
+              : tone.withValues(alpha: 0.42),
           width: 2,
         ),
       ),
@@ -672,23 +693,26 @@ class _StepMarker extends StatelessWidget {
           ? SizedBox(
               width: 15,
               height: 15,
-              child: CircularProgressIndicator(strokeWidth: 2.2, color: tone),
+              child: CircularProgressIndicator(
+                strokeWidth: 2.2,
+                color: light ? Colors.white : tone,
+              ),
             )
           : failed
-          ? const Icon(
+          ? Icon(
               Icons.priority_high_rounded,
               size: 16,
-              color: AppColors.triageRed,
+              color: light ? const Color(0xFFFF8A80) : AppColors.triageRed,
             )
           : step == null
           ? null
           : Text(
               '$step',
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'Sora',
                 fontSize: 13.5,
                 fontWeight: FontWeight.w800,
-                color: AppColors.checkNavy,
+                color: light ? Colors.white : AppColors.checkNavy,
               ),
             ),
     );
@@ -696,22 +720,29 @@ class _StepMarker extends StatelessWidget {
 }
 
 class _DoneChip extends StatelessWidget {
-  const _DoneChip();
+  const _DoneChip({this.light = false});
+  final bool light;
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
     decoration: BoxDecoration(
-      color: AppColors.checkBlueTint,
+      color: light
+          ? Colors.white.withValues(alpha: 0.12)
+          : AppColors.checkBlueTint,
       borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: AppColors.checkBlue.withValues(alpha: 0.16)),
+      border: Border.all(
+        color: light
+            ? Colors.white.withValues(alpha: 0.16)
+            : AppColors.checkBlue.withValues(alpha: 0.16),
+      ),
     ),
-    child: const Text(
+    child: Text(
       'Done',
       style: TextStyle(
         fontSize: 10.5,
         fontWeight: FontWeight.w800,
         letterSpacing: 0.4,
-        color: AppColors.checkBlue,
+        color: light ? AppColors.white85 : AppColors.checkBlue,
       ),
     ),
   );
