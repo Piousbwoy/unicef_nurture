@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "contract": "marian-v1",
+  "revision": "fce5900ef4080d48ea89e005f66e3b696171a4fd74bd33c6a1c0cc0c095b1470",
+  "source_revision": "d75a505a96de52043b9d57d19b4992564769d6dd",
+  "license": "Apache-2.0",
+  "files": [
+    {
+      "name": "encoder_model.onnx",
+      "bytes": 68578928,
+      "sha256": "d97f89125485b1e6553df67067de1f4eced2dc6a2964085076e964207ff9d2cd"
+    },
+    {
+      "name": "decoder_model.onnx",
+      "bytes": 81402099,
+      "sha256": "fce5900ef4080d48ea89e005f66e3b696171a4fd74bd33c6a1c0cc0c095b1470"
+    },
+    {
+      "name": "proj_model.onnx",
+      "bytes": 58824471,
+      "sha256": "b6f00a4bd98f712d7f150b8e972082e644d714af15e7835330c514c23b5a3ad9"
+    },
+    {
+      "name": "source.spm",
+      "bytes": 822549,
+      "sha256": "36d34adf713a24a95f9914878a8b960c01df0bf7ca15083d12e045aa4878c446"
+    },
+    {
+      "name": "target.spm",
+      "bytes": 788340,
+      "sha256": "ebd464b4fdc6f889eef52b938ea9e4bc6f3046445d78c9f0b82bea7fe2005c41"
+    },
+    {
+      "name": "vocab.json",
+      "bytes": 1476729,
+      "sha256": "51fc3a01c6455bf59302d7133dd841bb6fc3043872e7b37e5be530f468816923"
+    },
+    {
+      "name": "config.json",
+      "bytes": 1532,
+      "sha256": "c7d323628d2fb5c26bafa2086ff9843013eba8043e23e06b97cbe21af2af28ce"
+    },
+    {
+      "name": "generation_config.json",
+      "bytes": 3267,
+      "sha256": "d135291960d6a0a185b3dbb9caa0e55031c5bd2be078aab35d1e0f9e079c13ed"
+    },
+    {
+      "name": "tokenizer_fixtures.json",
+      "bytes": 3776,
+      "sha256": "c883120d4fb0f691ad3adefd8873514728643e3921909da5371b5214ce289389"
+    },
+    {
+      "name": "generation_fixtures.json",
+      "bytes": 2529,
+      "sha256": "b53907dc00dc6e267299b433c26faac201b586396a4a909add3360f632352148"
+    },
+    {
+      "name": "provenance.json",
+      "bytes": 345,
+      "sha256": "ab571670c1f5cf737d02e50c7756c0636f8303d0965ad9eaaac1c7b553ef1e46"
+    }
+  ]
+}

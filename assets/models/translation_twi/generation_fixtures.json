@@ -1,0 +1,176 @@
+[
+  {
+    "text": "The child is healthy.",
+    "source_ids": [
+      54,
+      711,
+      26,
+      3826,
+      3,
+      0
+    ],
+    "generated_ids": [
+      56999,
+      6202,
+      5,
+      18,
+      718,
+      3,
+      0
+    ],
+    "translation": "Abofra no wɔ ahoɔden."
+  },
+  {
+    "text": "Good morning! How are you?",
+    "source_ids": [
+      3021,
+      2224,
+      74,
+      149,
+      57,
+      48,
+      19,
+      0
+    ],
+    "generated_ids": [
+      56999,
+      402,
+      15,
+      156,
+      165,
+      2479,
+      19,
+      0
+    ],
+    "translation": "Wo ho te dɛn anɔpa?"
+  },
+  {
+    "text": "Wash your hands with soap and clean water.",
+    "source_ids": [
+      22608,
+      113,
+      1653,
+      40,
+      13012,
+      14,
+      1969,
+      965,
+      3,
+      0
+    ],
+    "generated_ids": [
+      56999,
+      1175,
+      14336,
+      12,
+      619,
+      180,
+      7418,
+      56,
+      300,
+      3,
+      0
+    ],
+    "translation": "Fa samina ne nsu pa hohoro wo nsa."
+  },
+  {
+    "text": "Please return to the clinic.",
+    "source_ids": [
+      5722,
+      1520,
+      10,
+      7,
+      15578,
+      3,
+      0
+    ],
+    "generated_ids": [
+      56999,
+      8566,
+      8,
+      1025,
+      245,
+      2413,
+      59,
+      3,
+      0
+    ],
+    "translation": "Yɛsrɛ sɛ san kɔ ayaresabea hɔ."
+  },
+  {
+    "text": "Akosua, Kwame and Amina.",
+    "source_ids": [
+      125,
+      3914,
+      24,
+      19684,
+      2,
+      26567,
+      14,
+      125,
+      23650,
+      3,
+      0
+    ],
+    "generated_ids": [
+      56999,
+      125,
+      3914,
+      6470,
+      2,
+      4,
+      259,
+      125,
+      3914,
+      6470,
+      12,
+      125,
+      10403,
+      55,
+      3,
+      0
+    ],
+    "translation": "Akosa, a ɔyɛ Akosa ne Amina."
+  },
+  {
+    "text": "12 children; 3.5 kg; 2026-04-05.",
+    "source_ids": [
+      410,
+      276,
+      78,
+      29566,
+      8945,
+      78,
+      481,
+      13203,
+      5111,
+      10342,
+      3979,
+      5111,
+      10342,
+      4945,
+      3,
+      0
+    ],
+    "generated_ids": [
+      56999,
+      410,
+      78,
+      353,
+      218,
+      2262,
+      7760,
+      244,
+      78,
+      481,
+      13203,
+      5111,
+      15938,
+      5111,
+      20199,
+      3,
+      0
+    ],
+    "translation": "12; mmofra bɛyɛ kilogram biako; 2026-04-05."
+  }
+]

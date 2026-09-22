@@ -1,0 +1,181 @@
+[
+  {
+    "text": "The child is healthy.",
+    "source_ids": [
+      111,
+      1213,
+      24,
+      6484,
+      3,
+      0
+    ],
+    "generated_ids": [
+      58088,
+      1241,
+      106,
+      4,
+      1278,
+      3,
+      0
+    ],
+    "translation": "Ɗan yana da lafiya."
+  },
+  {
+    "text": "Good morning! How are you?",
+    "source_ids": [
+      3567,
+      1923,
+      63,
+      174,
+      59,
+      26,
+      15,
+      0
+    ],
+    "generated_ids": [
+      58088,
+      169,
+      2,
+      3204,
+      223,
+      2354,
+      4,
+      40,
+      15,
+      0
+    ],
+    "translation": "To, yãya ake karkatar da ku?"
+  },
+  {
+    "text": "Wash your hands with soap and clean water.",
+    "source_ids": [
+      39590,
+      83,
+      1010,
+      54,
+      21653,
+      9,
+      2225,
+      890,
+      3,
+      0
+    ],
+    "generated_ids": [
+      58088,
+      124,
+      6347,
+      6129,
+      4,
+      14,
+      687,
+      41,
+      2502,
+      3,
+      0
+    ],
+    "translation": "Ka wanke hannunka da kuma ruwa mai tsabta."
+  },
+  {
+    "text": "Please return to the clinic.",
+    "source_ids": [
+      9727,
+      797,
+      8,
+      5,
+      28428,
+      3,
+      0
+    ],
+    "generated_ids": [
+      58088,
+      819,
+      20,
+      51,
+      1618,
+      8624,
+      3,
+      0
+    ],
+    "translation": "Don Allah ka koma asibiti."
+  },
+  {
+    "text": "Akosua, Kwame and Amina.",
+    "source_ids": [
+      84,
+      3504,
+      29,
+      32855,
+      2,
+      36881,
+      2097,
+      9,
+      5072,
+      2599,
+      3,
+      0
+    ],
+    "generated_ids": [
+      58088,
+      84,
+      9782,
+      1561,
+      327,
+      23,
+      4258,
+      37,
+      0
+    ],
+    "translation": "AGBOR 6 (Turanci)"
+  },
+  {
+    "text": "12 children; 3.5 kg; 2026-04-05.",
+    "source_ids": [
+      750,
+      461,
+      46,
+      1164,
+      7814,
+      20614,
+      46,
+      597,
+      19571,
+      161,
+      12470,
+      7472,
+      161,
+      12470,
+      7814,
+      3,
+      0
+    ],
+    "generated_ids": [
+      58088,
+      750,
+      46,
+      267,
+      13,
+      114,
+      22,
+      1638,
+      7446,
+      750,
+      46,
+      267,
+      24,
+      5,
+      67,
+      166,
+      46,
+      597,
+      161,
+      114,
+      3365,
+      267,
+      23,
+      4258,
+      37,
+      0
+    ],
+    "translation": "12; 3: 1 - 5) Yara 12; 3 is the e; 20- 1 Sarakuna 3 (Turanci)"
+  }
+]

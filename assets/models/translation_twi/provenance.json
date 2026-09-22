@@ -1,0 +1,9 @@
+{
+  "source": "Helsinki-NLP/opus-mt-en-tw",
+  "revision": "d75a505a96de52043b9d57d19b4992564769d6dd",
+  "weights_revision": "d79d90e1161397ca820000ce52caeaea613679fd",
+  "weights_sha256": "fb2320a451dbcdc0acc8e3bc773eb1511e3d4532f59a89f8b1e8ebc2b22a8a05",
+  "license": "Apache-2.0",
+  "torch": "2.13.0+cpu",
+  "contract": "marian-v1"
+}

@@ -8,7 +8,8 @@ vocab embedding (58k x 512 fp32 = 119 MB) sits in both encoder and decoder
 graphs behind Gather ops, so plain dynamic quantization alone does not shrink.
 
 Scheme: weight-only INT8/INT16 with fp32 activations.
-  - Embeddings: symmetric per-column int8 + DequantizeLinear after the Gather.
+  - Embeddings: symmetric per-token-row int8 + Cast/Mul dequant, with the row
+    scales looked up by a second Gather on the same indices.
   - MatMul weights: symmetric per-column int16 + Cast/Mul dequant (opset-14
     legal; DequantizeLinear only accepts int16 from opset 21 / ORT 1.16 and
     the app bundles ORT 1.15.1).
@@ -17,9 +18,9 @@ Scheme: weight-only INT8/INT16 with fp32 activations.
     MatMulInteger kernels: the u8s8 activation path miscomputes scattered
     columns on ORT 1.30, and per-tensor activation quantization is too coarse
     for these skewed hidden states (greedy decoding diverges from fp32).
-  - proj_model.onnx: the tied embedding as a logits projection MatMul
-    (hidden -> vocab), weight-only int16, because the Dart runner
-    (lib/core/ml/marian_native_engine.dart) chains
+  - proj_model.onnx: the tied embedding as a logits projection MatMul plus the
+    trained final_logits_bias (hidden -> vocab), weight-only int16, because the
+    Dart runner (lib/core/ml/marian_native_engine.dart) chains
     encoder -> decoder (hidden states) -> proj (logits).
 
 Usage:
@@ -82,42 +83,58 @@ def find_embed_gather(model, embed_name):
 
 
 def patch_embedding(model, embed_name):
-    """Replace fp32 embedding with symmetric per-column int8 + DequantizeLinear."""
+    """Replace fp32 embedding with per-row (per-token) int8.
+
+    A single per-column scale spans 57-58k token vectors of very different
+    magnitudes and leaves ~0.002 absolute error, which was enough to insert a
+    wrong word into a validated Hausa sentence. One scale per token row is the
+    same int8 footprint and roughly ten times finer; the row scales are looked
+    up with a second tiny Gather on the same indices.
+    """
     graph = model.graph
     embed_init = next(t for t in graph.initializer if t.name == embed_name)
     embed = numpy_helper.to_array(embed_init)  # [V, 512]
     vocab, dim = embed.shape
     assert dim == 512, f"unexpected d_model {dim}"
 
-    abs_max = np.max(np.abs(embed), axis=0)  # per column
+    abs_max = np.max(np.abs(embed), axis=1)  # per token row
     scale = abs_max / 127.0
-    scale = np.where(scale == 0, 1e-6, scale)
-    quant = np.clip(np.round(embed / scale), -127, 127).astype(np.int8)
-    max_err = float(np.max(np.abs(quant.astype(np.float32) * scale - embed)))
-    print(f"  embed {embed_name}: {vocab}x{dim} -> int8, max dequant err {max_err:.4f}")
+    scale = np.where(scale == 0, 1e-6, scale).astype(np.float32)
+    quant = np.clip(np.round(embed / scale[:, None]), -127, 127).astype(np.int8)
+    max_err = float(np.max(np.abs(quant.astype(np.float32) * scale[:, None] - embed)))
+    print(f"  embed {embed_name}: {vocab}x{dim} -> per-row int8, max dequant err {max_err:.4f}")
 
     gather = find_embed_gather(model, embed_name)
-    dequant_out = f"{gather.output[0]}_dequant"
-
+    indices = gather.input[1]
+    quant_name = f"{embed_name}_int8"
+    scale_name = f"{embed_name}_scale"
     graph.initializer.remove(embed_init)
-    graph.initializer.extend(
-        [
-            numpy_helper.from_array(quant, name=f"{embed_name}_int8"),
-            numpy_helper.from_array(scale.astype(np.float32), name=f"{embed_name}_scale"),
-        ]
-    )
-    gather.input[0] = f"{embed_name}_int8"
+    graph.initializer.extend([
+        numpy_helper.from_array(quant, name=quant_name),
+        numpy_helper.from_array(scale, name=scale_name),
+    ])
+    gather.input[0] = quant_name
     consumers = [n for n in graph.node if gather.output[0] in list(n.input)]
-    # Symmetric quantization: omit x_zero_point (ORT treats missing as 0; a
-    # scalar zero fails ORT's per-axis check which wants null or 1D[512]).
-    dq = helper.make_node(
-        "DequantizeLinear",
-        [gather.output[0], f"{embed_name}_scale"],
-        [dequant_out],
-        name=f"{embed_name}_dequant",
-        axis=2,
-    )
-    graph.node.insert(list(graph.node).index(gather) + 1, dq)
+
+    row_scale = f"{gather.output[0]}_row_scale"
+    scaled_scale = f"{row_scale}_3d"
+    cast_out = f"{gather.output[0]}_cast"
+    dequant_out = f"{gather.output[0]}_dequant"
+    axes_name = f"{embed_name}_unsqueeze_axis"
+    graph.initializer.append(numpy_helper.from_array(np.array([-1], np.int64), name=axes_name))
+    index = list(graph.node).index(gather)
+    graph.node.insert(index + 1, helper.make_node(
+        "Gather", [scale_name, indices], [row_scale],
+        name=f"{embed_name}_scale_gather", axis=0))
+    # Opset 14 takes Unsqueeze axes as a second input, not an attribute.
+    graph.node.insert(index + 2, helper.make_node(
+        "Unsqueeze", [row_scale, axes_name], [scaled_scale],
+        name=f"{embed_name}_scale_unsqueeze"))
+    graph.node.insert(index + 3, helper.make_node(
+        "Cast", [gather.output[0]], [cast_out], name=f"{embed_name}_cast",
+        to=onnx.TensorProto.FLOAT))
+    graph.node.insert(index + 4, helper.make_node(
+        "Mul", [cast_out, scaled_scale], [dequant_out], name=f"{embed_name}_dequant"))
     for node in consumers:
         for i, inp in enumerate(node.input):
             if inp == gather.output[0]:
@@ -197,14 +214,43 @@ def patch_matmul_weights(model, bits=16):
     return model
 
 
-def build_proj_model(embed, vocab, opset=14):
-    """Tiny fp32 model: hidden [B,S,512] x W[512,V] -> logits [B,S,V]."""
+def load_final_logits_bias(pair):
+    """Marian's output layer is hidden @ E^T + final_logits_bias.
+
+    The bias is trained (absmax ~7.5 hausa, ~9.6 twi) and mostly nonzero, so a
+    projection that omits it silently skews every argmax toward high-frequency
+    function words and produces repetition loops. Read it from the pinned HF
+    snapshot; embeddings in that snapshot are bit-identical to the ONNX export.
+    """
+    import glob
+    import json
+
+    from safetensors import safe_open
+
+    repo = {'translation_hausa': 'opus-mt-en-ha', 'translation_twi': 'opus-mt-en-tw'}[pair]
+    revision = json.loads((REPO_ROOT / 'build/marian_reference' / pair / 'provenance.json')
+        .read_text(encoding='utf-8'))['weights_revision']
+    files = glob.glob(str(Path.home() / '.cache/huggingface/hub' / f'models--Helsinki-NLP--{repo}'
+        / 'snapshots' / revision / 'model.safetensors'))
+    if not files:
+        raise SystemExit(f'missing pinned HF snapshot for {repo} ({revision})')
+    with safe_open(files[0], framework='np') as handle:
+        return handle.get_tensor('final_logits_bias').astype(np.float32).reshape(-1)
+
+
+def build_proj_model(embed, vocab, bias, opset=14):
+    """Logits projection: hidden [B,S,512] x W[512,V] + bias[V] -> logits [B,S,V]."""
     weight = embed.T.astype(np.float32)  # [512, V]
+    assert bias.shape == (vocab,), f'bias shape {bias.shape} != vocab {vocab}'
     inputs = [helper.make_tensor_value_info("hidden_states", onnx.TensorProto.FLOAT, ["batch", "seq", 512])]
     outputs = [helper.make_tensor_value_info("logits", onnx.TensorProto.FLOAT, ["batch", "seq", vocab])]
-    initializers = [numpy_helper.from_array(weight, name="proj_weight")]
-    node = helper.make_node("MatMul", ["hidden_states", "proj_weight"], ["logits"], name="proj_matmul")
-    graph = helper.make_graph([node], "proj", inputs, outputs, initializers)
+    initializers = [numpy_helper.from_array(weight, name="proj_weight"),
+        numpy_helper.from_array(bias, name="proj_bias")]
+    nodes = [
+        helper.make_node("MatMul", ["hidden_states", "proj_weight"], ["proj_matmul"], name="proj_matmul"),
+        helper.make_node("Add", ["proj_matmul", "proj_bias"], ["logits"], name="proj_bias_add"),
+    ]
+    graph = helper.make_graph(nodes, "proj", inputs, outputs, initializers)
     model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", opset)])
     model.ir_version = 8
     return model
@@ -223,6 +269,11 @@ def quantize_pair(pair):
     print("encoder inputs: ", [(i.name,) for i in enc.graph.input])
     print("decoder inputs: ", [(i.name,) for i in dec.graph.input])
 
+    # Keep the pristine fp32 tied embedding for the projection: building proj
+    # from the int8-dequantized copy would quantize the same weights twice.
+    tied_embed = numpy_helper.to_array(
+        next(t for t in dec.graph.initializer if t.name == "decoder.embed_tokens.weight"))
+
     enc = patch_embedding(enc, "embed_tokens.weight")
     dec = patch_embedding(dec, "decoder.embed_tokens.weight")
     enc = patch_matmul_weights(enc)
@@ -233,14 +284,8 @@ def quantize_pair(pair):
     onnx.save_model(enc, str(out / "encoder_model.onnx"))
     onnx.save_model(dec, str(out / "decoder_model.onnx"))
 
-    # proj_model.onnx from the decoder's (post-patch) tied embedding,
-    # dequantized back to fp32 so the projection weight matches the decoder's
-    # embedding exactly.
-    embed = numpy_helper.to_array(next(t for t in dec.graph.initializer if t.name == "decoder.embed_tokens.weight_int8"))
-    scale = numpy_helper.to_array(next(t for t in dec.graph.initializer if t.name == "decoder.embed_tokens.weight_scale"))
-    embed_fp32 = embed.astype(np.float32) * scale
-    vocab = embed_fp32.shape[0]
-    proj = build_proj_model(embed_fp32, vocab)
+    vocab = tied_embed.shape[0]
+    proj = build_proj_model(tied_embed, vocab, load_final_logits_bias(pair))
     proj = patch_matmul_weights(proj)
     onnx.checker.check_model(proj, full_check=True)
     onnx.save_model(proj, str(out / "proj_model.onnx"))
@@ -269,68 +314,84 @@ def detok(ids, rev):
     return "".join(out).strip()
 
 
-def greedy_decode(sessions, vocab, rev, spm_enc, text, pad_id, eos_id, max_new=50):
-    # Marian id space is vocab.json order, not sentencepiece order — map by
-    # piece string on both ends (same as HF MarianTokenizer and the Dart runner).
-    pieces = spm_enc.encode(text, out_type=str)
-    ids = [[vocab.get(p, 1) for p in pieces] + [eos_id]]
-    mask = [[1] * len(ids[0])]
-    enc_out = sessions["enc"].run(None, {"input_ids": np.array(ids, np.int64), "attention_mask": np.array(mask, np.int64)})[0]
-    dec_ids = [pad_id]
-    generated = []
-    for _ in range(max_new):
-        dec_in = np.array([dec_ids], np.int64)
-        dec_out = sessions["dec"].run(
-            None,
-            {"decoder_input_ids": dec_in, "encoder_hidden_states": enc_out, "encoder_attention_mask": np.array(mask, np.int64)},
-        )[0]
-        logits = sessions["proj"].run(None, {"hidden_states": dec_out})[0][0, -1]
-        nxt = int(np.argmax(logits))
-        generated.append(nxt)
-        if nxt == eos_id:
-            break
-        dec_ids.append(nxt)
-    return generated, detok(generated, rev)
+def greedy_decode(sessions, source_ids, gen_cfg, rev):
+    """Greedy decode through the real exported sessions.
 
-
-def validate(pair_dir, src_dir):
+    Mirrors marian_validation.greedy, which is the gate the fp32 reference was
+    certified against. Two rules there are load-bearing and were missing here:
+    Marian's ``bad_words_ids`` suppresses the pad token inside the loop (without
+    it argmax can settle on pad and truncate the sentence), and ``forced_eos``
+    terminates at the length cap. Returns the full id sequence *including* the
+    decoder-start token at index 0, matching the fixtures and the Dart engine.
+    """
     import json
 
-    import sentencepiece as spm
-
-    vocab = json.load(open(src_dir / "vocab.json"))
-    rev = {v: k for k, v in vocab.items()}
-    spm_enc = spm.SentencePieceProcessor(model_file=str(src_dir / "source.spm"))
-
-    with open(src_dir / "config.json") as f:
-        cfg = json.load(f)
+    cfg = json.load(open(gen_cfg)) if not isinstance(gen_cfg, dict) else gen_cfg
     pad_id = int(cfg["pad_token_id"])
     eos_id = int(cfg["eos_token_id"])
+    bad_words = cfg.get("bad_words_ids") or []
+    forced_eos = cfg.get("forced_eos_token_id")
+    max_length = int(cfg["max_length"])
 
-    def load(tag):
-        enc_dir = src_dir if tag == "fp32" else pair_dir
-        proj_name = "_proj_fp32.onnx" if tag == "fp32" else "proj_model.onnx"
-        enc = ort.InferenceSession(str(enc_dir / "encoder_model.onnx"), providers=["CPUExecutionProvider"])
-        dec = ort.InferenceSession(str(enc_dir / "decoder_model.onnx"), providers=["CPUExecutionProvider"])
-        proj = ort.InferenceSession(str(pair_dir / proj_name), providers=["CPUExecutionProvider"])
-        return {"enc": enc, "dec": dec, "proj": proj}
+    ids = np.array([source_ids], np.int64)
+    mask = np.ones_like(ids)
+    hidden = sessions["encoder"].run(None, {"input_ids": ids, "attention_mask": mask})[0]
+    prefix = [pad_id]
+    vocab_size = len(rev)
+    for step in range(max_length - 1):
+        logits = sessions["decoder"].run(
+            None,
+            {
+                "decoder_input_ids": np.array([prefix], np.int64),
+                "encoder_hidden_states": hidden,
+                "encoder_attention_mask": mask,
+            },
+        )[0]
+        # A split export ends in decoder_hidden_states and needs the projection;
+        # a monolithic export already returns vocabulary logits.
+        if logits.shape[-1] != vocab_size:
+            logits = sessions["proj"].run(None, {"hidden_states": logits})[0]
+        scores = logits[0, -1].copy()
+        for word in bad_words:
+            if len(word) != 1:
+                raise ValueError("Unsupported generation suppression rule")
+            scores[word[0]] = -np.inf
+        token = int(np.argmax(scores))
+        if step == max_length - 2 and forced_eos is not None:
+            token = int(forced_eos)
+        prefix.append(token)
+        if token == eos_id:
+            return prefix, detok(prefix[1:], rev)
+    raise ValueError("Generation did not terminate")
 
-    fp32 = load("fp32")
-    int8 = load("int8")
 
-    print(f"\n  Validating {src_dir.name} (pad={pad_id}, eos={eos_id})")
+def validate(pair_dir, src_dir, ref_dir):
+    vocab = json.load(open(src_dir / "vocab.json"))
+    rev = {int(v): k for k, v in vocab.items()}
+
+    def load(base, proj_path):
+        return {
+            "encoder": ort.InferenceSession(str(base / "encoder_model.onnx"), providers=["CPUExecutionProvider"]),
+            "decoder": ort.InferenceSession(str(base / "decoder_model.onnx"), providers=["CPUExecutionProvider"]),
+            "proj": ort.InferenceSession(str(proj_path), providers=["CPUExecutionProvider"]),
+        }
+
+    fp32 = load(ref_dir, pair_dir / "_proj_fp32.onnx")
+    quantized = load(pair_dir, pair_dir / "proj_model.onnx")
+    gen_cfg = json.load(open(ref_dir / "generation_config.json"))
+
+    print(f"\n  Validating {ref_dir.name} (pad={gen_cfg['pad_token_id']}, eos={gen_cfg['eos_token_id']})")
     all_match = True
-    for text in SAMPLE_SENTENCES:
-        ref_ids, ref_text = greedy_decode(fp32, vocab, rev, spm_enc, text, pad_id, eos_id)
-        q_ids, q_text = greedy_decode(int8, vocab, rev, spm_enc, text, pad_id, eos_id)
-        match = ref_ids == q_ids
+    for fixture in json.load(open(ref_dir / "generation_fixtures.json")):
+        ref_ids, ref_text = greedy_decode(fp32, fixture["source_ids"], gen_cfg, rev)
+        q_ids, q_text = greedy_decode(quantized, fixture["source_ids"], gen_cfg, rev)
+        match = q_ids == fixture["generated_ids"]
         all_match &= match
-        status = "MATCH " if match else "DIFFER"
-        print(f"  [{status}] {text}")
-        print(f"          fp32: {ref_text}")
+        print(f"  [{'MATCH ' if match else 'DIFFER'}] {fixture['text']}")
+        print(f"          quant: {q_text}")
         if not match:
-            print(f"          int8: {q_text}")
-    print(f"  => {'ALL GREEDY OUTPUTS MATCH fp32' if all_match else 'MISMATCHES PRESENT — review before shipping'}")
+            print(f"          fp32 : {ref_text}")
+    print(f"  => {'ALL GREEDY OUTPUTS MATCH THE PyTORCH-VALIDATED REFERENCE' if all_match else 'MISMATCHES PRESENT — review before shipping'}")
     return all_match
 
 
@@ -347,14 +408,8 @@ def write_app_package(pair_dir, src_dir, ref_dir):
     import json
     import shutil
 
-    import sentencepiece as spm
-
     vocab = json.load(open(src_dir / "vocab.json"))
-    rev = {v: k for k, v in vocab.items()}
-    spm_enc = spm.SentencePieceProcessor(model_file=str(src_dir / "source.spm"))
-    cfg = json.load(open(src_dir / "config.json"))
-    pad_id = int(cfg["pad_token_id"])
-    eos_id = int(cfg["eos_token_id"])
+    rev = {int(v): k for k, v in vocab.items()}
 
     # Tokenizer/SPM artifacts and provenance are identical to the fp32 export.
     for name in ("tokenizer_fixtures.json", "provenance.json", "generation_config.json"):
@@ -365,17 +420,24 @@ def write_app_package(pair_dir, src_dir, ref_dir):
     # Generation fixtures must match the fp32 reference ids exactly; the
     # Dart engine asserts this parity on device at load time.
     ref_fixtures = json.load(open(ref_dir / "generation_fixtures.json"))
-    enc = ort.InferenceSession(str(pair_dir / "encoder_model.onnx"), providers=["CPUExecutionProvider"])
-    dec = ort.InferenceSession(str(pair_dir / "decoder_model.onnx"), providers=["CPUExecutionProvider"])
-    proj = ort.InferenceSession(str(pair_dir / "proj_model.onnx"), providers=["CPUExecutionProvider"])
-    sessions = {"enc": enc, "dec": dec, "proj": proj}
+    gen_cfg = json.load(open(ref_dir / "generation_config.json"))
+    sessions = {
+        name: ort.InferenceSession(str(pair_dir / f"{name}_model.onnx"), providers=["CPUExecutionProvider"])
+        for name in ("encoder", "decoder", "proj")
+    }
     fixtures = []
     for fixture in ref_fixtures:
-        ids, text = greedy_decode(sessions, vocab, rev, spm_enc, fixture["text"], pad_id, eos_id)
-        if ids != fixture["generated_ids"]:
-            raise SystemExit(f"{pair_dir.name}: quantized greedy differs from fp32 reference for {fixture['text']!r}")
+        generated, text = greedy_decode(sessions, fixture["source_ids"], gen_cfg, rev)
+        if generated != fixture["generated_ids"]:
+            raise SystemExit(
+                f"{pair_dir.name}: quantized greedy differs from the PyTorch-validated "
+                f"reference for {fixture['text']!r}\n"
+                f"  quantized: {text!r}\n  reference: {fixture['translation']!r}"
+            )
         fixtures.append({"text": fixture["text"], "source_ids": fixture["source_ids"],
-            "generated_ids": ids, "translation": text})
+            "generated_ids": generated, "translation": text})
+    if len(fixtures) < 6:
+        raise SystemExit(f"{pair_dir.name}: only {len(fixtures)} parity fixtures, refusing to ship")
     write_json(pair_dir / "generation_fixtures.json", fixtures)
 
     names = ["encoder_model.onnx", "decoder_model.onnx", "proj_model.onnx", "source.spm",
@@ -403,14 +465,15 @@ def main():
     if args.validate:
         ok = True
         for pair in PAIRS:
-            # Rebuild temporary fp32 proj for the reference path.
-            src = ASSETS / pair
-            dec = onnx.load(str(src / "decoder_model.onnx"))
+            ref = REPO_ROOT / "build" / "marian_reference" / pair
+            # fp32 projection for the reference leg, from the same weights the
+            # quantized package carries, so the only variable is precision.
+            dec = onnx.load(str(ASSETS / pair / "decoder_model.onnx"))
             embed = numpy_helper.to_array(next(t for t in dec.graph.initializer if t.name == "decoder.embed_tokens.weight"))
-            ref_proj = OUT_ROOT / pair / "_proj_fp32.onnx"
-            ref_proj.parent.mkdir(parents=True, exist_ok=True)
-            onnx.save_model(build_proj_model(embed, embed.shape[0]), str(ref_proj))
-            ok &= validate(OUT_ROOT / pair, src)
+            (OUT_ROOT / pair).mkdir(parents=True, exist_ok=True)
+            onnx.save_model(build_proj_model(embed, embed.shape[0], load_final_logits_bias(pair)),
+                str(OUT_ROOT / pair / "_proj_fp32.onnx"))
+            ok &= validate(OUT_ROOT / pair, ASSETS / pair, ref)
         sys.exit(0 if ok else 1)
 
     if args.package:

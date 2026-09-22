@@ -53,13 +53,10 @@ server/.env
 # Contains the app's browser-side database — never commit it.
 .chrome-profile/
 
-# Trained models are ~941 MB and .gitattributes routes *.onnx through Git LFS,
-# whose quota on this remote is exhausted. Kept local until that is resolved;
-# delete these two lines to track them via LFS again.
-assets/models/translation_hausa/*.onnx
-assets/models/translation_twi/*.onnx
-assets/tts/hausa_piper/model.onnx
-assets/tts/twi_piper/model.onnx
+# ONNX weights are tracked as plain git blobs (see .gitattributes). Every model
+# in assets/ is quantized to stay under GitHub's 100 MB per-file limit, so the
+# LFS quota is no longer on the critical path. Regenerate them with
+# tool/quantize_translation_models.py; do not re-add ignore rules for *.onnx.
 
 # Vendored ONNX Runtime WASM (10.7 MB), regenerable with tool/fetch_ort_web.py.
 web/voice_runtime/

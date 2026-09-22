@@ -93,6 +93,14 @@ flutter:
     - assets/images/
     - assets/fonts/
     - assets/models/
+    # Flutter does not recurse into asset directories. These four are the
+    # offline voice packs; NativePackStore loads them by directory path, so
+    # dropping a line here ships an app that silently has no neural translation
+    # or TTS for that language.
+    - assets/models/translation_hausa/
+    - assets/models/translation_twi/
+    - assets/tts/hausa_piper/
+    - assets/tts/twi_piper/
   fonts:
     # CanvasKit always requests a family named Roboto at engine startup.
     # Alias that fallback to bundled Inter, our app font, to avoid a remote

@@ -1,0 +1,9 @@
+{
+  "source": "Helsinki-NLP/opus-mt-en-ha",
+  "revision": "9736e603aa1c79372d62b3a9d96029d0b51f7466",
+  "weights_revision": "a5937358c5c405faf5d6fa8a2a542bc0cad12ace",
+  "weights_sha256": "32eca42936c03ce060c5751f3d690c4c8364ca8df961100f49c9e4f434a3038f",
+  "license": "Apache-2.0",
+  "torch": "2.13.0+cpu",
+  "contract": "marian-v1"
+}
