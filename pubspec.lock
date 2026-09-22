@@ -185,6 +185,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.9"
+  dart_sentencepiece_tokenizer:
+    dependency: "direct main"
+    description:
+      name: dart_sentencepiece_tokenizer
+      sha256: c8dc360ec4048aece5cf883c1ea295dbce4f30c9659b8c26fe31b5e0876e8143
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.4.0"
   dbus:
     dependency: transitive
     description:
@@ -565,14 +573,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.2"
-  onnx_translation:
-    dependency: "direct main"
-    description:
-      name: onnx_translation
-      sha256: "244c3d283fdd23819edce97301fae8ef5cbc08884c62bc7aeb3ada9e342933d9"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.1.2"
   onnxruntime:
     dependency: "direct main"
     description:

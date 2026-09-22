@@ -1,19 +1,7 @@
-/// Lightweight offline translation engine for the CareBridge narration
-/// pipeline. Bridges the reviewed SpeechBank entries with a neural ONNX model
-/// (Hausa, Twi) and a domain-specific phrase dictionary (all 3 languages)
-/// to translate dynamic text that the narration composes at runtime.
-////// Architecture (chained, first-match wins):
-///   1. SpeechBank exact clip → reviewed translation
-///   2. Neural model (cached) → ONNX MarianMT inference
-///   3. Phrase dictionary → greedy longest-match substitution
-///
-/// Neural inference is async (~170 ms per sentence on-device); results are
-/// cached and served synchronously on subsequent calls. The UI "warms"
-/// translations when narration text is generated, so by the time the user
-/// reads or hears it, the translation is ready.
-///
-/// On web (no dart:ffi), neural inference is unavailable — falls through to
-/// the phrase dictionary. Dagbani has no open model → always dictionary.
+/// Offline translation drafts. Playback resolves exact bank recordings first;
+/// this service prefers complete dictionary wording over neural drafts.
+/// Protected clinical content is restricted by the shared speech policy.
+/// No compact dynamic Dagbani model is currently validated for this app.
 library;
 
 import '../i18n/translation_dictionary.dart';
@@ -154,8 +142,7 @@ class TranslationService {
   static TranslationService debugCreate({
     TranslationBackend? backend,
     NeuralTranslationService? neural,
-  }) =>
-      TranslationService._(backend: backend, neural: neural);
+  }) => TranslationService._(backend: backend, neural: neural);
 
   final TranslationBackend _backend;
   final NeuralTranslationService _neural;
@@ -182,11 +169,14 @@ class TranslationService {
     final cached = _cache[cacheKey];
     if (cached != null) return cached;
 
-    // Priority 1: Check neural model cache (populated by warmTranslation).
-    final neural = _neural.translateSync(
-      english,
-      lang,
-    );
+    final dictionary = _backend.translate(english, lang);
+    if (dictionary != null && dictionary.coverage == 1) {
+      _putCache(cacheKey, dictionary);
+      return dictionary;
+    }
+
+    // Neural drafts never replace available complete dictionary wording.
+    final neural = _neural.translateSync(english, lang);
     if (neural != null && neural.isNotEmpty) {
       final result = TranslationResult(
         text: neural,
@@ -216,15 +206,12 @@ class TranslationService {
     final lang = _canonicalize(language);
     // Try sync path first (covers cache hits + dictionary).
     final sync = translate(english, language);
-    if (sync != null && sync.source == TranslationSource.neuralModel) {
+    if (sync != null && sync.coverage == 1) {
       return sync;
     }
     // Kick off neural inference if supported.
     if (_neural.supportsLanguage(lang)) {
-      final neural = await _neural.warmTranslation(
-        english,
-        lang,
-      );
+      final neural = await _neural.warmTranslation(english, lang);
       if (neural != null && neural.isNotEmpty) {
         final result = TranslationResult(
           text: neural,
@@ -247,18 +234,19 @@ class TranslationService {
     if (!_neural.supportsLanguage(lang)) return;
     // Skip if dictionary already has high-confidence coverage.
     final dictResult = _backend.translate(english, lang);
-    if (dictResult != null && dictResult.isNeural) return;
+    if (dictResult != null && dictResult.coverage == 1) return;
     // Fire-and-forget neural inference.
-    NeuralTranslationService.instance.warmTranslation(english, lang).then((
-      result,
-    ) {
+    _neural.warmTranslation(english, lang).then((result) {
       if (result != null && result.isNotEmpty) {
         final key = '$english|$lang';
-        _cache[key] = TranslationResult(
-          text: result,
-          source: TranslationSource.neuralModel,
-          language: lang,
-          coverage: 1.0,
+        _putCache(
+          key,
+          TranslationResult(
+            text: result,
+            source: TranslationSource.neuralModel,
+            language: lang,
+            coverage: 1.0,
+          ),
         );
       }
     });

@@ -202,12 +202,12 @@ class CaregiverGrowPlayTab extends ConsumerWidget {
   }
 }
 
-class _PlayTogether extends StatelessWidget {
+class _PlayTogether extends ConsumerWidget {
   const _PlayTogether({super.key, required this.person, required this.now});
   final Person person;
   final DateTime now;
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final band = CaregiverMilestonePolicy.bandFor(person, now);
     if (band == null) {
       return CompanionCard(
@@ -236,7 +236,7 @@ class _PlayTogether extends StatelessWidget {
             speech: CaregiverSpeech(
               id: 'play_${person.id}_${caregiverDateKey(now)}',
               english: activity,
-              language: 'English',
+              language: ref.watch(narrationLanguageProvider),
             ),
           ),
           const _PlayTimer(),

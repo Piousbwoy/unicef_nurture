@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "contract": "piper-v1",
+  "language": "Twi",
+  "source": "https://huggingface.co/michsethowusu/stable-twi-tts",
+  "license": "CC-BY-NC-4.0",
+  "revision": "4cfe48851a0dd7cb228948294aac9b7278b8f43185ec2a23ef36c68f59b45182",
+  "files": [
+    {
+      "name": "model.onnx",
+      "bytes": 80236649,
+      "sha256": "4cfe48851a0dd7cb228948294aac9b7278b8f43185ec2a23ef36c68f59b45182"
+    },
+    {
+      "name": "model.onnx.json",
+      "bytes": 34718,
+      "sha256": "b22fbb084f656d83719061179f8f6e954f1c5a6169f84c83373e2d6f4d37c96d"
+    },
+    {
+      "name": "twi_rules.json",
+      "bytes": 818,
+      "sha256": "89da4682f0bb6730345da019890812ff6d2f5dea1c4f5a0d3660cb34e5236fcd"
+    },
+    {
+      "name": "voices.json",
+      "bytes": 4949,
+      "sha256": "8b11e643351a1c1315a963337c9daab955accffa101342b1242531828779de16"
+    },
+    {
+      "name": "frontend_provenance.json",
+      "bytes": 1271,
+      "sha256": "36673b57d5559725b4b66c08d1d5c57b7fdb3defda5d9e26aefe9c468856f402"
+    }
+  ]
+}

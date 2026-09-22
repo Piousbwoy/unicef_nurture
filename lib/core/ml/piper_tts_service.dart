@@ -9,9 +9,10 @@
 ///   System TTS fallback?    → speak English via device voice
 ///   Readable text            → always available
 ///
-/// On web, [PiperTtsRunner.available] is false — falls through to system TTS.
+/// Browser playback uses the installed language pack and same-origin WASM.
 library;
 
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'piper_tts_runner.dart';
@@ -31,19 +32,19 @@ class PiperModelConfig {
 }
 
 /// All TTS models the app can use.
-/// Dagbani excluded — no Piper model exists.
+/// No compact dynamic Dagbani voice has been validated for this application.
 const piperModelConfigs = <PiperModelConfig>[
   PiperModelConfig(
     language: 'Hausa',
     assetPath: 'assets/tts/hausa_piper',
-    speakerId: 0, // Malam Garba (male, Standard Kano)
-    voiceLabel: 'Malam Garba',
+    speakerId: 0,
+    voiceLabel: 'Murya F2',
   ),
   PiperModelConfig(
     language: 'Twi',
     assetPath: 'assets/tts/twi_piper',
-    speakerId: 29, // twi-6 (best pure Twi voice: 0.2677 UER, from voices.json)
-    voiceLabel: 'Auntie Akosua',
+    speakerId: 29, // twi-6 baseline; listening approval remains required.
+    voiceLabel: 'Stable Twi · twi-6',
   ),
 ];
 
@@ -69,56 +70,68 @@ class PiperTtsService {
   bool get isAvailable => runner.available;
 
   /// Languages that have a loaded TTS model.
-  final _loadedLanguages = <String>{};
   final _loading = <String, Future<void>>{};
+  bool _disposing = false;
 
   bool isConfigured(String language) =>
       piperModelConfigs.any((config) => config.language == language);
 
   Future<void> initializeLanguage(String language) {
-    if (!runner.available || !isConfigured(language)) return Future.value();
-    return _loading.putIfAbsent(language, () async {
-      final config = piperModelConfigs.firstWhere((c) => c.language == language);
+    if (_disposing || !runner.available || !isConfigured(language)) {
+      return Future.value();
+    }
+    if (runner.hasModel(language)) return Future.value();
+    final pending = _loading[language];
+    if (pending != null) return pending;
+    final completion = Completer<void>();
+    _loading[language] = completion.future;
+    final config = piperModelConfigs.firstWhere((c) => c.language == language);
+    Future<void> load() async {
       try {
-        await runner.init(language: language, modelAssetPath: config.assetPath,
-            speakerId: config.speakerId);
-        if (runner.hasModel(language)) _loadedLanguages.add(language);
-      } catch (_) { /* Readable guidance remains available. */ }
-    });
-  }
-
-  /// Load Piper models for all configured languages.
-  /// Called once during app initialization. Silently skips missing models.
-  Future<void> initialize() async {
-    if (_initialized || !runner.available) return;
-    for (final config in piperModelConfigs) {
-      await initializeLanguage(config.language);
-      if (_isModelLoaded(config.language)) {
-        _loadedLanguages.add(config.language);
+        await runner.init(
+          language: language,
+          modelAssetPath: config.assetPath,
+          speakerId: config.speakerId,
+        );
+      } catch (_) {
+        /* Readable guidance remains available. */
+      } finally {
+        _loading.remove(language);
+        completion.complete();
       }
     }
+
+    unawaited(load());
+    return completion.future;
+  }
+
+  /// Enable lazy initialization without allocating every language pipeline.
+  Future<void> initialize() async {
+    if (_disposing || !runner.available) return;
+    // Initialization does not allocate every language model. Playback loads one.
     _initialized = true;
-    debugPrint(
-      'PiperTtsService: ready — $_loadedLanguages available',
-    );
   }
 
   /// Whether Piper TTS can speak in [language].
   bool supportsLanguage(String language) {
-    return _loadedLanguages.contains(language);
+    return !_disposing && runner.hasModel(language);
   }
 
   /// Speak [text] in [language] using the native Piper voice.
   /// Returns true if Piper handled it, false if caller should fall back
   /// to system TTS or readable text.
-  Future<bool> speak(String text, String language, {VoidCallback? onStarted}) async {
+  Future<bool> speak(
+    String text,
+    String language, {
+    VoidCallback? onStarted,
+  }) async {
     if (!supportsLanguage(language)) return false;
     try {
       _setActiveLanguage(language);
       await runner.speak(text, waitForCompletion: true, onStarted: onStarted);
       return true;
-    } catch (e) {
-      debugPrint('PiperTtsService: speak failed for $language: $e');
+    } catch (_) {
+      debugPrint('PiperTtsService: synthesis or playback unavailable');
       return false;
     }
   }
@@ -130,8 +143,8 @@ class PiperTtsService {
       _setActiveLanguage(language);
       await runner.speakNonBlocking(text);
       return true;
-    } catch (e) {
-      debugPrint('PiperTtsService: speakNonBlocking failed: $e');
+    } catch (_) {
+      debugPrint('PiperTtsService: playback unavailable');
       return false;
     }
   }
@@ -146,10 +159,10 @@ class PiperTtsService {
   /// Whether audio is currently playing.
   bool get isSpeaking => runner.isSpeaking;
 
-  /// The voice label for display (e.g. "Malam Garba").
+  /// Checkpoint voice label; not an inferred speaker identity.
   String? voiceLabelFor(String language) {
     for (final config in piperModelConfigs) {
-      if (config.language == language && _loadedLanguages.contains(language)) {
+      if (config.language == language && supportsLanguage(language)) {
         return config.voiceLabel;
       }
     }
@@ -158,17 +171,22 @@ class PiperTtsService {
 
   /// Release all native model resources.
   Future<void> dispose() async {
-    for (final language in _loadedLanguages.toList()) {
-      await runner.dispose(language);
+    _disposing = true;
+    try {
+      await stop();
+      await Future.wait(_loading.values.toList());
+      for (final config in piperModelConfigs) {
+        await runner.dispose(config.language);
+      }
+    } finally {
+      _loading.clear();
+      _initialized = false;
+      _disposing = false;
     }
-    _loadedLanguages.clear();
-    _loading.clear();
-    _initialized = false;
   }
 
   // --- Private helpers ---
 
-  bool _isModelLoaded(String language) => runner.hasModel(language);
-
-  void _setActiveLanguage(String language) => runner.setActiveLanguage(language);
+  void _setActiveLanguage(String language) =>
+      runner.setActiveLanguage(language);
 }

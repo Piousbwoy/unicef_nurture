@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stable-twi-tts"
+version = "0.2.1"
+description = "Twi and Ghanaian English speech synthesis on ONNX"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "GhanaNLP" }]
+keywords = ["twi", "akan", "ghana", "tts", "speech-synthesis", "ipa", "onnx", "code-switching"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Natural Language :: English",
+]
+dependencies = [
+    "onnxruntime>=1.16",
+    "numpy>=1.21",
+]
+
+[project.optional-dependencies]
+# Only for loading a fork or a non-default revision from the Hugging Face Hub. The default
+# from_pretrained() path fetches a GitHub release over urllib and needs nothing extra —
+# huggingface_hub brings twelve transitive packages, which is a poor trade for four files.
+hub = ["huggingface_hub>=0.24"]
+# Local web UI: text, PDF or URL in, audio out.
+web = [
+    "fastapi>=0.110", "uvicorn>=0.27", "python-multipart>=0.0.9",
+    "pypdf>=4.0", "trafilatura>=1.8",
+]
+# Twi text. ghana-g2p pulls africa-g2p itself, so this one line is the whole Twi front-end.
+#
+# The version floor is not cosmetic: the model was trained on ghana-g2p 0.1.0's phonemes, and a
+# front-end that disagrees with training degrades audio without raising anything — that failure
+# mode cost this project a day at 68.6% phoneme error. Treat a major bump upstream as needing a
+# re-measurement, not as a routine upgrade.
+twi = ["ghana-g2p>=0.1.1"]
+# English without a system espeak-ng. Bundles libespeak-ng 1.51 — the version this model was
+# trained on — so the front-end is exact rather than whatever apt happens to ship. Separate from
+# the base install because espeak-ng is GPL-3.0 and this package is MIT: taking on that obligation
+# should be a choice, so English still works via a system espeak-ng if you prefer.
+eng = ["espeak-english>=0.1.1"]
+
+# Everything, minus the dev tools.
+all = ["stable-twi-tts[web,twi,eng]"]
+
+[project.urls]
+Homepage = "https://github.com/GhanaNLP/stable-twi-tts"
+Source = "https://github.com/GhanaNLP/stable-twi-tts"
+Model = "https://huggingface.co/ghanaopendata/stable-twi-tts"
+Demo = "https://ghananlp.github.io/stable-twi-tts/"
+
+[project.scripts]
+stable-twi-tts = "stable_twi_tts.cli:_entry"
+stable-twi-tts-web = "stable_twi_tts.web:main"
+
+[tool.setuptools]
+packages = ["stable_twi_tts"]
+
+[tool.setuptools.package-data]
+stable_twi_tts = ["static/*.html"]

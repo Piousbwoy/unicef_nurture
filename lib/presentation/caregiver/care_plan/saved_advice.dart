@@ -98,7 +98,7 @@ class _CaregiverSavedAdviceState extends ConsumerState<CaregiverSavedAdvice> {
       );
     }
     final writer = ref.watch(caregiverWriterProvider(scope));
-    final language = ref.watch(currentUserProvider)?.preferredLanguage ?? 'English';
+    final language = ref.watch(narrationLanguageProvider);
     return ref
         .watch(caregiverActivityProvider(scope))
         .when(
@@ -139,7 +139,7 @@ class _CaregiverSavedAdviceState extends ConsumerState<CaregiverSavedAdvice> {
                     voiceControl: CaregiverListen(
                       speech: CaregiverSpeech(
                         id: 'clinic_${assessment.id}',
-                        language: 'English',
+                        language: language,
                         english:
                             'Saved clinic advice from ${caregiverWhen(assessment.performedAt)}. ${plan.caregiverMessage ?? plan.summary}',
                       ),

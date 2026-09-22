@@ -12,19 +12,25 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../app/providers.dart';
 
 import '../../core/audio/caregiver_playback.dart';
+import '../../core/audio/speech_content_policy.dart';
 import '../../core/audio/voice_service.dart';
 import '../../core/i18n/speech_bank.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/glass.dart';
 import 'speech_language_sheet.dart';
+import 'offline_voice_check.dart';
 
-class AudioButton extends StatefulWidget {
+class AudioButton extends ConsumerStatefulWidget {
   const AudioButton({
     super.key,
     required this.text,
     required this.language,
+    this.sourceLanguage = 'English',
+    this.policy = SpeechContentPolicy.guidance,
     this.id,
     this.compact = false,
     this.bankClips,
@@ -34,6 +40,8 @@ class AudioButton extends StatefulWidget {
   /// The exact English text displayed by the caller, never a bank substitution.
   final String text;
   final String language;
+  final String sourceLanguage;
+  final SpeechContentPolicy policy;
   final String? id;
 
   /// An ordered bank candidate sequence. Only full, exact coverage is eligible.
@@ -44,10 +52,12 @@ class AudioButton extends StatefulWidget {
   final bool showLanguagePicker;
 
   @override
-  State<AudioButton> createState() => _AudioButtonState();
+  ConsumerState<AudioButton> createState() => _AudioButtonState();
 }
 
-class _AudioButtonState extends State<AudioButton> {
+class _AudioButtonState extends ConsumerState<AudioButton>
+    with WidgetsBindingObserver {
+  bool _visible = true;
   // VoiceService is shared. Disposing an older button must not stop a newer one.
   static _AudioButtonState? _owner;
   late CaregiverSpeech _input;
@@ -63,6 +73,8 @@ class _AudioButtonState extends State<AudioButton> {
     id: widget.id ?? 'inline_${widget.text.hashCode}',
     english: widget.text,
     language: widget.language,
+    sourceLanguage: widget.sourceLanguage,
+    policy: widget.policy,
     clipId: widget.id != null && SpeechBank.byId(widget.id!) != null
         ? widget.id
         : null,
@@ -74,6 +86,7 @@ class _AudioButtonState extends State<AudioButton> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _input = _snapshot();
   }
 
@@ -83,6 +96,8 @@ class _AudioButtonState extends State<AudioButton> {
     if (oldWidget.id != widget.id ||
         _input.english != widget.text ||
         _input.language != widget.language ||
+        _input.sourceLanguage != widget.sourceLanguage ||
+        _input.policy != widget.policy ||
         !listEquals(_input.clipIds, widget.bankClips)) {
       _stopOwned();
       _input = _snapshot();
@@ -92,9 +107,19 @@ class _AudioButtonState extends State<AudioButton> {
 
   void _stopOwned() {
     _generation++;
+    final previous = _playback;
+    if (_active && previous != null) {
+      _playback = CaregiverPlayback(
+        phase: CaregiverPlaybackPhase.stopped,
+        transcript: previous.transcript,
+        language: previous.language,
+        source: previous.source,
+        stage: SpeechStage.cancelled,
+      );
+    }
     if (identical(_owner, this)) {
       _owner = null;
-      unawaited(VoiceService.stop());
+      unawaited(VoiceService.stop(owner: this));
     }
   }
 
@@ -120,7 +145,24 @@ class _AudioButtonState extends State<AudioButton> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _visible =
+        (ModalRoute.isCurrentOf(context) ?? true) &&
+        TickerMode.valuesOf(context).enabled;
+    if (!_visible && !_picking) _stopOwned();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed && mounted) {
+      setState(_stopOwned);
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _stopOwned();
     super.dispose();
   }
@@ -143,6 +185,13 @@ class _AudioButtonState extends State<AudioButton> {
 
   /// Play [selected], superseding any other button's audio.
   Future<void> _play(String selected) async {
+    if (!(ModalRoute.of(context)?.isCurrent ?? true) ||
+        !TickerMode.valuesOf(context).enabled ||
+        (WidgetsBinding.instance.lifecycleState != null &&
+            WidgetsBinding.instance.lifecycleState !=
+                AppLifecycleState.resumed)) {
+      return;
+    }
     if (_active) _stop();
     final generation = ++_generation;
     final input = _input;
@@ -154,7 +203,9 @@ class _AudioButtonState extends State<AudioButton> {
       _playback = CaregiverPlayback(
         phase: CaregiverPlaybackPhase.loading,
         transcript: speech.localizedText ?? speech.english,
-        language: speech.localizedText == null ? 'English' : selected,
+        language: speech.localizedText == null
+            ? speech.sourceLanguage
+            : selected,
         source: 'Checking offline audio',
       );
     });
@@ -165,7 +216,12 @@ class _AudioButtonState extends State<AudioButton> {
           id: speech.id,
           preferredLanguage: selected,
           preferredScript: speech.english,
-          bankClips: speech.clipIds ??
+          sourceLanguage: speech.sourceLanguage,
+          policy: speech.policy,
+          owner: this,
+          revision: speech.revision,
+          bankClips:
+              speech.clipIds ??
               (speech.clipId == null ? null : [speech.clipId!]),
         ),
         onPlayback: (event) {
@@ -178,14 +234,21 @@ class _AudioButtonState extends State<AudioButton> {
       // Completion normally arrives as an event. Never mark playback as playing
       // merely because the full-playback future has returned.
       if (outcome.source == VoiceSource.readAloud &&
-          _playback?.phase != CaregiverPlaybackPhase.stopped) {
+          _playback?.phase != CaregiverPlaybackPhase.stopped &&
+          _playback?.phase != CaregiverPlaybackPhase.fallback) {
         setState(() {
           _playback = CaregiverPlayback(
             phase: CaregiverPlaybackPhase.fallback,
-            transcript: speech.localizedText ?? speech.english,
-            language: outcome.actualLanguage ??
-                (speech.localizedText == null ? 'English' : selected),
-            source: 'Readable text • offline audio unavailable',
+            transcript:
+                outcome.spokenScript ?? speech.localizedText ?? speech.english,
+            language:
+                outcome.actualLanguage ??
+                (speech.localizedText == null
+                    ? speech.sourceLanguage
+                    : selected),
+            source:
+                outcome.detail ?? 'Readable text • offline audio unavailable',
+            reasonCode: outcome.reasonCode,
           );
         });
       }
@@ -195,7 +258,9 @@ class _AudioButtonState extends State<AudioButton> {
         _playback = CaregiverPlayback(
           phase: CaregiverPlaybackPhase.fallback,
           transcript: speech.localizedText ?? speech.english,
-          language: speech.localizedText == null ? 'English' : selected,
+          language: speech.localizedText == null
+              ? speech.sourceLanguage
+              : selected,
           source: 'Readable text • offline audio unavailable',
         );
       });
@@ -204,8 +269,76 @@ class _AudioButtonState extends State<AudioButton> {
     }
   }
 
+  Future<void> _showDetails() async {
+    final event = _playback;
+    if (event == null || _picking) return;
+    final generation = _generation;
+    _picking = true;
+    String? language;
+    try {
+      language = await showModalBottomSheet<String>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (sheetContext) => SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '${event.language} • ${event.phase.name}',
+                style: Theme.of(sheetContext).textTheme.titleMedium,
+              ),
+              Text(event.source),
+              SelectableText(event.transcript),
+              Wrap(
+                spacing: 8,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(
+                      sheetContext,
+                      event.requestedLanguage ?? widget.language,
+                    ),
+                    child: const Text('Retry'),
+                  ),
+                  if (OfflineSpeechLanguage.canonical(widget.sourceLanguage) ==
+                      'English')
+                    TextButton(
+                      onPressed: () => Navigator.pop(sheetContext, 'English'),
+                      child: const Text('Hear English'),
+                    ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(sheetContext),
+                    child: const Text('Close'),
+                  ),
+                ],
+              ),
+              OfflineVoiceCheck(
+                language: event.requestedLanguage ?? widget.language,
+              ),
+            ],
+          ),
+        ),
+      );
+    } finally {
+      _picking = false;
+    }
+    if (mounted && generation == _generation && language != null) {
+      await _play(language);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen(currentUserProvider, (previous, next) {
+      if (previous?.id != next?.id ||
+          previous?.preferredLanguage != next?.preferredLanguage) {
+        setState(() {
+          _stopOwned();
+          _playback = null;
+        });
+      }
+    });
     final colour = _active ? AppColors.primary : AppColors.primaryDeep;
     final size = widget.compact ? 36.0 : 44.0;
     final loading = _playback?.phase == CaregiverPlaybackPhase.loading;
@@ -223,8 +356,9 @@ class _AudioButtonState extends State<AudioButton> {
         ? 'Play audio. Hold to choose another language.'
         : 'Play audio';
     final playback = _playback;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Flex(
+      direction: widget.compact ? Axis.horizontal : Axis.vertical,
+      crossAxisAlignment: CrossAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
         Semantics(
@@ -237,7 +371,8 @@ class _AudioButtonState extends State<AudioButton> {
               shape: const CircleBorder(),
               child: InkWell(
                 customBorder: const CircleBorder(),
-                onTap: () => _active ? _stop() : unawaited(_play(widget.language)),
+                onTap: () =>
+                    _active ? _stop() : unawaited(_play(widget.language)),
                 onLongPress: widget.showLanguagePicker
                     ? () => unawaited(_openPicker())
                     : null,
@@ -246,9 +381,9 @@ class _AudioButtonState extends State<AudioButton> {
                   height: 48,
                   child: Center(
                     child: AnimatedContainer(
-                      duration: VisualEffects.of(context).scale(
-                        const Duration(milliseconds: 220),
-                      ),
+                      duration: VisualEffects.of(
+                        context,
+                      ).scale(const Duration(milliseconds: 220)),
                       width: size,
                       height: size,
                       decoration: BoxDecoration(
@@ -274,12 +409,30 @@ class _AudioButtonState extends State<AudioButton> {
             ),
           ),
         ),
-        if (playback != null) ...[
+        if (playback != null && widget.compact)
+          Semantics(
+            liveRegion: true,
+            child: IconButton(
+              onPressed: _showDetails,
+              tooltip:
+                  '${playback.language} • $status. Transcript and voice setup',
+              icon: Icon(
+                playback.phase == CaregiverPlaybackPhase.fallback
+                    ? Icons.error_outline_rounded
+                    : Icons.info_outline_rounded,
+              ),
+            ),
+          ),
+        if (playback != null && !widget.compact) ...[
           const SizedBox(height: 4),
-          _SourcePill(
-            status: status,
-            detail: '${playback.language} • $status • ${playback.source}',
-            compact: widget.compact,
+          InkWell(
+            onTap: _showDetails,
+            child: _SourcePill(
+              status: status,
+              detail:
+                  '${playback.language} • $status • ${playback.source}. Tap for transcript, retry, and voice setup.',
+              compact: widget.compact,
+            ),
           ),
         ],
       ],
@@ -310,6 +463,8 @@ class _SourcePill extends StatelessWidget {
       excludeSemantics: true,
       child: Container(
         width: compact ? 48 : 80,
+        constraints: const BoxConstraints(minHeight: 48),
+        alignment: Alignment.center,
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
         decoration: BoxDecoration(
           color: AppColors.primaryLight,
@@ -321,7 +476,7 @@ class _SourcePill extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
           style: const TextStyle(
-            fontSize: 10.5,
+            fontSize: 12,
             fontWeight: FontWeight.w700,
             color: AppColors.primaryDeep,
           ),

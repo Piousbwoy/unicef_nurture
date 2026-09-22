@@ -16,7 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
-import '../../core/audio/voice_service.dart';
+import '../shared/audio_button.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/repositories/care_repository.dart';
 import '../../domain/entities/core.dart';
@@ -246,10 +246,11 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
                                 elevation: 0,
                                 title: const Text('Assessment'),
                                 actions: [
-                                  IconButton(
-                                    tooltip: 'Voice guide',
-                                    icon: const Icon(Icons.record_voice_over_rounded),
-                                    onPressed: () => _speakWelcome(p.fullName),
+                                  AudioButton(
+                                    id: 'assessment-welcome',
+                                    text: _welcomeScript(p.fullName),
+                                    language: ref.watch(narrationLanguageProvider),
+                                    compact: true,
                                   ),
                                 ],
                               ),
@@ -341,15 +342,8 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
     }
   }
 
-  Future<void> _speakWelcome(String patientName) async {
-    final message =
-        'Welcome to the assessment for $patientName. '
-        'Follow the form sections: first check vital signs, then look for danger signs, '
-        'then record measurements. Take your time — the app will guide you.';
-    await VoiceService.speakText(
-      id: 'assessment-welcome',
-      text: message,
-      language: 'en',
-    );
-  }
+  String _welcomeScript(String patientName) =>
+      'Welcome to the assessment for $patientName. '
+      'Follow the form sections: first check vital signs, then look for danger signs, '
+      'then record measurements. Take your time — the app will guide you.';
 }

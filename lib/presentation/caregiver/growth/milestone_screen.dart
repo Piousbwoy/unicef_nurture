@@ -30,6 +30,9 @@ class _MilestoneScreenState extends ConsumerState<CaregiverMilestoneScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (!(ModalRoute.isCurrentOf(context) ?? true) || !TickerMode.valuesOf(context).enabled) {
+      _voice?.stop(notify: false);
+    }
     if (_check != null) return;
     final scope = ref.read(caregiverScopeProvider);
     final user = ref.read(currentUserProvider);
@@ -67,7 +70,7 @@ class _MilestoneScreenState extends ConsumerState<CaregiverMilestoneScreen> {
     return CaregiverSpeech(
       id: 'milestone_${c.draft!.id}_${q.id}',
       english: q.question,
-      language: ref.read(currentUserProvider)?.preferredLanguage ?? 'English',
+      language: ref.read(narrationLanguageProvider),
     );
   }
 
@@ -76,14 +79,18 @@ class _MilestoneScreenState extends ConsumerState<CaregiverMilestoneScreen> {
     setState(() {});
     final c = _check!;
     final next = c.stage == CaregiverCheckStage.questions ? _speech(c) : null;
-    if (next?.id == _spoken) return;
+    final key = next == null ? null : '${next.id}/${next.language}';
+    if (key == _spoken) return;
     _voice?.stop();
-    _spoken = next?.id;
+    _spoken = key;
     if (next == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted &&
+      if (mounted && (ModalRoute.of(context)?.isCurrent ?? true) &&
+          TickerMode.valuesOf(context).enabled &&
+          (WidgetsBinding.instance.lifecycleState == null ||
+           WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) &&
           c.isCurrent() &&
-          _spoken == next.id &&
+          _spoken == key &&
           (ref.read(caregiverSettingsProvider(c.scope)).valueOrNull?.autoRead ??
               false)) {
         unawaited(_voice?.play(next));
@@ -110,6 +117,14 @@ class _MilestoneScreenState extends ConsumerState<CaregiverMilestoneScreen> {
       );
     }
     _voice = ref.watch(caregiverVoiceProvider(scope));
+    void resetNarration() {
+      _spoken = null;
+      _voice?.stop();
+      WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _changed(); });
+    }
+    ref.listen(narrationLanguageProvider, (_, _) => resetNarration());
+    ref.listen(caregiverSettingsProvider(scope).select((value) => value.valueOrNull?.autoRead),
+        (_, _) => resetNarration());
     ref.watch(caregiverSettingsProvider(scope));
     return CompanionPage(
       title: 'Milestone check',

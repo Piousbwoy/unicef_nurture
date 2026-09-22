@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/audio/caregiver_playback.dart';
 import '../../core/ml/neural_translation_service.dart';
+import '../../core/ml/piper_tts_service.dart';
+import 'offline_voice_check.dart';
 import '../../core/theme/app_theme.dart';
 
 /// What one language can actually give for one message: the words she would
@@ -13,16 +15,22 @@ typedef SpeechOffering = ({String words, String tag, bool audioReady});
 /// made from the message itself rather than from a language name.
 SpeechOffering speechOffering(CaregiverSpeech speech, String language) {
   final name = OfflineSpeechLanguage.canonical(language);
+  final source = OfflineSpeechLanguage.canonical(speech.sourceLanguage);
+  if (source != 'English' && name != source) {
+    return (words: speech.sourceText, tag: '$source words only', audioReady: false);
+  }
   if (name == 'English') {
     return (
       words: speech.english,
       tag: 'Needs a phone voice',
-      audioReady: true,
+      audioReady: false,
     );
   }
   final localized = speech.withLanguage(name).localizedText;
   if (localized != null) {
-    return (words: localized, tag: 'Ready on this phone', audioReady: true);
+    final hasCandidate = speech.withLanguage(name).matchingClips != null ||
+        PiperTtsService.instance.supportsLanguage(name);
+    return (words: localized, tag: hasCandidate ? 'Voice available to try' : 'Voice check needed', audioReady: hasCandidate);
   }
   // The neural model only stands in for text the bank never registered; a
   // clip id that failed to match must stay untranslated.
@@ -31,7 +39,7 @@ SpeechOffering speechOffering(CaregiverSpeech speech, String language) {
       (speech.clipIds == null || speech.clipIds!.isEmpty);
   if (uncatalogued &&
       NeuralTranslationService.instance.supportsLanguage(name)) {
-    return (words: speech.english, tag: 'Draft words', audioReady: true);
+    return (words: speech.english, tag: 'Translation not ready', audioReady: false);
   }
   return (words: speech.english, tag: 'English words only', audioReady: false);
 }
@@ -115,9 +123,7 @@ class SpeechLanguageTile extends StatelessWidget {
                             fontSize: 14.5,
                             fontWeight: FontWeight.w700,
                             letterSpacing: -0.1,
-                            color: selected && onDark
-                                ? AppColors.checkNavy
-                                : ink,
+                            color: selected ? (onDark ? AppColors.checkNavy : Colors.white) : ink,
                           ),
                         ),
                       ),
@@ -137,7 +143,7 @@ class SpeechLanguageTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 9,
+                      fontSize: 12,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0.7,
                       color: selected && onDark
@@ -156,7 +162,7 @@ class SpeechLanguageTile extends StatelessWidget {
                       fontSize: 13,
                       height: 1.35,
                       fontWeight: FontWeight.w600,
-                      color: selected && onDark ? AppColors.checkNavy : soft,
+                      color: selected ? (onDark ? AppColors.checkNavy : Colors.white) : soft,
                     ),
                   ),
                 ],
@@ -296,6 +302,7 @@ class _SpeechLanguageSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
+          OfflineVoiceCheck(language: current),
           Container(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 13),
             decoration: BoxDecoration(

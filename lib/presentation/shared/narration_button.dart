@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../core/audio/caregiver_playback.dart' show OfflineSpeechLanguage;
 import '../../core/theme/app_theme.dart';
+import 'offline_voice_check.dart';
 
 class NarrationButton extends ConsumerWidget {
   const NarrationButton({super.key, this.compact = false, this.iconColor});
@@ -59,6 +60,8 @@ class NarrationButton extends ConsumerWidget {
     final selected = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -115,6 +118,7 @@ class _NarrationLanguageSheet extends ConsumerWidget {
                 selected: language == current,
                 onTap: () => Navigator.of(context).pop(language),
               ),
+            OfflineVoiceCheck(language: current),
           ],
         ),
       )),

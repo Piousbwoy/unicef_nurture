@@ -1,27 +1,28 @@
 /// Native ONNX translation runner for Android / iOS / desktop.
 ///
-/// Uses the `onnx_translation` package (wraps `onnxruntime` Dart FFI bindings)
-/// to run MarianMT encoder-decoder models entirely on-device.
-///
-/// Model lifecycle:
-///   1. [init] loads ONNX graphs + tokenizer vocab from the asset bundle.
-///   2. [translate] encodes English → runs encoder → autoregressive decode →
-///      returns target-language text. ~170 ms per sentence on a OnePlus 13
-///      for the 17 MB Tiny model.
-///   3. [dispose] releases native session memory.
+/// App-owned Marian inference runs in an isolate using ONNX Runtime.
+/// Optional packs are integrity-checked and snapshotted before loading;
+/// tokenizer and generation fixtures gate runtime availability.
 library;
 
-import 'package:flutter/services.dart' show rootBundle;
-import 'package:onnx_translation/onnx_translation.dart';
+import 'dart:typed_data';
+import 'native_pack_store.dart';
+import 'marian_native_engine.dart';
+import 'model_artifact.dart';
 
 import 'translation_runner.dart';
 
 TranslationRunner buildTranslationRunner() => _IoTranslationRunner();
 
 class _IoTranslationRunner implements TranslationRunner {
-  /// One OnnxModel per language, lazily loaded.
-  final _models = <String, OnnxModel>{};
-  final _loadErrors = <String, Object>{};
+  /// One active language engine, lazily loaded.
+  final _models = <String, MarianNativeEngine>{};
+  Future<void> _lifecycle = Future.value();
+  Future<void> _serialize(Future<void> Function() action) {
+    final next = _lifecycle.then((_) => action());
+    _lifecycle = next.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return next;
+  }
 
   @override
   bool get available => true;
@@ -33,63 +34,50 @@ class _IoTranslationRunner implements TranslationRunner {
   Future<void> init({
     required String language,
     required String assetBasePath,
-  }) async {
-    if (_models.containsKey(language) || _loadErrors.containsKey(language)) {
-      return;
+  }) => _serialize(() async {
+    if (_models.containsKey(language)) return;
+    final bundle = await NativePackStore().bundle(assetBasePath);
+    final manifest = await ModelArtifactManifest.load(
+      assetBasePath,
+      'marian-v1',
+      bundle: bundle,
+    );
+    for (final engine in _models.values) {
+      await engine.dispose();
     }
-    try {
-      // Verify the required model files exist in the asset bundle before
-      // attempting to load — gives a clean error instead of a cryptic crash.
-      await _assertAssetExists('$assetBasePath/encoder_model.onnx');
-      await _assertAssetExists('$assetBasePath/vocab.json');
-
-      final model = OnnxModel();
-      await model.init(modelBasePath: assetBasePath);
-      _models[language] = model;
-    } catch (e) {
-      _loadErrors[language] = e;
+    _models.clear();
+    final artifacts = <String, Uint8List>{};
+    for (final file in manifest.files.values) {
+      final data = await bundle.load('$assetBasePath/${file.name}');
+      artifacts[file.name] = data.buffer.asUint8List(
+        data.offsetInBytes,
+        data.lengthInBytes,
+      );
     }
-  }
+    // Hashing, tokenizer fixture checks, model loading and inference run off-UI.
+    _models[language] = await MarianNativeEngine.load(manifest, artifacts);
+  });
 
   @override
-  Future<String?> translate(String english, {required String language, String? langToken}) async {
+  Future<String?> translate(
+    String english, {
+    required String language,
+    String? langToken,
+  }) async {
     final model = _models[language];
     if (model == null) return null;
 
     try {
-      final output = await model.runModel(
-        english,
-        initialLangToken: (langToken != null && langToken.isNotEmpty) ? langToken : null,
-      );
-      if (output.isEmpty) return null;
-      return _cleanOutput(output);
+      if (langToken != null && langToken.isNotEmpty) return null;
+      return await model.translate(english);
     } catch (_) {
       return null;
     }
   }
 
   @override
-  Future<void> dispose(String language) async {
+  Future<void> dispose(String language) => _serialize(() async {
     final model = _models.remove(language);
-    model?.release();
-  }
-
-  Future<void> _assertAssetExists(String path) async {
-    try {
-      await rootBundle.load(path);
-    } catch (_) {
-      throw StateError('Translation model asset missing: $path');
-    }
-  }
-
-  static String _cleanOutput(String text) {
-    var cleaned = text.trim();
-    // Strip common special tokens from MarianMT output.
-    cleaned = cleaned.replaceAll('</s>', '').replaceAll('<pad>', '').trim();
-    // Remove leading language token if the model echoes it (e.g. '>>hau<< ...').
-    if (cleaned.startsWith('>>') && cleaned.contains('<<')) {
-      cleaned = cleaned.substring(cleaned.indexOf('<<') + 2).trim();
-    }
-    return cleaned;
-  }
+    await model?.dispose();
+  });
 }

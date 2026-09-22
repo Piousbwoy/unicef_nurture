@@ -1440,7 +1440,7 @@ class _AndroidStatusBarState extends State<_AndroidStatusBar> {
             children: [
               Text(
                 timeStr,
-                style: GoogleFonts.roboto(
+                style: GoogleFonts.inter(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: ink,
@@ -1455,7 +1455,7 @@ class _AndroidStatusBarState extends State<_AndroidStatusBar> {
                   const SizedBox(width: 6),
                   Text(
                     '98%',
-                    style: GoogleFonts.roboto(
+                    style: GoogleFonts.inter(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
                       color: ink,

@@ -67,11 +67,10 @@ dependencies:
   tflite_flutter: ^0.11.0
 
   # On-device neural translation (MarianMT ONNX: Hausa, Twi).
-  # Runs encoder-decoder seq2seq models offline via ONNX Runtime;
-  # web falls through to the phrase-dictionary backend (no native FFI).
-  # Models: assets/models/translation_hausa/ + translation_twi/
+  # App-owned native isolates and same-origin WASM workers share contracts.
+  # Neural language packs are installed separately; recordings stay bundled.
   onnxruntime: ^1.4.1
-  onnx_translation: ^0.1.2
+  dart_sentencepiece_tokenizer: 1.4.0
 
   # On-device neural TTS using Piper VITS ONNX models.
   # Runs via the existing onnxruntime bindings (zero extra native deps).
@@ -94,11 +93,17 @@ flutter:
     - assets/images/
     - assets/fonts/
     - assets/models/
-    - assets/models/translation_hausa/
-    - assets/models/translation_twi/
-    - assets/tts/hausa_piper/
-    - assets/tts/twi_piper/
   fonts:
+    # CanvasKit always requests a family named Roboto at engine startup.
+    # Alias that fallback to bundled Inter, our app font, to avoid a remote
+    # font download before GoogleFonts runtime-fetching policy takes effect.
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
     # The caregiver Check flow styles its premium surfaces with raw
     # `fontFamily: 'Sora'` — these declarations are what make that resolve
     # instead of silently falling back to the platform font.

@@ -265,7 +265,7 @@ class GlassSurface extends StatelessWidget {
 
 // ─── Ambient backdrop ─────────────────────────────────────────────────────
 
-enum AmbientVariant { clinical, warm, caregiver }
+enum AmbientVariant { clinical, warm }
 
 /// Three static radial blobs on white. Gives the glass something to blur;
 /// on its own it is a quiet, expensive-looking page background.
@@ -322,22 +322,6 @@ class _AmbientPainter extends CustomPainter {
         blob(Offset(w * 0.1, h * 0.05), w * 0.7, _warm, 0.85);
         blob(Offset(w * 0.95, h * 0.4), w * 0.6, AppColors.surfaceTint, 0.9);
         blob(Offset(w * 0.4, h * 0.98), w * 0.7, AppColors.primaryGlow, 0.14);
-      case AmbientVariant.caregiver:
-        // The caregiver ground: deep navy with quiet blue glows, like
-        // moonlight on water. Dark blue is the identity of this whole flow,
-        // so the page itself is the deepest end of it.
-        canvas.drawRect(
-          Offset.zero & size,
-          Paint()..color = AppColors.checkNavyDeep,
-        );
-        blob(Offset(w * 0.12, h * 0.02), w * 0.8, AppColors.checkBlue, 0.20);
-        blob(
-          Offset(w * 0.95, h * 0.45),
-          w * 0.7,
-          AppColors.checkBlueLight,
-          0.10,
-        );
-        blob(Offset(w * 0.25, h * 0.98), w * 0.8, AppColors.checkBlue, 0.16);
     }
   }
 

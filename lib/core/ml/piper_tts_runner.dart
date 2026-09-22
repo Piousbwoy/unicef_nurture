@@ -1,15 +1,13 @@
 /// Platform-conditional abstraction for on-device Piper neural TTS.
 ///
-/// Follows the same dispatch pattern as [TranslationRunner]:
-///   - Native (Android/iOS/desktop): Piper VITS inference via flutter_piper_tts.
-///   - Web: stub that reports unavailable → system TTS handles it.
-///
-/// Piper models (Murya Hausa, Stable-Twi) produce native-quality speech at
-/// 22-24 kHz from ONNX VITS graphs, running entirely on-device via Rust ort
-/// bindings — no conflict with the Dart onnxruntime used for translation.
+/// Native inference uses an app-owned ONNX worker isolate; browser inference
+/// uses a same-origin WASM worker after explicit language-pack installation.
+/// Voice quality requires listening assessment, not just successful inference.
 library;
 
-import 'piper_tts_stub.dart' if (dart.library.io) 'piper_tts_io.dart';
+import 'piper_tts_stub.dart'
+    if (dart.library.io) 'piper_tts_io.dart'
+    if (dart.library.js_interop) 'piper_tts_web.dart';
 
 /// Abstraction over a loaded Piper TTS engine for a single language.
 abstract class PiperTtsRunner {
@@ -28,7 +26,11 @@ abstract class PiperTtsRunner {
 
   /// Speak [text] in the initialized language. Returns a future that completes
   /// when playback finishes (or use [speakNonBlocking] for fire-and-forget).
-  Future<void> speak(String text, {bool waitForCompletion = true, void Function()? onStarted});
+  Future<void> speak(
+    String text, {
+    bool waitForCompletion = true,
+    void Function()? onStarted,
+  });
 
   /// Start speaking without waiting for completion.
   Future<void> speakNonBlocking(String text);

@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "contract": "piper-v1",
+  "language": "Hausa",
+  "source": "https://huggingface.co/adab-tech/murya-piper-hausa-tts",
+  "license": "CC-BY-NC-SA-4.0",
+  "revision": "7889e1a9e07cabf6e1cbec4ce09d8eed49fc63bb729770f60dcb7de2f1d34c74",
+  "files": [
+    {
+      "name": "model.onnx",
+      "bytes": 77063376,
+      "sha256": "7889e1a9e07cabf6e1cbec4ce09d8eed49fc63bb729770f60dcb7de2f1d34c74"
+    },
+    {
+      "name": "model.onnx.json",
+      "bytes": 2340,
+      "sha256": "65317cec0b5c13d5ad38b5444caf37a93cbfb98b3b3d3117479c5aa642ee85bb"
+    }
+  ]
+}

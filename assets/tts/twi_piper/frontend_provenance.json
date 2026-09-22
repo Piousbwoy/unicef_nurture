@@ -1,0 +1,25 @@
+{
+  "repository": "https://github.com/GhanaNLP/stable-twi-tts",
+  "revision": "b19ca90ac07882b8cb87a349d85caf4aa984a20a",
+  "note": "Frontend reference data only. Model weights retain their separate noncommercial license. Rule data attributes Simon Ager/Omniglot in twi_rules.json.",
+  "files": [
+    {
+      "source": "https://raw.githubusercontent.com/GhanaNLP/stable-twi-tts/b19ca90ac07882b8cb87a349d85caf4aa984a20a/mobile/twi_rules.json",
+      "path": "assets/tts/twi_piper/twi_rules.json",
+      "sha256": "89da4682f0bb6730345da019890812ff6d2f5dea1c4f5a0d3660cb34e5236fcd",
+      "bytes": 818
+    },
+    {
+      "source": "https://raw.githubusercontent.com/GhanaNLP/stable-twi-tts/b19ca90ac07882b8cb87a349d85caf4aa984a20a/mobile/test_vectors.json",
+      "path": "test/fixtures/voice/twi_reference_vectors.json",
+      "sha256": "e26fac25b53da55aba204280439962a436eb052dae905cd789fa6606e434b0eb",
+      "bytes": 10260
+    },
+    {
+      "source": "https://raw.githubusercontent.com/GhanaNLP/stable-twi-tts/b19ca90ac07882b8cb87a349d85caf4aa984a20a/pyproject.toml",
+      "path": "assets/tts/twi_piper/frontend_project.toml",
+      "sha256": "88c44d9c88a3e8fd92d5f1669667657d8ca8432943077e6421fd822fc5af056a",
+      "bytes": 2756
+    }
+  ]
+}

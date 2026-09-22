@@ -80,26 +80,30 @@ abstract final class AudioGuide {
   /// UI can show an honest pill — studio recording, system TTS, Hausa
   /// bridge, or just the on-screen script. Never throws.
   static Future<VoiceOutcome> play(AudioTopic topic, String language) {
-    return VoiceService.speak(VoiceRequest(
-      id: topic.id,
-      preferredLanguage: language,
-      preferredScript: topic.script,
-    ));
+    return VoiceService.speak(
+      VoiceRequest(
+        id: topic.id,
+        preferredLanguage: language,
+        preferredScript: topic.script,
+      ),
+    );
   }
 
   /// Tries to play one recorded question, e.g. `audio/q_feed_dagbani.mp3`.
   /// Falls back to system TTS in [language], then Hausa bridge, then text.
   /// Used by the voice-first Quick Home Check.
   static Future<VoiceOutcome> playQuestion(String key, String language) {
-    return VoiceService.speak(VoiceRequest(
-      id: 'q_$key',
-      preferredLanguage: language,
-      // The question text lives in the screen; VoiceService only needs the
-      // language and a non-empty script. The caller will already have shown
-      // the question text on the card, so we pass a short hint as the
-      // fallback script.
-      preferredScript: 'Listen to the question on the screen.',
-    ));
+    return VoiceService.speak(
+      VoiceRequest(
+        id: 'q_$key',
+        preferredLanguage: language,
+        // The question text lives in the screen; VoiceService only needs the
+        // language and a non-empty script. The caller will already have shown
+        // the question text on the card, so we pass a short hint as the
+        // fallback script.
+        preferredScript: 'Listen to the question on the screen.',
+      ),
+    );
   }
 
   /// Stops anything that is currently playing.

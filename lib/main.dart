@@ -10,6 +10,7 @@ library;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
@@ -17,6 +18,8 @@ import 'data/local/app_database.dart';
 import 'presentation/shared/iphone_frame.dart';
 
 void main() {
+  // Font assets are bundled; offline screens never request remote fonts.
+  GoogleFonts.config.allowRuntimeFetching = false;
   // Pick the right database factory before any provider tries to open a
   // database — web gets the WASM factory, desktop gets FFI, mobile uses the
   // native sqflite plugin.

@@ -136,7 +136,7 @@ class NarrationNotifier extends Notifier<bool> {
 /// preferred guidance language so both shells share one source of truth.
 final narrationLanguageProvider = Provider<String>((ref) {
   final user = ref.watch(currentUserProvider);
-  return OfflineSpeechLanguage.canonical(user?.preferredLanguage ?? 'English');
+  return OfflineSpeechLanguage.resolve(account: user?.preferredLanguage);
 });
 
 // ------------------------------------------------------------------- Repositories

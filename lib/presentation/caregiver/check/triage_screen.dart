@@ -109,18 +109,37 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
     return CaregiverSpeech(
       id: id,
       english: SpeechBank.byId(id)?.english ?? question.label,
-      language: ref.read(currentUserProvider)?.preferredLanguage ?? 'English',
+      language: _voiceLanguage,
       clipId: id,
     );
   }
 
   /// The language this check speaks in: her pick for the session, otherwise
   /// the language already on her account.
-  String get _voiceLanguage => OfflineSpeechLanguage.canonical(
-    _speechLanguage ??
-        ref.read(currentUserProvider)?.preferredLanguage ??
-        'English',
+  String get _voiceLanguage => OfflineSpeechLanguage.resolve(
+    temporary: _speechLanguage,
+    account: ref.read(narrationLanguageProvider),
   );
+
+  bool get _canSpeak => mounted &&
+      (ModalRoute.of(context)?.isCurrent ?? true) && TickerMode.valuesOf(context).enabled &&
+      (WidgetsBinding.instance.lifecycleState == null ||
+       WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!(ModalRoute.isCurrentOf(context) ?? true) || !TickerMode.valuesOf(context).enabled) {
+      _voice?.stop(notify: false);
+    }
+  }
+
+  void _resetNarration() {
+    _spokenKey = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _check != null) _changed();
+    });
+  }
 
   Future<void> _listenToQuestion(CaregiverCheckController check) async {
     final voice = _voice;
@@ -144,7 +163,7 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
     final speech = _questionSpeech(check);
     final scope = ref.read(caregiverScopeProvider);
     final user = ref.read(currentUserProvider);
-    if (!mounted ||
+    if (!_canSpeak ||
         _check != check ||
         ref.read(caregiverScopeProvider) != scope ||
         ref.read(currentUserProvider) != user ||
@@ -166,14 +185,15 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
       return;
     }
     final speech = _questionSpeech(check);
-    if (_spokenKey == speech.id) return;
-    _spokenKey = speech.id;
+    final speechKey = '${speech.id}/${speech.language}/${speech.english}';
+    if (_spokenKey == speechKey) return;
+    _spokenKey = speechKey;
     _voice?.stop();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted ||
+      if (!_canSpeak ||
           _check != check ||
           check.stage != CaregiverCheckStage.questions ||
-          _spokenKey != speech.id) {
+          _spokenKey != speechKey) {
         return;
       }
       final settings = ref
@@ -198,6 +218,15 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
       );
     }
     _voice = ref.watch(caregiverVoiceProvider(scope));
+    ref.listen(narrationLanguageProvider, (_, _) {
+      _speechLanguage = null;
+      _voice?.stop();
+      _resetNarration();
+    });
+    ref.listen(caregiverSettingsProvider(scope).select((value) => value.valueOrNull?.autoRead), (_, next) {
+      if (next != true) _voice?.stop();
+      _resetNarration();
+    });
     ref.watch(caregiverSettingsProvider(scope));
     final check = _check;
     return CompanionPage(

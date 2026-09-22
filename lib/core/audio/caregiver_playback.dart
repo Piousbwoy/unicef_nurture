@@ -8,8 +8,20 @@ import '../i18n/speech_bank.dart';
 import '../ml/piper_tts_service.dart';
 import '../ml/translation_service.dart';
 import 'speech_content_policy.dart';
+import 'device_voice_platform.dart'
+    if (dart.library.js_interop) 'device_voice_web.dart';
 
 enum CaregiverPlaybackPhase { loading, playing, stopped, completed, fallback }
+
+enum SpeechStage {
+  preparingModel,
+  translating,
+  synthesizing,
+  playing,
+  completed,
+  cancelled,
+  failed,
+}
 
 class CaregiverSpeech {
   const CaregiverSpeech({
@@ -19,7 +31,14 @@ class CaregiverSpeech {
     this.clipId,
     this.clipIds,
     this.policy = SpeechContentPolicy.guidance,
+    this.sourceLanguage = 'English',
+    this.revision = '1',
+    this.owner,
   });
+  final String sourceLanguage;
+  final String revision;
+  final Object? owner;
+  String get sourceText => english;
   final SpeechContentPolicy policy;
   final String id;
   final String english;
@@ -42,7 +61,8 @@ class CaregiverSpeech {
       if (clip == null) return null;
       clips.add(clip);
     }
-    String normalize(String text) => text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    String normalize(String text) =>
+        text.trim().replaceAll(RegExp(r'\s+'), ' ');
     return normalize(clips.map((clip) => clip.english).join(' ')) ==
             normalize(english)
         ? List.unmodifiable(clips)
@@ -55,6 +75,8 @@ class CaregiverSpeech {
   /// returns null to preserve the safety invariant.
   String? get localizedText {
     final selected = OfflineSpeechLanguage.canonical(language);
+    final source = OfflineSpeechLanguage.canonical(sourceLanguage);
+    if (source != 'English') return source == selected ? english : null;
     if (selected == 'English') return english;
     if (SpeechSafety.requiresEnglish(english, policy)) return null;
     final clips = matchingClips;
@@ -75,8 +97,11 @@ class CaregiverSpeech {
     }
     // Pure dynamic text — try the phrase-dictionary translation engine.
     final result = TranslationService.instance.translate(english, selected);
-    return result != null && result.coverage == 1 &&
-        SpeechSafety.preservesTokens(english, result.text) ? result.text : null;
+    return result != null &&
+            result.coverage == 1 &&
+            SpeechSafety.preservesTokens(english, result.text)
+        ? result.text
+        : null;
   }
 
   bool get hasTranslation => localizedText != null;
@@ -88,12 +113,23 @@ class CaregiverSpeech {
     clipId: clipId,
     clipIds: clipIds,
     policy: policy,
+    sourceLanguage: sourceLanguage,
+    revision: revision,
+    owner: owner,
   );
 }
 
 /// Strict language identity and explicit evidence of offline device voices.
 abstract final class OfflineSpeechLanguage {
   static const names = ['English', 'Twi', 'Dagbani', 'Hausa'];
+
+  static String resolve({String? temporary, String? account}) => canonical(
+    temporary?.trim().isNotEmpty == true
+        ? temporary!
+        : account?.trim().isNotEmpty == true
+        ? account!
+        : 'English',
+  );
 
   static String canonical(String language) {
     final value = language.trim().toLowerCase().replaceAll('_', '-');
@@ -111,16 +147,22 @@ abstract final class OfflineSpeechLanguage {
   static bool? _flag(dynamic value) => switch (value) {
     true || 'true' => true,
     false || 'false' => false,
-    _ => value is String ? switch (value.trim().toLowerCase()) {
-      'true' => true,
-      'false' => false,
-      _ => null,
-    } : null,
+    _ =>
+      value is String
+          ? switch (value.trim().toLowerCase()) {
+              'true' => true,
+              'false' => false,
+              _ => null,
+            }
+          : null,
   };
 
   /// A locale or a voice name alone does not prove offline availability.
   /// Missing (including native iOS) or conflicting metadata is declined.
-  static Map<String, String>? deviceVoice(String language, List<dynamic> voices) {
+  static Map<String, String>? deviceVoice(
+    String language,
+    List<dynamic> voices,
+  ) {
     final primaries = switch (canonical(language)) {
       'English' => const ['en'],
       'Twi' => const ['tw', 'ak'],
@@ -136,7 +178,8 @@ abstract final class OfflineSpeechLanguage {
         if (name is! String || name.trim().isEmpty || locale is! String) {
           continue;
         }
-        if (locale.trim().toLowerCase().split(RegExp('[-_]')).first != primary) {
+        if (locale.trim().toLowerCase().split(RegExp('[-_]')).first !=
+            primary) {
           continue;
         }
         final local = _flag(voice['localService']);
@@ -156,7 +199,19 @@ class CaregiverPlayback {
     required this.transcript,
     required this.language,
     required this.source,
+    this.stage,
+    this.reasonCode,
+    this.requestedLanguage,
+    this.contentId,
+    this.revision,
+    this.generation,
   });
+  final SpeechStage? stage;
+  final String? reasonCode;
+  final String? requestedLanguage;
+  final String? contentId;
+  final String? revision;
+  final int? generation;
   final CaregiverPlaybackPhase phase;
   final String transcript;
   final String language;
@@ -173,7 +228,16 @@ abstract interface class CaregiverVoiceBackend {
 }
 
 class _PlaybackRun {
-  _PlaybackRun(this.generation, this.transcript, this.language, this.event);
+  _PlaybackRun(
+    this.generation,
+    this.transcript,
+    this.language,
+    this.event,
+    this.speech,
+  );
+  final CaregiverSpeech speech;
+  SpeechStage stage = SpeechStage.preparingModel;
+  String? reasonCode;
   final int generation;
   final void Function(CaregiverPlayback) event;
   final cancel = Completer<void>();
@@ -185,15 +249,30 @@ class _PlaybackRun {
 
   void emit(CaregiverPlaybackPhase phase) {
     if (ended) return;
-    ended = phase == CaregiverPlaybackPhase.completed ||
+    ended =
+        phase == CaregiverPlaybackPhase.completed ||
         phase == CaregiverPlaybackPhase.fallback ||
         phase == CaregiverPlaybackPhase.stopped;
-    event(CaregiverPlayback(
-      phase: phase,
-      transcript: transcript,
-      language: language,
-      source: source,
-    ));
+    event(
+      CaregiverPlayback(
+        phase: phase,
+        transcript: transcript,
+        language: language,
+        source: source,
+        stage: switch (phase) {
+          CaregiverPlaybackPhase.loading => stage,
+          CaregiverPlaybackPhase.playing => SpeechStage.playing,
+          CaregiverPlaybackPhase.completed => SpeechStage.completed,
+          CaregiverPlaybackPhase.stopped => SpeechStage.cancelled,
+          CaregiverPlaybackPhase.fallback => SpeechStage.failed,
+        },
+        reasonCode: reasonCode,
+        requestedLanguage: speech.language,
+        contentId: speech.id,
+        revision: speech.revision,
+        generation: generation,
+      ),
+    );
   }
 
   void stop() {
@@ -227,6 +306,7 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
     PiperTtsService? piper,
     this.operationTimeout = const Duration(seconds: 5),
     this.playbackTimeout = const Duration(minutes: 3),
+    this.modelTimeout = const Duration(minutes: 5),
   }) : _playerFactory = playerFactory ?? AudioPlayer.new,
        _ttsFactory = ttsFactory ?? _sharedTts,
        _assets = assets ?? rootBundle,
@@ -244,6 +324,7 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
       _PlaybackCoordinator.current?.stop() ?? Future<void>.value();
   final Duration operationTimeout;
   final Duration playbackTimeout;
+  final Duration modelTimeout;
   AudioPlayer? _player;
   FlutterTts? _tts;
   _PlaybackRun? _run;
@@ -252,7 +333,8 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
 
   static FlutterTts _sharedTts() => _PlaybackCoordinator.tts ??= FlutterTts();
 
-  bool _current(_PlaybackRun run) => !_disposed &&
+  bool _current(_PlaybackRun run) =>
+      !_disposed &&
       run.generation == _generation &&
       !run.cancel.isCompleted &&
       identical(_PlaybackCoordinator.current, this);
@@ -296,7 +378,7 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
       final tts = _tts;
       if (tts != null) {
         final result = await tts.stop().timeout(operationTimeout);
-        if (result != 1 && result != true) quiet = false;
+        if (!deviceCommandAccepted(result)) quiet = false;
       }
     } catch (_) {
       quiet = false;
@@ -315,13 +397,15 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
     // Capture ownership before any await, including asset loads/enumeration.
     final generation = ++_generation;
     final selected = OfflineSpeechLanguage.canonical(speech.language);
-    var localized = speech.matchingClips != null || selected == 'English'
-        ? speech.localizedText : null;
+    var localized = speech.localizedText;
     final run = _PlaybackRun(
       generation,
       localized ?? speech.english,
-      localized == null ? 'English' : selected,
+      localized == null
+          ? OfflineSpeechLanguage.canonical(speech.sourceLanguage)
+          : selected,
       event,
+      speech,
     );
     _run = run;
     _PlaybackCoordinator.current = this;
@@ -334,30 +418,45 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
       if (selected != 'English' &&
           SpeechSafety.requiresEnglish(speech.english, speech.policy)) {
         run.transcript = speech.english;
-        run.language = 'English';
-        run.source = 'English for safety: treatment, measurements and identifiers '
+        run.language = speech.sourceLanguage;
+        run.reasonCode = 'clinical_english_required';
+        run.source =
+            'English for safety: treatment, measurements and identifiers '
             'are not machine-translated. Choose English playback.';
         run.emit(CaregiverPlaybackPhase.fallback);
         return;
       }
-      if (localized == null && speech.clipId == null && speech.clipIds == null) {
+      if (localized == null &&
+          speech.clipId == null &&
+          speech.clipIds == null &&
+          OfflineSpeechLanguage.canonical(speech.sourceLanguage) == 'English') {
+        run.stage = SpeechStage.translating;
+        run.source =
+            'Preparing offline translation; first use may take a few minutes';
+        run.emit(CaregiverPlaybackPhase.loading);
         final result = await _wait(
           _translation.translateAsync(speech.english, selected),
-          run, operationTimeout,
+          run,
+          modelTimeout,
         );
         if (!_current(run)) return;
-        if (result != null && result.language == selected &&
-            result.coverage == 1 && result.text.trim().isNotEmpty &&
+        if (result != null &&
+            result.language == selected &&
+            result.coverage == 1 &&
+            result.text.trim().isNotEmpty &&
             SpeechSafety.preservesTokens(speech.english, result.text)) {
           localized = result.text;
           run.transcript = result.text;
           run.language = selected;
           run.provenance = result.isNeural
-              ? 'neural model draft' : 'phrase dictionary draft';
+              ? 'neural model draft'
+              : 'phrase dictionary draft';
         }
       }
       if (localized == null) {
-        run.source = '$selected translation is not bundled. Choose English or '
+        run.reasonCode = 'translation_unavailable';
+        run.source =
+            '$selected translation is not bundled. Choose English or '
             'ask a health worker to read the guidance.';
         run.emit(CaregiverPlaybackPhase.fallback);
         return;
@@ -369,7 +468,9 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
       final clips = speech.matchingClips;
       final folder = SpeechBank.folderFor(selected);
       if (clips != null && folder != null) {
-        final paths = [for (final clip in clips) 'audio/$folder/${clip.id}.wav'];
+        final paths = [
+          for (final clip in clips) 'audio/$folder/${clip.id}.wav',
+        ];
         try {
           // Preflight the WHOLE sequence before any audio starts.
           for (final path in paths) {
@@ -401,14 +502,17 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
       }
       if (!_current(run)) return;
 
-      // Piper neural TTS: native-quality speech for dynamic translated text.
+      // Model-specific Piper speech for dynamic translated text.
       if (await _piperSpeak(run)) {
         if (_current(run)) run.emit(CaregiverPlaybackPhase.completed);
         return;
       }
       if (!_current(run)) return;
 
-      if (!_PlaybackCoordinator.quiet) { _fallback(run); return; }
+      if (!_PlaybackCoordinator.quiet) {
+        _fallback(run);
+        return;
+      }
       // Device fallback requires a proven offline voice in the same language.
       if (await _synthesize(run)) {
         if (_current(run)) run.emit(CaregiverPlaybackPhase.completed);
@@ -431,9 +535,10 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
   }
 
   void _fallback(_PlaybackRun run) {
-    run.source = run.language == 'English'
-        ? 'Readable text • offline audio unavailable'
-        : 'Readable text • draft translation • offline audio unavailable';
+    run.reasonCode ??= 'offline_audio_unavailable';
+    run.source =
+        '${run.language == 'English' ? 'Readable text' : 'Readable text • draft translation'} • '
+        'offline audio unavailable. Retry, install a language pack, or choose an installed English voice.';
     run.emit(CaregiverPlaybackPhase.fallback);
   }
 
@@ -446,6 +551,7 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
     void finish(bool success) {
       if (!done.isCompleted) done.complete(success);
     }
+
     try {
       await _PlaybackCoordinator.serialize(() async {
         if (!_current(run)) return;
@@ -453,7 +559,9 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
         // completing the next clip or another user's request.
         final activePlayer = player = _player = _playerFactory();
         completion = activePlayer.onPlayerComplete.listen(
-          (_) { if (armed && _current(run)) finish(true); },
+          (_) {
+            if (armed && _current(run)) finish(true);
+          },
           onError: (Object _, StackTrace _) => finish(false),
           onDone: () => finish(false),
         );
@@ -463,7 +571,8 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
             if (state == PlayerState.playing) {
               run.emit(CaregiverPlaybackPhase.playing);
             } else if (state == PlayerState.stopped ||
-                state == PlayerState.disposed || state == PlayerState.paused) {
+                state == PlayerState.disposed ||
+                state == PlayerState.paused) {
               finish(false);
             }
           },
@@ -472,7 +581,11 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
         );
         // Loading cannot revive playback after stop: resume is a separate,
         // generation-checked command, not an async player.play(asset).
-        await _wait(activePlayer.setSource(AssetSource(path)), run, operationTimeout);
+        await _wait(
+          activePlayer.setSource(AssetSource(path)),
+          run,
+          operationTimeout,
+        );
         if (!_current(run)) return;
         armed = true;
         await _wait(activePlayer.resume(), run, operationTimeout);
@@ -500,7 +613,7 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
     }
   }
 
-  /// Synthesize speech via on-device Piper VITS (native-quality Hausa/Twi).
+  /// Synthesize speech via the validated model-specific Piper frontend.
   /// Returns true if Piper handled playback, false if caller should fall through.
   Future<bool> _piperSpeak(_PlaybackRun run) async {
     final service = _piper;
@@ -510,14 +623,29 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
     final text = run.transcript;
     if (text.trim().isEmpty) return false;
     try {
-      await _wait(service.initializeLanguage(run.language), run, operationTimeout);
-      if (!_current(run) || !service.supportsLanguage(run.language)) return false;
-      run.source = 'Piper offline voice - ${run.provenance.isEmpty ? 'bank draft translation' : run.provenance}';
-      final handled = await _wait(service.speak(text, run.language,
-        onStarted: () {
-          if (_current(run)) run.emit(CaregiverPlaybackPhase.playing);
-        },
-      ), run, playbackTimeout);
+      run.stage = SpeechStage.preparingModel;
+      run.source =
+          'Preparing ${run.language} voice; first use may take a few minutes';
+      run.emit(CaregiverPlaybackPhase.loading);
+      await _wait(service.initializeLanguage(run.language), run, modelTimeout);
+      if (!_current(run) || !service.supportsLanguage(run.language)) {
+        return false;
+      }
+      run.source =
+          'Piper offline voice - ${run.provenance.isEmpty ? 'bank draft translation' : run.provenance}';
+      run.stage = SpeechStage.synthesizing;
+      run.emit(CaregiverPlaybackPhase.loading);
+      final handled = await _wait(
+        service.speak(
+          text,
+          run.language,
+          onStarted: () {
+            if (_current(run)) run.emit(CaregiverPlaybackPhase.playing);
+          },
+        ),
+        run,
+        playbackTimeout,
+      );
       return handled && _current(run);
     } catch (_) {
       if (_current(run)) {
@@ -536,23 +664,34 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
     var started = false;
     Future<dynamic>? utterance;
     bool listening() => armed && _current(run) && !failed.isCompleted;
-    void fail() { if (!failed.isCompleted) failed.complete(false); }
+    void fail() {
+      if (!failed.isCompleted) failed.complete(false);
+    }
+
     try {
       await _PlaybackCoordinator.serialize(() async {
         if (!_current(run)) return;
         final tts = _tts ??= _ttsFactory();
-        final voices = await _wait(tts.getVoices, run, operationTimeout);
+        final voices = await _wait(
+          offlineDeviceVoices(tts),
+          run,
+          operationTimeout,
+        );
         if (!_current(run)) return;
         final voice = voices is List
             ? OfflineSpeechLanguage.deviceVoice(run.language, voices)
             : null;
-        if (voice == null) throw StateError('No explicitly offline voice');
+        if (voice == null) {
+          run.reasonCode = 'offline_voice_missing';
+          throw StateError('No explicitly offline voice');
+        }
         Future<void> configure(Future<dynamic> result) async {
           final accepted = await _wait(result, run, operationTimeout);
-          if (!_current(run) || (accepted != 1 && accepted != true)) {
+          if (!_current(run) || !deviceCommandAccepted(accepted)) {
             throw StateError('Device rejected offline voice configuration');
           }
         }
+
         // setLanguage may reset the engine's default voice. Pin the proven
         // offline voice AFTER setting its locale, never the other way around.
         await configure(tts.setLanguage(voice['locale']!));
@@ -560,7 +699,8 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
         await configure(tts.setSpeechRate(0.45));
         await configure(tts.awaitSpeakCompletion(true));
         if (!_current(run)) return;
-        run.source = '${run.language} offline device speech'
+        run.source =
+            '${run.language} offline device speech'
             '${run.language == 'English' ? '' : ' • draft translation'}';
         if (run.provenance.isNotEmpty) run.source += ' - ${run.provenance}';
         tts.setStartHandler(() {
@@ -573,25 +713,38 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
             completedEvent.complete();
           }
         });
-        tts.setErrorHandler((_) { if (listening()) fail(); });
-        tts.setCancelHandler(() { if (listening()) fail(); });
+        tts.setErrorHandler((_) {
+          if (listening()) fail();
+        });
+        tts.setCancelHandler(() {
+          if (listening()) fail();
+        });
         armed = true;
         // Do not hold the command queue while speaking: stop must interrupt it.
         // The invocation-bound future AND a completion event are required, so
         // an old queued callback alone cannot complete a new utterance.
         utterance = tts.speak(run.transcript);
         // Attach an error listener immediately, before leaving the queue.
-        utterance = utterance!.then<dynamic>((result) => result,
-            onError: (Object _, StackTrace _) { fail(); return 0; });
+        utterance = utterance!.then<dynamic>(
+          (result) => result,
+          onError: (Object _, StackTrace _) {
+            fail();
+            return 0;
+          },
+        );
       });
       if (!_current(run) || utterance == null) return false;
       final success = () async {
         final accepted = await utterance!;
-        if (accepted != 1 && accepted != true) return false;
+        if (!deviceCommandAccepted(accepted)) return false;
         await completedEvent.future;
         return _current(run);
       }();
-      return await _wait(Future.any([success, failed.future]), run, playbackTimeout);
+      return await _wait(
+        Future.any([success, failed.future]),
+        run,
+        playbackTimeout,
+      );
     } catch (_) {
       return false;
     } finally {
@@ -603,9 +756,15 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
   /// Diagnostic engine-reported locales, not proof of an offline voice.
   Future<List<String>> availableTtsLanguages() async {
     try {
-      final languages = await (_tts ??= _ttsFactory()).getLanguages.timeout(operationTimeout);
+      final languages = await (_tts ??= _ttsFactory()).getLanguages.timeout(
+        operationTimeout,
+      );
       return languages is List
-          ? languages.whereType<String>().where((s) => s.trim().isNotEmpty).toSet().toList()
+          ? languages
+                .whereType<String>()
+                .where((s) => s.trim().isNotEmpty)
+                .toSet()
+                .toList()
           : [];
     } catch (_) {
       return [];
@@ -621,7 +780,9 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
     _player = null;
     if (player != null) {
       await _PlaybackCoordinator.serialize(() async {
-        try { await player.dispose().timeout(operationTimeout); } catch (_) {
+        try {
+          await player.dispose().timeout(operationTimeout);
+        } catch (_) {
           // Disposal must not throw into a controller's lifecycle callback.
         }
       });

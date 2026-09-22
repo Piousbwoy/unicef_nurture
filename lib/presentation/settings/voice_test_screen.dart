@@ -13,6 +13,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/providers.dart';
 import '../../core/audio/voice_service.dart';
+import '../../core/i18n/speech_bank.dart';
+import '../shared/offline_voice_check.dart';
 import '../../core/theme/app_theme.dart';
 import '../shared/audio_button.dart';
 import '../shared/ui.dart';
@@ -28,17 +30,11 @@ class _VoiceTestScreenState extends ConsumerState<VoiceTestScreen> {
   List<String> _availableTts = const [];
   bool _loading = true;
   String? _error;
-  final Map<String, VoiceSource> _lastResults = {};
-
-  static const _testPhrases = <String, String>{
-    'English':
-        'If your child cannot drink or breastfeed, go to the health '
-        'facility at once.',
-    'Hausa': 'Idan yaranku ba ta iya sha ko nono, je asibitin yanzu.',
-    'Dagbani': 'Ni bini maa ti niŋ ka o nui tana, yi tiŋ bɛ ni kpeeni pam.',
-    'Twi':
-        'Sɛ akwadaa ntumi nnom nsuo anaasɛ nono a, kɔ ayaresabea '
-        'ntɛm ara.',
+  static final _testPhrases = <String, String>{
+    for (final language in ['English', 'Hausa', 'Dagbani', 'Twi'])
+      language: language == 'English'
+          ? SpeechBank.qNewbornFeed.english
+          : SpeechBank.qNewbornFeed.textFor(language)!,
   };
 
   @override
@@ -55,27 +51,13 @@ class _VoiceTestScreenState extends ConsumerState<VoiceTestScreen> {
         _availableTts = langs;
         _loading = false;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = 'Voice enumeration unavailable';
         _loading = false;
       });
     }
-  }
-
-  Future<void> _test(String language) async {
-    final phrase = _testPhrases[language] ?? _testPhrases['English']!;
-    final outcome = await VoiceService.speak(
-      VoiceRequest(
-        id: 'voice_test_$language',
-        preferredLanguage: language,
-        preferredScript: phrase,
-        bridgeScript: _testPhrases['Hausa'],
-      ),
-    );
-    if (!mounted) return;
-    setState(() => _lastResults[language] = outcome.source);
   }
 
   @override
@@ -98,9 +80,9 @@ class _VoiceTestScreenState extends ConsumerState<VoiceTestScreen> {
           SectionCard(
             title: 'What can this phone speak?',
             subtitle:
-                'Tap a language below to hear exactly what this phone '
-                'will say in it. The pill under each button names the voice '
-                'that actually played — this app never pretends.',
+                'Test a fixed question in each language. Open the details '
+                'beside a play button for the transcript, playback result, '
+                'or voice setup. This does not certify other text.',
             icon: Icons.record_voice_over_rounded,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -112,10 +94,9 @@ class _VoiceTestScreenState extends ConsumerState<VoiceTestScreen> {
                   children: const [
                     _LegendDot(
                       colour: AppColors.triageGreen,
-                      label: 'Real voice',
+                      label: 'Synthetic recording',
                     ),
                     _LegendDot(colour: AppColors.primary, label: 'Phone voice'),
-                    _LegendDot(colour: AppColors.triageAmber, label: 'Bridge'),
                     _LegendDot(colour: AppColors.inkFaint, label: 'Read aloud'),
                   ],
                 ),
@@ -128,8 +109,8 @@ class _VoiceTestScreenState extends ConsumerState<VoiceTestScreen> {
           SectionCard(
             title: 'Try a language',
             subtitle:
-                'Tap a language to hear what this phone says. The pill '
-                'under the button tells you which voice was used.',
+                'These samples use exact-content recordings when available. '
+                'Use Offline voice check below to test installed dynamic voices.',
             icon: Icons.translate_rounded,
             child: Column(
               children: [
@@ -145,8 +126,6 @@ class _VoiceTestScreenState extends ConsumerState<VoiceTestScreen> {
                       language: language,
                       phrase: _testPhrases[language] ?? '',
                       isPreferred: language == preferredLanguage,
-                      lastSource: _lastResults[language],
-                      onPlay: () => _test(language),
                     ),
                   ),
               ],
@@ -169,6 +148,7 @@ class _VoiceTestScreenState extends ConsumerState<VoiceTestScreen> {
                   )
                 : _CoverageMatrix(availableTts: _availableTts, error: _error),
           ),
+          OfflineVoiceCheck(language: preferredLanguage),
           const SizedBox(height: Gap.xl),
         ],
       ),
@@ -181,15 +161,11 @@ class _LanguageTestRow extends StatelessWidget {
     required this.language,
     required this.phrase,
     required this.isPreferred,
-    required this.lastSource,
-    required this.onPlay,
   });
 
   final String language;
   final String phrase;
   final bool isPreferred;
-  final VoiceSource? lastSource;
-  final VoidCallback onPlay;
 
   @override
   Widget build(BuildContext context) {
@@ -207,7 +183,10 @@ class _LanguageTestRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(
                       language,
@@ -249,10 +228,6 @@ class _LanguageTestRow extends StatelessWidget {
                     height: 1.4,
                   ),
                 ),
-                if (lastSource != null) ...[
-                  const SizedBox(height: 6),
-                  _ResultPill(source: lastSource!, language: language),
-                ],
               ],
             ),
           ),
@@ -260,51 +235,10 @@ class _LanguageTestRow extends StatelessWidget {
           AudioButton(
             text: phrase,
             language: language,
-            id: 'voice_test_$language',
+            sourceLanguage: language,
+            id: SpeechBank.qNewbornFeed.id,
+            showLanguagePicker: false,
             compact: true,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ResultPill extends StatelessWidget {
-  const _ResultPill({required this.source, required this.language});
-  final VoiceSource source;
-  final String language;
-
-  @override
-  Widget build(BuildContext context) {
-    final colour = switch (source) {
-      VoiceSource.studio => AppColors.triageGreen,
-      VoiceSource.synthesized => AppColors.primaryDeep,
-      VoiceSource.systemTts => AppColors.primaryDeep,
-      VoiceSource.linguaFranca => AppColors.triageAmber,
-      VoiceSource.readAloud => AppColors.inkFaint,
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: colour.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(color: colour, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 5),
-          Text(
-            source.labelFor(language),
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              color: colour,
-            ),
           ),
         ],
       ),
@@ -328,12 +262,14 @@ class _LegendDot extends StatelessWidget {
           decoration: BoxDecoration(color: colour, shape: BoxShape.circle),
         ),
         const SizedBox(width: 5),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: AppColors.inkMuted,
+        Flexible(
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: AppColors.inkMuted,
+            ),
           ),
         ),
       ],
@@ -351,54 +287,54 @@ class _CoverageMatrix extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (error != null) {
-      return Text(
-        'Could not read the voice engine: $error. The app will fall back to '
-        'the on-screen text for every language.',
-        style: const TextStyle(fontSize: 12.5, color: AppColors.inkMuted),
-      );
-    }
     return Column(
       children: [
+        if (error != null)
+          const Text(
+            'Could not list device voices. Recordings and installed neural '
+            'packs can still be tested below.',
+            style: TextStyle(fontSize: 12.5, color: AppColors.inkMuted),
+          ),
         _CoverageRow(
           language: 'English',
-          source: _has('en') ? VoiceSource.systemTts : VoiceSource.readAloud,
+          source: VoiceSource.readAloud,
           notes: _has('en')
-              ? 'Built into Android & iOS'
-              : 'No engine on this device',
+              ? 'English locale reported. Offline capability and playback still need a test.'
+              : 'No English locale reported by the phone engine.',
         ),
         _CoverageRow(
           language: 'Hausa',
           source: VoiceSource.synthesized,
-          notes: _has('ha')
-              ? 'On-device voice bank built in (Meta MMS), plus the '
-                    'phone\'s own Hausa voice as backup.'
-              : 'On-device voice bank built in (Meta MMS). Draft voice — '
-                    'human sign-off pending.',
+          notes:
+              'Exact-content synthetic recordings are bundled. Dynamic speech '
+              'requires an installed voice pack. Human sign-off is pending.'
+              '${_has('ha') ? ' A reported Hausa device locale is not proof of offline playback.' : ''}',
         ),
         _CoverageRow(
           language: 'Twi',
           source: VoiceSource.synthesized,
           notes:
-              'On-device voice bank built in (Meta MMS). Draft voice — '
-              'human sign-off pending.',
+              'Exact-content synthetic recordings are bundled. Dynamic speech '
+              'requires an installed voice pack. Human sign-off is pending.',
         ),
         _CoverageRow(
           language: 'Dagbani',
           source: VoiceSource.synthesized,
           notes:
-              'On-device voice bank built in (Meta MMS). Draft voice — '
-              'human sign-off pending.',
+              'Exact-content synthetic recordings only; arbitrary dynamic '
+              'speech is not supported. Human sign-off is pending.',
         ),
         _CoverageRow(
           language: 'Likpakpaln',
-          source: VoiceSource.linguaFranca,
-          notes: 'No TTS yet. Bridge to Hausa.',
+          source: VoiceSource.readAloud,
+          notes:
+              'No supported offline voice. Read the transcript or explicitly choose another language.',
         ),
         _CoverageRow(
           language: 'Gurene, Kusaal, Sissali, Dagaare',
-          source: VoiceSource.linguaFranca,
-          notes: 'No TTS yet. Bridge to Hausa.',
+          source: VoiceSource.readAloud,
+          notes:
+              'No supported offline voice. Read the transcript or explicitly choose another language.',
         ),
       ],
     );

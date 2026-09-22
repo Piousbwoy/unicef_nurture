@@ -52,3 +52,17 @@ server/.env
 # Persistent Chrome profile used by the web debug run (.vscode/launch.json).
 # Contains the app's browser-side database — never commit it.
 .chrome-profile/
+
+# Trained models are ~941 MB and .gitattributes routes *.onnx through Git LFS,
+# whose quota on this remote is exhausted. Kept local until that is resolved;
+# delete these two lines to track them via LFS again.
+assets/models/translation_hausa/*.onnx
+assets/models/translation_twi/*.onnx
+assets/tts/hausa_piper/model.onnx
+assets/tts/twi_piper/model.onnx
+
+# Vendored ONNX Runtime WASM (10.7 MB), regenerable with tool/fetch_ort_web.py.
+web/voice_runtime/
+
+# Agent debug screenshots from Flutter web verification runs.
+.qoder_screens/

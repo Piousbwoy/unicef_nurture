@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/glass.dart';
 import '../../../domain/entities/caregiver.dart';
 import '../../shared/speech_language_sheet.dart';
+import '../../shared/offline_voice_check.dart';
 import '../caregiver_providers.dart';
 
 final caregiverVoiceBackendProvider =
@@ -51,7 +52,7 @@ class CaregiverVoiceController extends ChangeNotifier
     playback = CaregiverPlayback(
       phase: CaregiverPlaybackPhase.loading,
       transcript: localized ?? item.english,
-      language: localized == null ? 'English' : language,
+      language: localized == null ? item.sourceLanguage : language,
       source: 'Checking offline audio',
     );
     notifyListeners();
@@ -66,7 +67,7 @@ class CaregiverVoiceController extends ChangeNotifier
       playback = CaregiverPlayback(
         phase: CaregiverPlaybackPhase.fallback,
         transcript: localized ?? item.english,
-        language: localized == null ? 'English' : language,
+        language: localized == null ? item.sourceLanguage : language,
         source: localized == null
             ? 'No $language translation for this message • English text only'
             : '$language offline audio unavailable • readable text only',
@@ -133,6 +134,9 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
     english: speech.english,
     language: speech.language,
     policy: speech.policy,
+    sourceLanguage: speech.sourceLanguage,
+    revision: speech.revision,
+    owner: speech.owner,
     clipId: speech.clipId,
     clipIds: speech.clipIds == null
         ? null
@@ -143,6 +147,9 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
       a.id == b.id &&
       a.english == b.english &&
       a.policy == b.policy &&
+      a.sourceLanguage == b.sourceLanguage &&
+      a.revision == b.revision &&
+      identical(a.owner, b.owner) &&
       a.clipId == b.clipId &&
       listEquals(a.clipIds, b.clipIds);
 
@@ -179,6 +186,18 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
     }
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!(ModalRoute.isCurrentOf(context) ?? true) ||
+        !TickerMode.valuesOf(context).enabled) {
+      if (!_picking) {
+        ++_generation;
+        _stopOwned();
+      }
+    }
+  }
+
   /// Tap: speak in the language this family already uses. A play button that
   /// opens a form instead of making a sound is the bug this replaced.
   void _play(
@@ -186,6 +205,13 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
     CaregiverScope scope,
     String language,
   ) {
+    if (!(ModalRoute.of(context)?.isCurrent ?? true) ||
+        !TickerMode.valuesOf(context).enabled ||
+        (WidgetsBinding.instance.lifecycleState != null &&
+            WidgetsBinding.instance.lifecycleState !=
+                AppLifecycleState.resumed)) {
+      return;
+    }
     _generation++;
     final speech = _input.withLanguage(language);
     setState(() {
@@ -196,7 +222,10 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
   }
 
   /// Hold: choose a language for this message only, then play it.
-  Future<void> _choose(CaregiverVoiceController voice, CaregiverScope scope) async {
+  Future<void> _choose(
+    CaregiverVoiceController voice,
+    CaregiverScope scope,
+  ) async {
     if (_picking) return;
     // Stop any other message in this scope before opening the picker.
     if (voice.active) voice.stop();
@@ -212,7 +241,10 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
       _picking = false;
     }
     if (!mounted || generation != _generation || selected == null) return;
-    if (!identical(ProviderScope.containerOf(context, listen: false), container) ||
+    if (!identical(
+          ProviderScope.containerOf(context, listen: false),
+          container,
+        ) ||
         ref.read(caregiverScopeProvider) != scope ||
         !identical(ref.read(currentUserProvider), account) ||
         !identical(ref.read(caregiverVoiceProvider(scope)), voice)) {
@@ -246,7 +278,8 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
       _voice = voice;
     }
     final currentSpeech = voice.speech;
-    final state = currentSpeech != null &&
+    final state =
+        currentSpeech != null &&
             _sameMessage(currentSpeech, _input) &&
             (identical(currentSpeech, _ownedSpeech) ||
                 currentSpeech.language == _input.language)
@@ -254,7 +287,8 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
         : null;
     final active = state != null && voice.active;
     final isLoading = state?.phase == CaregiverPlaybackPhase.loading;
-    final animate = VisualEffects.of(context).motion &&
+    final animate =
+        VisualEffects.of(context).motion &&
         state?.phase == CaregiverPlaybackPhase.playing;
     if (animate) {
       final pulse = _pulse ??= AnimationController(
@@ -265,11 +299,16 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
     } else {
       _pulse?.stop();
     }
-    final language = _chosenLanguage ?? OfflineSpeechLanguage.canonical(_input.language);
+    final language = OfflineSpeechLanguage.resolve(
+      temporary: _chosenLanguage ?? _input.language,
+      account: ref.watch(narrationLanguageProvider),
+    );
     final selected = _input.withLanguage(language);
     final localized = selected.localizedText;
     final transcript = state?.transcript ?? localized ?? _input.english;
-    final transcriptLanguage = state?.language ?? (localized == null ? 'English' : language);
+    final transcriptLanguage =
+        state?.language ??
+        (localized == null ? _input.sourceLanguage : language);
     final status = switch (state?.phase) {
       CaregiverPlaybackPhase.loading => 'Loading',
       CaregiverPlaybackPhase.playing => 'Playing',
@@ -325,7 +364,10 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
                     if (state != null)
                       Text(
                         '${state.language} • ${state.source}',
-                        style: const TextStyle(fontSize: 12, color: AppColors.caregiverMuted),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.caregiverMuted,
+                        ),
                       ),
                   ],
                 ),
@@ -348,9 +390,14 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
                   const SizedBox(height: 6),
                   Text(
                     transcript,
-                    style: const TextStyle(fontSize: 13.5, height: 1.5, color: AppColors.checkNavy),
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      height: 1.5,
+                      color: AppColors.checkNavy,
+                    ),
                   ),
-                  if (transcriptLanguage != 'English') ...[
+                  if (transcriptLanguage != 'English' &&
+                      _input.sourceLanguage == 'English') ...[
                     const SizedBox(height: 10),
                     const Text('English original'),
                     Text(_input.english, style: const TextStyle(height: 1.5)),
@@ -359,6 +406,33 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
               ),
             ),
           ],
+          if (state?.phase == CaregiverPlaybackPhase.fallback)
+            Wrap(
+              spacing: 8,
+              children: [
+                TextButton(
+                  onPressed: () => _play(voice, scope, language),
+                  child: const Text('Retry'),
+                ),
+                if (_input.sourceLanguage == 'English')
+                  TextButton(
+                    onPressed: () => _play(voice, scope, 'English'),
+                    child: const Text('Hear English'),
+                  ),
+                TextButton(
+                  onPressed: () => showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    useSafeArea: true,
+                    builder: (_) => SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: OfflineVoiceCheck(language: language),
+                    ),
+                  ),
+                  child: const Text('Voice setup'),
+                ),
+              ],
+            ),
           Padding(
             padding: const EdgeInsets.only(top: 10),
             child: Text(
@@ -369,7 +443,10 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
                         'Read the English original, or choose English in the language picker.'
                   : 'Draft $language translation from the bundled speech bank. '
                         'Bundled voices are synthetic. Native-speaker and clinical review are needed.',
-              style: const TextStyle(fontSize: 11.5, color: AppColors.caregiverMuted),
+              style: const TextStyle(
+                fontSize: 11.5,
+                color: AppColors.caregiverMuted,
+              ),
             ),
           ),
         ],
@@ -443,10 +520,8 @@ class _VoicePlayButton extends StatelessWidget {
     return AnimatedBuilder(
       animation: animation,
       child: button,
-      builder: (context, child) => Transform.scale(
-        scale: 1 + animation.value * 0.08,
-        child: child,
-      ),
+      builder: (context, child) =>
+          Transform.scale(scale: 1 + animation.value * 0.08, child: child),
     );
   }
 }

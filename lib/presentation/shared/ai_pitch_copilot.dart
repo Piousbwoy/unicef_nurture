@@ -4,7 +4,7 @@
 /// of CareBridge AI. When activated from the interactive Studio Toolbar in
 /// [IPhoneFrame], this copilot renders a sleek, glassmorphic executive deck
 /// next to the simulated device and continuously narrates the end-to-end clinical,
-/// architectural, and AI system innovations out loud using a clear female voice.
+/// architectural, and AI system features through the shared offline voice service.
 ///
 /// Organized into an extensive ~6-minute interactive presentation covering:
 /// 1. Introduction & Healthcare Mission
@@ -20,9 +20,13 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/providers.dart';
+import '../../core/audio/caregiver_playback.dart';
+import '../../core/audio/speakable_service.dart';
 import '../../core/theme/app_theme.dart';
+import 'offline_voice_check.dart';
 
 class PitchScene {
   const PitchScene({
@@ -140,10 +144,10 @@ const _kPitchScenes = <PitchScene>[
     points: [
       'Vulnerability Engine: Synthesizes 18 clinical, social, and nutritional flags into a dynamic 0-100 index score for every household.',
       'Treatment Response Engine: Calculates exact longitudinal weight-velocity trajectories (grams per kilo per day) to catch therapeutic deterioration early.',
-      'Honest Spoken Voice Engine: Bridges Northern Ghana\'s literacy barrier by synthesizing maternal guidance out loud in Dagbani, Hausa, and English.',
+      'Offline voice: exact Dagbani, Twi, and Hausa recordings, validated Twi/Hausa synthesis packs, and installed offline English voices. Unsupported text stays readable.',
     ],
     narration:
-        'Now, let us unpack the proprietary intelligence powering our AI system and explain exactly how it operates completely offline. Our technical architecture is driven by a trinity of specialized, deterministic rules engines running within the Dart runtime environment. First, our Vulnerability Engine synthesizes eighteen distinct physical, environmental, and socio-economic variables to dynamically compute a normalized risk score between zero and one hundred for every household. Second, our Treatment Response Engine tracks longitudinal child growth, computing exact weight velocity in grams per kilogram per day to alert health workers the very hour a malnourished child stops responding to therapeutic feeding. Third, to conquer the pervasive linguistic and literacy barriers of Northern Ghana, our honest spoken voice audio engine synthesizes maternal guidance out loud. Because commercial speech systems lack support for languages like Dagbani and Mampruli, our engine utilizes an honest fallback chain: playing studio recordings when available, bridging to the common Hausa trade language, or providing written local translation scripts.',
+        'Now, let us unpack the proprietary intelligence powering our AI system and explain exactly how it operates completely offline. Our technical architecture is driven by a trinity of specialized, deterministic rules engines running within the Dart runtime environment. First, our Vulnerability Engine synthesizes eighteen distinct physical, environmental, and socio-economic variables to dynamically compute a normalized risk score between zero and one hundred for every household. Second, our Treatment Response Engine tracks longitudinal child growth, computing exact weight velocity in grams per kilogram per day to alert health workers the very hour a malnourished child stops responding to therapeutic feeding. Third, to conquer the pervasive linguistic and literacy barriers of Northern Ghana, our honest spoken voice audio engine synthesizes maternal guidance out loud. Exact matching recordings are used first. Installed, validated Twi and Hausa packs can synthesize supported text locally. Dagbani dynamic synthesis is not installed. When translation or audio is unavailable, the app shows the transcript and offers an explicit English option. Synthetic voices and machine translations require fluent-speaker and clinical review.',
   ),
   PitchScene(
     title: 'Hybrid Offline SQLite Database & Synchronization',
@@ -162,22 +166,26 @@ const _kPitchScenes = <PitchScene>[
   ),
 ];
 
-class AiPitchCopilotPanel extends StatefulWidget {
+class AiPitchCopilotPanel extends ConsumerStatefulWidget {
   const AiPitchCopilotPanel({super.key, required this.onClose});
 
   final VoidCallback onClose;
 
   @override
-  State<AiPitchCopilotPanel> createState() => _AiPitchCopilotPanelState();
+  ConsumerState<AiPitchCopilotPanel> createState() =>
+      _AiPitchCopilotPanelState();
 }
 
-class _AiPitchCopilotPanelState extends State<AiPitchCopilotPanel>
-    with SingleTickerProviderStateMixin {
-  final FlutterTts _tts = FlutterTts();
+class _AiPitchCopilotPanelState extends ConsumerState<AiPitchCopilotPanel>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  final _owner = Object();
+  SpeakableService? _speechService;
+  CaregiverPlayback? _playback;
+  bool _visible = true;
+  int _generation = 0;
   int _currentIndex = 0;
   bool _isPlaying = false;
   bool _autoSpeak = true;
-  String _selectedVoiceName = 'Female Executive Narrator';
   late final AnimationController _pulseCtrl;
 
   @override
@@ -186,95 +194,77 @@ class _AiPitchCopilotPanelState extends State<AiPitchCopilotPanel>
     _pulseCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
-    )..repeat(reverse: true);
-    _initTts();
+    );
+    WidgetsBinding.instance.addObserver(this);
     // Start speaking the first scene automatically upon opening
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_autoSpeak) _speakCurrent();
     });
   }
 
-  /// Configures FlutterTTS to search for and select a professional female voice
-  /// with articulate executive presentation pacing and warm pitch.
-  Future<void> _initTts() async {
-    try {
-      await _tts.setLanguage('en-US');
-      await _tts.setSpeechRate(
-        0.50,
-      ); // Measured, articulate executive pacing (~6 minutes total)
-      await _tts.setVolume(1.0);
-      await _tts.setPitch(1.15); // Warmer, clear feminine tone
+  bool get _foreground =>
+      WidgetsBinding.instance.lifecycleState == null ||
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
 
-      // Search system synthesized voices for optimal lady / female vocal profiles
-      try {
-        final dynamic voices = await _tts.getVoices;
-        if (voices is List) {
-          for (final v in voices) {
-            if (v is Map) {
-              final name = '${v['name']}'.toLowerCase();
-              final locale = '${v['locale']}'.toLowerCase();
-              if (locale.contains('en') &&
-                  (name.contains('female') ||
-                      name.contains('zira') ||
-                      name.contains('samantha') ||
-                      name.contains('victoria') ||
-                      name.contains('hazel') ||
-                      name.contains('google us english') ||
-                      name.contains('en-us-standard-c') ||
-                      name.contains('en-us-standard-f') ||
-                      name.contains('en-us-standard-g') ||
-                      name.contains('en-gb-standard-a') ||
-                      name.contains('woman') ||
-                      name.contains('siri'))) {
-                await _tts.setVoice({
-                  'name': '${v['name']}',
-                  'locale': '${v['locale']}',
-                });
-                if (mounted) {
-                  setState(() => _selectedVoiceName = '${v['name']}');
-                }
-                break;
-              }
-            }
-          }
-        }
-      } catch (_) {
-        // Voice scanning fallback; pitch 1.15 maintains articulate female tone
-      }
-
-      _tts.setCompletionHandler(() {
-        if (mounted) setState(() => _isPlaying = false);
-      });
-      _tts.setCancelHandler(() {
-        if (mounted) setState(() => _isPlaying = false);
-      });
-      _tts.setErrorHandler((dynamic _) {
-        if (mounted) setState(() => _isPlaying = false);
-      });
-    } catch (_) {
-      // Ignore initial audio setup errors on unsupported web environments
+  Future<void> _speakCurrent({String? language}) async {
+    if (!mounted ||
+        !_visible ||
+        !_foreground ||
+        !(ModalRoute.of(context)?.isCurrent ?? true) ||
+        !TickerMode.valuesOf(context).enabled) {
+      return;
     }
-  }
-
-  Future<void> _speakCurrent() async {
-    try {
-      await _tts.stop();
-      if (!mounted) return;
-      setState(() => _isPlaying = true);
-      final scene = _kPitchScenes[_currentIndex];
-      await _tts.speak(scene.narration);
-    } catch (_) {
-      if (mounted) setState(() => _isPlaying = false);
+    final generation = ++_generation;
+    _speechService = ref.read(speakableServiceProvider);
+    setState(() => _isPlaying = true);
+    await _speechService!.speak(
+      _kPitchScenes[_currentIndex].narration,
+      language: language ?? ref.read(narrationLanguageProvider),
+      owner: _owner,
+      onPlayback: (event) {
+        if (!mounted || generation != _generation) return;
+        setState(() {
+          _playback = event;
+          _isPlaying =
+              event.phase == CaregiverPlaybackPhase.loading ||
+              event.phase == CaregiverPlaybackPhase.playing;
+        });
+      },
+    );
+    if (mounted && generation == _generation) {
+      setState(() => _isPlaying = false);
     }
   }
 
   Future<void> _stopSpeech() async {
-    try {
-      await _tts.stop();
-      if (mounted) setState(() => _isPlaying = false);
-    } catch (_) {
-      if (mounted) setState(() => _isPlaying = false);
+    ++_generation;
+    if (mounted) {
+      setState(() {
+        _isPlaying = false;
+        _playback = null;
+      });
     }
+    await _speechService?.stop(owner: _owner);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _visible =
+        (ModalRoute.isCurrentOf(context) ?? true) &&
+        TickerMode.valuesOf(context).enabled;
+    if (MediaQuery.disableAnimationsOf(context) || !_visible) {
+      _pulseCtrl.stop();
+      _pulseCtrl.value = 1;
+    } else if (!_pulseCtrl.isAnimating) {
+      _pulseCtrl.repeat(reverse: true);
+    }
+    if (!_visible) unawaited(_stopSpeech());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) unawaited(_stopSpeech());
   }
 
   void _selectScene(int index) {
@@ -289,13 +279,25 @@ class _AiPitchCopilotPanelState extends State<AiPitchCopilotPanel>
 
   @override
   void dispose() {
+    ++_generation;
+    WidgetsBinding.instance.removeObserver(this);
     _pulseCtrl.dispose();
-    _tts.stop();
+    unawaited(_speechService?.stop(owner: _owner) ?? Future<void>.value());
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(currentUserProvider, (previous, next) {
+      if (previous?.id == next?.id &&
+          previous?.preferredLanguage == next?.preferredLanguage) {
+        return;
+      }
+      unawaited(_stopSpeech());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _autoSpeak) unawaited(_speakCurrent());
+      });
+    });
     final scene = _kPitchScenes[_currentIndex];
     final isFirst = _currentIndex == 0;
     final isLast = _currentIndex == _kPitchScenes.length - 1;
@@ -363,7 +365,10 @@ class _AiPitchCopilotPanelState extends State<AiPitchCopilotPanel>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text(
                             '6-Min AI Pitch Copilot',
@@ -401,7 +406,7 @@ class _AiPitchCopilotPanelState extends State<AiPitchCopilotPanel>
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'SCENE ${_currentIndex + 1} OF ${_kPitchScenes.length} • LADY NARRATOR',
+                        'SCENE ${_currentIndex + 1} OF ${_kPitchScenes.length} • OFFLINE NARRATION',
                         style: AppType.eyebrow.copyWith(
                           color: Colors.amberAccent,
                           fontSize: 10,
@@ -506,7 +511,10 @@ class _AiPitchCopilotPanelState extends State<AiPitchCopilotPanel>
                   ),
                 ],
               ),
-              child: Row(
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   ElevatedButton.icon(
                     onPressed: _isPlaying ? _stopSpeech : _speakCurrent,
@@ -536,7 +544,6 @@ class _AiPitchCopilotPanelState extends State<AiPitchCopilotPanel>
                       ),
                     ),
                   ),
-                  const Spacer(),
                   const Text(
                     'Auto-speak:',
                     style: TextStyle(
@@ -553,7 +560,7 @@ class _AiPitchCopilotPanelState extends State<AiPitchCopilotPanel>
                       if (v && !_isPlaying) _speakCurrent();
                       if (!v && _isPlaying) _stopSpeech();
                     },
-                    activeColor: Colors.amberAccent,
+                    activeThumbColor: Colors.amberAccent,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ],
@@ -589,7 +596,7 @@ class _AiPitchCopilotPanelState extends State<AiPitchCopilotPanel>
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Lady AI Narrator speaking ($_selectedVoiceName)...',
+                        '${_playback?.language ?? ref.watch(narrationLanguageProvider)} • ${_playback?.stage?.name ?? 'preparing'}',
                         style: const TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w800,
@@ -659,6 +666,52 @@ class _AiPitchCopilotPanelState extends State<AiPitchCopilotPanel>
                     ],
                   ),
                   const SizedBox(height: 18),
+                  if (_playback case final event?) ...[
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        '${event.language} • ${event.source}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    if (event.phase == CaregiverPlaybackPhase.fallback) ...[
+                      SelectableText(
+                        event.transcript,
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          TextButton(
+                            onPressed: _speakCurrent,
+                            child: const Text('Retry'),
+                          ),
+                          TextButton(
+                            onPressed: () => _speakCurrent(language: 'English'),
+                            child: const Text('Hear English'),
+                          ),
+                          TextButton(
+                            onPressed: () => showModalBottomSheet<void>(
+                              context: context,
+                              isScrollControlled: true,
+                              useSafeArea: true,
+                              builder: (_) => SingleChildScrollView(
+                                padding: const EdgeInsets.all(20),
+                                child: OfflineVoiceCheck(
+                                  language: ref.read(narrationLanguageProvider),
+                                ),
+                              ),
+                            ),
+                            child: const Text('Voice setup'),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                  ],
                   const Text(
                     'KEY PRESENTATION HIGHLIGHTS & ACTIONS:',
                     style: TextStyle(
@@ -714,7 +767,7 @@ class _AiPitchCopilotPanelState extends State<AiPitchCopilotPanel>
                       ),
                       const SizedBox(width: 6),
                       const Text(
-                        'LADY AI NARRATOR AUDIO SCRIPT:',
+                        'ENGLISH SOURCE SCRIPT:',
                         style: TextStyle(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w800,
@@ -771,7 +824,10 @@ class _AiPitchCopilotPanelState extends State<AiPitchCopilotPanel>
                 bottom: Radius.circular(26),
               ),
             ),
-            child: Row(
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 OutlinedButton.icon(
                   onPressed: isFirst
@@ -792,7 +848,6 @@ class _AiPitchCopilotPanelState extends State<AiPitchCopilotPanel>
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
-                const Spacer(),
                 FilledButton.icon(
                   onPressed: () {
                     if (isLast) {

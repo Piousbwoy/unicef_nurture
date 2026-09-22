@@ -302,7 +302,7 @@ class _SectionHeader extends StatelessWidget {
             style: GoogleFonts.sora(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: AppColors.ink,
             ),
           ),
         ],
@@ -392,7 +392,7 @@ class _ShimmerLine extends StatelessWidget {
       height: 16,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
+        color: AppColors.checkNavy.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
       ),
     );
@@ -935,7 +935,7 @@ class _FamilySection extends ConsumerWidget {
             style: GoogleFonts.sora(
               fontSize: 17,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: AppColors.ink,
             ),
           ),
         ),
@@ -1009,7 +1009,7 @@ class _FamilySection extends ConsumerWidget {
           loading: () => const SizedBox.shrink(),
           error: (_, _) => const Text(
             'Family members could not be loaded.',
-            style: TextStyle(color: AppColors.white60),
+            style: TextStyle(color: AppColors.inkMuted),
           ),
           data: (people) => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -9,7 +9,7 @@ export 'speech_content_policy.dart';
 
 class SpeakableService {
   SpeakableService({CaregiverVoiceBackend? backend})
-      : _backend = backend ?? DeviceCaregiverVoice();
+    : _backend = backend ?? DeviceCaregiverVoice();
 
   static final instance = SpeakableService();
   static SpeakableService debugCreate({CaregiverVoiceBackend? backend}) =>
@@ -42,11 +42,14 @@ class SpeakableService {
       }
       return null;
     }
+
     return match(0);
   }
 
-  Future<bool> speak(String text, {
+  Future<bool> speak(
+    String text, {
     required String language,
+    String sourceLanguage = 'English',
     Object? owner,
     SpeechContentPolicy policy = SpeechContentPolicy.guidance,
     void Function(CaregiverPlayback)? onPlayback,
@@ -56,21 +59,40 @@ class SpeakableService {
     _owner = owner;
     var completed = false;
     final speech = CaregiverSpeech(
-      id: 'universal:$generation', english: text, language: language,
-      clipIds: exactClips(text), policy: policy,
+      id: 'universal:$generation',
+      english: text,
+      language: language,
+      clipIds: OfflineSpeechLanguage.canonical(sourceLanguage) == 'English'
+          ? exactClips(text)
+          : null,
+      policy: policy,
+      sourceLanguage: sourceLanguage,
+      owner: owner,
     );
     try {
       await _backend.play(speech, (event) {
-        if (generation != _generation) return;
+        if (generation != _generation) {
+          // Cancellation belongs to the superseded observer, never the new run.
+          if (event.phase == CaregiverPlaybackPhase.stopped) {
+            onPlayback?.call(event);
+          }
+          return;
+        }
         _playback = event;
         completed = event.phase == CaregiverPlaybackPhase.completed;
         onPlayback?.call(event);
       });
     } catch (_) {
       if (generation == _generation) {
-        final event = CaregiverPlayback(phase: CaregiverPlaybackPhase.fallback,
-          transcript: text, language: 'English',
-          source: 'Readable text - offline audio unavailable. Choose English playback.');
+        final event = CaregiverPlayback(
+          phase: CaregiverPlaybackPhase.fallback,
+          transcript: text,
+          language: OfflineSpeechLanguage.canonical(sourceLanguage),
+          stage: SpeechStage.failed,
+          reasonCode: 'offline_audio_unavailable',
+          source:
+              'Readable text - offline audio unavailable. Retry or check the installed voice pack.',
+        );
         _playback = event;
         onPlayback?.call(event);
       }

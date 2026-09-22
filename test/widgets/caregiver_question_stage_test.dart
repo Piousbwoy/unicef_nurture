@@ -144,7 +144,8 @@ Future<void> _open(
 
 /// The stage is a lazy list, so a line can exist without being built yet.
 /// Scroll until it appears, then assert it stayed in view.
-Future<void> _expectText(WidgetTester tester, String text) async {  final finder = find.text(text);
+Future<void> _expectText(WidgetTester tester, String text) async {
+  final finder = find.text(text);
   for (var i = 0; i < 8 && finder.evaluate().isEmpty; i++) {
     await tester.drag(find.byType(ListView).first, const Offset(0, -320));
     await tester.pumpAndSettle();
@@ -162,7 +163,6 @@ Future<void> _tap(WidgetTester tester, Finder target) async {
   await tester.tap(target);
   await tester.pumpAndSettle();
 }
-
 
 void main() {
   testWidgets('the question is a stage, not a form card', (tester) async {
@@ -207,7 +207,8 @@ void main() {
 
     expect(find.byType(SpeechLanguageTile), findsNWidgets(4));
     // Availability sits on the card before the tap, never after it.
-    expect(find.text('READY ON THIS PHONE'), findsWidgets);
+    expect(find.text('VOICE AVAILABLE TO TRY'), findsWidgets);
+    expect(find.text('READY ON THIS PHONE'), findsNothing);
     expect(find.text('NEEDS A PHONE VOICE'), findsOneWidget);
     expect(find.text('Say this in'), findsNothing);
     expect(find.text('Cancel'), findsNothing);

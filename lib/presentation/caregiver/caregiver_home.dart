@@ -118,15 +118,11 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
     ref.watch(caregiverVoiceProvider(scope));
     final household = scope.householdId;
     return CompanionTheme(
-      // The caregiver identity is dark blue, end to end: a deep-navy ground
-      // with a navy hero header and navy navigation, so the whole flow reads
-      // as one premium surface instead of light-blue cards on cream.
+      // White canvas; the deep-navy identity lives on the cards.
       child: AmbientBackdrop(
-        variant: AmbientVariant.caregiver,
         child: Scaffold(
           backgroundColor: Colors.transparent,
           appBar: GlassAppBar(
-            hero: true,
             title: const Text(
               'My family',
               style: TextStyle(
@@ -136,7 +132,7 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
               ),
             ),
             actions: [
-              const NarrationButton(compact: true, iconColor: Colors.white),
+              const NarrationButton(compact: true),
               const CaregiverEmergencyButton(),
               Padding(
                 padding: const EdgeInsets.only(right: 12),
@@ -192,20 +188,11 @@ class CaregiverNavigation extends StatelessWidget {
   ];
   @override
   Widget build(BuildContext context) => Container(
-    decoration: const BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [AppColors.checkNavy, AppColors.checkNavyDeep],
+    decoration: BoxDecoration(
+      color: AppColors.caregiverCanvas,
+      border: Border(
+        top: BorderSide(color: AppColors.line, width: 1),
       ),
-      border: Border(top: BorderSide(color: Color(0x14FFFFFF), width: 1)),
-      boxShadow: [
-        BoxShadow(
-          color: Color(0x59000000),
-          blurRadius: 24,
-          offset: Offset(0, -8),
-        ),
-      ],
     ),
     child: SafeArea(
       top: false,
@@ -244,21 +231,9 @@ class CaregiverNavigation extends StatelessWidget {
                                   padding: const EdgeInsets.all(6),
                                   decoration: BoxDecoration(
                                     color: index == i
-                                        ? AppColors.checkBlue.withValues(
-                                            alpha: 0.28,
-                                          )
+                                        ? AppColors.primary.withValues(alpha: 0.12)
                                         : Colors.transparent,
                                     borderRadius: BorderRadius.circular(12),
-                                    boxShadow: index == i
-                                        ? [
-                                            BoxShadow(
-                                              color: AppColors.checkBlueLight
-                                                  .withValues(alpha: 0.28),
-                                              blurRadius: 10,
-                                              offset: const Offset(0, 2),
-                                            ),
-                                          ]
-                                        : null,
                                   ),
                                   child: AnimatedSwitcher(
                                     duration: const Duration(milliseconds: 200),
@@ -266,8 +241,8 @@ class CaregiverNavigation extends StatelessWidget {
                                       icons[i],
                                       key: ValueKey('${icons[i]}_$i'),
                                       color: index == i
-                                          ? AppColors.checkBlueBright
-                                          : AppColors.white60,
+                                          ? AppColors.primary
+                                          : AppColors.caregiverMuted,
                                       size: index == i ? 24 : 22,
                                     ),
                                   ),
@@ -282,8 +257,8 @@ class CaregiverNavigation extends StatelessWidget {
                                         ? FontWeight.w800
                                         : FontWeight.w500,
                                     color: index == i
-                                        ? AppColors.checkBlueBright
-                                        : AppColors.white60,
+                                        ? AppColors.primary
+                                        : AppColors.caregiverMuted,
                                   ),
                                   child: Text(
                                     labels[i],

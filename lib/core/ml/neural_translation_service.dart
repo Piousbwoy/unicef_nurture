@@ -30,12 +30,12 @@ const neuralModelConfigs = <NeuralModelConfig>[
   NeuralModelConfig(
     language: 'Hausa',
     assetPath: 'assets/models/translation_hausa',
-    langToken: '',  // Helsinki-NLP opus-mt-en-ha: monodirectional, no tag needed
+    langToken: '', // Helsinki-NLP opus-mt-en-ha: monodirectional, no tag needed
   ),
   NeuralModelConfig(
     language: 'Twi',
     assetPath: 'assets/models/translation_twi',
-    langToken: '',  // Helsinki-NLP opus-mt-en-tw: monodirectional, no tag needed
+    langToken: '', // Helsinki-NLP opus-mt-en-tw: monodirectional, no tag needed
   ),
 ];
 
@@ -61,16 +61,33 @@ class NeuralTranslationService {
   TranslationRunner get runner => _runner ??= createTranslationRunner();
 
   final _loading = <String, Future<void>>{};
+  bool _disposing = false;
+  int _generation = 0;
   bool isLoaded(String language) => runner.hasModel(language);
 
   Future<void> initializeLanguage(String language) {
-    if (!runner.available || !supportsLanguage(language)) return Future.value();
-    return _loading.putIfAbsent(language, () async {
-      final config = neuralModelConfigs.firstWhere((c) => c.language == language);
-      try {
-        await runner.init(language: language, assetBasePath: config.assetPath);
-      } catch (_) { /* Missing/corrupt models leave readable guidance. */ }
-    });
+    if (_disposing || !runner.available || !supportsLanguage(language)) {
+      return Future.value();
+    }
+    if (isLoaded(language)) return Future.value();
+    return _loading.putIfAbsent(
+      language,
+      () => Future<void>(() async {
+        final config = neuralModelConfigs.firstWhere(
+          (c) => c.language == language,
+        );
+        try {
+          await runner.init(
+            language: language,
+            assetBasePath: config.assetPath,
+          );
+        } catch (_) {
+          /* Missing/corrupt models leave readable guidance. */
+        } finally {
+          _loading.remove(language);
+        }
+      }),
+    );
   }
 
   bool _initialized = false;
@@ -88,10 +105,7 @@ class NeuralTranslationService {
   /// Safe to call multiple times (idempotent). Silently skips languages
   /// whose model files are missing.
   Future<void> initialize() async {
-    if (_initialized || !runner.available) return;
-    for (final config in neuralModelConfigs) {
-      await initializeLanguage(config.language);
-    }
+    if (_disposing || !runner.available) return;
     _initialized = true;
   }
 
@@ -117,34 +131,40 @@ class NeuralTranslationService {
   /// Kick off async neural translation. Populates [_neuralCache] on completion.
   /// Returns a future so callers can await it if they need the result
   /// immediately (e.g. for TTS that needs text before speaking).
-  Future<String?> warmTranslation(String english, String language) async {
-    if (!runner.available || !supportsLanguage(language)) return null;
-    await initializeLanguage(language);
-    if (!isLoaded(language)) return null;
-    final token = tokenFor(language);
-    // token can be empty string for monodirectional models — that's valid.
-
+  Future<String?> warmTranslation(String english, String language) {
+    if (_disposing || !runner.available || !supportsLanguage(language)) {
+      return Future.value();
+    }
     final key = '$english|$language';
-
-    // Already cached.
-    if (_neuralCache.containsKey(key)) return _neuralCache[key];
-
-    // Already in flight — deduplicate.
-    if (_inFlight.containsKey(key)) return _inFlight[key];
-
-    final future = runner.translate(english, language: language, langToken: token?.isNotEmpty == true ? token : null).then((result) {
-      _inFlight.remove(key);
-      if (result != null && result.isNotEmpty) {
-        _putCache(key, result);
-      }
-      return result;
-    }).catchError((_) {
-      _inFlight.remove(key);
-      return null;
-    });
-
-    _inFlight[key] = future;
-    return future;
+    if (_neuralCache.containsKey(key)) return Future.value(_neuralCache[key]);
+    final generation = _generation;
+    return _inFlight.putIfAbsent(
+      key,
+      () => Future<String?>(() async {
+        try {
+          if (generation != _generation || _disposing) return null;
+          await initializeLanguage(language);
+          if (generation != _generation || !isLoaded(language)) return null;
+          final result = await runner.translate(
+            english,
+            language: language,
+            langToken: tokenFor(language),
+          );
+          if (generation != _generation || _disposing) return null;
+          if (result != null &&
+              result.trim().isNotEmpty &&
+              result.trim() != english.trim()) {
+            _putCache(key, result);
+            return result;
+          }
+          return null;
+        } catch (_) {
+          return null;
+        } finally {
+          if (generation == _generation) _inFlight.remove(key);
+        }
+      }),
+    );
   }
 
   /// Translate synchronously if cached, otherwise returns null.
@@ -162,13 +182,21 @@ class NeuralTranslationService {
 
   /// Release all native model sessions.
   Future<void> dispose() async {
-    for (final config in neuralModelConfigs) {
-      await runner.dispose(config.language);
-    }
+    _disposing = true;
+    ++_generation;
     _neuralCache.clear();
-    _inFlight.clear();
-    _loading.clear();
-    _initialized = false;
+    try {
+      await Future.wait(_loading.values.toList());
+      await Future.wait(_inFlight.values.toList());
+      for (final config in neuralModelConfigs) {
+        await runner.dispose(config.language);
+      }
+    } finally {
+      _inFlight.clear();
+      _loading.clear();
+      _initialized = false;
+      _disposing = false;
+    }
   }
 
   /// Test-only: inject a translation directly into the cache.
