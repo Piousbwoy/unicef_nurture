@@ -14,6 +14,7 @@ import 'package:carebridge_ai/presentation/assessment/decision_workspace.dart';
 import 'package:carebridge_ai/presentation/assessment/station/vitals_strip.dart';
 import 'package:carebridge_ai/presentation/assessment/types.dart';
 import 'package:carebridge_ai/presentation/shared/recommendation_kit.dart';
+import 'package:carebridge_ai/presentation/shared/premium_cards/ai_insight_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -59,6 +60,8 @@ AssessmentDraft _draft({
   ClientType type = ClientType.newborn,
   Map<String, Object?>? inputs,
   List<String> dangerSigns = const [],
+  NutritionStatus? nutritionStatus,
+  List<String>? vaccinesGiven,
 }) => AssessmentDraft(
   inputs:
       inputs ??
@@ -68,6 +71,7 @@ AssessmentDraft _draft({
         'temperature_celsius': 37.0,
         'respiratory_rate': 48,
         'pulse': 140,
+        if (vaccinesGiven != null) ...{'vaccines_given': vaccinesGiven},
       },
   result: AssessmentResult(
     clientType: type,
@@ -76,6 +80,41 @@ AssessmentDraft _draft({
     findings: const [],
     actions: const [],
     dangerSignsPresent: dangerSigns,
+    nutritionStatus: nutritionStatus,
+    confidence: RecommendationConfidence.high,
+  ),
+);
+
+/// A finding this visit produced that is nobody else's: the deck owns it.
+const _fastBreathing = ClinicalFinding(
+  label: 'Fast breathing',
+  detail: 'Breathing is faster than the band for this age.',
+  severity: TriageLevel.watch,
+  protocolSource: 'IMCI child',
+  measuredValue: '62/min',
+  threshold: '≥ 50/min',
+  weight: 2,
+);
+
+/// Nine months old with nothing given, so a long list of doses is overdue.
+/// [findings] decides whether anything besides the schedule is wrong too.
+AssessmentDraft _epiDraft({
+  List<ClinicalFinding> findings = const [_fastBreathing],
+}) => AssessmentDraft(
+  inputs: {
+    'age_in_days': 270,
+    'danger_signs': const <String>[],
+    'temperature_celsius': 37.0,
+    'respiratory_rate': 62,
+    'pulse': 110,
+    'vaccines_given': const <String>[],
+  },
+  result: AssessmentResult(
+    clientType: ClientType.newborn,
+    triage: TriageLevel.routine,
+    classification: 'WELL NEWBORN — NO IMCI CLASSIFICATION',
+    findings: findings,
+    actions: const [],
     confidence: RecommendationConfidence.high,
   ),
 );
@@ -97,6 +136,7 @@ Future<void> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        bootstrapProvider.overrideWith((ref) async {}),
         if (repository != null)
           careRepositoryProvider.overrideWithValue(repository),
       ],
@@ -120,9 +160,33 @@ Future<void> _pump(
   await tester.pumpAndSettle();
 }
 
-Future<void> _report(WidgetTester tester) async {
+/// The working sheet is part of the result page now: scroll down to it rather
+/// than opening a page. `RecSection` paints its title in upper case.
+final _actionsHeader = find.text('PRIORITIZED ACTIONS');
+
+/// The page scrollable: the merged sheet nests smaller ones (chip rows,
+/// worklists), so the outermost is the one that scrolls.
+final _page = find.byType(Scrollable).first;
+
+Future<void> _toSheet(WidgetTester tester) async {
+  await tester.scrollUntilVisible(_actionsHeader, 400, scrollable: _page);
+  await tester.ensureVisible(_actionsHeader);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _report(WidgetTester tester, {bool experimental = false}) async {
+  await tester.scrollUntilVisible(
+    find.text('Open full clinical report'),
+    400,
+    scrollable: _page,
+  );
   await tester.tap(find.text('Open full clinical report'));
   await tester.pumpAndSettle();
+  if (experimental) {
+    await tester.scrollUntilVisible(find.byType(AiInsightCard), 300);
+    expect(find.byType(ResearchAnalysisPanel), findsNothing);
+    return;
+  }
   await tester.scrollUntilVisible(find.byType(ResearchAnalysisPanel), 300);
   final panel = tester.widget<ResearchAnalysisPanel>(
     find.byType(ResearchAnalysisPanel),
@@ -138,6 +202,8 @@ OfflineRiskPrediction _prediction({
   ModelApplicability applicability = ModelApplicability.applicable,
   ModelInputQuality quality = ModelInputQuality.complete,
   ModelEvidence evidence = ModelEvidence.retrospectiveResearch,
+  double score = .987,
+  bool experimental = false,
 }) => OfflineRiskPrediction(
   modelName: 'neonatal_sepsis',
   usingModel: true,
@@ -149,11 +215,30 @@ OfflineRiskPrediction _prediction({
       : const [],
   predictedAt: DateTime(2026),
   modelVersion: 'test-research',
-  researchOutput: .987,
+  researchOutput: score,
+  rawNeuralOutput: .8,
+  patientOutputAllowed: experimental,
+  runtimeVerified: experimental,
+  outputScope: experimental ? 'clinician_experimental' : null,
+  artifactSha256: experimental
+      ? OfflineInferenceService.neonatalArtifact
+      : null,
+  inputPolicyVersion: experimental
+      ? OfflineInferenceService.neonatalPolicy
+      : null,
+  observedValues: experimental
+      ? const {
+          'age_days': 2,
+          'temperature_celsius': 37,
+          'respiratory_rate_per_min': 48,
+          'heart_rate_per_min': 140,
+          'current_weight_kg': 3,
+        }
+      : const {},
   execution: execution,
   applicability: applicability,
   inputQuality: quality,
-  evidence: evidence,
+  evidence: experimental ? ModelEvidence.legacyRealData : evidence,
   ruleInCandidate: true,
 );
 
@@ -189,6 +274,90 @@ class _DelayedService extends OfflineInferenceService {
 void main() {
   GoogleFonts.config.allowRuntimeFetching = false;
 
+  test(
+    'analysis uses the same experimental display permission as reasoning',
+    () {
+      expect(
+        AnalysisViewModel(_prediction(experimental: true)).mayShowOutput,
+        isTrue,
+      );
+      expect(AnalysisViewModel(_prediction()).mayShowOutput, isFalse);
+    },
+  );
+
+  testWidgets(
+    'experimental card leads clinical findings without changing urgent care',
+    (tester) async {
+      final service = _DelayedService();
+      await _pump(tester, _draft(signs: ['convulsions']), service: service);
+      expect(find.textContaining('Model analysis pending'), findsOneWidget);
+      expect(find.text('Pre-referral stabilisation'), findsOneWidget);
+      service.predictions.complete({
+        'neonatal_sepsis': _prediction(experimental: true, score: .01),
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('Experimental model score'), findsOneWidget);
+      expect(
+        find.textContaining('regardless of the experimental score'),
+        findsWidgets,
+      );
+      expect(
+        tester.getTopLeft(find.byType(AiInsightCard)).dy,
+        lessThan(tester.getTopLeft(find.byType(ClinicalDecisionHeader)).dy),
+      );
+      expect(find.text('Clinical Protocol Check'), findsOneWidget);
+      expect(find.byType(ResearchAnalysisPanel), findsNothing);
+      expect(find.text('Pre-referral stabilisation'), findsOneWidget);
+    },
+  );
+
+  testWidgets('pending save is explicit and late inference cannot rewrite it', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final service = _DelayedService();
+    final repository = _CaptureRepository();
+    await _pump(tester, _draft(), service: service, repository: repository);
+    await tester.tap(find.text('Save assessment'));
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    final saved = repository.assessment!;
+    final before = jsonEncode(saved.inputs);
+    final snapshot =
+        (saved.inputs['ml_predictions'] as Map)['neonatal_sepsis'] as Map;
+    expect(snapshot['save_state'], 'pending_at_save');
+    expect(snapshot['experimental_adjusted_output'], isNull);
+    service.predictions.complete({
+      'neonatal_sepsis': _prediction(experimental: true),
+    });
+    await tester.pumpAndSettle();
+    expect(jsonEncode(saved.inputs), before);
+    expect(saved.result.findings, isEmpty);
+  });
+
+  testWidgets('failed inference save is explicit and keeps protocol care', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final service = _DelayedService();
+    final repository = _CaptureRepository();
+    await _pump(tester, _draft(), service: service, repository: repository);
+    service.predictions.completeError(
+      StateError('test interpreter unavailable'),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Model analysis failed'), findsOneWidget);
+    await tester.tap(find.text('Save assessment'));
+    await tester.pumpAndSettle();
+    final saved = repository.assessment!;
+    expect(
+      ((saved.inputs['ml_predictions'] as Map)['neonatal_sepsis']
+          as Map)['save_state'],
+      'failed',
+    );
+    expect(saved.result.findings, isEmpty);
+  });
+
   testWidgets('research-only signals cannot add a PSBI treatment or referral', (
     tester,
   ) async {
@@ -200,7 +369,7 @@ void main() {
     expect(find.textContaining('AI rule-in candidate'), findsNothing);
     expect(find.text('PROTOCOL DECISION'), findsOneWidget);
     await _report(tester);
-    expect(find.text('Research only'), findsOneWidget);
+    expect(find.text('Missing observations'), findsOneWidget);
     expect(find.textContaining('Rule-in candidate:'), findsNothing);
     expect(find.textContaining('Risk 2.0%'), findsNothing);
   });
@@ -211,7 +380,7 @@ void main() {
       await _pump(tester, _draft());
       expect(find.text('Pre-referral stabilisation'), findsNothing);
       await _report(tester);
-      expect(find.text('Research only'), findsOneWidget);
+      expect(find.text('Missing observations'), findsOneWidget);
       await tester.tap(find.text('Neonatal sepsis research'));
       await tester.pumpAndSettle();
       expect(
@@ -262,6 +431,13 @@ void main() {
       expect(current.historyOfConvulsions, isTrue);
       expect(current.feedingDifficulty, isFalse);
       expect(current.birthWeightKg, 2.4);
+      expect(current.currentWeightKg, isNull);
+      final measured = AssessmentFeatureAdapter(
+        context,
+        _draft(inputs: const {'weight_kg': 3.1, 'pulse': 140}),
+      ).features;
+      expect(measured.currentWeightKg, 3.1);
+      expect(measured.birthWeightKg, 2.4);
       final unknown = AssessmentFeatureAdapter(
         context,
         _draft(inputs: const {}),
@@ -423,7 +599,9 @@ void main() {
           home: Scaffold(
             body: SingleChildScrollView(
               child: ResearchAnalysisPanel(
-                predictions: Future.value({'neonatal_sepsis': _prediction()}),
+                predictions: Future.value({
+                  'neonatal_sepsis': _prediction(experimental: true),
+                }),
                 statuses: Future.value([
                   OfflineModelStatus(
                     name: 'neonatal_sepsis',
@@ -452,9 +630,10 @@ void main() {
       await tester.tap(find.text('Neonatal sepsis research'));
       await tester.pumpAndSettle();
       // Research output is now shown as a percentage in the gauge
-      expect(find.textContaining('99%'), shown ? findsOneWidget : findsNothing);
+      expect(find.text('98.7/100'), shown ? findsOneWidget : findsNothing);
+      expect(find.textContaining('99%'), findsNothing);
       expect(
-        find.textContaining('Research output'),
+        find.text('Experimental model score'),
         shown ? findsOneWidget : findsNothing,
       );
       expect(
@@ -507,8 +686,7 @@ void main() {
       expect(find.text('PROTOCOL DECISION'), findsOneWidget);
       // Loading state now shows a skeleton loader instead of text
       expect(find.byType(ResearchAnalysisPanel), findsOneWidget);
-      await tester.tap(find.text('Open care plan'));
-      await tester.pumpAndSettle();
+      await _toSheet(tester);
       await tester.tap(find.byType(Checkbox).first);
       await tester.pump();
       final checks = find.descendant(
@@ -526,16 +704,17 @@ void main() {
       expect(find.text('HOW SOON?'), findsNothing);
       await tester.tap(referral);
       await tester.pumpAndSettle();
-      service.predictions.complete({'neonatal_sepsis': _prediction()});
+      service.predictions.complete({
+        'neonatal_sepsis': _prediction(experimental: true),
+      });
       await tester.pumpAndSettle();
       expect(find.text('Remove referral'), findsOneWidget);
       expect(find.text('HOW SOON?'), findsOneWidget);
-      await _report(tester);
+      await _report(tester, experimental: true);
       expect(find.textContaining('Rule-in candidate:'), findsNothing);
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Open care plan'));
-      await tester.pumpAndSettle();
+      await _toSheet(tester);
       expect(find.text('Remove referral'), findsOneWidget);
       expect(
         tester.widgetList<Checkbox>(checks).map((w) => w.value).toList(),
@@ -552,8 +731,12 @@ void main() {
     final service = _DelayedService();
     final repository = _CaptureRepository();
     await _pump(tester, _draft(), service: service, repository: repository);
-    service.predictions.complete({'neonatal_sepsis': _prediction()});
+    service.predictions.complete({
+      'neonatal_sepsis': _prediction(experimental: true),
+    });
     await tester.pumpAndSettle();
+    expect(find.text('High model score'), findsOneWidget);
+    expect(find.text('Pre-referral stabilisation'), findsNothing);
     await tester.tap(find.text('Save assessment'));
     await tester.pumpAndSettle();
     final saved = repository.assessment!;
@@ -561,6 +744,12 @@ void main() {
     expect(saved.result.findings, isEmpty);
     final serialized =
         (saved.inputs['ml_predictions'] as Map)['neonatal_sepsis'] as Map;
+    expect(serialized['save_state'], 'completed');
+    expect(serialized['experimental_raw_output'], .8);
+    expect(serialized['experimental_adjusted_output'], .987);
+    expect(serialized['clinical_use_allowed'], isFalse);
+    final reloaded = jsonDecode(jsonEncode(saved.inputs)) as Map;
+    expect(reloaded['ml_predictions']['neonatal_sepsis'], serialized);
     expect(serialized['risk_probability'], isNull);
     expect(serialized['classification'], 'unavailable');
     expect(serialized['rule_in_candidate'], 0);
@@ -579,7 +768,10 @@ void main() {
       final service = _DelayedService();
       final repository = _CaptureRepository();
       await _pump(tester, _draft(), service: service, repository: repository);
-      await tester.tap(find.text('Open care plan'));
+      await _toSheet(tester);
+      await tester.ensureVisible(
+        find.text('Disagree with this plan? Record a clinical override'),
+      );
       await tester.pumpAndSettle();
       await tester.tap(
         find.text('Disagree with this plan? Record a clinical override'),
@@ -600,8 +792,11 @@ void main() {
       await _report(tester);
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Open care plan'));
-      await tester.pumpAndSettle();
+      await _toSheet(tester);
+      expect(
+        find.text('Disagree with this plan? Record a clinical override'),
+        findsNothing,
+      );
       expect(
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
         'Clinical review needed for persistent caregiver concern',
@@ -621,15 +816,11 @@ void main() {
     tester,
   ) async {
     await _pump(tester, _draft(), size: const Size(320, 1000), textScale: 2);
-    await tester.scrollUntilVisible(find.text('Open care plan'), 250);
-    await tester.ensureVisible(find.text('Open care plan'));
-    await tester.pumpAndSettle();
-    expect(find.text('Open care plan').hitTestable(), findsOneWidget);
-    await tester.tap(find.text('Open care plan'));
-    await tester.pumpAndSettle();
+    await _toSheet(tester);
     await tester.scrollUntilVisible(
       find.text('Open full clinical report'),
       400,
+      scrollable: _page,
     );
     await tester.drag(find.byType(Scrollable).first, const Offset(0, -400));
     await tester.pumpAndSettle();
@@ -667,7 +858,6 @@ void main() {
                       level: TriageLevel.urgent,
                       missingCount: 1,
                       rationale: 'Convulsions observed during this visit.',
-                      onNext: () {},
                     ),
                     const ActionWorklist(
                       actions: [
@@ -689,10 +879,139 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    final button = tester.getSize(
-      find.widgetWithText(FilledButton, 'Open care plan'),
+    // The header is a verdict, not a doorway: the sheet is on the same page.
+    expect(find.text('Open care plan'), findsNothing);
+    expect(find.byType(ActionWorklist), findsOneWidget);
+  });
+
+  testWidgets(
+    'the sheet lists each action once: EPI and food sit in their own sections',
+    (tester) async {
+      // Nine months old, nothing given yet, and at risk of malnutrition: the
+      // plan the engines synthesize is mostly EPI and food lines.
+      await _pump(
+        tester,
+        _draft(
+          age: 270,
+          nutritionStatus: NutritionStatus.atRisk,
+          vaccinesGiven: const [],
+        ),
+        age: 270,
+      );
+      await _toSheet(tester);
+
+      final shown = tester
+          .widget<ActionWorklist>(find.byType(ActionWorklist))
+          .actions
+          .map((a) => a.instruction)
+          .toList();
+      expect(shown, isNotEmpty);
+      expect(shown.where((s) => s.startsWith('Give today:')), isEmpty);
+      expect(shown.where((s) => s.startsWith('Start with:')), isEmpty);
+
+      // The detail is one tap away rather than one scroll further down. The
+      // dose card is also the proof the EPI action existed to be filtered:
+      // both are generated from the same non-empty `giveToday` list.
+      final epi = find.text('IMMUNISATION');
+      final giveToday = find.text('GIVE TODAY — IN THIS SAME SESSION');
+      expect(epi, findsOneWidget);
+      expect(giveToday.hitTestable(), findsNothing);
+      await tester.scrollUntilVisible(epi, 300, scrollable: _page);
+      await tester.ensureVisible(epi);
+      await tester.pumpAndSettle();
+      await tester.tap(epi);
+      await tester.pumpAndSettle();
+      expect(giveToday.hitTestable(), findsOneWidget);
+    },
+  );
+
+  testWidgets('a dose reads once: the schedule is only under IMMUNISATION', (
+    tester,
+  ) async {
+    // Fast breathing plus a long list of overdue doses: the deck has a real
+    // finding of its own, and must still keep the doses out.
+    await _pump(tester, _epiDraft(), age: 270);
+
+    // No measured value is restated as a chip row above the findings deck.
+    expect(find.text('THE NUMBERS BEHIND THE VERDICT'), findsNothing);
+
+    // The two sentences that name the leading findings both fold to a count:
+    // the verdict line and the family's takeaway. Neither recites a dose.
+    expect(find.textContaining('immunisation gaps'), findsNWidgets(2));
+    expect(find.textContaining('because of: BCG'), findsNothing);
+    expect(find.textContaining('Driven by BCG'), findsNothing);
+
+    final deck = find.ancestor(
+      of: find.text('WHAT WE FOUND'),
+      matching: find.byType(RecSection),
     );
-    expect(button.height, greaterThanOrEqualTo(48));
+    expect(deck, findsOneWidget);
+    expect(
+      find.descendant(of: deck, matching: find.textContaining('BCG')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: deck, matching: find.textContaining('breath')),
+      findsWidgets,
+    );
+
+    // The full report is the record: it still lists every dose.
+    await _report(tester);
+    expect(find.textContaining('BCG'), findsWidgets);
+  });
+
+  testWidgets('a folded sentence keeps the clinical driver beside the count', (
+    tester,
+  ) async {
+    // Something genuinely wrong as well as the schedule: the fold replaces the
+    // dose list inside a sentence it did not write, so the neighbouring driver
+    // and each sentence's own separator have to survive.
+    await _pump(
+      tester,
+      _epiDraft(
+        findings: const [
+          ClinicalFinding(
+            label: 'Some swelling of the feet',
+            detail: 'Both feet swell and leave a dent after pressing.',
+            severity: TriageLevel.priority,
+            protocolSource: 'IMCI child',
+            weight: 9,
+          ),
+        ],
+      ),
+      age: 270,
+    );
+
+    expect(
+      find.textContaining('because of: Some swelling of the feet; 16 '),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Driven by Some swelling of the feet, 16 '),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'with the schedule folded away, the deck says nothing rather than all-clear',
+    (tester) async {
+      await _pump(tester, _epiDraft(findings: const []), age: 270);
+
+      // Every finding this visit produced is a dose. The section that would
+      // otherwise answer with a green all-clear card under a priority verdict
+      // is skipped outright.
+      expect(find.text('WHAT WE FOUND'), findsNothing);
+      expect(find.text('No concerning findings'), findsNothing);
+      expect(find.text('IMMUNISATION'), findsOneWidget);
+    },
+  );
+
+  testWidgets('with no immunisation gap the verdict line is the saved one', (
+    tester,
+  ) async {
+    await _pump(tester, _draft());
+    expect(find.text('No abnormal findings — routine care.'), findsOneWidget);
+    expect(find.textContaining('immunisation gap'), findsNothing);
   });
 
   testWidgets(

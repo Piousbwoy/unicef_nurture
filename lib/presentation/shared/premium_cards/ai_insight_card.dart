@@ -1,11 +1,8 @@
 /// AI Insight Card - Glassmorphism Design
 ///
-/// The on-device model's voice on the result page: the continuous acuity
-/// index, its 95% band, the patient-specific narrative it generated, the
-/// feature attributions behind the number, and what would change it.
-/// Fed entirely by [ClinicalReasoning] — every sentence and every number on
-/// this card is derived from THIS patient's measurements, so two patients
-/// with similar-but-different records never read identically.
+/// Eligible experimental neural output, or an explicitly rule-based fallback.
+/// Measured inputs, fixed training slots, and local replacement sensitivities
+/// remain distinct. Neither variant claims a calibrated clinical probability.
 ///
 /// The card explains and grades; the protocol verdict governs care. It
 /// never issues treatment or referral instructions.
@@ -15,6 +12,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../core/ml/clinical_reasoning_engine.dart';
+import '../../../core/ml/offline_inference_service.dart';
 import '../../../core/theme/glass.dart';
 import '../../../core/theme/premium_design_tokens.dart';
 
@@ -23,12 +21,131 @@ class AiInsightCard extends StatelessWidget {
     super.key,
     required this.reasoning,
     this.onExplainTapped,
+    this.pending = false,
+    this.unavailableReason,
     this.animationDuration = PremiumDesignTokens.standardTransition,
   });
 
   final ClinicalReasoning reasoning;
+  final bool pending;
+  final String? unavailableReason;
   final VoidCallback? onExplainTapped;
   final Duration animationDuration;
+
+  Widget _experimentalCard(
+    BuildContext context,
+    ExperimentalAssessment assessment,
+  ) {
+    final p = assessment.prediction;
+    final score = assessment.scoreIndex;
+    final colors = Theme.of(context).colorScheme;
+    final color = score >= 70
+        ? colors.error
+        : score >= 40
+        ? colors.onTertiaryContainer
+        : score >= 15
+        ? colors.tertiary
+        : colors.primary;
+    return Semantics(
+      container: true,
+      child: GlassSurface(
+        blur: false,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.memory_rounded, color: color),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'AI Assessment',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Text('Experimental model score'),
+            const SizedBox(height: 8),
+            _AcuityGauge(
+              index: score,
+              band: assessment.bandLabel,
+              color: color,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Not a calibrated clinical risk estimate. Display bands are not clinical thresholds.',
+            ),
+            const SizedBox(height: 12),
+            Text(assessment.narrative),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                const _StatChip(label: '5/20 observed · 15 fixed'),
+                _StatChip(label: p.modelVersion ?? 'Version unavailable'),
+              ],
+            ),
+            const SizedBox(height: 12),
+            for (final entry in p.observedValues.entries)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  '${ExperimentalAssessment.featureLabel(entry.key)}: ${entry.value} ${p.featureUnits[entry.key] ?? ''}',
+                ),
+              ),
+            const SizedBox(height: 12),
+            Text(
+              'Local model sensitivities',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const Text(
+              'One measured input replaced with its training mean; not causal effects or treatment suggestions.',
+            ),
+            const SizedBox(height: 8),
+            if (p.sensitivityStatus != ModelSensitivityStatus.completed ||
+                assessment.sensitivities.every((s) => s.scorePointDelta == 0))
+              Text(assessment.sensitivitySummary)
+            else
+              for (final s in assessment.sensitivities.take(3))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    '${ExperimentalAssessment.featureLabel(s.featureKey)} · ${s.rawValue} ${s.unit}\n'
+                    '${s.scorePointDelta >= 0 ? '+' : ''}${s.scorePointDelta.toStringAsFixed(2)} score points against baseline ${s.baselineNormalized}',
+                  ),
+                ),
+            const SizedBox(height: 8),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: const Text('Model provenance and limitations'),
+              children: [
+                Text(
+                  'Raw neural output: ${p.rawNeuralOutput}\n'
+                  'Adjusted experimental output: ${p.researchOutput}\n'
+                  'Postprocessing: ${p.postprocessing['formula'] ?? 'sigmoid(A * logit(p) + B)'}\n'
+                  'A = ${p.postprocessing['A']}; B = ${p.postprocessing['B']}\n'
+                  'Unvalidated legacy-teacher transform; not validated for this neural artifact.\n'
+                  'Current weight is an experimental proxy for admission weight; measurement timing is unverified.\n'
+                  'Age support: 0–3 days.\n'
+                  'Input policy: ${p.inputPolicyVersion}\n'
+                  'Artifact SHA-256: ${p.artifactSha256}\n'
+                  'Fixed normalized zeros: ${p.fixedFeatures.entries.map((e) => '${e.key}: ${e.value}').join('; ')}',
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'On-device neural model · Not a diagnosis · Clinician review required',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Color get _indexColor {
     final v = reasoning.acuityIndex;
@@ -39,6 +156,8 @@ class AiInsightCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final experimental = reasoning.experimentalAssessment;
+    if (experimental != null) return _experimentalCard(context, experimental);
     final color = _indexColor;
     return GlassSurface(
       blur: false,
@@ -79,16 +198,13 @@ class AiInsightCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'On-device AI assessment',
+                            'AI Assessment',
                             style: PremiumDesignTokens.headlineSmall.copyWith(
                               color: PremiumDesignTokens.neutral800,
                             ),
                           ),
                           const SizedBox(height: 2),
-                          _ConfidenceBadge(
-                            confidencePct: reasoning.confidencePct,
-                            color: color,
-                          ),
+                          _ConfidenceBadge(color: color),
                         ],
                       ),
                     ),
@@ -97,31 +213,21 @@ class AiInsightCard extends StatelessWidget {
 
                 const SizedBox(height: 20),
 
-                // ── The index, its band and its band ─────────────────────
-                _AcuityGauge(
-                  index: reasoning.acuityIndex,
-                  band: reasoning.bandLabel,
-                  color: color,
+                // ── Runtime availability ────────────────────────────────
+                Text(
+                  pending
+                      ? 'Model analysis pending — clinical guidance is ready.'
+                      : unavailableReason ??
+                            'No eligible experimental model output is available.',
                 ),
 
                 const SizedBox(height: 10),
                 // Wrap, not Row: the chips must fold onto a second line on
                 // narrow screens at large text scales instead of
                 // overflowing.
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    _StatChip(
-                      label:
-                          '95% band ${reasoning.ci95.lo.round()}–'
-                          '${reasoning.ci95.hi.round()}',
-                    ),
-                    _StatChip(label: 'Confidence ${reasoning.confidencePct}%'),
-                  ],
-                ),
+                const Text('Rule-based summary · Not neural inference'),
 
-                // ── The narrative: the model speaking about THIS patient ──
+                // ── Deterministic rule-based narrative ────────────────────
                 const SizedBox(height: 18),
                 Container(
                   width: double.infinity,
@@ -129,12 +235,12 @@ class AiInsightCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: PremiumDesignTokens.neutral50,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: PremiumDesignTokens.neutral200,
-                    ),
+                    border: Border.all(color: PremiumDesignTokens.neutral200),
                   ),
                   child: Text(
-                    reasoning.narrative,
+                    pending
+                        ? 'Clinical protocols remain available while the on-device model runs.'
+                        : reasoning.narrative,
                     style: PremiumDesignTokens.bodyMedium.copyWith(
                       color: PremiumDesignTokens.neutral800,
                       height: 1.55,
@@ -143,13 +249,14 @@ class AiInsightCard extends StatelessWidget {
                 ),
 
                 // ── Feature attributions ─────────────────────────────────
-                if (reasoning.contributions.isNotEmpty) ...[
+                if (!pending && reasoning.contributions.isNotEmpty) ...[
                   const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    spacing: 8,
                     children: [
                       Text(
-                        'What moves the number',
+                        'Rule-based contributors',
                         style: PremiumDesignTokens.headlineSmall.copyWith(
                           color: PremiumDesignTokens.neutral800,
                         ),
@@ -181,7 +288,7 @@ class AiInsightCard extends StatelessWidget {
                 ],
 
                 // ── What would change this ───────────────────────────────
-                if (reasoning.whatWouldChangeThis.isNotEmpty) ...[
+                if (!pending && reasoning.whatWouldChangeThis.isNotEmpty) ...[
                   const SizedBox(height: 18),
                   Text(
                     'What would change this read',
@@ -218,9 +325,8 @@ class AiInsightCard extends StatelessWidget {
 
                 const SizedBox(height: 16),
                 Text(
-                  'Generated on-device from this visit’s measurements. It '
-                  'explains and grades — the protocol verdict above governs '
-                  'treatment and referral.',
+                  'Rule-based summary · Not a diagnosis · Clinician review required. '
+                  'Clinical protocols govern treatment and referral.',
                   style: PremiumDesignTokens.labelMedium.copyWith(
                     color: PremiumDesignTokens.neutral500,
                     height: 1.45,
@@ -237,9 +343,7 @@ class AiInsightCard extends StatelessWidget {
 
 /// Confidence badge driven by the model's data-quality arithmetic.
 class _ConfidenceBadge extends StatelessWidget {
-  const _ConfidenceBadge({required this.confidencePct, required this.color});
-
-  final int confidencePct;
+  const _ConfidenceBadge({required this.color});
   final Color color;
 
   @override
@@ -262,9 +366,11 @@ class _ConfidenceBadge extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
-          Text(
-            '$confidencePct% confidence',
-            style: PremiumDesignTokens.labelSmall.copyWith(color: color),
+          Flexible(
+            child: Text(
+              'Rule-based',
+              style: PremiumDesignTokens.labelSmall.copyWith(color: color),
+            ),
           ),
         ],
       ),
@@ -313,7 +419,7 @@ class _AcuityGauge extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Text(
-                    '/ 100 acuity',
+                    '/ 100',
                     style: PremiumDesignTokens.headlineMedium.copyWith(
                       color: color.withValues(alpha: 0.8),
                     ),

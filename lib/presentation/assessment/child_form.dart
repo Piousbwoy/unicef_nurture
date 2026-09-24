@@ -89,6 +89,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
   // ------------------------------------------------------- ENHANCEMENT 2
   int? _rrTimerSecs;
   final _temp = TextEditingController();
+  final _pulse = TextEditingController();
   final _weight = TextEditingController();
   final _height = TextEditingController();
   final _muac = TextEditingController();
@@ -254,6 +255,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     }
 
     seed(_rr, 'respiratory_rate');
+    seed(_pulse, 'pulse');
     seed(_temp, 'temperature_celsius', decimals: 1);
     seed(_weight, 'weight_kg', decimals: 1);
     seed(_height, 'height_cm', decimals: 1);
@@ -262,7 +264,8 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     seed(_hb, 'haemoglobin', decimals: 1);
     if (changed('rr_timer_secs', owner: 'respiratory_rate') ||
         changed('respiratory_rate')) {
-      _rrTimerSecs = s?.values['respiratory_rate'] == null ||
+      _rrTimerSecs =
+          s?.values['respiratory_rate'] == null ||
               s?.notMeasured.containsKey('respiratory_rate') == true
           ? null
           : s?.values['rr_timer_secs']?.toInt();
@@ -285,6 +288,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
     _ageMonths,
     _rr,
     _temp,
+    _pulse,
     _weight,
     _height,
     _muac,
@@ -457,6 +461,13 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
       cutoff: 'Fever ≥37.5 · hypothermia <35.5',
       example: 'e.g. 36.8',
       width: 180,
+    ),
+    MeasureField(
+      label: 'Pulse',
+      controller: _pulse,
+      unit: 'beats/minute',
+      cutoff: 'Measured heart rate; optional for the clinical chart',
+      example: 'e.g. 140',
     ),
     MeasureField(
       label: 'Weight today',
@@ -1594,6 +1605,7 @@ class _ChildProtocolFormState extends State<ChildProtocolForm> {
 
   Map<String, Object?> _youngInfantInputs() => {
     'protocol': 'young_infant',
+    'pulse': parseInt(_pulse),
     'visit_type': _visitType,
     'age_in_days': ageDays,
     'respiratory_rate': parseInt(_rr),

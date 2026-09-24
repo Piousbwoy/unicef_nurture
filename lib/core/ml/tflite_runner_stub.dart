@@ -26,8 +26,9 @@ class _WebDartTfliteRunner implements TfliteRunner {
       _models[assetPath] = model;
     }
     final p = model.run(input);
-    if (!p.isFinite || p < 0 || p > 1)
+    if (!p.isFinite || p < 0 || p > 1) {
       throw const FormatException('Invalid model output');
+    }
     return p;
   }
 }

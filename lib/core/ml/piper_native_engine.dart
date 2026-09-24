@@ -94,9 +94,15 @@ class PiperNativeEngine {
     await _request('validate', {'text': text});
   }
 
-  Future<Uint8List> synthesize(String text) async {
+  Future<Uint8List> synthesize(
+    String text, {
+    SpeechProsody prosody = SpeechProsody.standard,
+  }) async {
     if (_disposing != null) throw StateError('Piper worker disposed');
-    final result = await _request('synthesize', {'text': text});
+    final result = await _request('synthesize', {
+      'text': text,
+      'prosody': prosody.name,
+    });
     return (result as TransferableTypedData).materialize().asUint8List();
   }
 
@@ -176,6 +182,10 @@ void _worker(SendPort responses) {
         case 'synthesize':
           stage = 'synthesis';
           if (session == null) throw StateError('Piper model unavailable');
+          final prosody = SpeechProsody.values.firstWhere(
+            (p) => p.name == request['prosody'],
+            orElse: () => SpeechProsody.standard,
+          );
           final ids = frontend!.encode(request['text'] as String);
           if (ids.isEmpty) throw const FormatException('Empty speech');
           final inputs = <String, OrtValue>{};
@@ -191,7 +201,7 @@ void _worker(SendPort responses) {
               [1],
             );
             inputs['scales'] = OrtValueTensor.createTensorWithDataList(
-              spec!.scales,
+              spec!.scalesFor(prosody),
               [3],
             );
             if (spec!.numSpeakers > 1) {

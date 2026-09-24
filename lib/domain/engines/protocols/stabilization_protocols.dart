@@ -27,6 +27,8 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import 'dispensing.dart';
+
 /// Where the dose / step in this protocol comes from. A single line of
 /// text, plus a structured machine-readable identifier so the audit log
 /// can group "all steps citing WHO IMCI 2014" together.
@@ -70,6 +72,7 @@ class ProtocolStep {
     required this.rationale,
     required this.whenToDo,
     this.contraindication,
+    this.dispensing,
   });
 
   /// 1-indexed ordinal; the CHO reads top to bottom.
@@ -94,6 +97,13 @@ class ProtocolStep {
   /// breaths/min or patellar reflex absent".
   final String? contraindication;
 
+  /// Optional weight-based calculation attached to this step. When present
+  /// and the child's weight is known, the UI shows the physical amount
+  /// (tablets, millilitres) beside the verbatim [dose]. Null means the dose
+  /// is not weight-based, or this build has no citable strength table for
+  /// it — the raw [dose] string is then the whole answer.
+  final Dispensing? dispensing;
+
   Map<String, Object?> toMap() => {
         'order': order,
         'action': action,
@@ -101,6 +111,7 @@ class ProtocolStep {
         'rationale': rationale,
         'when': whenToDo,
         if (contraindication != null) 'contraindication': contraindication,
+        if (dispensing != null) 'weight_based': true,
       };
 }
 
@@ -394,6 +405,13 @@ const childPneumoniaProtocol = StabilizationProtocol(
           'First-line for severe pneumonia per WHO IMCI; oral route is '
           'non-inferior to injectable for children able to swallow.',
       whenToDo: 'Immediately, before transport.',
+      // Unsored 250 mg dispersible tablets, so the count is whole tablets.
+      dispensing: DosePerKilogram(
+        mgPerKg: 40,
+        unit: DrugUnit(label: '250 mg dispersible tablet', mg: 250),
+        citation: 'WHO IMCI Chart Booklet 2014, p.8-15 and Ghana STG '
+            '2017 Ch.5 — Amoxicillin 40 mg/kg per dose orally.',
+      ),
     ),
     ProtocolStep(
       order: 2,

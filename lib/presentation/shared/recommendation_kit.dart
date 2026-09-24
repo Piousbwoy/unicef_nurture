@@ -26,6 +26,7 @@ import '../../domain/engines/immunisation_engine.dart';
 import '../../domain/engines/nurturing_care_engine.dart';
 import '../../domain/engines/nutrition_engine.dart';
 import '../../domain/engines/nutrition/therapeutic_supplements.dart';
+import '../../domain/engines/protocols/dispensing.dart';
 import '../../domain/engines/protocols/stabilization_protocols.dart';
 import '../../domain/engines/recommendation_engine.dart';
 import '../../domain/entities/visit.dart';
@@ -2342,6 +2343,7 @@ class PreReferralRecSection extends StatelessWidget {
               protocol: p,
               reason:
                   plan.preReferralActivationReasons[p.id] ?? 'See audit log.',
+              weightKg: plan.preReferralWeightKg,
             ),
             const SizedBox(height: Gap.md),
           ],
@@ -2376,13 +2378,26 @@ class PreReferralRecSection extends StatelessWidget {
 /// urgency note, ordered steps (with dose / when / contraindication per
 /// step), and the protocol-level contraindications.
 class _ProtocolCard extends StatelessWidget {
-  const _ProtocolCard({required this.protocol, required this.reason});
+  const _ProtocolCard({
+    required this.protocol,
+    required this.reason,
+    this.weightKg,
+  });
 
   final StabilizationProtocol protocol;
   final String reason;
 
+  /// Recorded weight for the assessment this card belongs to; null when the
+  /// child was not weighed.
+  final double? weightKg;
+
   @override
   Widget build(BuildContext context) {
+    // A step here can be calculated from weight but wasn't, because this
+    // assessment has no weight. Say so — silence would read as "no dose
+    // advice for this child".
+    final wantsWeight =
+        weightKg == null && protocol.steps.any((s) => s.dispensing != null);
     return Container(
       padding: const EdgeInsets.all(Gap.md),
       decoration: BoxDecoration(
@@ -2521,7 +2536,22 @@ class _ProtocolCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: Gap.xs),
-          for (final s in protocol.steps) _ProtocolStepTile(step: s),
+          for (final s in protocol.steps)
+            _ProtocolStepTile(step: s, weightKg: weightKg),
+          if (wantsWeight)
+            const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: Text(
+                'No weight recorded for this child, so the tablet count above '
+                'is not shown. Weigh the child to get it.',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.inkMuted,
+                  height: 1.4,
+                ),
+              ),
+            ),
           const SizedBox(height: Gap.sm),
           // Why this protocol fired — the audit anchor every card must
           // carry: the selector's own reason string (AI rule-in candidate,
@@ -2582,12 +2612,18 @@ class _ProtocolCard extends StatelessWidget {
 
 /// One numbered step in a pre-referral protocol.
 class _ProtocolStepTile extends StatelessWidget {
-  const _ProtocolStepTile({required this.step});
+  const _ProtocolStepTile({required this.step, this.weightKg});
 
   final ProtocolStep step;
 
+  /// The child's recorded weight, when this assessment has one. Null
+  /// suppresses the calculated line entirely — the dose string alone is
+  /// shown rather than a number derived from a guess.
+  final double? weightKg;
+
   @override
   Widget build(BuildContext context) {
+    final dispensed = step.dispensing?.dispense(weightKg);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Gap.xs),
       child: Row(
@@ -2649,6 +2685,10 @@ class _ProtocolStepTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
+                if (dispensed != null) ...[
+                  _DispensedLine(d: dispensed),
+                  const SizedBox(height: 4),
+                ],
                 SpeakableText(
                   'WHEN: ${step.whenToDo}',
                   style: const TextStyle(
@@ -2679,6 +2719,96 @@ class _ProtocolStepTile extends StatelessWidget {
                   ),
                 ],
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------- Weight-based dose
+
+/// The amount this child's weight works out to, shown under the guideline
+/// dose it came from. Distinct from [ProtocolStep.dose] on purpose: the grey
+/// chip above is the published rule, this blue block is arithmetic on one
+/// number the CHO entered, and the citation of the rule is repeated so the
+/// two can never be mistaken for each other.
+class _DispensedLine extends StatelessWidget {
+  const _DispensedLine({required this.d});
+
+  final Dispensed d;
+
+  @override
+  Widget build(BuildContext context) {
+    final drift = d.driftPercent;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: Gap.sm,
+        vertical: Gap.xs + 1,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.primaryLight,
+        borderRadius: BorderRadius.circular(Gap.radiusSm),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'FOR THIS CHILD',
+            style: TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.5,
+              color: AppColors.primaryDeep,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            d.measure,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+              color: AppColors.primaryDeep,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            drift == null
+                ? d.working
+                : '${d.working} · the amount above is '
+                      '${drift > 0 ? '+' : '−'}${drift.abs().toStringAsFixed(0)}% '
+                      'from it',
+            style: const TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.inkMuted,
+              height: 1.4,
+            ),
+          ),
+          if (d.caution != null) ...[
+            const SizedBox(height: 3),
+            Text(
+              d.caution!,
+              style: const TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
+                color: AppColors.triageAmber,
+                height: 1.4,
+              ),
+            ),
+          ],
+          const SizedBox(height: 3),
+          Text(
+            'FROM: ${d.citationNote}',
+            style: const TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.inkFaint,
+              height: 1.4,
             ),
           ),
         ],

@@ -5,6 +5,7 @@
 /// Voice quality requires listening assessment, not just successful inference.
 library;
 
+import 'piper_contract.dart';
 import 'piper_tts_stub.dart'
     if (dart.library.io) 'piper_tts_io.dart'
     if (dart.library.js_interop) 'piper_tts_web.dart';
@@ -26,14 +27,19 @@ abstract class PiperTtsRunner {
 
   /// Speak [text] in the initialized language. Returns a future that completes
   /// when playback finishes (or use [speakNonBlocking] for fire-and-forget).
+  /// [prosody] changes delivery cadence/timbre only, never the spoken content.
   Future<void> speak(
     String text, {
     bool waitForCompletion = true,
     void Function()? onStarted,
+    SpeechProsody prosody = SpeechProsody.standard,
   });
 
   /// Start speaking without waiting for completion.
-  Future<void> speakNonBlocking(String text);
+  Future<void> speakNonBlocking(
+    String text, {
+    SpeechProsody prosody = SpeechProsody.standard,
+  });
 
   /// Stop current playback immediately.
   Future<void> stop();

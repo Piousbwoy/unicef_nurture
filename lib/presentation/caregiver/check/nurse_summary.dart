@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../domain/entities/caregiver.dart';
 import '../../../domain/entities/core.dart';
 import '../../../domain/entities/visit.dart';
+import '../../../domain/enums.dart';
 import '../../../domain/services/caregiver_check_policy.dart';
 import '../caregiver_providers.dart';
 import '../widgets/companion.dart';
@@ -122,7 +124,7 @@ class _CaregiverNurseSummaryState extends ConsumerState<CaregiverNurseSummary> {
       'unanswered': unasked,
       'answers': recorded?.map((k, v) => MapEntry(k, v.name)),
       'onset': onset,
-      if (durationKey != null) 'duration': durationKey,
+      'duration': ?durationKey,
       if (given.isNotEmpty) 'given': given.toList()..sort(),
       if (concerns.isNotEmpty) 'concerns': concerns,
     });
@@ -137,6 +139,51 @@ class _CaregiverNurseSummaryState extends ConsumerState<CaregiverNurseSummary> {
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          // Prominent emergency action, only on a report that recorded a
+          // danger sign. Reuses the app's existing 112 dial + non-dispatch
+          // honesty copy; never invents a direct CHO number we do not store.
+          if (widget.report.verdict == HomeCheckVerdict.urgent)
+            CompanionCard(
+              eyebrow: 'DANGER SIGN • ACT NOW',
+              title: widget.report.verdict.label,
+              tone: AppColors.triageRed,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'A danger sign was recorded. Go to the nearest health '
+                    'facility now — do not wait for documents or a saved report.',
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.triageRed,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(56),
+                      textStyle: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    onPressed: () => caregiverDial(context, '112'),
+                    icon: const Icon(Icons.phone_rounded, size: 26),
+                    label: const Text('Call 112 emergency help'),
+                  ),
+                  const SizedBox(height: 6),
+                  TextButton(
+                    onPressed: () => showCaregiverEmergency(context),
+                    child: const Text('More emergency help'),
+                  ),
+                  const Text(
+                    'Calling needs a supported phone and cellular coverage. '
+                    'This app does not dispatch help. If the call fails, go to '
+                    'the nearest facility or ask someone nearby to help you '
+                    'reach one.',
+                    style: TextStyle(fontSize: 12.5, height: 1.4),
+                  ),
+                ],
+              ),
+            ),
           CompanionCard(
             title: widget.person.fullName,
             eyebrow: 'CAREGIVER REPORT • NOT A DIAGNOSIS OR REFERRAL',
@@ -166,7 +213,9 @@ class _CaregiverNurseSummaryState extends ConsumerState<CaregiverNurseSummary> {
                 if (durationLine != null)
                   Text('Signs started: ${durationLine.label}'),
                 if (givenLabels.isNotEmpty)
-                  Text('Already given before checking: ${givenLabels.join(', ')}'),
+                  Text(
+                    'Already given before checking: ${givenLabels.join(', ')}',
+                  ),
                 if (concerns.isNotEmpty)
                   Text('Caregiver was worried about: ${concerns.join(', ')}'),
                 if (activity.isLoading)

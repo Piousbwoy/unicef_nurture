@@ -1,7 +1,148 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/fhw_luxe.dart';
+import '../../core/theme/glass.dart';
 import '../shared/ui.dart' show PressScale;
+
+/// One quick action revealed behind a swiped queue card.
+class SwipeAction {
+  const SwipeAction({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.tone,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final Color? tone;
+}
+
+/// A foreground card that swipes left to reveal quick actions behind it.
+///
+/// Tap on the closed card fires the primary action (the obvious thing);
+/// tap while open closes the reveal. The reveal is a direct manipulation,
+/// not decoration, so it stays available under reduced motion — it simply
+/// snaps instead of easing.
+class SwipeRevealActions extends StatefulWidget {
+  const SwipeRevealActions({
+    super.key,
+    required this.actions,
+    required this.child,
+    this.onTap,
+    this.revealWidth = 156,
+  });
+
+  final List<SwipeAction> actions;
+  final Widget child;
+  final VoidCallback? onTap;
+  final double revealWidth;
+
+  @override
+  State<SwipeRevealActions> createState() => _SwipeRevealActionsState();
+}
+
+class _SwipeRevealActionsState extends State<SwipeRevealActions> {
+  double _offset = 0;
+
+  void _updateDrag(double dx) {
+    setState(() {
+      _offset = (_offset + dx).clamp(-widget.revealWidth, 0.0);
+    });
+  }
+
+  void _endDrag(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    setState(() {
+      _offset = velocity < -300 || _offset < -widget.revealWidth / 2
+          ? -widget.revealWidth
+          : 0.0;
+    });
+  }
+
+  void _tap() {
+    if (_offset != 0) {
+      setState(() => _offset = 0);
+      return;
+    }
+    widget.onTap?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.actions.isEmpty) return widget.child;
+    final fx = VisualEffects.of(context);
+    final duration = fx.scale(const Duration(milliseconds: 220));
+    final actionWidth = widget.revealWidth / widget.actions.length;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(Gap.radius),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                for (final action in widget.actions)
+                  Semantics(
+                    button: true,
+                    label: action.label,
+                    child: InkWell(
+                      onTap: action.onPressed,
+                      child: Container(
+                        width: actionWidth,
+                        color:
+                            (action.tone ?? AppColors.primary).withValues(
+                              alpha: 0.10,
+                            ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              action.icon,
+                              size: 19,
+                              color: action.tone ?? AppColors.primaryDark,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              action.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppType.label.copyWith(
+                                fontSize: 10.5,
+                                color: action.tone ?? AppColors.primaryDark,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          TweenAnimationBuilder<double>(
+            tween: Tween<double>(end: _offset),
+            duration: duration,
+            curve: AppMotion.curve,
+            builder: (context, value, child) => Transform.translate(
+              offset: Offset(value, 0),
+              child: child,
+            ),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _tap,
+              onHorizontalDragUpdate: (details) => _updateDrag(details.delta.dx),
+              onHorizontalDragEnd: _endDrag,
+              child: widget.child,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class ClinicCard extends StatelessWidget {
   const ClinicCard({
@@ -28,7 +169,7 @@ class ClinicCard extends StatelessWidget {
     final radius = BorderRadius.circular(Gap.radius);
     final shape = RoundedRectangleBorder(
       borderRadius: radius,
-      side: BorderSide(color: accent ?? AppColors.line),
+      side: BorderSide(color: accent ?? FhwLuxePalette.hairLine),
     );
     // The surface has to be a Material, not a coloured box: rows inside a
     // card are frequently ListTiles, and ink on a DecoratedBox paints under
@@ -37,12 +178,21 @@ class ClinicCard extends StatelessWidget {
       width: double.infinity,
       decoration: BoxDecoration(
         borderRadius: radius,
-        boxShadow: const [AppShadows.card],
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x080F2042),
+            blurRadius: 20,
+            offset: Offset(0, 8),
+          ),
+          BoxShadow(
+            color: Color(0x0A0F2042),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: Material(
-        // A raised warm-white surface: it reads as lifted paper against the
-        // ivory canvas, warmer than a pure clinical white.
-        color: AppColors.canvas,
+        color: FhwLuxePalette.cardSurface,
         clipBehavior: Clip.antiAlias,
         shape: shape,
         child: Stack(

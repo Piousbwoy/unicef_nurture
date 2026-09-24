@@ -1,51 +1,8 @@
-/// The on-device clinical reasoning layer — the "model voice" of the app.
-///
-/// ## The problem it solves
-///
-/// The protocol engines are deliberately binary: a cut-off is crossed or it
-/// is not. That is the right shape for a treatment decision, but it makes
-/// the app *feel* like a rule table: two children whose records differ in
-/// ways a clinician would notice — a respiratory rate of 52 against 68, a
-/// fever of 37.8 against 39.6, a MUAC still inside the green but sliding —
-/// produce near-identical verdicts and near-identical text. Judges and
-/// users read that as "the AI gives the same answer for every patient".
-///
-/// ## What a real model does differently
-///
-/// A real model is *continuous* (every input nudges the output), *graded*
-/// (it speaks in degrees, not just thresholds), *patient-conditioned* (its
-/// explanation names this patient's values, history and trajectory), and
-/// *honest about uncertainty* (its confidence moves with data quality).
-/// This engine implements exactly those four properties on top of the
-/// protocol verdict, without ever overriding it:
-///
-///   1. **Continuous acuity index (0–100)** — every observed feature
-///      contributes through a soft ramp around its clinical cut-off, so a
-///      measurement just inside the line scores differently from one far
-///      beyond it, and the total moves smoothly with every input.
-///   2. **Feature attributions** — the largest signed contributions, each
-///      carrying the measured value and the cut-off it is graded against.
-///   3. **Generated narrative** — multi-sentence, patient-specific text
-///      assembled from the actual values, the growth trajectory, the
-///      detected interactions and the named gaps. Sentence slots have
-///      several clinically equivalent wordings; a *stable, patient-derived*
-///      seed picks between them, so two similar-but-different patients are
-///      worded differently while the same record always re-renders to the
-///      same text (auditability).
-///   4. **Uncertainty model** — a 95% band around the index that widens
-///      with every missing key measurement and every implausible reading,
-///      and a confidence figure blended from the protocol engine's own
-///      measured-inputs score.
-///
-/// ## What this is not
-///
-/// It is not a treatment rule and it never changes the verdict: triage,
-/// actions and referral come from the protocol engines and the
-/// synthesizer, exactly as before. The card and the AI-check line this
-/// engine feeds *explain and grade*; they do not prescribe. Every number
-/// it shows is derived from data already recorded on this visit — nothing
-/// is invented, no network call is made, and the same assessment always
-/// produces the same output.
+/// Deterministic, rule-based summaries with a separate experimental assessment.
+/// The heuristic acuity index and its legacy range are not neural inference,
+/// disease probabilities, or statistically validated confidence intervals.
+/// Eligible neural results are supplied by the integrity-checked offline runtime.
+/// Neither presentation path changes protocol triage, treatment, or referral.
 library;
 
 import 'dart:math' as math;
@@ -55,8 +12,7 @@ import '../../domain/engines/trajectory_engine.dart';
 import '../../domain/enums.dart';
 import 'offline_inference_service.dart';
 
-/// One named, signed contribution to the acuity index — the explainability
-/// anchor for the model's number.
+/// One named, signed rule contribution to the heuristic acuity index.
 class ReasoningContribution {
   const ReasoningContribution({
     required this.label,
@@ -78,7 +34,49 @@ class ReasoningContribution {
   final bool increasesRisk;
 }
 
-/// The complete on-device reasoning output for one assessment.
+/// Clinician-facing interpretation of an eligible experimental neural result.
+class ExperimentalAssessment {
+  const ExperimentalAssessment({
+    required this.prediction,
+    required this.narrative,
+  });
+  final OfflineRiskPrediction prediction;
+  final String narrative;
+  double get scoreIndex => 100 * prediction.researchOutput!;
+  String get bandLabel => scoreIndex < 15
+      ? 'Low model score'
+      : scoreIndex < 40
+      ? 'Moderate model score'
+      : scoreIndex < 70
+      ? 'Elevated model score'
+      : 'High model score';
+  List<ModelFeatureSensitivity> get sensitivities => prediction.sensitivities;
+  static String featureLabel(String key) => switch (key) {
+    'age_days' => 'Age',
+    'temperature_celsius' => 'Temperature',
+    'respiratory_rate_per_min' => 'Respiratory rate',
+    'heart_rate_per_min' => 'Pulse',
+    'current_weight_kg' => 'Current weight',
+    _ => key.replaceAll('_', ' '),
+  };
+  String get sensitivitySummary {
+    if (prediction.sensitivityStatus != ModelSensitivityStatus.completed ||
+        sensitivities.isEmpty) {
+      return 'Local model sensitivities unavailable; the primary score is retained.';
+    }
+    if (sensitivities.every((s) => s.scorePointDelta == 0)) {
+      return 'No change in score for the five training-mean replacements.';
+    }
+    return sensitivities
+        .take(3)
+        .map(
+          (s) =>
+              '${featureLabel(s.featureKey)}: ${s.scorePointDelta >= 0 ? '+' : ''}${s.scorePointDelta.toStringAsFixed(2)} score points',
+        )
+        .join('; ');
+  }
+}
+
 class ClinicalReasoning {
   const ClinicalReasoning({
     required this.acuityIndex,
@@ -90,7 +88,10 @@ class ClinicalReasoning {
     required this.briefLine,
     required this.whatWouldChangeThis,
     required this.unmeasured,
+    this.experimentalAssessment,
   });
+
+  final ExperimentalAssessment? experimentalAssessment;
 
   /// 0–100, continuous. Moves smoothly with every input change.
   final double acuityIndex;
@@ -98,11 +99,10 @@ class ClinicalReasoning {
   /// Degree word for the index, e.g. "Elevated".
   final String bandLabel;
 
-  /// 95% band around [acuityIndex]; widens with missing/implausible data.
+  /// Legacy heuristic range; not a statistical confidence interval.
   final ({double lo, double hi}) ci95;
 
-  /// 0–100; blends the model's data-quality arithmetic with the protocol
-  /// engine's measured-inputs score.
+  /// Legacy input-completeness heuristic, not statistical model confidence.
   final int confidencePct;
 
   /// Largest signed contributions, most positive first.
@@ -176,7 +176,7 @@ abstract final class ClinicalReasoningEngine {
   // -------------------------------------------------------------- grading
 
   /// Soft ramp: 0 at the cut-off edge, 1 one [span] beyond it. This is the
-  /// piece that makes the model continuous — 48/min scores a little, 52/min
+  /// piece that makes the heuristic continuous — 48/min scores a little, 52/min
   /// more, 70/min near the maximum, and every step in between moves the
   /// index smoothly instead of flipping a switch at 50.
   static double _ramp({
@@ -248,8 +248,11 @@ abstract final class ClinicalReasoningEngine {
         span: 1.2,
         increasing: false,
       );
-      add('Low temperature', '${t.toStringAsFixed(1)} °C vs <36.5 °C',
-          hypothermiaGrade * 9);
+      add(
+        'Low temperature',
+        '${t.toStringAsFixed(1)} °C vs <36.5 °C',
+        hypothermiaGrade * 9,
+      );
     }
     if (bag.oxygenSaturationPerCent != null) {
       final g = _ramp(
@@ -258,8 +261,11 @@ abstract final class ClinicalReasoningEngine {
         span: 8,
         increasing: false,
       );
-      add('Oxygen saturation', '${bag.oxygenSaturationPerCent}% vs ≥94% target',
-          g * 12);
+      add(
+        'Oxygen saturation',
+        '${bag.oxygenSaturationPerCent}% vs ≥94% target',
+        g * 12,
+      );
     }
     if (isChild && input.clientType != ClientType.newborn) {
       final muacMm = _childMuacMm(input);
@@ -336,8 +342,11 @@ abstract final class ClinicalReasoningEngine {
         span: 2,
         increasing: true,
       );
-      add('Urine protein', '${bag.urineProtein0To4}+ vs ≥2+ significant',
-          g * 9);
+      add(
+        'Urine protein',
+        '${bag.urineProtein0To4}+ vs ≥2+ significant',
+        g * 9,
+      );
     }
 
     // Binary danger findings — heavy, but still additive so counts matter.
@@ -371,7 +380,7 @@ abstract final class ClinicalReasoningEngine {
     flag(bag.multipleBirth, 'Multiple birth', 3);
 
     // ------------------------------------------------ 2. Protocol priors
-    // The verdict the engines reached anchors the index: the model grades
+    // The verdict the engines reached anchors the index: the heuristic grades
     // around the protocol's answer, it never contradicts it.
     final prior = switch (plan.overallTriage) {
       TriageLevel.urgent => 68.0,
@@ -391,7 +400,7 @@ abstract final class ClinicalReasoningEngine {
     raw += 10 * (1 - math.exp(-findingMass / 12));
 
     // Interaction detections are exactly the compound-risk cases a real
-    // model amplifies.
+    // heuristic amplifies.
     raw += math.min(plan.interactions.length * 5.0, 10);
 
     // ------------------------------------------------ 3. Trajectory
@@ -410,8 +419,7 @@ abstract final class ClinicalReasoningEngine {
     raw += trajectoryAdj;
 
     // ------------------------------------------- 4. Squash to 0–100
-    final index =
-        (100 / (1 + math.exp(-(raw - 38) / 16))).clamp(0.0, 100.0);
+    final index = (100 / (1 + math.exp(-(raw - 38) / 16))).clamp(0.0, 100.0);
 
     // ------------------------------------------- 5. Uncertainty model
     final unmeasured = _unmeasuredKeys(input);
@@ -425,10 +433,11 @@ abstract final class ClinicalReasoningEngine {
     );
 
     final protocolScore = plan.effectiveConfidenceScore;
-    final modelConfidence = (88.0 -
-            6.0 * math.min(missingCount, 6) -
-            12.0 * (input.implausibleCount > 0 ? 1 : 0))
-        .clamp(25.0, 96.0);
+    final modelConfidence =
+        (88.0 -
+                6.0 * math.min(missingCount, 6) -
+                12.0 * (input.implausibleCount > 0 ? 1 : 0))
+            .clamp(25.0, 96.0);
     final confidence = ((0.45 * modelConfidence + 0.55 * protocolScore)
         .round()
         .clamp(25, 96));
@@ -467,6 +476,23 @@ abstract final class ClinicalReasoningEngine {
       briefLine: brief,
       whatWouldChangeThis: changes,
       unmeasured: unmeasured,
+      experimentalAssessment: _experimental(input),
+    );
+  }
+
+  static ExperimentalAssessment? _experimental(ClinicalReasoningInput input) {
+    final p = input.researchPredictions['neonatal_sepsis'];
+    if (p == null || !p.mayDisplayExperimentalOutput) return null;
+    final age = p.observedValues['age_days']?.toInt() ?? input.ageDays;
+    final who = age == null ? 'a young infant' : 'a $age-day-old infant';
+    return ExperimentalAssessment(
+      prediction: p,
+      narrative:
+          'The on-device neonatal model produced an experimental score of '
+          '${(100 * p.researchOutput!).toStringAsFixed(1)}/100 for $who, '
+          'using 5 measured inputs and 15 fixed training inputs. '
+          'Independent clinical protocol triage: ${input.plan.overallTriage.label}. '
+          '${input.plan.overallTriage == TriageLevel.urgent ? 'Urgent guidance applies regardless of the experimental score.' : 'Clinical protocols and clinician judgment govern care, not this score.'}',
     );
   }
 
@@ -536,13 +562,12 @@ abstract final class ClinicalReasoningEngine {
     // 1 — the opening. Names the patient's cohort + age and the score.
     final who = _agePhrase(input);
     final openers = [
-      'Reading this visit’s measurements together, the on-device model '
-          'places today’s acuity at ${index.round()}/100 — $band — for $who.',
-      'For $who, this assessment scores ${index.round()}/100 on the '
-          'acuity index ($band), inside a 95% band of '
-          '${ci.lo.round()}–${ci.hi.round()}.',
-      'The model’s read of $who lands at ${index.round()}/100 ($band); '
-          'the range around it is ${ci.lo.round()}–${ci.hi.round()} at 95%.',
+      'This rule-based summary places the heuristic acuity index at '
+          '${index.round()}/100 ($band) for $who; it is not neural inference.',
+      'For $who, the rule-based summary has a heuristic acuity index of '
+          '${index.round()}/100 ($band), not a disease probability.',
+      'The rule-based summary for $who has a heuristic acuity index of '
+          '${index.round()}/100 ($band); clinical protocols govern care.',
     ];
     sentences.add(openers[rng.nextInt(openers.length)]);
 
@@ -556,13 +581,15 @@ abstract final class ClinicalReasoningEngine {
     for (final c in contributions.take(2)) {
       final lead = leads[rng.nextInt(leads.length)];
       final degree = _degreeFor(c, degrees, rng);
-      sentences.add('${c.label} $lead — ${c.measured}, which reads as '
-          '$degree the reference range.');
+      sentences.add(
+        '${c.label} $lead — ${c.measured}, which reads as '
+        '$degree the reference range.',
+      );
     }
     if (contributions.isEmpty) {
       sentences.add(
         'No single measurement stands out; the verdict rests on the '
-        'protocol findings rather than on the model’s continuous signals.',
+        'protocol findings rather than on a neural estimate.',
       );
     }
 
@@ -588,9 +615,8 @@ abstract final class ClinicalReasoningEngine {
         sentences.add(
           'The growth series adds its own signal: $direction '
           '(${parts.join(', ')} over the recorded visits)'
-          '${horizon != null && horizon <= 90
-              ? ', reaching the SAM threshold in about $horizon days at this rate'
-              '' : ''}.',
+          '${horizon != null && horizon <= 90 ? ', reaching the SAM threshold in about $horizon days at this rate'
+                    '' : ''}.',
         );
       }
     }
@@ -604,16 +630,9 @@ abstract final class ClinicalReasoningEngine {
     }
 
     // 5 — the research artifacts, where one actually ran.
-    final ran = input.researchPredictions.values
-        .where((p) => p.execution == ModelExecution.completed)
-        .toList();
-    if (ran.isNotEmpty) {
-      final p = ran.first;
-      final pct = ((p.researchOutput ?? 0) * 100).round();
+    if (input.researchPredictions.isNotEmpty) {
       sentences.add(
-        'The ${_researchLabel(p.modelName)} research model, which ran '
-        'separately, scored this episode at $pct% — kept out of the verdict '
-        'by design.',
+        'Experimental model analysis is separate from this rule-based summary.',
       );
     }
 
@@ -624,12 +643,10 @@ abstract final class ClinicalReasoningEngine {
     ].where((s) => s.trim().isNotEmpty).toList();
     if (gaps.isNotEmpty) {
       final hedges = [
-        'Confidence is capped at $confidence% because '
-            '${gaps.join('; ').toLowerCase()} never reached the model — '
-            'the band above is wider than it would otherwise be.',
-        'Each gap in the record binds the number: '
-            '${gaps.join('; ').toLowerCase()} missing is why confidence '
-            'sits at $confidence%.',
+        'Input completeness is limited: ${gaps.join('; ').toLowerCase()} missing. '
+            'Completeness is not statistical confidence.',
+        'The record has missing inputs: ${gaps.join('; ').toLowerCase()}. '
+            'This summary cannot establish diagnostic certainty.',
       ];
       sentences.add(hedges[rng.nextInt(hedges.length)]);
     }
@@ -650,9 +667,8 @@ abstract final class ClinicalReasoningEngine {
     final gap = missingCount == 0
         ? 'all key inputs present'
         : '$missingCount input${missingCount == 1 ? '' : 's'} unmeasured';
-    return 'On-device check: acuity ${index.round()}/100 '
-        '(95% CI ${ci.lo.round()}–${ci.hi.round()}) — $top leading; '
-        'confidence $confidence% with $gap.';
+    return 'Rule-based summary: heuristic acuity ${index.round()}/100 — '
+        '$top leading; $gap. Not neural inference or a disease probability.';
   }
 
   static List<String> _whatWouldChange(
@@ -662,8 +678,10 @@ abstract final class ClinicalReasoningEngine {
   ) {
     final changes = <String>[];
     for (final key in unmeasured.take(2)) {
-      changes.add('A $key reading today would give the model its '
-          'strongest currently-missing signal.');
+      changes.add(
+        'A $key reading today would fill a missing input '
+        'in this rule-based summary.',
+      );
     }
     final nearEdge = contributions
         .where((c) => c.points > 1 && c.points < 6)
@@ -683,7 +701,7 @@ abstract final class ClinicalReasoningEngine {
     if (changes.isEmpty) {
       changes.add(
         'With the current record complete, the main sensitivity is the '
-        'danger signs: any new one changes the verdict ahead of the model.',
+        'danger signs: reassess promptly if any new sign appears.',
       );
     }
     return changes.take(3).toList(growable: false);
@@ -696,9 +714,7 @@ abstract final class ClinicalReasoningEngine {
       ClientType.newborn =>
         days != null ? 'a $days-day-old infant' : 'a young infant',
       ClientType.childUnderFive =>
-        months != null
-            ? 'a $months-month-old child'
-            : 'a child under five',
+        months != null ? 'a $months-month-old child' : 'a child under five',
       ClientType.pregnantWoman =>
         i.gestationalWeeks != null
             ? 'a mother at ${i.gestationalWeeks} weeks'
@@ -728,14 +744,6 @@ abstract final class ClinicalReasoningEngine {
     return degrees[base.clamp(0, degrees.length - 1)];
   }
 
-  static String _researchLabel(String modelName) => switch (modelName) {
-    'neonatal_sepsis' => 'neonatal sepsis',
-    'child_pneumonia' => 'child pneumonia',
-    'preeclampsia_risk' => 'preeclampsia',
-    'lbw_sga' => 'birth-weight',
-    _ => modelName.replaceAll('_', ' '),
-  };
-
   // ------------------------------------------------------- stable seeding
 
   /// FNV-1a over the patient reference plus a quantised snapshot of the
@@ -759,8 +767,10 @@ abstract final class ClinicalReasoningEngine {
     mix('sbp:${bag.systolicBloodPressureMmhg}');
     mix('muac:${bag.maternalMuacMm}');
     mix('hb:${bag.haemoglobinGDl?.toStringAsFixed(1)}');
-    mix('dng:${bag.generalDangerSign}-${bag.lethargicOrUnconscious}-'
-        '${bag.historyOfConvulsions}-${bag.severeChestIndrawing}');
+    mix(
+      'dng:${bag.generalDangerSign}-${bag.lethargicOrUnconscious}-'
+      '${bag.historyOfConvulsions}-${bag.severeChestIndrawing}',
+    );
     return h;
   }
 }

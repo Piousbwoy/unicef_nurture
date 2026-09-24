@@ -12,6 +12,74 @@ def sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def verify_output_policy(name, contract):
+    if contract.get('clinical_use_allowed') is not False:
+        raise ValueError(f'Clinical authorization is forbidden: {name}')
+    if name != 'neonatal_sepsis':
+        if contract.get('patient_output_allowed') is not False:
+            raise ValueError(f'Unapproved patient output in release: {name}')
+        return
+    artifact = 'b40ce5c43958b16bf6508887f49d79e7de7c0e6b8c4fd68ffabefb8a8d2b0fff'
+    policy = 'neonatal-five-observed-v1'
+    expected = {
+        'model_name': name, 'model_version': 'v2.0-real-data-neonatal_sepsis',
+        'artifact_sha256': artifact, 'input_policy_version': policy,
+        'evidence': 'legacy_real_data', 'output_scope': 'clinician_experimental',
+        'cohort': 'young_infant', 'age_days_support': [0, 3],
+        'model_type': 'dense_network', 'output_type': 'binary_probability',
+        'input_dtype': 'int8', 'input_shape': [1, 20],
+        'output_dtype': 'float32', 'output_shape': [1, 1],
+        'input_quantization': [0.003921568859368563, -128],
+        'output_quantization': [0., 0],
+        'input_quantization_arithmetic': 'float32_divide_add_round_ties_away_from_zero',
+    }
+    if (contract.get('patient_output_allowed') is not True or
+            any(contract.get(k) != v for k, v in expected.items())):
+        raise ValueError('Invalid neonatal experimental identity or tensor contract')
+    order = ['age_days', 'temperature_celsius', 'respiratory_rate_per_min',
+             'heart_rate_per_min', 'oxygen_saturation_per_cent', 'birth_weight_kg',
+             'apgar_5_minute', 'history_of_convulsions', 'severe_chest_indrawing',
+             'nasal_flaring_grunting', 'bulging_fontanelle', 'jaundice_before_24h',
+             'feeding_difficulty', 'abdominal_distension', 'cord_infection',
+             'skin_pustules', 'lethargic_unconscious', 'bleeding', 'hiv_exposed', 'multiple_birth']
+    observed = {
+        'age_days': (0, 59, .0296), 'temperature_celsius': (34, 41, .6548),
+        'respiratory_rate_per_min': (20, 120, .4019),
+        'heart_rate_per_min': (60, 220, .5754), 'birth_weight_kg': (.8, 5, .5274),
+    }
+    features = contract.get('features', [])
+    if not isinstance(features, list) or [f.get('name') for f in features] != order:
+        raise ValueError('Invalid neonatal tensor order')
+    for feature in features:
+        key = feature['name']
+        if key in observed:
+            lo, hi, _ = observed[key]
+            valid = (feature.get('input_policy') == 'observed' and
+                     feature.get('required') is True and feature.get('supported') is True and
+                     feature.get('min') == lo and feature.get('max') == hi and
+                     feature.get('transform') == 'min_max' and
+                     feature.get('input_source') == ('current_weight_kg' if key == 'birth_weight_kg' else key))
+        else:
+            reason = ('legacy_encoding_defect' if key in ['feeding_difficulty', 'lethargic_unconscious']
+                      else 'unavailable_training_feature')
+            valid = (feature.get('input_policy') == 'constant_normalized' and
+                     feature.get('constant_normalized') == 0 and
+                     feature.get('required') is False and feature.get('supported') is False and
+                     feature.get('fixed_reason') == reason)
+        if not valid or feature.get('imputation') is not None:
+            raise ValueError(f'Invalid neonatal feature policy: {key}')
+    baseline = contract.get('sensitivity_baseline', {})
+    calibration = contract.get('calibration', {})
+    if (baseline.get('artifact_sha256') != artifact or
+            baseline.get('input_policy_version') != policy or
+            baseline.get('means') != {k: v[2] for k, v in observed.items()} or
+            calibration.get('A') != 2.013769 or calibration.get('B') != -5.826344 or
+            calibration.get('formula') != 'sigmoid(A * logit(p) + B)' or
+            calibration.get('validated_for_artifact') is not False or
+            not isinstance(calibration.get('provenance'), str) or not calibration['provenance']):
+        raise ValueError('Invalid neonatal sensitivity or legacy postprocessing policy')
+
+
 def verify(build):
     copied = []
 
@@ -38,8 +106,7 @@ def verify(build):
             raise ValueError(f"Model/metadata hash mismatch: {name}")
         if contract["model_version"] != metrics["model_version"]:
             raise ValueError(f"Model version mismatch: {name}")
-        if contract["clinical_use_allowed"] or contract["patient_output_allowed"]:
-            raise ValueError(f"Unapproved patient output in release: {name}")
+        verify_output_policy(name, contract)
         artifacts[name] = digest
 
     audio = sorted((ROOT / "assets/audio").rglob("*.wav"))

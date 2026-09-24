@@ -92,6 +92,17 @@ Referral _urgent() => Referral(
   issuedAt: _when,
 );
 
+/// A day's worth of register columns, as the tally card receives them.
+const _busyDay = DailyRegisterTally(
+  childrenSeen: 7,
+  rdtDone: 5,
+  rdtPositive: 3,
+  sam: 2,
+  mam: 4,
+  immunised: 6,
+  referralsIssued: 8,
+);
+
 Future<void> _pump(
   WidgetTester tester, {
   Size size = const Size(390, 1200),
@@ -100,6 +111,8 @@ Future<void> _pump(
   List<Referral> referrals = const [],
   Visit? activeSession,
   List<ClinicQueueTicket> queue = const [],
+  DailyRegisterTally register = const DailyRegisterTally(),
+  bool registerFails = false,
   int pendingSync = 0,
   bool online = true,
 }) async {
@@ -119,6 +132,12 @@ Future<void> _pump(
         clinicQueueProvider.overrideWith((ref) async => queue),
         householdProvider.overrideWith((ref, id) async => _household),
         zoneHomeChecksProvider.overrideWith((ref) async => const []),
+        if (registerFails)
+          dailyRegisterProvider.overrideWith(
+            (ref) async => throw Exception('register unreadable'),
+          )
+        else
+          dailyRegisterProvider.overrideWith((ref) async => register),
         syncStatusProvider.overrideWith(
           (ref) => Stream.value(
             SyncStatusSummary(
@@ -131,10 +150,15 @@ Future<void> _pump(
         connectivityProvider.overrideWith((ref) => Stream.value(online)),
       ],
       child: MaterialApp(
+        // disableAnimations: the Today tab permanently shows BreathingDot
+        // sync signals, whose infinite pulse would otherwise starve
+        // pumpAndSettle. Reduced motion renders the identical static layout,
+        // which is what these content pins need.
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(textScale),
+            disableAnimations: true,
+          ),
           child: child!,
         ),
         home: Scaffold(
@@ -171,10 +195,10 @@ void main() {
     );
 
     for (final label in [
-      'Overdue reviews',
+      'Queue clear',
       'Due today',
       'Open referrals',
-      'Household records',
+      'Households',
     ]) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
@@ -247,11 +271,64 @@ void main() {
 
     expect(find.text('Bring these records forward'), findsOneWidget);
     expect(
-      find.text('Priorities from saved records—not a diagnosis of who is '
-          'unwell now.'),
+      find.text(
+        'Priorities from saved records—not a diagnosis of who is '
+        'unwell now.',
+      ),
       findsOneWidget,
     );
     expect(find.text('Achana household'), findsWidgets);
+  });
+
+  testWidgets('a day that has produced nothing shows no tally', (tester) async {
+    await _pump(tester);
+    // A quiet morning is an absent card, not a card full of zeroes — which
+    // would read as a broken device rather than as the truth.
+    expect(find.text('Today’s tally'), findsNothing);
+    expect(find.text('Under-5 seen'), findsNothing);
+  });
+
+  testWidgets('the day is tallied into register columns', (tester) async {
+    await _pump(tester, register: _busyDay);
+
+    expect(find.text('Today’s tally'), findsOneWidget);
+    expect(find.text('7'), findsOneWidget);
+    expect(find.text('Under-5 seen'), findsOneWidget);
+    expect(
+      find.text(
+        'Counted from records you saved on this phone today. Each child '
+        'counts once, however often they were seen.',
+      ),
+      findsOneWidget,
+    );
+    // The RDT column carries its own denominator: a positivity count without
+    // the number tested is not a figure anyone at the district can check.
+    expect(find.text('3/5'), findsOneWidget);
+    expect(find.text('RDT positive / tested'), findsOneWidget);
+    for (final label in [
+      'SAM (severe)',
+      'MAM (moderate)',
+      'Immunisations given',
+      'Referrals issued',
+    ]) {
+      expect(find.text(label), findsOneWidget, reason: label);
+    }
+  });
+
+  testWidgets('an untested day is an em dash, not a fabricated zero rate', (
+    tester,
+  ) async {
+    await _pump(tester, register: const DailyRegisterTally(childrenSeen: 3));
+    expect(find.text('—'), findsOneWidget);
+    expect(find.text('0/0'), findsNothing);
+  });
+
+  testWidgets('a tally that cannot be counted says so', (tester) async {
+    await _pump(tester, registerFails: true);
+    expect(
+      find.text('Today’s tally could not be counted. Tap to retry.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('fits 320px at 200% text without overflow', (tester) async {
@@ -261,6 +338,7 @@ void main() {
       textScale: 2,
       pendingSync: 12,
       referrals: [_urgent()],
+      register: _busyDay,
       queue: [
         ClinicQueueTicket(
           visit: _openVisit(),

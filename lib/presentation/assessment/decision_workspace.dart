@@ -32,14 +32,7 @@ class AnalysisViewModel {
               _ => 'Research only',
             },
   };
-  bool get mayShowOutput =>
-      prediction.evidence == ModelEvidence.retrospectiveResearch &&
-      prediction.execution == ModelExecution.completed &&
-      prediction.applicability == ModelApplicability.applicable &&
-      prediction.inputQuality == ModelInputQuality.complete &&
-      prediction.researchOutput?.isFinite == true &&
-      prediction.researchOutput! >= 0 &&
-      prediction.researchOutput! <= 1;
+  bool get mayShowOutput => prediction.mayDisplayExperimentalOutput;
 }
 
 class ClinicalDecisionHeader extends StatelessWidget {
@@ -49,7 +42,6 @@ class ClinicalDecisionHeader extends StatelessWidget {
     required this.level,
     required this.missingCount,
     required this.rationale,
-    required this.onNext,
     this.audio,
     this.overrideNote,
     this.flat = false,
@@ -57,7 +49,6 @@ class ClinicalDecisionHeader extends StatelessWidget {
   final String classification, rationale;
   final TriageLevel level;
   final int missingCount;
-  final VoidCallback onNext;
   final Widget? audio, overrideNote;
 
   /// No frame of its own: the caller supplies the surface (the glass hero
@@ -100,8 +91,8 @@ class ClinicalDecisionHeader extends StatelessWidget {
   double get _confidenceFraction => missingCount == 0
       ? 1.0
       : missingCount <= 2
-          ? 0.66
-          : 0.33;
+      ? 0.66
+      : 0.33;
 
   @override
   Widget build(BuildContext context) {
@@ -213,10 +204,7 @@ class ClinicalDecisionHeader extends StatelessWidget {
               ),
               if (audio != null) ...[
                 const Spacer(),
-                if (flat)
-                  audio!
-                else
-                  _TintedAudio(audio: audio!),
+                if (flat) audio! else _TintedAudio(audio: audio!),
               ],
             ],
           ),
@@ -227,7 +215,9 @@ class ClinicalDecisionHeader extends StatelessWidget {
               letterSpacing: 1.2,
               fontWeight: FontWeight.w700,
               fontSize: 11,
-              color: flat ? AppColors.inkMuted : Colors.white.withValues(alpha: 0.6),
+              color: flat
+                  ? AppColors.inkMuted
+                  : Colors.white.withValues(alpha: 0.6),
             ),
           ),
           const SizedBox(height: 8),
@@ -268,9 +258,7 @@ class ClinicalDecisionHeader extends StatelessWidget {
                   child: CustomPaint(
                     painter: _ConfidenceRing(
                       fraction: _confidenceFraction,
-                      ringColor: flat
-                          ? triageColours(level).fg
-                          : Colors.white,
+                      ringColor: flat ? triageColours(level).fg : Colors.white,
                       trackColor: flat
                           ? AppColors.line
                           : Colors.white.withValues(alpha: 0.15),
@@ -284,9 +272,7 @@ class ClinicalDecisionHeader extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: flat
-                          ? AppColors.ink
-                          : Colors.white,
+                      color: flat ? AppColors.ink : Colors.white,
                     ),
                   ),
                 ),
@@ -297,35 +283,6 @@ class ClinicalDecisionHeader extends StatelessWidget {
             const SizedBox(height: 12),
             overrideNote!,
           ],
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: FilledButton.icon(
-              onPressed: onNext,
-              style: FilledButton.styleFrom(
-                backgroundColor: flat
-                    ? AppColors.primary
-                    : Colors.white,
-                foregroundColor: flat
-                    ? Colors.white
-                    : switch (level) {
-                        TriageLevel.urgent => const Color(0xFF7F1D1D),
-                        TriageLevel.priority => const Color(0xFFB45309),
-                        TriageLevel.watch => const Color(0xFFB45309),
-                        TriageLevel.routine => const Color(0xFF047857),
-                      },
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              icon: const Icon(Icons.medical_services_outlined, size: 20),
-              label: const Text(
-                'Open care plan',
-                style: TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -337,9 +294,9 @@ class _TintedAudio extends StatelessWidget {
   final Widget audio;
   @override
   Widget build(BuildContext context) => Theme(
-    data: Theme.of(context).copyWith(
-      iconTheme: const IconThemeData(color: Colors.white),
-    ),
+    data: Theme.of(
+      context,
+    ).copyWith(iconTheme: const IconThemeData(color: Colors.white)),
     child: audio,
   );
 }
@@ -464,7 +421,11 @@ class ResearchAnalysisPanel extends StatelessWidget {
             child: const Text(
               'Clinical guidance uses observed findings and protocol rules. '
               'Experimental models do not change treatment or referral.',
-              style: TextStyle(fontSize: 12.5, height: 1.5, color: AppColors.inkMuted),
+              style: TextStyle(
+                fontSize: 12.5,
+                height: 1.5,
+                color: AppColors.inkMuted,
+              ),
             ),
           ),
           FutureBuilder<Map<String, OfflineRiskPrediction>>(
@@ -472,7 +433,8 @@ class ResearchAnalysisPanel extends StatelessWidget {
             builder: (context, snapshot) {
               if (snapshot.hasError) {
                 return _AnalysisError(
-                  message: 'Analysis unavailable. Clinical guidance remains available offline.',
+                  message:
+                      'Analysis unavailable. Clinical guidance remains available offline.',
                 );
               }
               if (!snapshot.hasData) {
@@ -498,7 +460,8 @@ class ResearchAnalysisPanel extends StatelessWidget {
                     children: [
                       if (statusSnapshot.hasError)
                         _AnalysisError(
-                          message: 'Evidence metadata unavailable. No experimental output is shown.',
+                          message:
+                              'Evidence metadata unavailable. No experimental output is shown.',
                         )
                       else if (statusSnapshot.connectionState !=
                           ConnectionState.done)
@@ -564,7 +527,10 @@ class _AnalysisSkeleton extends StatelessWidget {
 
 /// Error state with icon and muted styling.
 class _AnalysisError extends StatelessWidget {
-  const _AnalysisError({required this.message, this.icon = Icons.error_outline_rounded});
+  const _AnalysisError({
+    required this.message,
+    this.icon = Icons.error_outline_rounded,
+  });
 
   final String message;
   final IconData icon;
@@ -645,7 +611,8 @@ class _ModelEvidenceCardState extends State<_ModelEvidenceCard>
     final p = widget.model.prediction;
     final c = widget.status?.contract ?? const <String, Object?>{};
     final usable = widget.status?.isModelUsable == true;
-    final showGauge = widget.model.mayShowOutput &&
+    final showGauge =
+        widget.model.mayShowOutput &&
         usable &&
         widget.status?.modelVersion == p.modelVersion &&
         c['patient_output_allowed'] == true;
@@ -677,7 +644,9 @@ class _ModelEvidenceCardState extends State<_ModelEvidenceCard>
                         height: 8,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: usable ? AppColors.triageGreen : AppColors.inkFaint,
+                          color: usable
+                              ? AppColors.triageGreen
+                              : AppColors.inkFaint,
                         ),
                       ),
                       const SizedBox(width: Gap.sm),
@@ -713,7 +682,18 @@ class _ModelEvidenceCardState extends State<_ModelEvidenceCard>
                   ),
                   if (showGauge) ...[
                     const SizedBox(height: Gap.sm),
-                    _RiskGauge(value: p.researchOutput!),
+                    const Text('Experimental model score'),
+                    Text('${(100 * p.researchOutput!).toStringAsFixed(1)}/100'),
+                    LinearProgressIndicator(
+                      value: p.researchOutput!,
+                      semanticsLabel: 'Experimental model score',
+                      semanticsValue: (100 * p.researchOutput!).toStringAsFixed(
+                        1,
+                      ),
+                    ),
+                    const Text(
+                      'Not a calibrated clinical risk estimate. Clinician review required.',
+                    ),
                   ],
                 ],
               ),
@@ -729,76 +709,16 @@ class _ModelEvidenceCardState extends State<_ModelEvidenceCard>
                   child: SizeTransition(
                     sizeFactor: _anim,
                     alignment: Alignment.topLeft,
-                    child: _EvidenceDetail(model: widget.model, status: widget.status),
+                    child: _EvidenceDetail(
+                      model: widget.model,
+                      status: widget.status,
+                    ),
                   ),
                 );
               },
             ),
         ],
       ),
-    );
-  }
-}
-
-/// Visual gauge for the 0-1 research output.
-class _RiskGauge extends StatelessWidget {
-  const _RiskGauge({required this.value});
-
-  final double value;
-
-  @override
-  Widget build(BuildContext context) {
-    final pct = (value * 100).round();
-    final color = value >= 0.7
-        ? AppColors.triageRed
-        : value >= 0.4
-            ? AppColors.triageAmber
-            : AppColors.triageGreen;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Text(
-              'Research output',
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
-                color: AppColors.inkMuted,
-                letterSpacing: 0.3,
-              ),
-            ),
-            const Spacer(),
-            Text(
-              '$pct%',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: value,
-            minHeight: 6,
-            backgroundColor: AppColors.surfaceTint,
-            valueColor: AlwaysStoppedAnimation(color),
-          ),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          '0–1 scale — experimental, not a diagnosis',
-          style: TextStyle(
-            fontSize: 10,
-            color: AppColors.inkFaint,
-            fontStyle: FontStyle.italic,
-          ),
-        ),
-      ],
     );
   }
 }
@@ -836,27 +756,46 @@ class _EvidenceDetail extends StatelessWidget {
             ),
           ),
           const SizedBox(height: Gap.md),
-          _DetailRow(label: 'Model version', value: p.modelVersion ?? 'Unavailable'),
+          _DetailRow(
+            label: 'Model version',
+            value: p.modelVersion ?? 'Unavailable',
+          ),
           _DetailRow(
             label: 'File integrity',
             value: status?.integrityVerified == true
                 ? 'Checked'
                 : 'Not checked',
           ),
-          _DetailRow(label: 'Dataset', value: c['dataset']?.toString() ?? 'Not documented'),
+          _DetailRow(
+            label: 'Dataset',
+            value: c['dataset']?.toString() ?? 'Not documented',
+          ),
           _DetailRow(
             label: 'Dataset outcome',
             value: c['outcome']?.toString() ?? 'Not documented',
           ),
           _DetailRow(
             label: 'Supported population',
-            value: '${c['cohort'] ?? 'Not documented'}'
+            value:
+                '${c['cohort'] ?? 'Not documented'}'
                 '${c['age_days_support'] == null ? '' : ' · age in days ${c['age_days_support']}'}',
           ),
-          _DetailRow(label: 'Observed predictors', value: names(p.featuresUsed)),
-          _DetailRow(label: 'Missing predictors', value: names(p.featuresMissing)),
-          _DetailRow(label: 'Imputed predictors', value: names(p.imputedFeatures)),
-          _DetailRow(label: 'Unsupported predictors', value: names(p.unsupportedFeatures)),
+          _DetailRow(
+            label: 'Observed predictors',
+            value: names(p.featuresUsed),
+          ),
+          _DetailRow(
+            label: 'Missing predictors',
+            value: names(p.featuresMissing),
+          ),
+          _DetailRow(
+            label: 'Imputed predictors',
+            value: names(p.imputedFeatures),
+          ),
+          _DetailRow(
+            label: 'Unsupported predictors',
+            value: names(p.unsupportedFeatures),
+          ),
           _DetailRow(
             label: 'Input support warnings',
             value: names({...p.invalidFeatures, ...p.driftFeatures}.toList()),
@@ -875,7 +814,11 @@ class _EvidenceDetail extends StatelessWidget {
           const SizedBox(height: Gap.sm),
           const Text(
             'Repository datasets have been explored previously. Retrospective results do not establish clinical readiness in Northern Ghana.',
-            style: TextStyle(fontSize: 11.5, height: 1.5, color: AppColors.inkMuted),
+            style: TextStyle(
+              fontSize: 11.5,
+              height: 1.5,
+              color: AppColors.inkMuted,
+            ),
           ),
         ],
       ),

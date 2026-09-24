@@ -72,6 +72,7 @@ class _WebPiperTtsRunner implements PiperTtsRunner {
     String text, {
     bool waitForCompletion = true,
     void Function()? onStarted,
+    SpeechProsody prosody = SpeechProsody.standard,
   }) async {
     final stopping = stop();
     final generation = _generation;
@@ -95,7 +96,7 @@ class _WebPiperTtsRunner implements PiperTtsRunner {
             'kind': 'piper',
             'base': base,
             'ids': Int32List.fromList(frontend.encode(chunk)).toJS,
-            'scales': Float32List.fromList(spec.scales).toJS,
+            'scales': Float32List.fromList(spec.scalesFor(prosody)).toJS,
             'speaker': _speaker,
           });
           _task = task;
@@ -142,8 +143,10 @@ class _WebPiperTtsRunner implements PiperTtsRunner {
   }
 
   @override
-  Future<void> speakNonBlocking(String text) =>
-      speak(text, waitForCompletion: false);
+  Future<void> speakNonBlocking(
+    String text, {
+    SpeechProsody prosody = SpeechProsody.standard,
+  }) => speak(text, waitForCompletion: false, prosody: prosody);
   @override
   Future<void> stop() async {
     ++_generation;

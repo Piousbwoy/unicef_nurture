@@ -289,6 +289,11 @@ abstract final class GhanaEpi {
 }
 
 abstract final class ImmunisationEngine {
+  /// The [ClinicalFinding.protocolSource] every finding this engine emits
+  /// carries. Screens that give immunisation its own section filter on this
+  /// rather than retyping the schedule name.
+  static const String protocolSource = 'Ghana EPI schedule';
+
   /// A dose is considered overdue once this many weeks have passed beyond its
   /// due age. Four weeks is the operational grace period used in practice.
   static const int _graceWeeks = 4;
@@ -512,7 +517,7 @@ abstract final class ImmunisationEngine {
           severity: item.weeksOverdue >= 12
               ? TriageLevel.priority
               : TriageLevel.watch,
-          protocolSource: 'Ghana EPI schedule',
+          protocolSource: ImmunisationEngine.protocolSource,
           measuredValue: '${item.weeksOverdue} weeks late',
           threshold: 'due at ${_weeksLabel(item.dose.dueAtWeeks)}',
           weight: item.weeksOverdue >= 12 ? 4 : 2,
@@ -528,7 +533,7 @@ abstract final class ImmunisationEngine {
           label: '${item.dose.label} can no longer be given',
           detail: item.detail,
           severity: TriageLevel.watch,
-          protocolSource: 'Ghana EPI schedule',
+          protocolSource: ImmunisationEngine.protocolSource,
           weight: 1,
         ),
       );
@@ -546,7 +551,7 @@ abstract final class ImmunisationEngine {
               'A sick visit is a vaccination opportunity. Mild illness, '
               'diarrhoea and mild fever are not contraindications, and sending '
               'the child away to "come back well" is how doses get lost.',
-          protocolSource: 'Ghana EPI schedule',
+          protocolSource: ImmunisationEngine.protocolSource,
           isTreatment: true,
         ),
       );
@@ -568,7 +573,7 @@ abstract final class ImmunisationEngine {
               'Doses in the same series need at least four weeks between '
               'them. A dated card is the difference between a plan and a '
               'wish.',
-          protocolSource: 'Ghana EPI schedule',
+          protocolSource: ImmunisationEngine.protocolSource,
           isCounselling: true,
         ),
       );

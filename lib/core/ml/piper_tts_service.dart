@@ -15,6 +15,7 @@ library;
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 
+import 'piper_contract.dart';
 import 'piper_tts_runner.dart';
 
 /// Configuration for a Piper TTS model (per language).
@@ -124,11 +125,17 @@ class PiperTtsService {
     String text,
     String language, {
     VoidCallback? onStarted,
+    SpeechProsody prosody = SpeechProsody.standard,
   }) async {
     if (!supportsLanguage(language)) return false;
     try {
       _setActiveLanguage(language);
-      await runner.speak(text, waitForCompletion: true, onStarted: onStarted);
+      await runner.speak(
+        text,
+        waitForCompletion: true,
+        onStarted: onStarted,
+        prosody: prosody,
+      );
       return true;
     } catch (_) {
       debugPrint('PiperTtsService: synthesis or playback unavailable');
@@ -137,11 +144,15 @@ class PiperTtsService {
   }
 
   /// Start speaking without waiting. Use [stop] to interrupt.
-  Future<bool> speakNonBlocking(String text, String language) async {
+  Future<bool> speakNonBlocking(
+    String text,
+    String language, {
+    SpeechProsody prosody = SpeechProsody.standard,
+  }) async {
     if (!supportsLanguage(language)) return false;
     try {
       _setActiveLanguage(language);
-      await runner.speakNonBlocking(text);
+      await runner.speakNonBlocking(text, prosody: prosody);
       return true;
     } catch (_) {
       debugPrint('PiperTtsService: playback unavailable');

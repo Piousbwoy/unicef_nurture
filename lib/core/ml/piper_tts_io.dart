@@ -13,7 +13,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'native_pack_store.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -30,10 +30,9 @@ class _IoPiperTtsRunner implements PiperTtsRunner {
 
   Future<void> _serialize(Future<void> Function() action) {
     final next = _lifecycle.then((_) => action());
-    _lifecycle = next.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    _lifecycle = next.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     return next;
   }
-
   String? _currentLanguage;
   AudioPlayer? _player;
   Completer<void>? _playbackDone;
@@ -51,38 +50,26 @@ class _IoPiperTtsRunner implements PiperTtsRunner {
     required int speakerId,
   }) => _serialize(() async {
     if (_models.containsKey(language)) return;
-    final manifest = await ModelArtifactManifest.load(
-      modelAssetPath,
-      'piper-v1',
-    );
-    final config = await manifest.text(modelAssetPath, 'model.onnx.json');
+    final bundle = await NativePackStore().bundle(modelAssetPath);
+    final manifest = await ModelArtifactManifest.load(modelAssetPath, 'piper-v1', bundle: bundle);
+    final config = await manifest.text(modelAssetPath, 'model.onnx.json', bundle: bundle);
     final rules = language == 'Twi'
-        ? await manifest.text(modelAssetPath, 'twi_rules.json')
-        : null;
+        ? await manifest.text(modelAssetPath, 'twi_rules.json', bundle: bundle) : null;
     // Release the previous pipeline before allocating another model.
     await stop();
-    for (final engine in _models.values) {
-      await engine.dispose();
-    }
+    for (final engine in _models.values) { await engine.dispose(); }
     _models.clear();
-    final data = await rootBundle.load('$modelAssetPath/model.onnx');
+    final data = await bundle.load('$modelAssetPath/model.onnx');
     final engine = await PiperNativeEngine.load(
       model: data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
-      artifact: manifest.file('model.onnx'),
-      config: config,
-      language: language,
-      speaker: speakerId,
-      rules: rules,
+      artifact: manifest.file('model.onnx'), config: config,
+      language: language, speaker: speakerId, rules: rules,
     );
     _models[language] = engine;
   });
 
   @override
-  Future<void> speak(
-    String text, {
-    bool waitForCompletion = true,
-    void Function()? onStarted,
-  }) async {
+  Future<void> speak(String text, {bool waitForCompletion = true, void Function()? onStarted, SpeechProsody prosody = SpeechProsody.standard}) async {
     final language = _currentLanguage;
     final engine = _models[language];
     if (engine == null) throw StateError('Piper model unavailable');
@@ -103,12 +90,11 @@ class _IoPiperTtsRunner implements PiperTtsRunner {
         onStarted?.call();
       }
     }
-
     Future<void> play() async {
       try {
         for (final chunk in chunks) {
           if (generation != _generation) throw StateError('Piper stopped');
-          final wav = await engine.synthesize(chunk);
+          final wav = await engine.synthesize(chunk, prosody: prosody);
           if (generation != _generation) throw StateError('Piper stopped');
           await _playWav(wav, generation, began);
         }
@@ -116,30 +102,22 @@ class _IoPiperTtsRunner implements PiperTtsRunner {
         if (generation == _generation) _currentLanguage = null;
       }
     }
-
     final playback = play();
     if (waitForCompletion) {
       await playback;
     } else {
-      unawaited(
-        playback.then<void>(
-          (_) {
-            if (!started.isCompleted)
-              started.completeError(StateError('Piper did not start'));
-          },
-          onError: (Object _, StackTrace __) {
-            if (!started.isCompleted)
-              started.completeError(StateError('Piper playback failed'));
-          },
-        ),
-      );
+      unawaited(playback.then<void>((_) {
+        if (!started.isCompleted) started.completeError(StateError('Piper did not start'));
+      }, onError: (Object _, StackTrace _) {
+        if (!started.isCompleted) started.completeError(StateError('Piper playback failed'));
+      }));
       await started.future;
     }
   }
 
   @override
-  Future<void> speakNonBlocking(String text) =>
-      speak(text, waitForCompletion: false);
+  Future<void> speakNonBlocking(String text, {SpeechProsody prosody = SpeechProsody.standard}) =>
+      speak(text, waitForCompletion: false, prosody: prosody);
 
   @override
   Future<void> stop() async {
@@ -150,9 +128,7 @@ class _IoPiperTtsRunner implements PiperTtsRunner {
     _playbackDone = null;
     _currentLanguage = null;
     if (done != null && !done.isCompleted) done.complete();
-    try {
-      await player?.stop();
-    } catch (_) {}
+    try { await player?.stop(); } catch (_) {}
     // The request's finally block owns player disposal and its temporary file.
   }
 
@@ -175,15 +151,11 @@ class _IoPiperTtsRunner implements PiperTtsRunner {
 
   int _generation = 0;
 
-  Future<void> _playWav(
-    Uint8List wavBytes,
-    int generation,
-    void Function()? onStarted,
-  ) async {
+  Future<void> _playWav(Uint8List wavBytes,
+      int generation, void Function()? onStarted) async {
     void check() {
       if (generation != _generation) throw StateError('Piper stopped');
     }
-
     final dir = await getTemporaryDirectory();
     check();
     final tmpFile = File(
@@ -200,14 +172,10 @@ class _IoPiperTtsRunner implements PiperTtsRunner {
       _player = activePlayer;
       _playbackDone = done;
       void failed(Object _) {
-        if (!done.isCompleted)
-          done.completeError(StateError('Audio playback failed'));
+        if (!done.isCompleted) done.completeError(StateError('Audio playback failed'));
       }
-
       // Observe errors immediately, even while setSource/resume is awaiting.
-      unawaited(
-        done.future.then<void>((_) {}, onError: (Object _, StackTrace __) {}),
-      );
+      unawaited(done.future.then<void>((_) {}, onError: (Object _, StackTrace _) {}));
       completion = activePlayer.onPlayerComplete.listen((_) {
         if (generation == _generation && !done.isCompleted) done.complete();
       }, onError: failed);
@@ -225,12 +193,11 @@ class _IoPiperTtsRunner implements PiperTtsRunner {
     } finally {
       await completion?.cancel();
       await states?.cancel();
-      try {
-        await player?.dispose();
-      } catch (_) {}
+      try { await player?.dispose(); } catch (_) {}
       if (identical(_player, player)) _player = null;
       if (identical(_playbackDone, done)) _playbackDone = null;
       await tmpFile.delete().catchError((_) => tmpFile);
     }
   }
+
 }

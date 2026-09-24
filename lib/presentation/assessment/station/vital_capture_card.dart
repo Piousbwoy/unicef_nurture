@@ -2,10 +2,13 @@
 /// surface on that screen that blurs.
 ///
 /// Layout, top to bottom: label + why line · big tabular readout with unit ·
-/// band gauge · "Last …" chip from the previous assessment · captured-at
+/// hospital ruler · "Last …" chip from the previous assessment · captured-at
 /// stamp · Re-take / Not measured / Next. Below it, the capture instrument
-/// (keypad, breath counter or MUAC gauge + keypad).
+/// (− /+ jog buttons, then the breath counter, MUAC tape or the collapsible
+/// "Type the reading instead" keypad).
 library;
+
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,9 +20,9 @@ import '../../../core/theme/glass.dart';
 import '../../../core/theme/motion.dart';
 import '../../shared/ui.dart';
 import '../widgets/muac_gauge.dart';
-import 'band_gauge.dart';
 import 'breath_counter.dart';
 import 'clinical_keypad.dart';
+import 'hospital_ruler.dart';
 import 'vital_spec.dart';
 
 /// Reasons a vital was not taken. Recorded verbatim in `inputs['not_measured']`.
@@ -93,7 +96,7 @@ class VitalCaptureCard extends ConsumerStatefulWidget {
 }
 
 class _VitalCaptureCardState extends ConsumerState<VitalCaptureCard> {
-  /// For a paired vital (BP), which reading the keypad is editing.
+  /// For a paired vital (BP), which reading the ruler and jog are editing.
   bool _editingPair = false;
 
   /// The MUAC gauge wants a cm controller; we derive it from the mm text.
@@ -248,6 +251,7 @@ class _VitalCaptureCardState extends ConsumerState<VitalCaptureCard> {
                         caption: 'Systolic',
                         tone: band?.tone,
                         scaler: scaler,
+                        compact: true,
                         active: !_editingPair,
                         onTap: () => setState(() => _editingPair = false),
                       ),
@@ -269,6 +273,7 @@ class _VitalCaptureCardState extends ConsumerState<VitalCaptureCard> {
                         caption: pair.label,
                         tone: pairBand?.tone,
                         scaler: scaler,
+                        compact: true,
                         active: _editingPair,
                         onTap: () => setState(() => _editingPair = true),
                       ),
@@ -278,10 +283,11 @@ class _VitalCaptureCardState extends ConsumerState<VitalCaptureCard> {
               const SizedBox(height: Gap.md),
 
               if (entry.notMeasured == null)
-                BandGauge(
+                HospitalRuler(
                   spec: activeSpec,
                   ctx: widget.ctx,
                   value: _editingPair ? pairV : v,
+                  onChanged: (value) => _setText(activeSpec.format(value)),
                 ),
               const SizedBox(height: Gap.md),
 
@@ -356,11 +362,23 @@ class _VitalCaptureCardState extends ConsumerState<VitalCaptureCard> {
         ),
         const SizedBox(height: Gap.md),
 
-        // Instrument.
+        // Instrument: the − / + jog, then the capture instrument.
         if (entry.notMeasured == null)
           AnimatedSwitcher(
             duration: fx.scale(AppMotion.fast),
-            child: _instrument(activeSpec, activeText),
+            child: Column(
+              key: ValueKey('inst-${activeSpec.key}'),
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _FineTune(
+                  spec: activeSpec,
+                  value: _editingPair ? pairV : v,
+                  onChanged: (value) => _setText(activeSpec.format(value)),
+                ),
+                const SizedBox(height: Gap.sm),
+                _instrument(activeSpec, activeText),
+              ],
+            ),
           ),
       ],
     );
@@ -373,6 +391,18 @@ class _VitalCaptureCardState extends ConsumerState<VitalCaptureCard> {
       onChanged: _setText,
       allowDecimal: active.keypad == KeypadMode.decimal,
       maxDecimals: active.decimals == 0 ? 1 : active.decimals,
+    );
+    // Exact entry is the fallback now — the ruler and the jog do first pass.
+    final typeInstead = ExpansionTile(
+      key: ValueKey('type-${active.key}'),
+      tilePadding: EdgeInsets.zero,
+      title: Text(
+        spec.capture == CaptureMode.breathCounter
+            ? 'Type the rate instead'
+            : 'Type the reading instead',
+        style: AppType.label.copyWith(color: AppColors.inkMuted),
+      ),
+      children: [keypad],
     );
     switch (spec.capture) {
       case CaptureMode.breathCounter:
@@ -390,14 +420,7 @@ class _VitalCaptureCardState extends ConsumerState<VitalCaptureCard> {
               ),
             ),
             const SizedBox(height: Gap.sm),
-            ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              title: Text(
-                'Type the rate instead',
-                style: AppType.label.copyWith(color: AppColors.inkMuted),
-              ),
-              children: [keypad],
-            ),
+            typeInstead,
           ],
         );
       case CaptureMode.keypad:
@@ -412,12 +435,126 @@ class _VitalCaptureCardState extends ConsumerState<VitalCaptureCard> {
                 child: MuacGauge(controller: _muacCm),
               ),
               const SizedBox(height: Gap.sm),
-              keypad,
+              typeInstead,
             ],
           );
         }
-        return KeyedSubtree(key: ValueKey('kp-${active.key}'), child: keypad);
+        return typeInstead;
     }
+  }
+}
+
+/// The − / + jog under the card: one tap moves the active reading by one
+/// step of the spec; hold to repeat.
+class _FineTune extends StatelessWidget {
+  const _FineTune({
+    required this.spec,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final VitalSpec spec;
+  final double? value;
+  final ValueChanged<double> onChanged;
+
+  void _step(int direction) {
+    final v = value;
+    final next = v == null
+        ? (direction < 0 ? spec.gaugeMax : spec.gaugeMin)
+        : (v + direction * spec.step).clamp(spec.gaugeMin, spec.gaugeMax);
+    if (next != v) onChanged(next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final by = spec.format(spec.step);
+    return GlassSurface(
+      tier: GlassTier.chip,
+      blur: false,
+      shadow: false,
+      padding: EdgeInsets.zero,
+      child: Row(
+        children: [
+          Expanded(
+            child: _JogButton(
+              icon: Icons.remove_rounded,
+              label: 'Decrease ${spec.label.toLowerCase()} by $by ${spec.unit}',
+              onStep: () => _step(-1),
+            ),
+          ),
+          Container(width: 1, height: 26, color: AppColors.line),
+          Expanded(
+            child: _JogButton(
+              icon: Icons.add_rounded,
+              label: 'Increase ${spec.label.toLowerCase()} by $by ${spec.unit}',
+              onStep: () => _step(1),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _JogButton extends StatefulWidget {
+  const _JogButton({
+    required this.icon,
+    required this.label,
+    required this.onStep,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onStep;
+
+  @override
+  State<_JogButton> createState() => _JogButtonState();
+}
+
+class _JogButtonState extends State<_JogButton> {
+  static const _repeatEvery = Duration(milliseconds: 140);
+
+  Timer? _autoRepeat;
+
+  void _stopRepeat() {
+    _autoRepeat?.cancel();
+    _autoRepeat = null;
+  }
+
+  /// A hold, not a press: the long-press recognizer wins the arena on its own
+  /// timer, so repeating works while the finger is still down and a scroll
+  /// that starts on the button never nudges the reading.
+  void _startRepeat() {
+    widget.onStep();
+    _stopRepeat();
+    _autoRepeat = Timer.periodic(_repeatEvery, (_) => widget.onStep());
+  }
+
+  @override
+  void dispose() {
+    _stopRepeat();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: widget.label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onStep,
+        onLongPress: _startRepeat,
+        onLongPressUp: _stopRepeat,
+        onLongPressCancel: _stopRepeat,
+        child: SizedBox(
+          height: 48,
+          child: Center(
+            child: Icon(widget.icon, size: 22, color: AppColors.inkMuted),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -430,6 +567,7 @@ class _Readout extends StatelessWidget {
     this.tone,
     this.caption,
     this.onTap,
+    this.compact = false,
   });
 
   final String text;
@@ -439,6 +577,10 @@ class _Readout extends StatelessWidget {
   final VitalTone? tone;
   final String? caption;
   final VoidCallback? onTap;
+
+  /// Paired readings share one row, so they get a smaller numeral — at 56 a
+  /// three-digit systolic fades mid-glyph on a 390dp phone.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -458,18 +600,22 @@ class _Readout extends StatelessWidget {
           textBaseline: TextBaseline.alphabetic,
           children: [
             Flexible(
-              child: Semantics(
-                label: text.isEmpty
-                    ? 'No reading yet'
-                    : '$text $unit${tone == null ? '' : ', ${tone!.name}'}',
-                child: Text(
-                  text.isEmpty ? '—' : text,
-                  maxLines: 1,
-                  overflow: TextOverflow.fade,
-                  softWrap: false,
-                  style: AppType.numeral.copyWith(
-                    fontSize: 56 * (scaler.scale(1) > 1.3 ? 0.75 : 1.0),
-                    color: text.isEmpty ? AppColors.inkFaint : colour,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Semantics(
+                  label: text.isEmpty
+                      ? 'No reading yet'
+                      : '$text $unit${tone == null ? '' : ', ${tone!.name}'}',
+                  child: Text(
+                    text.isEmpty ? '—' : text,
+                    maxLines: 1,
+                    style: AppType.numeral.copyWith(
+                      fontSize:
+                          (compact ? 40 : 56) *
+                          (scaler.scale(1) > 1.3 ? 0.75 : 1.0),
+                      color: text.isEmpty ? AppColors.inkFaint : colour,
+                    ),
                   ),
                 ),
               ),

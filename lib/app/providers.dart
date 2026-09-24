@@ -113,8 +113,11 @@ class NarrationNotifier extends Notifier<bool> {
     Future.microtask(() async {
       try {
         final stored = await read();
-        if (!disposed && revision == _revision && stored != state) state = stored;
-      } catch (_) { /* A failed preference read leaves narration off. */ }
+        if (!disposed && revision == _revision && stored != state)
+          state = stored;
+      } catch (_) {
+        /* A failed preference read leaves narration off. */
+      }
     });
     return false;
   }
@@ -123,7 +126,9 @@ class NarrationNotifier extends Notifier<bool> {
     ++_revision;
     state = value;
     final write = ref.read(narrationPreferenceWriterProvider);
-    final stopped = !value ? ref.read(speakableServiceProvider).stop() : Future<void>.value();
+    final stopped = !value
+        ? ref.read(speakableServiceProvider).stop()
+        : Future<void>.value();
     _writes = _writes.then((_) => write(value)).catchError((Object _) {});
     await stopped;
     await _writes;
@@ -250,6 +255,7 @@ void _invalidatePulledReads(Ref ref) {
   ref.invalidate(visibleHouseholdsProvider);
   ref.invalidate(dayPlanProvider);
   ref.invalidate(openReferralsProvider);
+  ref.invalidate(dailyRegisterProvider);
   ref.invalidate(decliningChildrenProvider);
   ref.invalidate(barrierPatternsProvider);
   ref.invalidate(referralCompletionProvider);
@@ -645,6 +651,21 @@ final clinicDayStatsProvider = FutureProvider<ClinicDayStats>((ref) async {
     return const ClinicDayStats(received: 0, openNow: 0);
   }
   return ref.read(careRepositoryProvider).clinicDayStats(user);
+});
+
+/// Today's register tally for the signed-in worker — the counts a CHPS register
+/// column asks for, read off records saved on this device.
+///
+/// Returns an empty tally rather than throwing when nobody is signed in or the
+/// role cannot assess: the card it feeds hides itself at zero, and a caregiver
+/// has no register to keep.
+final dailyRegisterProvider = FutureProvider<DailyRegisterTally>((ref) async {
+  await ref.watch(bootstrapProvider.future);
+  final user = ref.watch(currentUserProvider);
+  if (user == null || !user.can(Permission.runClinicalAssessment)) {
+    return const DailyRegisterTally();
+  }
+  return ref.read(careRepositoryProvider).dailyRegister(user);
 });
 
 /// The milestone checks this family ran at home, newest first — the nurturing

@@ -19,6 +19,7 @@ library;
 
 import '../enums.dart';
 import '../entities/visit.dart';
+import 'protocols/dispensing.dart';
 
 const String _protocol = 'WHO IMCI — Sick Child (2–59 months)';
 
@@ -423,11 +424,22 @@ abstract final class ChildEngine {
           cutoff: '>= 2 signs',
           weight: 5,
         );
+        // Plan B publishes 75 ml/kg over four hours; the volume for this
+        // child is that figure times the weight actually recorded, and is
+        // omitted when there is no weight rather than estimated.
+        final planB = FluidPerKilogram(
+          mlPerKg: 75,
+          hours: 4,
+          citation:
+              'WHO Treatment Plan B — 75 ml/kg ORS given over 4 hours '
+              '(MSF Medical Guidelines, Dehydration).',
+        ).dispense(i.weightKg);
         actions.add(
-          const RecommendedAction(
+          RecommendedAction(
             instruction:
-                'Give ORS over 4 hours in front of you, plus zinc for 14 days. '
-                'Continue breastfeeding throughout.',
+                'Give ORS over 4 hours in front of you, plus zinc for 14 '
+                'days. Continue breastfeeding throughout.'
+                '${planB == null ? '' : ' ${planB.working}: ${planB.measure}.'}',
             urgency: ReferralUrgency.sameDay,
             rationale: 'IMCI Plan B.',
             protocolSource: _protocol,
@@ -504,11 +516,26 @@ abstract final class ChildEngine {
           isDangerSign: true,
         );
         capabilities.addAll({'bloodTransfusion', 'laboratory'});
+        // The single pre-referral dose is published per kilo, so the child's
+        // weight gives a milligram target. Which of the rectal strengths to
+        // reach it with is deliberately not computed here: this build holds no
+        // cited strength table for rectal artesunate, so the CHO picks it.
+        final artesunate = MilligramTarget(
+          mgPerKg: 10,
+          selectNote:
+              'Choose the rectal artesunate strength closest to this figure.',
+          citation:
+              'Rectal artesunate 10 mg/kg as a single dose before '
+              'transferring the patient (MSF Medical Guidelines, Essential '
+              'Drugs; WHO pre-referral severe malaria guidance).',
+        ).dispense(i.weightKg);
         actions.add(
-          const RecommendedAction(
+          RecommendedAction(
             instruction:
                 'Give pre-referral rectal artesunate now, then travel. Do not '
-                'wait for a test result.',
+                'wait for a test result.'
+                '${artesunate == null ? '' : ' ${artesunate.measure} '
+                    '(${artesunate.working}).'}',
             urgency: ReferralUrgency.immediate,
             rationale:
                 'Pre-referral treatment for suspected severe malaria measurably '

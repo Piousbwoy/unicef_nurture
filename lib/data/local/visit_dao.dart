@@ -81,6 +81,20 @@ class VisitParticipant {
   );
 }
 
+/// The half-open local-day window `[midnight, next midnight)` as the ISO text
+/// the date columns actually store. Timestamps are written with
+/// `toIso8601String()`, which sorts lexicographically, so a string range is a
+/// correct day filter — and the upper bound is exclusive, which keeps a record
+/// saved at exactly midnight tonight in tomorrow's tally.
+({String start, String end}) _dayWindow(DateTime day) => (
+  start: DateTime(day.year, day.month, day.day).toIso8601String(),
+  end: DateTime(
+    day.year,
+    day.month,
+    day.day,
+  ).add(const Duration(days: 1)).toIso8601String(),
+);
+
 abstract final class VisitDao {
   static Future<void> upsert(Visit visit) async {
     final db = await AppDatabase.instance.database;
@@ -207,16 +221,11 @@ abstract final class VisitDao {
 
   static Future<List<Visit>> completedOn(DateTime day, String workerId) async {
     final db = await AppDatabase.instance.database;
-    final start = DateTime(day.year, day.month, day.day).toIso8601String();
-    final end = DateTime(
-      day.year,
-      day.month,
-      day.day,
-    ).add(const Duration(days: 1)).toIso8601String();
+    final window = _dayWindow(day);
     final rows = await db.query(
       Tables.visits,
       where: 'conducted_by = ? AND started_at >= ? AND started_at < ?',
-      whereArgs: [workerId, start, end],
+      whereArgs: [workerId, window.start, window.end],
       orderBy: 'started_at DESC',
     );
     return rows.map(Visit.fromMap).toList(growable: false);
@@ -230,12 +239,7 @@ abstract final class VisitDao {
     DateTime day,
   ) async {
     final db = await AppDatabase.instance.database;
-    final start = DateTime(day.year, day.month, day.day).toIso8601String();
-    final end = DateTime(
-      day.year,
-      day.month,
-      day.day,
-    ).add(const Duration(days: 1)).toIso8601String();
+    final window = _dayWindow(day);
     final rows = await db.rawQuery(
       'SELECT v.started_at AS started_at, v.completed_at AS completed_at, '
       'MIN(a.performed_at) AS first_assessed_at '
@@ -243,7 +247,7 @@ abstract final class VisitDao {
       'LEFT JOIN ${Tables.assessments} a ON a.visit_id = v.id '
       'WHERE v.conducted_by = ? AND v.started_at >= ? AND v.started_at < ? '
       'GROUP BY v.id',
-      [workerId, start, end],
+      [workerId, window.start, window.end],
     );
     var open = 0;
     var assessed = 0;
@@ -261,7 +265,9 @@ abstract final class VisitDao {
     return ClinicDayStats(
       received: rows.length,
       openNow: open,
-      avgMinutesToFirstAssessment: assessed == 0 ? null : totalMinutes / assessed,
+      avgMinutesToFirstAssessment: assessed == 0
+          ? null
+          : totalMinutes / assessed,
     );
   }
 
@@ -561,6 +567,28 @@ abstract final class AssessmentDao {
     return (rows.first['c'] as num).toInt();
   }
 
+  /// Everything this worker saved on [day], whole.
+  ///
+  /// Deliberately not a SQL aggregate: the daily register tally reads the
+  /// `inputs_json` and `result_json` payloads for the RDT result, the vaccine
+  /// list and the nutrition band, none of which belong in a `LIKE` pattern.
+  /// One clinic day is tens of rows, so the parse is free — see
+  /// [DailyRegisterTally.of].
+  static Future<List<Assessment>> forWorkerOn(
+    String workerId,
+    DateTime day,
+  ) async {
+    final db = await AppDatabase.instance.database;
+    final window = _dayWindow(day);
+    final rows = await db.query(
+      Tables.assessments,
+      where: 'performed_by = ? AND performed_at >= ? AND performed_at < ?',
+      whereArgs: [workerId, window.start, window.end],
+      orderBy: 'performed_at ASC',
+    );
+    return rows.map(Assessment.fromMap).toList(growable: false);
+  }
+
   /// Assessments this worker recorded within the window — the personal
   /// workload figure behind "register time handed back".
   static Future<int> countWithin(String workerId, {int withinDays = 30}) async {
@@ -722,6 +750,22 @@ abstract final class ReferralDao {
       where: 'id = ?',
       whereArgs: [referralId],
     );
+  }
+
+  /// Referrals this worker wrote out on [day], whatever happened to them since.
+  ///
+  /// Counted in SQL because the register asks only for the total, and a
+  /// referral carries no JSON payload to unpick — unlike
+  /// [AssessmentDao.forWorkerOn].
+  static Future<int> countIssuedBy(String workerId, DateTime day) async {
+    final db = await AppDatabase.instance.database;
+    final window = _dayWindow(day);
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM ${Tables.referrals} '
+      'WHERE issued_by = ? AND issued_at >= ? AND issued_at < ?',
+      [workerId, window.start, window.end],
+    );
+    return (rows.first['c'] as num).toInt();
   }
 
   /// Completion rate over a window. The single number that says whether the

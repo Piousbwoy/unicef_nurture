@@ -2,6 +2,7 @@
 /// Falls through to system TTS or readable text.
 library;
 
+import 'piper_contract.dart';
 import 'piper_tts_runner.dart';
 
 PiperTtsRunner buildPiperTtsRunner() => _WebPiperTtsRunner();
@@ -23,12 +24,20 @@ class _WebPiperTtsRunner implements PiperTtsRunner {
   }
 
   @override
-  Future<void> speak(String text, {bool waitForCompletion = true, void Function()? onStarted}) async {
+  Future<void> speak(
+    String text, {
+    bool waitForCompletion = true,
+    void Function()? onStarted,
+    SpeechProsody prosody = SpeechProsody.standard,
+  }) async {
     // No-op — caller falls through to system TTS.
   }
 
   @override
-  Future<void> speakNonBlocking(String text) async {
+  Future<void> speakNonBlocking(
+    String text, {
+    SpeechProsody prosody = SpeechProsody.standard,
+  }) async {
     // No-op.
   }
 

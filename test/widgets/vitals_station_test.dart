@@ -18,6 +18,9 @@ import 'package:carebridge_ai/presentation/assessment/station/clinical_keypad.da
 import 'package:carebridge_ai/presentation/assessment/station/vital_spec.dart';
 import 'package:carebridge_ai/presentation/assessment/station/vitals_station_screen.dart';
 import 'package:carebridge_ai/presentation/assessment/types.dart';
+import 'package:carebridge_ai/presentation/assessment/child_form.dart';
+import 'package:carebridge_ai/presentation/assessment/assessment_feature_adapter.dart';
+import 'package:carebridge_ai/presentation/assessment/form_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -118,12 +121,25 @@ Future<_Harness> _pump(
   return h;
 }
 
-/// Taps a key on the on-screen keypad (never the system keyboard).
+/// Taps a key on the on-screen keypad (never the system keyboard). The keypad
+/// is the station's fallback, so it lives behind a collapsed "Type … instead"
+/// tile — open it first if it isn't on screen yet.
 Future<void> _key(WidgetTester tester, String label) async {
-  final key = find.descendant(
+  var key = find.descendant(
     of: find.byType(ClinicalKeypad),
     matching: find.text(label),
   );
+  if (key.evaluate().isEmpty) {
+    final tile = find.textContaining('Type the').first;
+    await tester.ensureVisible(tile);
+    await tester.pumpAndSettle();
+    await tester.tap(tile.hitTestable());
+    await tester.pumpAndSettle();
+    key = find.descendant(
+      of: find.byType(ClinicalKeypad),
+      matching: find.text(label),
+    );
+  }
   await tester.ensureVisible(key.first);
   await tester.pumpAndSettle();
   await tester.tap(key.hitTestable().first);
@@ -480,6 +496,91 @@ void main() {
     expect(h.result!.values, isEmpty);
     expect(h.result!.isEmpty, isTrue);
   });
+
+  testWidgets(
+    'newborn station pulse survives retake and reaches the feature bag',
+    (tester) async {
+      final input = _child(ageDays: 2);
+      final h = await _pump(tester, input: input);
+      await _next(tester);
+      await _next(tester);
+      expect(find.text('Pulse'), findsOneWidget);
+      await _type(tester, '142');
+      await tester.tap(find.text('Re-take').hitTestable());
+      await tester.pumpAndSettle();
+      await _type(tester, '140');
+      await _next(tester);
+      await _type(tester, '3.1');
+      await _toReview(tester);
+      await tester.tap(find.text('Continue to chart'));
+      await tester.pumpAndSettle();
+      expect(h.result!.retakes['pulse'], 1);
+      AssessmentDraft? draft;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChildProtocolForm(
+              input: input,
+              initialVitals: h.result,
+              onComplete: (value) => draft = value,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      tester.widget<RunBar>(find.byType(RunBar)).onRun();
+      await tester.pumpAndSettle();
+      expect(draft!.inputs['pulse'], 140);
+      final bag = AssessmentFeatureAdapter(input, draft!).features;
+      expect(bag.heartRatePerMin, 140);
+      expect(bag.currentWeightKg, 3.1);
+    },
+  );
+
+  testWidgets(
+    'newborn direct pulse is optional for completing clinical assessment',
+    (tester) async {
+      final input = _child(ageDays: 2);
+      AssessmentDraft? draft;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChildProtocolForm(
+              input: input,
+              onComplete: (value) => draft = value,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      tester.widget<RunBar>(find.byType(RunBar)).onRun();
+      await tester.pumpAndSettle();
+      expect(draft, isNotNull);
+      expect(
+        AssessmentFeatureAdapter(input, draft!).features.heartRatePerMin,
+        isNull,
+      );
+      final pulse = find.byWidgetPredicate(
+        (w) => w is MeasureField && w.label == 'Pulse',
+      );
+      await tester.scrollUntilVisible(
+        find.text('Measurements'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(pulse, findsOneWidget);
+      await tester.ensureVisible(pulse);
+      await tester.enterText(
+        find.descendant(of: pulse, matching: find.byType(TextField)),
+        '138',
+      );
+      tester.widget<RunBar>(find.byType(RunBar)).onRun();
+      await tester.pumpAndSettle();
+      expect(draft!.inputs['pulse'], 138);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+    },
+  );
 
   testWidgets('no BackdropFilter under reduced motion', (tester) async {
     await _pump(tester);

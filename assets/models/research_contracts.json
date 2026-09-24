@@ -28,7 +28,7 @@
       "model_version": "v2.0-real-data-neonatal_sepsis",
       "artifact_sha256": "b40ce5c43958b16bf6508887f49d79e7de7c0e6b8c4fd68ffabefb8a8d2b0fff",
       "evidence": "legacy_real_data",
-      "patient_output_allowed": false,
+      "patient_output_allowed": true,
       "clinical_use_allowed": false,
       "cohort": "young_infant",
       "age_days_support": [
@@ -42,7 +42,8 @@
         "Weight meaning differs from the app's birth-weight field",
         "Published metrics describe the teacher, not an independently evaluated exported model",
         "Not clinically validated for Northern Ghana",
-        "No individual probability confidence interval"
+        "No individual probability confidence interval",
+        "Current measured weight is an experimental proxy for source admission weight; measurement timing unverified"
       ],
       "evaluation_kind": "legacy_teacher_only",
       "evaluation": {},
@@ -57,7 +58,9 @@
           "transform": "min_max",
           "imputation": null,
           "required": true,
-          "supported": true
+          "supported": true,
+          "input_policy": "observed",
+          "input_source": "age_days"
         },
         {
           "name": "temperature_celsius",
@@ -69,7 +72,9 @@
           "transform": "min_max",
           "imputation": null,
           "required": true,
-          "supported": true
+          "supported": true,
+          "input_policy": "observed",
+          "input_source": "temperature_celsius"
         },
         {
           "name": "respiratory_rate_per_min",
@@ -81,7 +86,9 @@
           "transform": "min_max",
           "imputation": null,
           "required": true,
-          "supported": true
+          "supported": true,
+          "input_policy": "observed",
+          "input_source": "respiratory_rate_per_min"
         },
         {
           "name": "heart_rate_per_min",
@@ -93,7 +100,9 @@
           "transform": "min_max",
           "imputation": null,
           "required": true,
-          "supported": true
+          "supported": true,
+          "input_policy": "observed",
+          "input_source": "heart_rate_per_min"
         },
         {
           "name": "oxygen_saturation_per_cent",
@@ -105,19 +114,24 @@
           "transform": "min_max",
           "imputation": null,
           "required": false,
-          "supported": false
+          "supported": false,
+          "input_policy": "constant_normalized",
+          "constant_normalized": 0.0,
+          "fixed_reason": "unavailable_training_feature"
         },
         {
           "name": "birth_weight_kg",
-          "meaning": "birth weight kg",
+          "meaning": "Current measured weight: experimental proxy for source admission weight; measurement timing unverified",
           "kind": "double",
-          "unit": "source_schema_unit",
+          "unit": "kg",
           "min": 0.8,
           "max": 5.0,
           "transform": "min_max",
           "imputation": null,
-          "required": false,
-          "supported": false
+          "required": true,
+          "supported": true,
+          "input_policy": "observed",
+          "input_source": "current_weight_kg"
         },
         {
           "name": "apgar_5_minute",
@@ -129,7 +143,10 @@
           "transform": "min_max",
           "imputation": null,
           "required": false,
-          "supported": false
+          "supported": false,
+          "input_policy": "constant_normalized",
+          "constant_normalized": 0.0,
+          "fixed_reason": "unavailable_training_feature"
         },
         {
           "name": "history_of_convulsions",
@@ -141,7 +158,10 @@
           "transform": "min_max",
           "imputation": null,
           "required": false,
-          "supported": false
+          "supported": false,
+          "input_policy": "constant_normalized",
+          "constant_normalized": 0.0,
+          "fixed_reason": "unavailable_training_feature"
         },
         {
           "name": "severe_chest_indrawing",
@@ -153,7 +173,10 @@
           "transform": "min_max",
           "imputation": null,
           "required": false,
-          "supported": false
+          "supported": false,
+          "input_policy": "constant_normalized",
+          "constant_normalized": 0.0,
+          "fixed_reason": "unavailable_training_feature"
         },
         {
           "name": "nasal_flaring_grunting",
@@ -165,7 +188,10 @@
           "transform": "min_max",
           "imputation": null,
           "required": false,
-          "supported": false
+          "supported": false,
+          "input_policy": "constant_normalized",
+          "constant_normalized": 0.0,
+          "fixed_reason": "unavailable_training_feature"
         },
         {
           "name": "bulging_fontanelle",
@@ -177,7 +203,10 @@
           "transform": "min_max",
           "imputation": null,
           "required": false,
-          "supported": false
+          "supported": false,
+          "input_policy": "constant_normalized",
+          "constant_normalized": 0.0,
+          "fixed_reason": "unavailable_training_feature"
         },
         {
           "name": "jaundice_before_24h",
@@ -189,7 +218,10 @@
           "transform": "min_max",
           "imputation": null,
           "required": false,
-          "supported": false
+          "supported": false,
+          "input_policy": "constant_normalized",
+          "constant_normalized": 0.0,
+          "fixed_reason": "unavailable_training_feature"
         },
         {
           "name": "feeding_difficulty",
@@ -201,7 +233,10 @@
           "transform": "min_max",
           "imputation": null,
           "required": false,
-          "supported": false
+          "supported": false,
+          "input_policy": "constant_normalized",
+          "constant_normalized": 0.0,
+          "fixed_reason": "legacy_encoding_defect"
         },
         {
           "name": "abdominal_distension",
@@ -213,7 +248,10 @@
           "transform": "min_max",
           "imputation": null,
           "required": false,
-          "supported": false
+          "supported": false,
+          "input_policy": "constant_normalized",
+          "constant_normalized": 0.0,
+          "fixed_reason": "unavailable_training_feature"
         },
         {
           "name": "cord_infection",
@@ -225,7 +263,10 @@
           "transform": "min_max",
           "imputation": null,
           "required": false,
-          "supported": false
+          "supported": false,
+          "input_policy": "constant_normalized",
+          "constant_normalized": 0.0,
+          "fixed_reason": "unavailable_training_feature"
         },
         {
           "name": "skin_pustules",
@@ -237,7 +278,10 @@
           "transform": "min_max",
           "imputation": null,
           "required": false,
-          "supported": false
+          "supported": false,
+          "input_policy": "constant_normalized",
+          "constant_normalized": 0.0,
+          "fixed_reason": "unavailable_training_feature"
         },
         {
           "name": "lethargic_unconscious",
@@ -249,7 +293,10 @@
           "transform": "min_max",
           "imputation": null,
           "required": false,
-          "supported": false
+          "supported": false,
+          "input_policy": "constant_normalized",
+          "constant_normalized": 0.0,
+          "fixed_reason": "legacy_encoding_defect"
         },
         {
           "name": "bleeding",
@@ -261,7 +308,10 @@
           "transform": "min_max",
           "imputation": null,
           "required": false,
-          "supported": false
+          "supported": false,
+          "input_policy": "constant_normalized",
+          "constant_normalized": 0.0,
+          "fixed_reason": "unavailable_training_feature"
         },
         {
           "name": "hiv_exposed",
@@ -273,7 +323,10 @@
           "transform": "min_max",
           "imputation": null,
           "required": false,
-          "supported": false
+          "supported": false,
+          "input_policy": "constant_normalized",
+          "constant_normalized": 0.0,
+          "fixed_reason": "unavailable_training_feature"
         },
         {
           "name": "multiple_birth",
@@ -285,9 +338,33 @@
           "transform": "min_max",
           "imputation": null,
           "required": false,
-          "supported": false
+          "supported": false,
+          "input_policy": "constant_normalized",
+          "constant_normalized": 0.0,
+          "fixed_reason": "unavailable_training_feature"
         }
-      ]
+      ],
+      "output_scope": "clinician_experimental",
+      "input_policy_version": "neonatal-five-observed-v1",
+      "calibration": {
+        "A": 2.013769,
+        "B": -5.826344,
+        "formula": "sigmoid(A * logit(p) + B)",
+        "provenance": "Unvalidated legacy Random Forest teacher OOF transform; includes assumed prior shift",
+        "validated_for_artifact": false
+      },
+      "sensitivity_baseline": {
+        "artifact_sha256": "b40ce5c43958b16bf6508887f49d79e7de7c0e6b8c4fd68ffabefb8a8d2b0fff",
+        "input_policy_version": "neonatal-five-observed-v1",
+        "provenance": "Normalized training means from legacy artifact metrics",
+        "means": {
+          "age_days": 0.0296,
+          "temperature_celsius": 0.6548,
+          "respiratory_rate_per_min": 0.4019,
+          "heart_rate_per_min": 0.5754,
+          "birth_weight_kg": 0.5274
+        }
+      }
     },
     "child_pneumonia": {
       "model_type": "dense_network",

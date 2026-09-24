@@ -53,6 +53,7 @@ class OfflineFeatureBag {
     this.weightGainOver1kgPerWeek,
     // ── Newborn / infant ──────────────────────────────────────────────────
     this.birthWeightKg,
+    this.currentWeightKg,
     this.birthLengthCm,
     this.apgar5Minute,
     // ── Newborn PSBI booleans (1.0 = yes) ────────────────────────────────
@@ -111,6 +112,7 @@ class OfflineFeatureBag {
   final bool? oliguria;
   final bool? weightGainOver1kgPerWeek;
   final double? birthWeightKg;
+  final double? currentWeightKg;
   final double? birthLengthCm;
   final int? apgar5Minute;
   final bool? historyOfConvulsions;
@@ -167,6 +169,7 @@ class OfflineFeatureBag {
     Object? oliguria = _unset,
     Object? weightGainOver1kgPerWeek = _unset,
     Object? birthWeightKg = _unset,
+    Object? currentWeightKg = _unset,
     Object? birthLengthCm = _unset,
     Object? apgar5Minute = _unset,
     Object? historyOfConvulsions = _unset,
@@ -268,6 +271,9 @@ class OfflineFeatureBag {
     weightGainOver1kgPerWeek: identical(weightGainOver1kgPerWeek, _unset)
         ? this.weightGainOver1kgPerWeek
         : weightGainOver1kgPerWeek as bool?,
+    currentWeightKg: identical(currentWeightKg, _unset)
+        ? this.currentWeightKg
+        : currentWeightKg as double?,
     birthWeightKg: identical(birthWeightKg, _unset)
         ? this.birthWeightKg
         : birthWeightKg as double?,
@@ -345,6 +351,7 @@ class OfflineFeatureBag {
     'respiratory_rate_per_min' ||
     'respiratory_rate_per_min_age_cutoff' => _copy(respiratoryRatePerMin: null),
     'heart_rate_per_min' => _copy(heartRatePerMin: null),
+    'current_weight_kg' => _copy(currentWeightKg: null),
     'oxygen_saturation_per_cent' ||
     'oxygen_saturation' => _copy(oxygenSaturationPerCent: null),
     'systolic_bp' || 'diastolic_bp' || 'blood_pressure' => _copy(

@@ -12,6 +12,8 @@
 /// green appear only on the marker and the text, never as decoration.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -130,6 +132,9 @@ class VitalSpec {
     }
     return null;
   }
+
+  /// The smallest increment the ruler, steppers and keypad honour ("0.1", "1").
+  double get step => 1 / math.pow(10, decimals);
 
   /// True when the value is outside the engine's plausible range.
   bool implausible(double value) {

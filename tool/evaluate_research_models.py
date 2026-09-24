@@ -399,6 +399,35 @@ def build_contract(schemas):
                           "required": f in learned, "supported": f in learned}
                          for f, (lo, hi, kind) in schema.items()],
         }
+    c = models['neonatal_sepsis']
+    policy = 'neonatal-five-observed-v1'
+    means = {'age_days': .0296, 'temperature_celsius': .6548,
+             'respiratory_rate_per_min': .4019, 'heart_rate_per_min': .5754,
+             'birth_weight_kg': .5274}
+    c.update(patient_output_allowed=True, output_scope='clinician_experimental',
+             input_policy_version=policy,
+             calibration={'A': 2.013769, 'B': -5.826344,
+                          'formula': 'sigmoid(A * logit(p) + B)',
+                          'provenance': 'Unvalidated legacy Random Forest teacher OOF transform; includes assumed prior shift',
+                          'validated_for_artifact': False},
+             sensitivity_baseline={'artifact_sha256': c['artifact_sha256'],
+                                   'input_policy_version': policy,
+                                   'provenance': 'Normalized training means from legacy artifact metrics',
+                                   'means': means})
+    c['limitations'].append('Current measured weight is an experimental proxy for source admission weight; measurement timing unverified')
+    for f in c['features']:
+        key = f['name']
+        observed = key in means
+        f.update(input_policy='observed' if observed else 'constant_normalized',
+                 required=observed, supported=observed)
+        if observed:
+            f['input_source'] = 'current_weight_kg' if key == 'birth_weight_kg' else key
+        else:
+            f.update(constant_normalized=0.0,
+                     fixed_reason='legacy_encoding_defect' if key in ('feeding_difficulty', 'lethargic_unconscious')
+                     else 'unavailable_training_feature')
+        if key == 'birth_weight_kg':
+            f.update(unit='kg', meaning='Current measured weight: experimental proxy for source admission weight; measurement timing unverified')
     return {"schema_version": 1, "models": models}
 
 
@@ -518,10 +547,50 @@ def verify_completed_run(name, schemas, out):
     return result
 
 
+def experimental_neonatal_fixture():
+    """Official TFLite execution vectors; no fitting or clinical validation."""
+    import tensorflow as tf
+    path = ASSETS / 'neonatal_sepsis_int8_v1.tflite'
+    artifact = digest(path.read_bytes())
+    if artifact != 'b40ce5c43958b16bf6508887f49d79e7de7c0e6b8c4fd68ffabefb8a8d2b0fff':
+        raise ValueError('Experimental fixture requires the unchanged shipped artifact')
+    interpreter = tf.lite.Interpreter(model_path=str(path), num_threads=1)
+    interpreter.allocate_tensors()
+    inp, out = interpreter.get_input_details()[0], interpreter.get_output_details()[0]
+    slots = [0, 1, 2, 3, 5]
+    raw = [[2, 37, 48, 140, 3], [0, 34, 20, 60, .8], [3, 41, 120, 220, 5]]
+    rows = []
+    for values in raw:
+        row = np.zeros(20, dtype=np.float32)
+        for slot, value, lo, hi in zip(slots, values, [0, 34, 20, 60, .8], [59, 41, 120, 220, 5]):
+            row[slot] = (value - lo) / (hi - lo)
+        rows.append(row)
+    for slot, mean in zip(slots, [.0296, .6548, .4019, .5754, .5274]):
+        row = rows[0].copy()
+        row[slot] = mean
+        rows.append(row)
+    cases = []
+    for index, row in enumerate(rows):
+        v = np.float32(row / np.float32(inp['quantization'][0])) + np.float32(inp['quantization'][1])
+        q = (np.sign(v) * np.floor(np.abs(v) + np.float32(.5))).clip(-128, 127).astype(np.int8)
+        interpreter.set_tensor(inp['index'], q.reshape(1, -1))
+        interpreter.invoke()
+        output = float(interpreter.get_tensor(out['index']).ravel()[0])
+        adjusted = float(apply_calibration(np.array([output]), 2.013769, -5.826344)[0])
+        cases.append({'name': ['measured', 'lower_bounds', 'upper_bounds'][index] if index < 3 else f'replace_slot_{slots[index-3]}',
+                      'raw': raw[index] if index < 3 else raw[0],
+                      'normalized': row.tolist(), 'quantized': q.tolist(),
+                      'raw_output': output, 'adjusted_output': adjusted})
+    return {'artifact_sha256': artifact, 'input_policy_version': 'neonatal-five-observed-v1',
+            'model_path': path.relative_to(ROOT).as_posix(), 'tolerance': 1e-5,
+            'scope': 'Execution parity only; not predictive accuracy or clinical validation', 'cases': cases}
+
+
 def verification_fixtures(schemas, out):
     """Boundary and missing-input fixtures from frozen artifacts, not new training."""
     import tensorflow as tf
     fixtures = []
+    write_json(out / 'neonatal_experimental_parity.json', experimental_neonatal_fixture())
     for name in DATASETS:
         report = verify_completed_run(name, schemas, out)
         features = report["features"]

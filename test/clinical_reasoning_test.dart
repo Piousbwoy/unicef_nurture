@@ -20,6 +20,8 @@ import 'package:carebridge_ai/domain/engines/recommendation_engine.dart';
 import 'package:carebridge_ai/domain/entities/visit.dart';
 import 'package:carebridge_ai/domain/enums.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
+import 'package:carebridge_ai/presentation/shared/premium_cards/ai_insight_card.dart';
 
 CarePlan _plan({
   TriageLevel triage = TriageLevel.routine,
@@ -65,7 +67,168 @@ ClinicalReasoning _reason(
   );
 }
 
+OfflineRiskPrediction _experimental(
+  double score, {
+  bool allowed = true,
+  bool withSensitivities = true,
+}) => OfflineRiskPrediction(
+  modelName: 'neonatal_sepsis',
+  usingModel: true,
+  riskProbability: null,
+  classification: 'unavailable',
+  featuresUsed: const [
+    'age_days',
+    'temperature_celsius',
+    'respiratory_rate_per_min',
+    'heart_rate_per_min',
+    'current_weight_kg',
+  ],
+  featuresMissing: const [],
+  predictedAt: DateTime(2026),
+  modelVersion: 'v2.0-real-data-neonatal_sepsis',
+  rawNeuralOutput: .8,
+  researchOutput: score,
+  patientOutputAllowed: allowed,
+  outputScope: 'clinician_experimental',
+  artifactSha256: OfflineInferenceService.neonatalArtifact,
+  inputPolicyVersion: OfflineInferenceService.neonatalPolicy,
+  runtimeVerified: true,
+  execution: ModelExecution.completed,
+  applicability: ModelApplicability.applicable,
+  inputQuality: ModelInputQuality.complete,
+  evidence: ModelEvidence.legacyRealData,
+  observedValues: const {
+    'age_days': 2,
+    'temperature_celsius': 37,
+    'respiratory_rate_per_min': 48,
+    'heart_rate_per_min': 140,
+    'current_weight_kg': 3,
+  },
+  sensitivityStatus: ModelSensitivityStatus.completed,
+  sensitivities: withSensitivities
+      ? [
+          for (final (key, value, mean, unit) in [
+            ('age_days', 2.0, .0296, 'days'),
+            ('temperature_celsius', 37.0, .6548, 'C'),
+            ('respiratory_rate_per_min', 48.0, .4019, 'per_min'),
+            ('heart_rate_per_min', 140.0, .5754, 'per_min'),
+            ('current_weight_kg', 3.0, .5274, 'kg'),
+          ])
+            ModelFeatureSensitivity(
+              featureKey: key,
+              rawValue: value,
+              unit: unit,
+              baselineNormalized: mean,
+              scorePointDelta: 0,
+            ),
+        ]
+      : const [],
+);
+
+ClinicalReasoning _neonatalReason(
+  double score, {
+  TriageLevel triage = TriageLevel.routine,
+  bool allowed = true,
+}) => ClinicalReasoningEngine.assess(
+  ClinicalReasoningInput(
+    bag: const OfflineFeatureBag(ageDays: 2),
+    plan: _plan(triage: triage),
+    clientType: ClientType.newborn,
+    patientRef: 'test',
+    ageDays: 2,
+    researchPredictions: {
+      'neonatal_sepsis': _experimental(score, allowed: allowed),
+    },
+  ),
+);
+
 void main() {
+  test(
+    'empty sensitivity records do not claim five unchanged replacements',
+    () {
+      final assessment = ExperimentalAssessment(
+        prediction: _experimental(.01, withSensitivities: false),
+        narrative: 'test',
+      );
+      expect(assessment.sensitivitySummary, contains('unavailable'));
+      expect(assessment.sensitivitySummary, isNot(contains('No change')));
+    },
+  );
+
+  test(
+    'experimental display bands never replace deterministic clinical acuity',
+    () {
+      for (final (score, band) in [
+        (.1499, 'Low model score'),
+        (.15, 'Moderate model score'),
+        (.4, 'Elevated model score'),
+        (.7, 'High model score'),
+      ]) {
+        final dynamic r = _neonatalReason(score);
+        expect(r.experimentalAssessment, isNotNull);
+        expect(r.experimentalAssessment.bandLabel, band);
+        expect(
+          r.experimentalAssessment.scoreIndex,
+          closeTo(score * 100, 1e-10),
+        );
+        expect(r.acuityIndex, _neonatalReason(.01).acuityIndex);
+      }
+      final dynamic urgent = _neonatalReason(.01, triage: TriageLevel.urgent);
+      expect(
+        urgent.experimentalAssessment.narrative,
+        contains('regardless of the experimental score'),
+      );
+      expect(urgent.experimentalAssessment.narrative, contains('2-day-old'));
+      final dynamic denied = _neonatalReason(.99, allowed: false);
+      expect(denied.experimentalAssessment, isNull);
+      expect(denied.narrative, isNot(contains('99%')));
+    },
+  );
+
+  test(
+    'fallback describes rules without claiming neural confidence intervals',
+    () {
+      final r = _reason(const OfflineFeatureBag());
+      expect(r.narrative, contains('rule-based'));
+      expect('${r.narrative} ${r.briefLine}', isNot(contains('95%')));
+      expect(r.narrative, isNot(contains('on-device model')));
+    },
+  );
+
+  testWidgets(
+    'experimental card wraps and shows provenance without clinical probability',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(
+              textScaler: TextScaler.linear(2),
+              disableAnimations: true,
+            ),
+            child: Scaffold(
+              body: SingleChildScrollView(
+                child: AiInsightCard(
+                  reasoning: _neonatalReason(.01, triage: TriageLevel.urgent),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('AI Assessment'), findsOneWidget);
+      expect(find.text('Experimental model score'), findsOneWidget);
+      expect(find.textContaining('No change'), findsOneWidget);
+      expect(find.textContaining('95%'), findsNothing);
+      expect(find.textContaining('5/20 observed'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   group('determinism (auditability)', () {
     test('the same record produces the identical index and narrative', () {
       final bag = const OfflineFeatureBag(
@@ -199,7 +362,7 @@ void main() {
       final gappyWidth = gappy.ci95.hi - gappy.ci95.lo;
       expect(gappyWidth, greaterThan(completeWidth));
       expect(gappy.confidencePct, lessThan(complete.confidencePct));
-      expect(gappy.narrative, contains('confidence'));
+      expect(gappy.narrative, contains('missing'));
     });
 
     test('what-would-change names the actual missing measurement', () {
@@ -225,8 +388,10 @@ void main() {
         ),
       );
       expect(r.contributions, isNotEmpty);
-      expect(r.contributions.first.points,
-          greaterThanOrEqualTo(r.contributions.last.points));
+      expect(
+        r.contributions.first.points,
+        greaterThanOrEqualTo(r.contributions.last.points),
+      );
       final measured = r.contributions.map((c) => c.measured).join(' | ');
       expect(measured, contains('62/min'));
       expect(measured, contains('≥40/min'));

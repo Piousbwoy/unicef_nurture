@@ -1,5 +1,6 @@
 import 'package:carebridge_ai/app/providers.dart';
 import 'package:carebridge_ai/core/theme/app_theme.dart';
+import 'package:carebridge_ai/core/theme/fhw_luxe.dart';
 import 'package:carebridge_ai/data/repositories/insight_repository.dart';
 import 'package:carebridge_ai/domain/engines/vulnerability_engine.dart';
 import 'package:carebridge_ai/domain/entities/core.dart';
@@ -150,7 +151,7 @@ void main() {
           )
           .first,
     );
-    expect(card.color, AppColors.canvas);
+    expect(card.color, FhwLuxePalette.cardSurface);
   });
 
   testWidgets(

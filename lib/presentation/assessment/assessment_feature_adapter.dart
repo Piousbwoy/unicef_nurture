@@ -149,6 +149,7 @@ class AssessmentFeatureAdapter {
       oliguria: pe('oliguria'),
       weightGainOver1kgPerWeek: pe('weight_gain_over_1kg_per_week'),
       birthWeightKg: number('birth_weight_kg') ?? birth?.birthWeightKg,
+      currentWeightKg: weight,
       birthLengthCm: birth?.birthLengthCm,
       apgar5Minute: birth?.apgar5Minute,
       historyOfConvulsions:
@@ -218,6 +219,7 @@ class AssessmentFeatureAdapter {
       skinPustules: bag.skinPustules == true,
       coughPresent: bag.coughPresent == true,
       generalDangerSign: bag.generalDangerSign == true,
+      weightKg: number('weight_kg'),
     );
   }
 }

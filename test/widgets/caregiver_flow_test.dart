@@ -409,6 +409,10 @@ void main() {
       await _scrollTo(tester, find.text('Show the nurse'));
       await tester.tap(find.text('Show the nurse'));
       await tester.pumpAndSettle();
+      // Urgent report surfaces a prominent emergency call as the first card.
+      expect(find.text('DANGER SIGN • ACT NOW'), findsOneWidget);
+      expect(find.text('Go to the health facility now'), findsOneWidget);
+      expect(find.text('Call 112 emergency help'), findsOneWidget);
       expect(find.textContaining('What I noticed:'), findsOneWidget);
       expect(find.textContaining('Unanswered:'), findsOneWidget);
       expect(find.text('SCAN AT CLINIC'), findsNothing);

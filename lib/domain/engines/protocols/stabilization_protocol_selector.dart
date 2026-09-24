@@ -41,6 +41,7 @@ class StabilizationContext {
     this.skinPustules = false,
     this.coughPresent = false,
     this.generalDangerSign = false,
+    this.weightKg,
   });
 
   /// Patient age in days. For adults / pregnancies, leave null and use
@@ -75,6 +76,12 @@ class StabilizationContext {
   // ── Child (2-59 m) IMCI signals ──────────────────────────────────────
   final bool coughPresent;
   final bool generalDangerSign;
+
+  /// Recorded weight for this assessment, in kg. Never used to decide
+  /// whether a protocol activates — it only lets the UI turn a protocol's
+  /// published per-kg figure into counted tablets or millilitres for this
+  /// specific child. Null when the child was not weighed.
+  final double? weightKg;
 }
 
 /// The activated protocols and their observed clinical indications.

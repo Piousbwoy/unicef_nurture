@@ -42,6 +42,20 @@ const _temperature = VitalSpec(
   bands: temperatureBands,
 );
 
+const _pulse = VitalSpec(
+  key: 'pulse',
+  label: 'Pulse',
+  unit: 'beats/minute',
+  decimals: 0,
+  keypad: KeypadMode.integer,
+  why:
+      'Record the measured heart rate. Optional for completing the clinical chart.',
+  icon: Icons.monitor_heart_outlined,
+  gaugeMin: 60,
+  gaugeMax: 220,
+  plausible: MeasurementKind.heartRate,
+);
+
 const _weightChild = VitalSpec(
   key: 'weight_kg',
   label: 'Weight',
@@ -123,6 +137,7 @@ List<VitalSpec> childStationVitals({
   return [
     _respiratoryRate,
     _temperature,
+    if (isYoungInfant) _pulse,
     _weightChild,
     if (!isYoungInfant) _height,
     if (muacApplies) _muacMm,

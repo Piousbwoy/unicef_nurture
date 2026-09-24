@@ -488,5 +488,36 @@ void main() {
         original.preReferralActivationReasons,
       );
     });
+
+    test('the weight the tablet count came from travels with the plan', () {
+      CarePlan planWith(StabilizationContext ctx) =>
+          RecommendationEngine.synthesize(
+            results: [emptyResult()],
+            stabilizationContext: ctx,
+            stabilizationRisks: const StabilizationAiRisks(),
+          );
+
+      final weighed = planWith(
+        const StabilizationContext(
+          patientAgeDays: 30 * 18,
+          coughPresent: true,
+          severeChestIndrawing: true,
+          weightKg: 11.2,
+        ),
+      );
+      expect(weighed.preReferralWeightKg, 11.2);
+      expect(CarePlan.fromJson(weighed.toJson()).preReferralWeightKg, 11.2);
+
+      // No weight on the card means no calculated dose on the card — the
+      // record must not carry a number invented from a missing measurement.
+      final unweighed = planWith(
+        const StabilizationContext(
+          patientAgeDays: 30 * 18,
+          coughPresent: true,
+          severeChestIndrawing: true,
+        ),
+      );
+      expect(unweighed.preReferralWeightKg, isNull);
+    });
   });
 }

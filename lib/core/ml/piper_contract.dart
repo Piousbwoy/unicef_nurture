@@ -1,5 +1,13 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
+
+/// Delivery-only prosody intent. Changes *how* a fixed string is spoken
+/// (rate / breathiness), never *what* is said, so it cannot alter clinical
+/// content or dosing. [standard] preserves the checkpoint's own inference
+/// scales exactly; every caller defaults to it, so behaviour is unchanged
+/// until a screen opts into a different tone.
+enum SpeechProsody { standard, soothing, urgent }
 
 /// Shared, testable tensor/audio contract for ONNX native and WASM runners.
 class PiperModelSpec {
@@ -7,6 +15,29 @@ class PiperModelSpec {
   final int sampleRate;
   final int numSpeakers;
   final Float32List scales;
+
+  /// VITS inference scales are `[noise, length, noise_w]`. These factors are
+  /// relative to the checkpoint's own baseline and clamped to a safe band so
+  /// an extreme config can never be pushed into a pathological duration.
+  static const _min = 0.25;
+  static const _max = 1.80;
+  static const _factors = <SpeechProsody, List<double>>{
+    // Urgent referral: a touch faster, crisper, less breathy.
+    SpeechProsody.urgent: [0.85, 0.90, 0.80],
+    // Maternal reassurance: a touch slower, warmer, more pitch fluctuation.
+    SpeechProsody.soothing: [1.05, 1.10, 1.08],
+  };
+
+  /// Scales to feed the `scales` tensor for [prosody]. [SpeechProsody.standard]
+  /// returns the model's configured values unchanged.
+  Float32List scalesFor(SpeechProsody prosody) {
+    final factors = _factors[prosody];
+    if (factors == null) return scales;
+    return Float32List.fromList([
+      for (var i = 0; i < scales.length; i++)
+        math.min(_max, math.max(_min, scales[i] * factors[i])),
+    ]);
+  }
 
   factory PiperModelSpec.fromJson(String json) {
     final config = jsonDecode(json) as Map<String, dynamic>;

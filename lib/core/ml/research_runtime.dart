@@ -20,6 +20,137 @@ class OfflineInferenceService {
     : _bundle = bundle ?? rootBundle,
       _runner = runner ?? getTfliteRunner();
   static final instance = OfflineInferenceService();
+  static const neonatalArtifact =
+      'b40ce5c43958b16bf6508887f49d79e7de7c0e6b8c4fd68ffabefb8a8d2b0fff';
+  static const neonatalPolicy = 'neonatal-five-observed-v1';
+  static const _neonatalMeans = {
+    'age_days': .0296,
+    'temperature_celsius': .6548,
+    'respiratory_rate_per_min': .4019,
+    'heart_rate_per_min': .5754,
+    'birth_weight_kg': .5274,
+  };
+  static const _neonatalOrder = [
+    'age_days',
+    'temperature_celsius',
+    'respiratory_rate_per_min',
+    'heart_rate_per_min',
+    'oxygen_saturation_per_cent',
+    'birth_weight_kg',
+    'apgar_5_minute',
+    'history_of_convulsions',
+    'severe_chest_indrawing',
+    'nasal_flaring_grunting',
+    'bulging_fontanelle',
+    'jaundice_before_24h',
+    'feeding_difficulty',
+    'abdominal_distension',
+    'cord_infection',
+    'skin_pustules',
+    'lethargic_unconscious',
+    'bleeding',
+    'hiv_exposed',
+    'multiple_birth',
+  ];
+
+  static bool _validExperimentalPolicy(Map c, List<Map> features) {
+    if (c['model_name'] != 'neonatal_sepsis' ||
+        c['artifact_sha256'] != neonatalArtifact ||
+        c['evidence'] != 'legacy_real_data' ||
+        c['input_policy_version'] != neonatalPolicy ||
+        c['output_scope'] != 'clinician_experimental' ||
+        jsonEncode(c['age_days_support']) != '[0,3]' ||
+        jsonEncode(features.map((f) => f['name']).toList()) !=
+            jsonEncode(_neonatalOrder)) {
+      return false;
+    }
+    final cal = c['calibration'];
+    final baseline = c['sensitivity_baseline'];
+    if (cal is! Map ||
+        cal['A'] != 2.013769 ||
+        cal['B'] != -5.826344 ||
+        cal['validated_for_artifact'] != false ||
+        cal['formula'] != 'sigmoid(A * logit(p) + B)' ||
+        cal['provenance'] is! String ||
+        baseline is! Map ||
+        baseline['artifact_sha256'] != neonatalArtifact ||
+        baseline['input_policy_version'] != neonatalPolicy ||
+        baseline['means'] is! Map) {
+      return false;
+    }
+    final means = baseline['means'] as Map;
+    if (means.length != 5 ||
+        !_neonatalMeans.entries.every((e) => means[e.key] == e.value)) {
+      return false;
+    }
+    for (final f in features) {
+      final key = f['name'];
+      if (_neonatalMeans.containsKey(key)) {
+        final bounds = switch (key) {
+          'age_days' => (0, 59),
+          'temperature_celsius' => (34, 41),
+          'respiratory_rate_per_min' => (20, 120),
+          'heart_rate_per_min' => (60, 220),
+          _ => (.8, 5),
+        };
+        if (f['input_policy'] != 'observed' ||
+            f['required'] != true ||
+            f['supported'] != true ||
+            f['imputation'] != null ||
+            f['min'] != bounds.$1 ||
+            f['max'] != bounds.$2 ||
+            f['input_source'] !=
+                (key == 'birth_weight_kg' ? 'current_weight_kg' : key)) {
+          return false;
+        }
+      } else {
+        final reason =
+            key == 'feeding_difficulty' || key == 'lethargic_unconscious'
+            ? 'legacy_encoding_defect'
+            : 'unavailable_training_feature';
+        if (f['input_policy'] != 'constant_normalized' ||
+            f['constant_normalized'] != 0 ||
+            f['supported'] != false ||
+            f['required'] != false ||
+            f['imputation'] != null ||
+            f['fixed_reason'] != reason) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  static bool _validInputPolicy(Map f, Set<String> rawKeys) =>
+      switch (f['input_policy']) {
+        null =>
+          f['input_source'] == null || rawKeys.contains(f['input_source']),
+        'observed' => rawKeys.contains(f['input_source'] ?? f['name']),
+        'constant_normalized' =>
+          f['constant_normalized'] is num &&
+              (f['constant_normalized'] as num).isFinite &&
+              (f['constant_normalized'] as num) >= 0 &&
+              (f['constant_normalized'] as num) <= 1 &&
+              f['required'] == false &&
+              f['supported'] == false &&
+              f['fixed_reason'] is String &&
+              (f['fixed_reason'] as String).isNotEmpty,
+        _ => false,
+      };
+
+  static double _adjust(double raw, Map cal) {
+    if (!raw.isFinite || raw < 0 || raw > 1) {
+      throw const FormatException('Invalid model output');
+    }
+    final clipped = raw.clamp(1e-7, 1 - 1e-7);
+    return 1 /
+        (1 +
+            math.exp(
+              -((cal['A'] as num) * math.log(clipped / (1 - clipped)) +
+                  (cal['B'] as num)),
+            ));
+  }
+
   final AssetBundle _bundle;
   final TfliteRunner _runner;
   Future<void>? _initialization;
@@ -95,6 +226,11 @@ class OfflineInferenceService {
             graph != null &&
             supportValid &&
             calibrationValid &&
+            (contract['input_policy_version'] == null &&
+                    contract['output_scope'] == null
+                ? contract['evidence'] != 'legacy_real_data' ||
+                      contract['patient_output_allowed'] != true
+                : _validExperimentalPolicy(contract, features)) &&
             contract['patient_output_allowed'] is bool &&
             contract['clinical_use_allowed'] == false &&
             [
@@ -131,6 +267,7 @@ class OfflineInferenceService {
               (f) =>
                   f['name'] is String &&
                   rawKeys.contains(f['name']) &&
+                  _validInputPolicy(f, rawKeys) &&
                   ['bool', 'int', 'double', 'float'].contains(f['kind']) &&
                   f['unit'] is String &&
                   f['min'] is num &&
@@ -270,6 +407,9 @@ class OfflineInferenceService {
         invalid = <String>[],
         outside = <String>[];
     final observed = <String, double>{};
+    final measured = <String, double>{};
+    final units = <String, String>{};
+    final fixed = <String, String>{};
     final imputed = <String>[], requiredMissing = <String>[];
     final features = status.metadataValid
         ? (c['features'] as List).cast<Map>()
@@ -278,7 +418,12 @@ class OfflineInferenceService {
     final raw = bag.rawFeatures;
     for (var i = 0; i < features.length; i++) {
       final f = features[i];
-      final key = f['name'] as String;
+      final key = (f['input_source'] ?? f['name']) as String;
+      if (f['input_policy'] == 'constant_normalized') {
+        tensor[i] = (f['constant_normalized'] as num).toDouble();
+        fixed[f['name'] as String] = f['fixed_reason'] as String;
+        continue;
+      }
       if (f['supported'] != true) {
         unsupported.add(key);
         continue;
@@ -323,6 +468,8 @@ class OfflineInferenceService {
       tensor[i] = ResearchTransform.normalize(value, lo, hi);
       used.add(key);
       observed[key] = tensor[i];
+      measured[key] = value;
+      units[key] = f['unit'] as String;
     }
     final support = c['age_days_support'];
     if (status.metadataValid &&
@@ -341,7 +488,11 @@ class OfflineInferenceService {
         : ModelInputQuality.complete;
     var execution = ModelExecution.notRun;
     String reason;
-    double? researchOutput;
+    double? researchOutput, rawNeuralOutput;
+    var sensitivityStatus = ModelSensitivityStatus.notRun;
+    final sensitivities = <ModelFeatureSensitivity>[];
+    final experimental =
+        status.metadataValid && c['input_policy_version'] == neonatalPolicy;
     if (!status.isModelPresent) {
       execution = ModelExecution.unavailable;
       reason =
@@ -365,8 +516,10 @@ class OfflineInferenceService {
       reason =
           'Observed values are outside model support; this is not a clinical reassurance.';
     } else if (quality == ModelInputQuality.missingObservations) {
-      reason = 'Required observations are missing. No model output is shown.';
-    } else if (evidence != ModelEvidence.retrospectiveResearch ||
+      reason =
+          'Required observations are missing: ${requiredMissing.join(', ')}. No model output is shown.';
+    } else if ((!experimental &&
+            evidence != ModelEvidence.retrospectiveResearch) ||
         c['patient_output_allowed'] != true) {
       reason =
           'Research only. This artifact has not passed patient-output evidence checks.';
@@ -374,8 +527,10 @@ class OfflineInferenceService {
       try {
         if (features.any(
           (f) =>
-              f['supported'] != true ||
-              (raw[f['name']] == null && !imputed.contains(f['name'])),
+              f['input_policy'] != 'constant_normalized' &&
+              (f['supported'] != true ||
+                  (raw[f['input_source'] ?? f['name']] == null &&
+                      !imputed.contains(f['input_source'] ?? f['name']))),
         )) {
           throw const FormatException(
             'Incomplete exported-model input contract',
@@ -389,14 +544,8 @@ class OfflineInferenceService {
           throw const FormatException('Invalid model output');
         }
         final cal = c['calibration'] as Map;
-        final a = (cal['A'] as num).toDouble(),
-            b = (cal['B'] as num).toDouble();
-        if (!a.isFinite || !b.isFinite) {
-          throw const FormatException('Invalid calibration');
-        }
-        final clipped = p.clamp(1e-7, 1 - 1e-7);
-        researchOutput =
-            1 / (1 + math.exp(-(a * math.log(clipped / (1 - clipped)) + b)));
+        rawNeuralOutput = p;
+        researchOutput = _adjust(p, cal);
         if (!researchOutput.isFinite) {
           throw const FormatException('Invalid calibrated output');
         }
@@ -405,9 +554,50 @@ class OfflineInferenceService {
             'Experimental model output — not a diagnosis or treatment threshold.';
       } catch (_) {
         researchOutput = null;
+        rawNeuralOutput = null;
         execution = ModelExecution.failed;
         reason =
             'Model execution failed. Clinical guidance remains available offline.';
+      }
+    }
+    if (execution == ModelExecution.completed && experimental) {
+      try {
+        for (var i = 0; i < features.length; i++) {
+          final f = features[i];
+          if (f['input_policy'] != 'observed') continue;
+          final key = f['input_source'] as String;
+          final baseline = _neonatalMeans[f['name']]!;
+          final replacement = Float32List.fromList(tensor)..[i] = baseline;
+          final output = await _runner.run(
+            assetPath: status.modelAssetPath,
+            input: replacement,
+          );
+          sensitivities.add(
+            ModelFeatureSensitivity(
+              featureKey: key,
+              rawValue: measured[key]!,
+              unit: units[key]!,
+              baselineNormalized: baseline,
+              scorePointDelta:
+                  100 *
+                  (researchOutput! - _adjust(output, c['calibration'] as Map)),
+            ),
+          );
+        }
+        sensitivities.sort((a, b) {
+          final magnitude = b.scorePointDelta.abs().compareTo(
+            a.scorePointDelta.abs(),
+          );
+          return magnitude != 0
+              ? magnitude
+              : used
+                    .indexOf(a.featureKey)
+                    .compareTo(used.indexOf(b.featureKey));
+        });
+        sensitivityStatus = ModelSensitivityStatus.completed;
+      } catch (_) {
+        sensitivities.clear();
+        sensitivityStatus = ModelSensitivityStatus.unavailable;
       }
     }
     return OfflineRiskPrediction(
@@ -422,6 +612,24 @@ class OfflineInferenceService {
       inferenceMs: watch.elapsedMilliseconds,
       featureValues: observed,
       researchOutput: researchOutput,
+      rawNeuralOutput: rawNeuralOutput,
+      patientOutputAllowed: c['patient_output_allowed'] == true,
+      outputScope: c['output_scope'] is String
+          ? c['output_scope'] as String
+          : null,
+      artifactSha256: status.actualSha256,
+      inputPolicyVersion: c['input_policy_version'] is String
+          ? c['input_policy_version'] as String
+          : null,
+      runtimeVerified: status.isModelUsable,
+      observedValues: Map.unmodifiable(measured),
+      featureUnits: Map.unmodifiable(units),
+      fixedFeatures: Map.unmodifiable(fixed),
+      postprocessing: status.metadataValid && c['calibration'] is Map
+          ? Map.unmodifiable(Map<String, Object?>.from(c['calibration'] as Map))
+          : const {},
+      sensitivities: List.unmodifiable(sensitivities),
+      sensitivityStatus: sensitivityStatus,
       execution: execution,
       applicability: applicability,
       inputQuality: quality,
@@ -456,6 +664,7 @@ extension ResearchFeatures on OfflineFeatureBag {
       'oxygen_saturation_per_cent': oxygenSaturationPerCent?.toDouble(),
       'oxygen_saturation': oxygenSaturationPerCent?.toDouble(),
       'birth_weight_kg': birthWeightKg,
+      'current_weight_kg': currentWeightKg,
       'apgar_5_minute': apgar5Minute?.toDouble(),
       'history_of_convulsions': b(historyOfConvulsions),
       'severe_chest_indrawing': b(severeChestIndrawing),

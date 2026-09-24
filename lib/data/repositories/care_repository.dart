@@ -270,8 +270,14 @@ class CareRepository {
     return PersonDao.inHousehold(householdId);
   }
 
-  Future<Map<String, List<Person>>> visibleHouseholdMembers(AppUser user) async {
-    await _require(user, Permission.viewAllHouseholds, 'search patient records');
+  Future<Map<String, List<Person>>> visibleHouseholdMembers(
+    AppUser user,
+  ) async {
+    await _require(
+      user,
+      Permission.viewAllHouseholds,
+      'search patient records',
+    );
     final households = await visibleHouseholds(user);
     final grouped = await PersonDao.groupedByHousehold();
     return {
@@ -440,6 +446,30 @@ class CareRepository {
       entityTable: 'visits',
     );
     return VisitDao.clinicDayStats(user.id, day ?? DateTime.now());
+  }
+
+  /// The day's register tally: under-fives seen, RDTs, malnutrition bands,
+  /// immunisations and referrals, counted from the rows this account saved.
+  ///
+  /// The same permission that lets a worker write those rows — this is their
+  /// own day read back to them, so no zone-wide right is needed. The referrals
+  /// are counted per worker for the same reason: a shared phone held by two
+  /// CHPS staff must not show one person's register column total to the other.
+  Future<DailyRegisterTally> dailyRegister(
+    AppUser user, {
+    DateTime? day,
+  }) async {
+    await _require(
+      user,
+      Permission.runClinicalAssessment,
+      'view the daily register tally',
+      entityTable: 'assessments',
+    );
+    final on = day ?? _clock();
+    return DailyRegisterTally.of(
+      assessments: await AssessmentDao.forWorkerOn(user.id, on),
+      referralsIssued: await ReferralDao.countIssuedBy(user.id, on),
+    );
   }
 
   /// The open session for one household, if there is one. Intake joins this

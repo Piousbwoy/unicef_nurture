@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:carebridge_ai/core/ml/offline_inference_service.dart';
 import 'package:carebridge_ai/core/ml/tflite_runner.dart';
+import 'package:carebridge_ai/core/ml/tflite_runner_stub.dart' as web_runtime;
 
 const _contractPath = 'assets/models/research_contracts.json';
 const _modelPath = 'assets/models/neonatal_sepsis_int8_v1.tflite';
@@ -16,7 +17,8 @@ const _complete = OfflineFeatureBag(
   respiratoryRatePerMin: 48,
   heartRatePerMin: 140,
   oxygenSaturationPerCent: 97,
-  birthWeightKg: 3,
+  birthWeightKg: 2,
+  currentWeightKg: 3,
   apgar5Minute: 9,
   historyOfConvulsions: false,
   severeChestIndrawing: false,
@@ -55,20 +57,31 @@ class _Bundle extends CachingAssetBundle {
 }
 
 class _Runner implements TfliteRunner {
-  _Runner({this.output = 0.8, this.fail = false});
+  _Runner({this.output = 0.8, this.fail = false, this.outputs, this.failAt});
   final double output;
   final bool fail;
+  final List<double>? outputs;
+  final int? failAt;
+  bool busy = false;
   int calls = 0;
   Float32List? input;
+  final inputs = <Float32List>[];
   @override
   Future<double> run({
     required String assetPath,
     required Float32List input,
   }) async {
+    if (busy && outputs != null) {
+      throw StateError('Concurrent interpreter access');
+    }
+    busy = true;
     calls++;
-    this.input = input;
-    if (fail) throw StateError('Interpreter unavailable');
-    return output;
+    this.input ??= Float32List.fromList(input);
+    inputs.add(Float32List.fromList(input));
+    await Future<void>.delayed(Duration.zero);
+    busy = false;
+    if (fail || calls == failAt) throw StateError('Interpreter unavailable');
+    return outputs == null ? output : outputs![calls - 1];
   }
 }
 
@@ -81,10 +94,16 @@ Future<_Bundle> _bundle({
   final c = root['models']['neonatal_sepsis'] as Map;
   if (research) {
     // A test-only eligibility contract; never written to shipped assets.
+    c.remove('input_policy_version');
+    c.remove('output_scope');
+    c.remove('sensitivity_baseline');
     c['evidence'] = 'retrospective_research';
     c['patient_output_allowed'] = true;
     c['calibration'] = {'A': 1.0, 'B': 0.0};
     for (final f in c['features'] as List) {
+      f.remove('input_policy');
+      f.remove('constant_normalized');
+      f.remove('fixed_reason');
       f['supported'] = true;
     }
   }
@@ -128,10 +147,173 @@ void main() {
         expect(s.metadataValid, isTrue, reason: s.name);
         expect(s.isModelUsable, isTrue);
         expect(s.modelVersion, s.contract['model_version']);
-        expect(s.contract['patient_output_allowed'], isFalse);
+        expect(
+          s.contract['patient_output_allowed'],
+          s.name == 'neonatal_sepsis',
+        );
+        expect(s.contract['clinical_use_allowed'], isFalse);
         expect(s.headlineValidation, isEmpty);
         expect(s.externalValidation, isEmpty);
       }
+    },
+  );
+
+  test(
+    'neonatal execution requires current weight, never stored birth weight',
+    () async {
+      final runner = _Runner();
+      final p = await OfflineInferenceService(
+        runner: runner,
+      ).neonatalSepsisRisk(_complete.withoutFeature('current_weight_kg'));
+      expect(p.inputQuality, ModelInputQuality.missingObservations);
+      expect(p.featuresMissing, contains('current_weight_kg'));
+      expect(p.execution, ModelExecution.notRun);
+      expect(runner.calls, 0);
+      _noClinicalOutput(p);
+    },
+  );
+
+  test(
+    'display permission fails closed for every unverified or invalid state',
+    () {
+      OfflineRiskPrediction prediction(Map<String, dynamic> change) =>
+          OfflineRiskPrediction(
+            modelName: change['model'] ?? 'neonatal_sepsis',
+            usingModel: change['using'] ?? true,
+            riskProbability: null,
+            classification: 'unavailable',
+            featuresUsed: const [],
+            featuresMissing: change['missing'] ?? const [],
+            invalidFeatures: change['invalid'] ?? const [],
+            predictedAt: DateTime(2026),
+            rawNeuralOutput: change['raw'] ?? .8,
+            researchOutput: change['adjusted'] ?? .04,
+            patientOutputAllowed: change['allowed'] ?? true,
+            runtimeVerified: change['verified'] ?? true,
+            outputScope: change['scope'] ?? 'clinician_experimental',
+            artifactSha256:
+                change['hash'] ?? OfflineInferenceService.neonatalArtifact,
+            inputPolicyVersion:
+                change['policy'] ?? OfflineInferenceService.neonatalPolicy,
+            execution: change['execution'] ?? ModelExecution.completed,
+            evidence: change['evidence'] ?? ModelEvidence.legacyRealData,
+            applicability: change['cohort'] ?? ModelApplicability.applicable,
+            inputQuality: change['quality'] ?? ModelInputQuality.complete,
+            driftDetected: change['drift'] ?? false,
+          );
+      expect(prediction({}).mayDisplayExperimentalOutput, isTrue);
+      for (final change in <Map<String, dynamic>>[
+        {'model': 'child_pneumonia'},
+        {'using': false},
+        {'allowed': false},
+        {'verified': false},
+        {'scope': 'clinical'},
+        {'hash': 'wrong'},
+        {'policy': 'unknown'},
+        {'drift': true},
+        {
+          'missing': ['current_weight_kg'],
+        },
+        {
+          'invalid': ['temperature_celsius'],
+        },
+        for (final execution in ModelExecution.values.where(
+          (e) => e != ModelExecution.completed,
+        ))
+          {'execution': execution},
+        for (final evidence in ModelEvidence.values.where(
+          (e) => e != ModelEvidence.legacyRealData,
+        ))
+          {'evidence': evidence},
+        for (final quality in ModelInputQuality.values.where(
+          (e) => e != ModelInputQuality.complete,
+        ))
+          {'quality': quality},
+        {'cohort': ModelApplicability.unknownCohort},
+        {'cohort': ModelApplicability.unsupportedCohort},
+        for (final value in [double.nan, double.infinity, -.1, 1.1]) ...[
+          {'raw': value},
+          {'adjusted': value},
+        ],
+      ]) {
+        expect(
+          prediction(change).mayDisplayExperimentalOutput,
+          isFalse,
+          reason: '$change',
+        );
+        expect(prediction(change).clinicallyActionable, isFalse);
+      }
+    },
+  );
+
+  test(
+    'local sensitivities are sequential, signed and stably ranked',
+    () async {
+      final runner = _Runner(outputs: [.8, .6, .9, .6, .8, .7]);
+      final p = await OfflineInferenceService(
+        runner: runner,
+      ).neonatalSepsisRisk(_complete);
+      expect(p.sensitivityStatus, ModelSensitivityStatus.completed);
+      expect(p.sensitivities.map((s) => s.featureKey), [
+        'temperature_celsius',
+        'age_days',
+        'respiratory_rate_per_min',
+        'current_weight_kg',
+        'heart_rate_per_min',
+      ]);
+      expect(
+        p.sensitivities.first.scorePointDelta,
+        closeTo(-15.167173637413752, 1e-7),
+      );
+      expect(
+        p.sensitivities[1].scorePointDelta,
+        closeTo(3.925625077461277, 1e-7),
+      );
+      expect(p.sensitivities.last.scorePointDelta, 0);
+      expect(p.sensitivities[1].rawValue, 2);
+      expect(runner.calls, 6);
+      _noClinicalOutput(p);
+    },
+  );
+
+  test(
+    'failed sensitivity retains primary output without invented drivers',
+    () async {
+      final p = await OfflineInferenceService(
+        runner: _Runner(failAt: 3),
+      ).neonatalSepsisRisk(_complete);
+      expect(p.execution, ModelExecution.completed);
+      expect(p.mayDisplayExperimentalOutput, isTrue);
+      expect(p.rawNeuralOutput, .8);
+      expect(p.researchOutput, closeTo(.04588406103741966, 1e-10));
+      expect(p.sensitivityStatus, ModelSensitivityStatus.unavailable);
+      expect(p.sensitivities, isEmpty);
+      _noClinicalOutput(p);
+    },
+  );
+
+  test(
+    'real web graph executes the five-observed policy and sensitivity reruns',
+    () async {
+      final service = OfflineInferenceService(
+        runner: web_runtime.createTfliteRunner(),
+      );
+      final p = await service.neonatalSepsisRisk(_complete);
+      expect(p.execution, ModelExecution.completed, reason: p.statusReason);
+      expect(p.mayDisplayExperimentalOutput, isTrue);
+      expect(p.sensitivityStatus, ModelSensitivityStatus.completed);
+      expect(p.sensitivities, hasLength(5));
+      expect(p.fixedFeatures, hasLength(15));
+      expect(p.observedValues, hasLength(5));
+      final roundTrip = jsonDecode(jsonEncode(p.toMap())) as Map;
+      expect(roundTrip['observed_values']['current_weight_kg'], 3);
+      expect(
+        roundTrip['fixed_features']['feeding_difficulty'],
+        'legacy_encoding_defect',
+      );
+      expect(roundTrip['experimental_raw_output'], p.rawNeuralOutput);
+      expect(roundTrip['experimental_adjusted_output'], p.researchOutput);
+      _noClinicalOutput(p);
     },
   );
 
@@ -146,7 +328,7 @@ void main() {
     ]);
     expect(bundle.loads[_contractPath], 1);
     expect(bundle.loads[_modelPath], 1);
-    expect(runner.calls, 0);
+    expect(runner.calls, 12);
   });
 
   test(
@@ -156,15 +338,105 @@ void main() {
       final service = OfflineInferenceService(runner: runner);
       for (final p in (await service.runAllPredictions(_complete)).values) {
         _noClinicalOutput(p);
-        expect(p.researchOutput, isNull);
+        if (p.modelName != 'neonatal_sepsis') expect(p.researchOutput, isNull);
       }
       final neonatal = await service.neonatalSepsisRisk(_complete);
-      expect(neonatal.execution, ModelExecution.notRun);
+      expect(neonatal.execution, ModelExecution.completed);
       expect(neonatal.evidence, ModelEvidence.legacyRealData);
-      expect(neonatal.unsupportedFeatures, contains('feeding_difficulty'));
-      expect(runner.calls, 0);
+      expect(neonatal.unsupportedFeatures, isEmpty);
+      expect(runner.calls, 12);
     },
   );
+
+  test(
+    'training policy uses five observations and fifteen exact fixed zeros',
+    () async {
+      final runner = _Runner();
+      final service = OfflineInferenceService(runner: runner);
+      final p = await service.neonatalSepsisRisk(_complete);
+      expect(p.execution, ModelExecution.completed);
+      final input = runner.inputs.first;
+      expect(
+        input.take(4),
+        orderedEquals([
+          closeTo(2 / 59, 1e-7),
+          closeTo(3 / 7, 1e-7),
+          closeTo(.28, 1e-7),
+          .5,
+        ]),
+      );
+      expect(input[5], closeTo(2.2 / 4.2, 1e-7));
+      for (final i in [4, ...List.generate(14, (i) => i + 6)]) {
+        expect(input[i], 0, reason: 'Fixed slot $i');
+      }
+      expect(p.featuresUsed, [
+        'age_days',
+        'temperature_celsius',
+        'respiratory_rate_per_min',
+        'heart_rate_per_min',
+        'current_weight_kg',
+      ]);
+      expect(p.featuresMissing, isEmpty);
+      final saved = p.toMap();
+      expect(saved['experimental_raw_output'], .8);
+      expect(
+        saved['experimental_adjusted_output'],
+        closeTo(.04588406103741966, 1e-10),
+      );
+      expect(saved['fixed_features'], hasLength(15));
+      expect(saved['observed_values'], containsPair('current_weight_kg', 3.0));
+      expect(saved['sensitivities'], hasLength(5));
+      expect(runner.inputs, hasLength(6));
+      for (var i = 0; i < 5; i++) {
+        final slot = [0, 1, 2, 3, 5][i];
+        expect(
+          runner.inputs[i + 1][slot],
+          closeTo([.0296, .6548, .4019, .5754, .5274][i], 1e-7),
+        );
+        for (var j = 0; j < 20; j++) {
+          if (j != slot) expect(runner.inputs[i + 1][j], input[j]);
+        }
+      }
+      final changed = _Runner();
+      await OfflineInferenceService(runner: changed).neonatalSepsisRisk(
+        const OfflineFeatureBag(
+          ageDays: 2,
+          temperatureCelsius: 37,
+          respiratoryRatePerMin: 48,
+          heartRatePerMin: 140,
+          currentWeightKg: 3,
+          oxygenSaturationPerCent: 75,
+          historyOfConvulsions: true,
+          feedingDifficulty: true,
+          lethargicOrUnconscious: true,
+        ),
+      );
+      expect(changed.inputs.first, input);
+      _noClinicalOutput(p);
+    },
+  );
+
+  for (final mutation in <void Function(Map)>[
+    (c) => c['output_scope'] = 'clinical',
+    (c) => c['clinical_use_allowed'] = true,
+    (c) => c['input_policy_version'] = 'unknown',
+    (c) => c['features'][4]['constant_normalized'] = .5,
+    (c) => c['features'][5]['input_source'] = 'birth_weight_kg',
+    (c) => c['features'][1]['required'] = false,
+    (c) => c['sensitivity_baseline'] = {},
+  ]) {
+    test(
+      'malformed experimental policy blocks execution ${mutation.hashCode}',
+      () async {
+        final p = await OfflineInferenceService(
+          bundle: await _bundle(mutate: mutation),
+          runner: _Runner(),
+        ).neonatalSepsisRisk(_complete);
+        expect(p.execution, ModelExecution.invalidMetadata);
+        _noClinicalOutput(p);
+      },
+    );
+  }
 
   for (final key in [
     'input_dtype',

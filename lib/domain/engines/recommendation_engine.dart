@@ -115,6 +115,7 @@ class CarePlan {
     this.guardrailEscalated = false,
     this.preReferralProtocols = const [],
     this.preReferralActivationReasons = const {},
+    this.preReferralWeightKg,
     this.patientCohort,
     this.cohortNote,
   });
@@ -191,6 +192,12 @@ class CarePlan {
   /// default, but available for retrospective review.
   final Map<String, String> preReferralActivationReasons;
 
+  /// The recorded weight the pre-referral steps were calculated against, in
+  /// kg. Persisted with the plan so an audit of a saved assessment shows
+  /// which weight produced the tablet count on screen. Null when the child
+  /// was not weighed, in which case no step shows a calculated amount.
+  final double? preReferralWeightKg;
+
   /// The patient group this plan was synthesized for — a newborn, a
   /// child under five, a pregnant or postpartum mother. The same
   /// findings demand different words, different watchpoints and a
@@ -229,6 +236,7 @@ class CarePlan {
     'guardrail_escalated': guardrailEscalated,
     'pre_referral_protocols': [for (final p in preReferralProtocols) p.toMap()],
     'pre_referral_activation_reasons': preReferralActivationReasons,
+    'pre_referral_weight_kg': preReferralWeightKg,
     'patient_cohort': patientCohort?.name,
     'cohort_note': cohortNote,
   };
@@ -290,6 +298,7 @@ class CarePlan {
         ((j['pre_referral_activation_reasons'] as Map?) ?? const {}).map(
           (k, v) => MapEntry('$k', v as String),
         ),
+    preReferralWeightKg: (j['pre_referral_weight_kg'] as num?)?.toDouble(),
     patientCohort: _clientTypeFromName(j['patient_cohort'] as String?),
     cohortNote: j['cohort_note'] as String?,
   );
@@ -533,6 +542,7 @@ abstract final class RecommendationEngine {
       guardrailEscalated: escalated,
       preReferralProtocols: preRefPlan.protocols,
       preReferralActivationReasons: preRefPlan.activatedBy,
+      preReferralWeightKg: stabilizationContext?.weightKg,
       patientCohort: patientCohort,
       cohortNote: cohortNote,
     );

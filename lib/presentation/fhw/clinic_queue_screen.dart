@@ -191,17 +191,35 @@ class _QueueTicketCard extends StatelessWidget {
         ? '${waited.inMinutes} min'
         : '${waited.inHours}h ${waited.inMinutes % 60}m';
     final cancellable = ticket.assessedCount == 0 && !busy;
-    return ClinicCard(
+    final card = ClinicCard(
       accent: ticket.pending > 0 ? AppColors.brass : AppColors.triageGreen,
       title: ticket.householdName,
       subtitle:
-          'Arrived $arrival · waiting $waitedLabel · ${ticket.assessedCount}/'
-          '${ticket.presentCount} assessed',
+          'Arrived $arrival · ${ticket.assessedCount}/${ticket.presentCount} '
+          'assessed',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceTint,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  'Waiting $waitedLabel',
+                  style: AppType.label.copyWith(
+                    fontSize: 12,
+                    color: AppColors.inkMuted,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   ticket.allAssessed
@@ -231,6 +249,26 @@ class _QueueTicketCard extends StatelessWidget {
           ],
         ],
       ),
+    );
+    if (busy) return card;
+    // Swipe left for the quick actions; a tap on the card itself resumes.
+    return SwipeRevealActions(
+      actions: [
+        SwipeAction(
+          label: 'Resume',
+          icon: Icons.play_arrow_rounded,
+          onPressed: onResume,
+        ),
+        if (cancellable)
+          SwipeAction(
+            label: 'Cancel',
+            icon: Icons.close_rounded,
+            tone: AppColors.triageRed,
+            onPressed: onCancel,
+          ),
+      ],
+      onTap: onResume,
+      child: card,
     );
   }
 }

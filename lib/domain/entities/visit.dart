@@ -115,6 +115,126 @@ class ClinicDayStats {
   bool get hasAssessments => avgMinutesToFirstAssessment != null;
 }
 
+/// One worker's day, tallied into the columns a CHPS register asks for.
+///
+/// Everything here counts *children*, not taps. A three-year-old assessed
+/// twice — cough first, then her MUAC re-measured after she ate — is one child
+/// seen, and a positive RDT recorded on either pass is one positive child.
+/// The register's job is to say how many children were dealt with.
+///
+/// The RDT pair is kept as a fraction rather than a rate on purpose: a
+/// positivity figure without the number tested behind it cannot be checked by
+/// anybody at the district.
+///
+/// Scope is narrow and stays that way in the wording shown to the worker: these
+/// are the records *this account saved on this device*, so the tally is a
+/// starting point for the paper register rather than the facility's total,
+/// which also holds colleagues' work and anything recorded on paper alone.
+class DailyRegisterTally {
+  const DailyRegisterTally({
+    this.childrenSeen = 0,
+    this.rdtDone = 0,
+    this.rdtPositive = 0,
+    this.sam = 0,
+    this.mam = 0,
+    this.immunised = 0,
+    this.referralsIssued = 0,
+  });
+
+  /// Distinct under-fives (newborn and IMCI child) assessed today.
+  final int childrenSeen;
+
+  /// Children whose malaria RDT was recorded as done, and the subset positive.
+  final int rdtDone;
+  final int rdtPositive;
+
+  /// Children carried in each acute malnutrition band by the nutrition engine.
+  final int sam;
+  final int mam;
+
+  /// Children with at least one vaccine dose ticked on the weighing card.
+  final int immunised;
+
+  /// Referrals this worker issued today — the only count here that is not
+  /// restricted to children, since most maternal referrals are for mothers.
+  final int referralsIssued;
+
+  /// A day that has produced no records yet, so nothing is displayed rather
+  /// than a card of zeroes.
+  bool get isEmpty =>
+      childrenSeen == 0 &&
+      rdtDone == 0 &&
+      sam == 0 &&
+      mam == 0 &&
+      immunised == 0 &&
+      referralsIssued == 0;
+
+  /// Aggregates one day's assessments in Dart rather than in SQL.
+  ///
+  /// Not laziness: the RDT result, the vaccine list and the nutrition band all
+  /// live inside the `inputs_json` and `result_json` payload columns, which
+  /// exist precisely so the question set can grow without a migration. Querying
+  /// them in SQLite would mean pattern-matching a JSON string, and a tally
+  /// built on `LIKE '%"rdt_positive":true%'` breaks the moment a field is
+  /// renamed. A clinic day is tens of rows, so the loop costs nothing.
+  factory DailyRegisterTally.of({
+    required List<Assessment> assessments,
+    required int referralsIssued,
+  }) {
+    // Oldest first, whatever order the caller had, because the nutrition band
+    // below is resolved by "last reading wins".
+    final ordered = [...assessments]
+      ..sort((a, b) => a.performedAt.compareTo(b.performedAt));
+
+    final seen = <String>{};
+    final tested = <String>{};
+    final positive = <String>{};
+    final vaccinated = <String>{};
+    final bandOf = <String, NutritionStatus>{};
+
+    for (final a in ordered) {
+      final isChild =
+          a.clientType == ClientType.newborn ||
+          a.clientType == ClientType.childUnderFive;
+      if (!isChild) continue;
+      final child = a.personId;
+      seen.add(child);
+
+      // A positive is only ever counted inside a test, so a stray
+      // `rdt_positive` on an untested row cannot push the numerator past the
+      // denominator.
+      if (a.inputs['rdt_done'] == true) {
+        tested.add(child);
+        if (a.inputs['rdt_positive'] == true) positive.add(child);
+      }
+
+      final doses = a.inputs['vaccines_given'];
+      if (doses is List && doses.isNotEmpty) vaccinated.add(child);
+
+      // The band is the one exception to "any reading today counts", and only
+      // because it would otherwise double-count: a child re-measured after
+      // eating must not stand in the SAM and MAM columns of one register row.
+      // A later reading with no MUAC at all — a newborn check, or a review
+      // where the tape stayed in the bag — leaves the earlier band alone
+      // rather than clearing it.
+      final band = a.result.nutritionStatus;
+      if (band != null) bandOf[child] = band;
+    }
+
+    return DailyRegisterTally(
+      childrenSeen: seen.length,
+      rdtDone: tested.length,
+      rdtPositive: positive.length,
+      sam: bandOf.values.where((b) => b == NutritionStatus.severeAcute).length,
+      mam: bandOf.values
+          .where((b) => b == NutritionStatus.moderateAcute)
+          .length,
+      immunised: vaccinated.length,
+      referralsIssued: referralsIssued,
+    );
+  }
+}
+
 /// A single explainable contribution to a decision.
 ///
 /// Every recommendation the app makes is decomposed into these. This is what

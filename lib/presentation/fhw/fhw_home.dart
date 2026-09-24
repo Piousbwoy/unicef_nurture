@@ -3,11 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/fhw_luxe.dart';
 import '../assessment/emergency_tunnel.dart';
 import '../shared/narration_button.dart';
 import 'assess_tab.dart';
 import 'day_plan_tab.dart';
 import 'home_tab.dart';
+import 'luxe_components.dart';
+import 'luxe_motion.dart';
 import 'profile_tab.dart';
 import 'receive_patient_sheet.dart';
 import 'referrals_tab.dart';
@@ -45,7 +48,7 @@ class _FhwHomeState extends ConsumerState<FhwHome> {
     final waiting = queue.valueOrNull?.length ?? 0;
 
     return Scaffold(
-      backgroundColor: AppColors.canvas,
+      backgroundColor: FhwLuxePalette.porcelainCanvas,
       body: Column(
         children: [
           _ClinicHeader(
@@ -94,7 +97,7 @@ class _FhwHomeState extends ConsumerState<FhwHome> {
           ),
         ],
       ),
-      bottomNavigationBar: _NavPillBar(
+      bottomNavigationBar: FloatingAcrylicDock(
         index: _tab,
         titles: _titles,
         icons: _icons,
@@ -146,8 +149,8 @@ class _FhwHomeState extends ConsumerState<FhwHome> {
   }
 
   Future<void> _receive() async {
-    final households = ref.read(visibleHouseholdsProvider).valueOrNull ??
-        const [];
+    final households =
+        ref.read(visibleHouseholdsProvider).valueOrNull ?? const [];
     await showReceivePatientSheet(context, knownHouseholds: households);
     if (mounted) refreshClinicWorkspace();
   }
@@ -159,6 +162,7 @@ class _FhwHomeState extends ConsumerState<FhwHome> {
     ref.invalidate(zoneHomeChecksProvider);
     ref.invalidate(activeClinicSessionProvider);
     ref.invalidate(clinicQueueProvider);
+    ref.invalidate(dailyRegisterProvider);
     ref.invalidate(syncStatusProvider);
   }
 
@@ -201,13 +205,13 @@ class _ClinicHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const radius = BorderRadius.only(
-      bottomLeft: Radius.circular(36),
-      bottomRight: Radius.circular(36),
+      bottomLeft: Radius.circular(32),
+      bottomRight: Radius.circular(32),
     );
     return Container(
       width: double.infinity,
       decoration: const BoxDecoration(
-        gradient: AppColors.heroGradient,
+        gradient: FhwLuxePalette.sapphireHeroGradient,
         borderRadius: radius,
         boxShadow: [
           BoxShadow(
@@ -250,103 +254,103 @@ class _ClinicHeader extends StatelessWidget {
               bottom: false,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(22, 10, 18, 22),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          greeting.toUpperCase(),
-                          style: AppType.eyebrow.copyWith(
-                            color: Colors.white.withValues(alpha: 0.66),
-                          ),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppType.title.copyWith(
-                            fontSize: 25,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.5,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 9),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 6,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Flexible(
-                              child: Row(
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                greeting.toUpperCase(),
+                                style: AppType.eyebrow.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.66),
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppType.title.copyWith(
+                                  fontSize: 25,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.5,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 9),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
-                                  const Icon(
-                                    Icons.place_outlined,
-                                    size: 13,
-                                    color: Colors.white70,
-                                  ),
-                                  const SizedBox(width: 4),
                                   Flexible(
-                                    child: Text(
-                                      zone,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: AppType.caption.copyWith(
-                                        color: Colors.white70,
-                                      ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.place_outlined,
+                                          size: 13,
+                                          color: Colors.white70,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Flexible(
+                                          child: Text(
+                                            zone,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: AppType.caption.copyWith(
+                                              color: Colors.white70,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
+                                  ),
+                                  _QueueBadge(
+                                    waiting: waiting,
+                                    loading: queueLoading,
                                   ),
                                 ],
                               ),
+                            ],
+                          ),
+                        ),
+                        _HeaderIconChip(
+                          child: const NarrationButton(iconColor: Colors.white),
+                        ),
+                        const SizedBox(width: 6),
+                        _HeaderIconChip(
+                          child: IconButton(
+                            tooltip: 'Refresh local records',
+                            onPressed: onRefresh,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints.tightFor(
+                              width: 48,
+                              height: 48,
                             ),
-                            _QueueBadge(
-                              waiting: waiting,
-                              loading: queueLoading,
-                            ),
-                          ],
+                            color: Colors.white,
+                            iconSize: 22,
+                            icon: const Icon(Icons.refresh_rounded),
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                  _HeaderIconChip(
-                    child: const NarrationButton(iconColor: Colors.white),
-                  ),
-                  const SizedBox(width: 6),
-                  _HeaderIconChip(
-                    child: IconButton(
-                      tooltip: 'Refresh local records',
-                      onPressed: onRefresh,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(
-                        width: 48,
-                        height: 48,
-                      ),
-                      color: Colors.white,
-                      iconSize: 22,
-                      icon: const Icon(Icons.refresh_rounded),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(child: _ReceivePill(onTap: onReceive)),
+                        const SizedBox(width: 10),
+                        _EmergencyDock(onTap: onEmergency),
+                      ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  Expanded(child: _ReceivePill(onTap: onReceive)),
-                  const SizedBox(width: 10),
-                  _EmergencyDock(onTap: onEmergency),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+            ),
           ],
         ),
       ),
@@ -374,23 +378,25 @@ class _QueueBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.brass.withValues(alpha: 0.7)),
+        border: Border.all(color: FhwLuxePalette.glassBorderLight),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (!loading)
+            const Padding(
+              padding: EdgeInsets.only(right: 5),
+              child: BreathingDot(size: 6),
+            ),
           const Icon(
             Icons.groups_rounded,
             size: 13,
-            color: AppColors.brassLight,
+            color: FhwLuxePalette.sapphireElectric,
           ),
           const SizedBox(width: 5),
           Text(
             label,
-            style: AppType.label.copyWith(
-              fontSize: 11.5,
-              color: Colors.white,
-            ),
+            style: AppType.label.copyWith(fontSize: 11.5, color: Colors.white),
           ),
         ],
       ),
@@ -427,8 +433,8 @@ class _ReceivePill extends StatelessWidget {
               ],
             ),
             border: Border.all(
-              color: AppColors.brassLight.withValues(alpha: 0.9),
-              width: 1.4,
+              color: FhwLuxePalette.glassBorderLight,
+              width: 1.2,
             ),
             boxShadow: const [
               BoxShadow(
@@ -582,110 +588,6 @@ class _HeaderIconChip extends StatelessWidget {
         ),
       ),
       child: child,
-    );
-  }
-}
-
-/// Bottom navigation with a gradient active pill. Icon and text label are both
-/// kept for every destination (nav rule), targets stay \u2265 48dp, and the bar
-/// is safe-area aware.
-class _NavPillBar extends StatelessWidget {
-  const _NavPillBar({
-    required this.index,
-    required this.titles,
-    required this.icons,
-    required this.onSelect,
-  });
-
-  final int index;
-  final List<String> titles;
-  final List<IconData> icons;
-  final ValueChanged<int> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      child: SafeArea(
-        top: false,
-        child: Container(
-          decoration: const BoxDecoration(
-            border: Border(top: BorderSide(color: AppColors.line)),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Row(
-              children: [
-                for (var i = 0; i < titles.length; i++)
-                  Expanded(
-                    child: _NavItem(
-                      key: ValueKey('fhw-tab-$i'),
-                      title: titles[i],
-                      icon: icons[i],
-                      selected: index == i,
-                      onTap: () => onSelect(i),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NavItem extends StatelessWidget {
-  const _NavItem({
-    super.key,
-    required this.title,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String title;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      selected: selected,
-      button: true,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(Gap.radiusSm),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          padding: const EdgeInsets.symmetric(vertical: 9),
-          decoration: BoxDecoration(
-            gradient: selected ? AppColors.brandGradient : null,
-            borderRadius: BorderRadius.circular(Gap.radiusSm),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 22,
-                color: selected ? Colors.white : AppColors.inkMuted,
-              ),
-              const SizedBox(height: 3),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: AppType.label.copyWith(
-                  fontSize: 11,
-                  color: selected ? Colors.white : AppColors.inkMuted,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
