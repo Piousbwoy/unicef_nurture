@@ -162,7 +162,8 @@ class _MemberFormScreenState extends ConsumerState<MemberFormScreen> {
   @override
   Widget build(BuildContext context) {
     final members = ref.watch(householdMembersProvider(widget.household.id));
-    final women = members.valueOrNull
+    final women =
+        members.valueOrNull
             ?.where(
               (p) =>
                   p.clientType == ClientType.pregnantWoman ||
@@ -324,7 +325,8 @@ class _MemberFormScreenState extends ConsumerState<MemberFormScreen> {
                       const SizedBox(height: Gap.md),
                       const FieldLabel(
                         'Or age in years, if the date is not known',
-                        why: 'Common for adults, and better than a fabricated '
+                        why:
+                            'Common for adults, and better than a fabricated '
                             'date.',
                       ),
                       TextFormField(
@@ -338,7 +340,8 @@ class _MemberFormScreenState extends ConsumerState<MemberFormScreen> {
                       const SizedBox(height: Gap.lg),
                       FieldLabel(
                         'Mother',
-                        why: 'Links the child to her history — a previous loss '
+                        why:
+                            'Links the child to her history — a previous loss '
                             'or anaemia changes this child\u2019s risk.',
                         required: women.isNotEmpty,
                       ),
@@ -375,7 +378,8 @@ class _MemberFormScreenState extends ConsumerState<MemberFormScreen> {
                       const SizedBox(height: Gap.lg),
                       const FieldLabel(
                         'Phone',
-                        why: 'Used for follow-up where there is signal. Not '
+                        why:
+                            'Used for follow-up where there is signal. Not '
                             'required.',
                       ),
                       TextFormField(
@@ -386,7 +390,10 @@ class _MemberFormScreenState extends ConsumerState<MemberFormScreen> {
                     ],
 
                     const SizedBox(height: Gap.lg),
-                    const FieldLabel('NHIS number', why: 'If the card is here.'),
+                    const FieldLabel(
+                      'NHIS number',
+                      why: 'If the card is here.',
+                    ),
                     TextFormField(
                       controller: _nhis,
                       decoration: const InputDecoration(
@@ -614,7 +621,8 @@ class _PregnancySection extends StatelessWidget {
       children: [
         const FieldLabel(
           'First day of the last period (LMP)',
-          why: 'Gives the gestational age, which decides what is due and when '
+          why:
+              'Gives the gestational age, which decides what is due and when '
               'a danger sign becomes urgent.',
         ),
         _DateField(
@@ -661,7 +669,8 @@ class _PregnancySection extends StatelessWidget {
 
         const FieldLabel(
           'Previous losses',
-          why: 'Miscarriage, stillbirth or a baby who died. The strongest '
+          why:
+              'Miscarriage, stillbirth or a baby who died. The strongest '
               'single predictor of the next outcome, which is why it is asked '
               'plainly.',
         ),
@@ -681,10 +690,7 @@ class _PregnancySection extends StatelessWidget {
           'ANC contacts completed',
           why: 'WHO 2016 and Ghana both expect eight.',
         ),
-        _NumberField(
-          label: 'Out of 8',
-          controller: state._ancContacts,
-        ),
+        _NumberField(label: 'Out of 8', controller: state._ancContacts),
         const SizedBox(height: Gap.lg),
 
         Row(
@@ -705,7 +711,8 @@ class _PregnancySection extends StatelessWidget {
 
         const FieldLabel(
           'Haemoglobin (g/dL)',
-          why: 'Under 11 is anaemia; under 7 is severe and needs referral. '
+          why:
+              'Under 11 is anaemia; under 7 is severe and needs referral. '
               'Maternal anaemia runs at 44% in the Upper West.',
         ),
         TextFormField(
@@ -718,8 +725,7 @@ class _PregnancySection extends StatelessWidget {
         CheckboxListTile(
           contentPadding: EdgeInsets.zero,
           value: state._ironFolate,
-          onChanged: (v) =>
-              state.update(() => state._ironFolate = v ?? false),
+          onChanged: (v) => state.update(() => state._ironFolate = v ?? false),
           title: const Text(
             'Iron and folic acid supplied',
             style: TextStyle(fontSize: 14),
@@ -780,7 +786,8 @@ class _DeliverySection extends StatelessWidget {
 
         const FieldLabel(
           'Where',
-          why: 'A delivery with no skilled attendant changes both the mother\u2019s '
+          why:
+              'A delivery with no skilled attendant changes both the mother\u2019s '
               'and the baby\u2019s risk.',
           required: true,
         ),
@@ -804,7 +811,8 @@ class _DeliverySection extends StatelessWidget {
 
         const FieldLabel(
           'How many babies',
-          why: 'Twins carry several times the neonatal risk of a singleton, and '
+          why:
+              'Twins carry several times the neonatal risk of a singleton, and '
               'each baby needs its own record.',
         ),
         _EnumChips<BirthPlurality>(
@@ -860,7 +868,8 @@ class _NewbornSection extends StatelessWidget {
 
         const FieldLabel(
           'Birth weight (kg)',
-          why: 'Under 2.5 kg is low birth weight; under 1.5 kg is very low and '
+          why:
+              'Under 2.5 kg is low birth weight; under 1.5 kg is very low and '
               'needs facility care.',
         ),
         TextFormField(
@@ -899,7 +908,8 @@ class _NewbornSection extends StatelessWidget {
 
         const FieldLabel(
           'Did the baby need help to breathe at birth?',
-          why: 'Birth asphyxia is the leading cause of newborn death in the '
+          why:
+              'Birth asphyxia is the leading cause of newborn death in the '
               'north.',
         ),
         YesNoField(
@@ -917,8 +927,7 @@ class _NewbornSection extends StatelessWidget {
         YesNoField(
           value: state._breastfedWithinHour,
           allowUnknown: true,
-          onChanged: (v) =>
-              state.update(() => state._breastfedWithinHour = v),
+          onChanged: (v) => state.update(() => state._breastfedWithinHour = v),
         ),
         const SizedBox(height: Gap.lg),
 
@@ -951,6 +960,7 @@ class _TypeOption extends StatelessWidget {
   String get _image => switch (type) {
     ClientType.newborn => AppImages.cardNewborn,
     ClientType.childUnderFive => AppImages.cardChild,
+    ClientType.womanOfReproductiveAge => AppImages.cardWoman,
     _ => AppImages.cardMother,
   };
 
@@ -1080,9 +1090,7 @@ class _DateField extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 color: value == null ? AppColors.inkFaint : AppColors.ink,
-                fontWeight: value == null
-                    ? FontWeight.w400
-                    : FontWeight.w600,
+                fontWeight: value == null ? FontWeight.w400 : FontWeight.w600,
               ),
             ),
           ),

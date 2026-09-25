@@ -454,11 +454,20 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
         }
       }
       if (localized == null) {
-        run.reasonCode = 'translation_unavailable';
-        run.source =
-            '$selected translation is not bundled. Choose English or '
-            'ask a health worker to read the guidance.';
-        run.emit(CaregiverPlaybackPhase.fallback);
+        // Translation failed — try English device TTS so the user hears
+        // something rather than silence.
+        if (speech.english.trim().isNotEmpty) {
+          run.transcript = speech.english;
+          run.language = speech.sourceLanguage;
+          run.reasonCode = 'translation_fallback_english';
+          run.source =
+              '$selected translation unavailable — speaking English instead.';
+          if (await _synthesize(run)) {
+            if (_current(run)) run.emit(CaregiverPlaybackPhase.completed);
+            return;
+          }
+        }
+        _fallback(run);
         return;
       }
       if (!_PlaybackCoordinator.quiet || localized.trim().isEmpty) {

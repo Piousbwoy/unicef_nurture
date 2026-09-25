@@ -151,64 +151,96 @@ void _phoneSize(WidgetTester tester) {
 void main() {
   GoogleFonts.config.allowRuntimeFetching = false;
 
-  testWidgets('household screen has no overflows at phone width', (
-    tester,
-  ) async {
-    _phoneSize(tester);
-    final mother = _person('p-m', 'Achana', ClientType.pregnantWoman);
-    final child = _person('p-c', 'sala', ClientType.childUnderFive);
-    final assessment = _assessment(
-      mother,
-      TriageLevel.priority,
-      'PREGNANCY WITH RISK FACTORS',
-    );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          currentUserProvider.overrideWithValue(_user()),
-          householdProvider.overrideWith((ref, id) async => _household),
-          householdScoreProvider.overrideWith((ref, id) async => _score()),
-          householdMembersProvider.overrideWith(
-            (ref, id) async => [mother, child],
-          ),
-          householdContactsProvider.overrideWith(
-            (ref, id) async => [
-              ScheduledContact(
-                id: 'c-1',
-                personId: 'p-m',
-                householdId: _household.id,
-                dueDate: DateTime.now().subtract(const Duration(days: 2)),
-                purpose: 'ANC 4th visit — review haemoglobin and BP',
-                createdBy: 'u-fhw-1',
-                priority: TriageLevel.priority,
-              ),
-            ],
-          ),
-          barrierHistoryProvider.overrideWith((ref, id) async => const []),
-          householdHomeChecksProvider.overrideWith((ref, id) async => const []),
-          householdMilestoneChecksProvider.overrideWith(
-            (ref, id) async => const [],
-          ),
-          latestAssessmentProvider.overrideWith((ref, id) async {
-            if (id == mother.id) return assessment;
-            if (id == child.id) {
-              return _assessment(child, TriageLevel.routine, 'WELL CHILD');
-            }
-            return null;
-          }),
-          personProvider.overrideWith(
-            (ref, id) async => mother.id == id
-                ? mother
-                : child.id == id
-                ? child
-                : null,
-          ),
-        ],
-        child: const MaterialApp(home: HouseholdScreen(householdId: 'h-1')),
-      ),
-    );
-    await tester.pumpAndSettle();
-  });
+  testWidgets(
+    'household keeps clinical content without a family-code action at phone width',
+    (tester) async {
+      _phoneSize(tester);
+      final mother = _person('p-m', 'Achana', ClientType.pregnantWoman);
+      final child = _person('p-c', 'sala', ClientType.childUnderFive);
+      final assessment = _assessment(
+        mother,
+        TriageLevel.priority,
+        'PREGNANCY WITH RISK FACTORS',
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            currentUserProvider.overrideWithValue(_user()),
+            householdProvider.overrideWith((ref, id) async => _household),
+            householdScoreProvider.overrideWith((ref, id) async => _score()),
+            householdMembersProvider.overrideWith(
+              (ref, id) async => [mother, child],
+            ),
+            householdContactsProvider.overrideWith(
+              (ref, id) async => [
+                ScheduledContact(
+                  id: 'c-1',
+                  personId: 'p-m',
+                  householdId: _household.id,
+                  dueDate: DateTime.now().subtract(const Duration(days: 2)),
+                  purpose: 'ANC 4th visit — review haemoglobin and BP',
+                  createdBy: 'u-fhw-1',
+                  priority: TriageLevel.priority,
+                ),
+              ],
+            ),
+            barrierHistoryProvider.overrideWith((ref, id) async => const []),
+            householdHomeChecksProvider.overrideWith(
+              (ref, id) async => const [],
+            ),
+            householdMilestoneChecksProvider.overrideWith(
+              (ref, id) async => const [],
+            ),
+            latestAssessmentProvider.overrideWith((ref, id) async {
+              if (id == mother.id) return assessment;
+              if (id == child.id) {
+                return _assessment(child, TriageLevel.routine, 'WELL CHILD');
+              }
+              return null;
+            }),
+            personProvider.overrideWith(
+              (ref, id) async => mother.id == id
+                  ? mother
+                  : child.id == id
+                  ? child
+                  : null,
+            ),
+          ],
+          child: const MaterialApp(home: HouseholdScreen(householdId: 'h-1')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Family code'), findsNothing);
+      expect(find.byIcon(Icons.qr_code_2_rounded), findsNothing);
+      expect(find.text('Achana household'), findsWidgets);
+      expect(find.text('Add person'), findsOneWidget);
+      expect(find.text('Start assessment'), findsOneWidget);
+
+      await tester.scrollUntilVisible(
+        find.text('Who lives here'),
+        250,
+        scrollable: find.byType(Scrollable),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Achana'), findsOneWidget);
+      expect(find.text('sala'), findsOneWidget);
+      expect(
+        find.textContaining('PREGNANCY WITH RISK FACTORS'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('WELL CHILD'), findsOneWidget);
+
+      await tester.scrollUntilVisible(
+        find.text('ANC 4th visit — review haemoglobin and BP'),
+        250,
+        scrollable: find.byType(Scrollable),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Scheduled next'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('summary screen has no overflows at phone width', (tester) async {
     _phoneSize(tester);
@@ -381,7 +413,8 @@ void main() {
 
     // The result experience is two pages: the verdict moment, then the
     // full clinical report. Both must be overflow-free at phone width.
-    final cta = find.text('Open full clinical report');
+    // The doorway is the whole teaser card, labelled once.
+    final cta = find.text('Full clinical report');
     await tester.scrollUntilVisible(
       cta,
       300,

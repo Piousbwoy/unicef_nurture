@@ -1,5 +1,6 @@
 // Offline contract, fail-closed execution, and research/clinical separation.
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -314,6 +315,26 @@ void main() {
       expect(roundTrip['experimental_raw_output'], p.rawNeuralOutput);
       expect(roundTrip['experimental_adjusted_output'], p.researchOutput);
       _noClinicalOutput(p);
+    },
+  );
+
+  test(
+    'the web-compiled interpreter avoids dart2js-unsupported Int64 accessors',
+    () {
+      // dart2js throws "Unsupported operation: Int64 accessor not supported by
+      // dart2js" the moment a 64-bit ByteData accessor is reached. That took
+      // the whole model pack offline in the browser while every Dart VM test
+      // stayed green, so the constraint is checked here instead.
+      final source = File(
+        'lib/core/ml/tflite_dart_interpreter.dart',
+      ).readAsStringSync();
+      expect(
+        RegExp(r'\b(?:get|set)(?:U?Int64)\b').hasMatch(source),
+        isFalse,
+        reason:
+            'This interpreter is compiled by dart2js for web; 64-bit values '
+            'must be read as two 32-bit words.',
+      );
     },
   );
 

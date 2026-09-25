@@ -22,6 +22,7 @@ class CockpitGauge extends StatelessWidget {
     this.interval95,
     this.conformalQ95,
     this.caption = '0–1 scale — experimental, not a diagnosis',
+    this.valueText,
   });
 
   final double value;
@@ -29,6 +30,10 @@ class CockpitGauge extends StatelessWidget {
   final ({double low, double high})? interval95;
   final double? conformalQ95;
   final String caption;
+
+  /// Overrides the centre figure. The verdict hero passes the raw research
+  /// index (a 0–100 scale) so the dial never wears a probability's "%" face.
+  final String? valueText;
 
   Color get _color {
     if (value >= 0.7) return AppColors.triageRed;
@@ -70,8 +75,11 @@ class CockpitGauge extends StatelessWidget {
               ),
               child: Center(
                 child: Text(
-                  '$pct%',
-                  style: AppType.stat.copyWith(fontSize: 20, color: color),
+                  valueText ?? '$pct%',
+                  style: AppType.stat.copyWith(
+                    fontSize: valueText == null ? 20 : 18,
+                    color: color,
+                  ),
                 ),
               ),
             ),

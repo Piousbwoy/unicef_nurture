@@ -1,8 +1,8 @@
-/// A person outside the check's scope used to land on one grey paragraph and a
-/// "Get help" button, which read as a broken app. The screen now names the
-/// exact reason, shows what the record says, and offers a way forward — and it
-/// has to survive a 320px handset at 200% text, because that is the device
-/// most caregivers in the north actually hold.
+/// Everyone the nurse can assess, the caregiver can check: a six-year-old and
+/// a general-care woman used to land on a blocked screen, which read as a
+/// broken app. The check now opens for every registered person, and the entry
+/// screens have to survive a 320px handset at 200% text, because that is the
+/// device most caregivers in the north actually hold.
 library;
 
 import 'package:carebridge_ai/app/providers.dart';
@@ -135,8 +135,8 @@ Future<void> _open(
   await tester.pumpAndSettle();
 }
 
-/// The check list is longer than one screen at 200% text, so every assertion
-/// scrolls its target into view first.
+/// The check screens are longer than one viewport at 200% text, so every
+/// assertion scrolls its target into view first.
 Future<void> _expectText(WidgetTester tester, String text) async {
   final finder = find.text(text);
   expect(finder, findsWidgets, reason: text);
@@ -146,41 +146,38 @@ Future<void> _expectText(WidgetTester tester, String text) async {
 }
 
 void main() {
-  testWidgets(
-    'a child past five is told why, shown the record and given a way on',
-    (tester) async {
-      await _open(tester, [_kid(ageInDays: 6 * 365)]);
-      expect(tester.takeException(), isNull);
-      await _expectText(tester, 'Past the under-five window');
-      await _expectText(tester, 'What the record says');
-      await _expectText(tester, 'Who this check is for');
-      await _expectText(tester, 'Check someone else');
-      // The honesty line stays, with the real name instead of the old
-      // sentence-ending interpolation that read as a broken string.
-      await _expectText(
-        tester,
-        'Nothing was saved. No danger-sign check was done and no health '
-        'conclusion has been made for Fusea Issah.',
-      );
-
-      await tester.tap(find.text('Check someone else'));
-      await tester.pumpAndSettle();
-      expect(find.text('Who needs a check today?'), findsOneWidget);
-    },
-  );
-
-  testWidgets('a missing birth date names the missing field, not the app', (
+  testWidgets('a child past five starts the child battery, not a block', (
     tester,
   ) async {
-    await _open(tester, [_woman()]);
+    await _open(tester, [_kid(ageInDays: 6 * 365)]);
     expect(tester.takeException(), isNull);
-    await _expectText(tester, 'A different kind of record');
-    await _expectText(tester, 'Woman (general care)');
-    await _expectText(tester, 'Add a family member');
-    await _expectText(tester, 'Emergency — do not wait for a check');
+    await _expectText(tester, 'What is worrying you about Fusea today?');
+    await _expectText(tester, 'Very thin or swollen feet');
+    expect(find.text('Past the under-five window'), findsNothing);
+    expect(find.text('Who this check is for'), findsNothing);
+
+    await tester.tap(find.text('No specific worry — just check'));
+    await tester.pumpAndSettle();
+    await _expectText(tester, 'Is the child unable to drink or breastfeed?');
   });
 
-  testWidgets('the blocked screen fits 320px at 200% text', (tester) async {
+  testWidgets('a general-care woman gets the maternal battery without the '
+      'fetal-movement worry', (tester) async {
+    await _open(tester, [_woman()]);
+    expect(tester.takeException(), isNull);
+    await _expectText(tester, 'What is worrying you about Fusea today?');
+    await _expectText(tester, 'Bleeding');
+    // Her battery has no fetal-movement question, so the picker must not
+    // offer a worry that leads to a question she will never be asked.
+    expect(find.text('Baby moving less'), findsNothing);
+    expect(find.text('A different kind of record'), findsNothing);
+
+    await tester.tap(find.text('No specific worry — just check'));
+    await tester.pumpAndSettle();
+    await _expectText(tester, 'Is there heavy bleeding?');
+  });
+
+  testWidgets('the check entry fits 320px at 200% text', (tester) async {
     await _open(
       tester,
       [_kid(ageInDays: 6 * 365)],
@@ -188,6 +185,9 @@ void main() {
       size: const Size(320, 720),
     );
     expect(tester.takeException(), isNull);
-    expect(find.text('Past the under-five window'), findsOneWidget);
+    expect(
+      find.text('What is worrying you about Fusea today?'),
+      findsOneWidget,
+    );
   });
 }

@@ -283,7 +283,8 @@ class CaregiverCheckPolicy {
     if (cohort.startsWith('newborn:')) return newbornQuestions;
     if (cohort.startsWith('child:')) return childQuestions;
     if (cohort == ClientType.pregnantWoman.name) return maternalQuestions;
-    if (cohort == ClientType.postpartumWoman.name) {
+    if (cohort == ClientType.postpartumWoman.name ||
+        cohort == ClientType.womanOfReproductiveAge.name) {
       return maternalQuestions.where((q) => q.key != 'move').toList();
     }
     return null;
@@ -301,29 +302,40 @@ class CaregiverCheckPolicy {
     ).difference(DateTime.utc(born.year, born.month, born.day)).inDays;
   }
 
+  /// The battery for any registered person, mirroring the nurse's tolerant
+  /// routing: a child past five is still observed as a child, a record with
+  /// no usable date keeps the battery it was registered under, and a
+  /// general-care woman gets the maternal signs minus the fetal-movement
+  /// question. This is conservative home observation screening, not a
+  /// validated adult or older-child chart.
   CaregiverQuestionSet? questionsFor(Person person, {List<String>? concerns}) {
     final type = person.clientType;
     if (type == ClientType.newborn || type == ClientType.childUnderFive) {
       final dob = person.dateOfBirth;
-      if (dob == null) return null;
-      final days = _daysOld(dob);
-      final valid = ClientType.forChildAgeInDays(days);
-      if (valid == null) return null;
-      final group = valid == ClientType.newborn ? 'newborn' : 'child';
+      final days = dob == null ? null : _daysOld(dob);
+      final derived = days == null ? null : ClientType.forChildAgeInDays(days);
+      final effective =
+          derived ??
+          (days != null && days > 59 ? ClientType.childUnderFive : type);
+      final group = effective == ClientType.newborn ? 'newborn' : 'child';
       return reorder(
         CaregiverQuestionSet(
           group: group,
-          cohortKey: '$group:${caregiverDateKey(dob)}',
-          clientType: valid,
-          questions: valid == ClientType.newborn
+          cohortKey:
+              '$group:${dob == null ? 'unregistered' : caregiverDateKey(dob)}',
+          clientType: effective,
+          questions: effective == ClientType.newborn
               ? newbornQuestions
               : childQuestions,
         ),
         concerns ?? const [],
       );
     }
-    if (type != ClientType.pregnantWoman && type != ClientType.postpartumWoman)
+    if (type != ClientType.pregnantWoman &&
+        type != ClientType.postpartumWoman &&
+        type != ClientType.womanOfReproductiveAge) {
       return null;
+    }
     return reorder(
       CaregiverQuestionSet(
         group: 'mother',
@@ -341,47 +353,15 @@ class CaregiverCheckPolicy {
 
   /// Why [questionsFor] refuses this person, or null when a check is possible.
   ///
-  /// Kept beside [questionsFor] so the two can never disagree. The blocked
-  /// screen has to be specific: a missing birth date, a child who has aged
-  /// out and a record of the wrong kind each need a different fix, and a
-  /// generic "not supported" reads as a broken app.
+  /// Every registered type now has a battery, so this only fires if a future
+  /// [ClientType] arrives before its questions are written — a safety net,
+  /// not a routine screen.
   ({String headline, String detail})? blockReasonFor(Person person) {
-    final type = person.clientType;
-    if (type == ClientType.pregnantWoman ||
-        type == ClientType.postpartumWoman) {
-      return null;
-    }
-    if (type == ClientType.newborn || type == ClientType.childUnderFive) {
-      final dob = person.dateOfBirth;
-      if (dob == null) {
-        return (
-          headline: 'A birth date is missing',
-          detail: person.ageYearsApprox == null
-              ? '${person.fullName} has no birth date and no age on the record, so the app cannot work out which questions fit.'
-              : 'Only an approximate age (about ${person.ageYearsApprox} years) is recorded for ${person.fullName}. This check needs a birth date.',
-        );
-      }
-      final days = _daysOld(dob);
-      if (days < 0) {
-        return (
-          headline: 'The birth date looks wrong',
-          detail:
-              "The birth date on ${person.fullName}'s record is in the future, so no age can be worked out.",
-        );
-      }
-      if (ClientType.forChildAgeInDays(days) == null) {
-        return (
-          headline: 'Past the under-five window',
-          detail:
-              '${person.fullName} is ${person.ageLabel} old. This check covers children under five, pregnancy, and the six weeks after birth.',
-        );
-      }
-      return null;
-    }
+    if (questionsFor(person) != null) return null;
     return (
-      headline: 'A different kind of record',
+      headline: 'This record needs a fix first',
       detail:
-          '${person.fullName} is recorded as "${type.label}". This check covers children under five, pregnancy, and the six weeks after birth.',
+          '${person.fullName} is recorded as "${person.clientType.label}". No home check has been written for that kind of record yet.',
     );
   }
 

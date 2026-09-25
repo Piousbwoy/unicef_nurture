@@ -121,15 +121,18 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
     account: ref.read(narrationLanguageProvider),
   );
 
-  bool get _canSpeak => mounted &&
-      (ModalRoute.of(context)?.isCurrent ?? true) && TickerMode.valuesOf(context).enabled &&
+  bool get _canSpeak =>
+      mounted &&
+      (ModalRoute.of(context)?.isCurrent ?? true) &&
+      TickerMode.valuesOf(context).enabled &&
       (WidgetsBinding.instance.lifecycleState == null ||
-       WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed);
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed);
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!(ModalRoute.isCurrentOf(context) ?? true) || !TickerMode.valuesOf(context).enabled) {
+    if (!(ModalRoute.isCurrentOf(context) ?? true) ||
+        !TickerMode.valuesOf(context).enabled) {
       _voice?.stop(notify: false);
     }
   }
@@ -223,10 +226,15 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
       _voice?.stop();
       _resetNarration();
     });
-    ref.listen(caregiverSettingsProvider(scope).select((value) => value.valueOrNull?.autoRead), (_, next) {
-      if (next != true) _voice?.stop();
-      _resetNarration();
-    });
+    ref.listen(
+      caregiverSettingsProvider(
+        scope,
+      ).select((value) => value.valueOrNull?.autoRead),
+      (_, next) {
+        if (next != true) _voice?.stop();
+        _resetNarration();
+      },
+    );
     ref.watch(caregiverSettingsProvider(scope));
     final check = _check;
     return CompanionPage(
@@ -442,8 +450,8 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
         const (
           headline: 'This check cannot cover them yet',
           detail:
-              'The danger-sign check covers children under five, pregnancy, '
-              'and the six weeks after birth.',
+              'The danger-sign check covers every child in the household '
+              'and every woman on the record, whatever her type.',
         );
     final dob = person.dateOfBirth;
     return ListView(
@@ -474,9 +482,12 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: const [
-              _CoverRow('A child under five, with a birth date on the record'),
+              _CoverRow(
+                'Every child in the household, even without a birth date',
+              ),
               _CoverRow('A woman recorded as pregnant'),
               _CoverRow('A mother in the six weeks after giving birth'),
+              _CoverRow('A woman recorded for general care'),
             ],
           ),
         ),
@@ -1107,7 +1118,7 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
           PremiumCheckButton(
             label: 'Show the nurse',
             icon: Icons.badge_outlined,
-            trailingIcon: Icons.qr_code_2_rounded,
+            trailingIcon: Icons.chevron_right_rounded,
             onPressed: () => Navigator.of(context).push(
               GlassPageRoute<void>(
                 builder: (_) => CaregiverNurseSummary(

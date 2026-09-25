@@ -28,20 +28,44 @@ void main() {
     // One age per band that carries a negatively-worded milestone ID.
     final cases = <int>[5, 10, 13, 20];
     for (final months in cases) {
-      final person = child(dob: now.subtract(Duration(days: (months * 30.4375).ceil())), type: ClientType.childUnderFive);
+      final person = child(
+        dob: now.subtract(Duration(days: (months * 30.4375).ceil())),
+        type: ClientType.childUnderFive,
+      );
       final band = CaregiverMilestonePolicy.bandFor(person, now)!;
-      final negatives = band.milestones.where((m) => m.id.startsWith('no_') || m.id.startsWith('not_')).toList();
-      expect(negatives, isNotEmpty, reason: 'band ${band.label} should have a negative milestone');
+      final negatives = band.milestones
+          .where((m) => m.id.startsWith('no_') || m.id.startsWith('not_'))
+          .toList();
+      expect(
+        negatives,
+        isNotEmpty,
+        reason: 'band ${band.label} should have a negative milestone',
+      );
       for (final negativeId in negatives) {
         expect(negativeId.question, isNot(contains(' not ')));
-        final answers = {for (final m in band.milestones) m.id: CaregiverAnswer.yes};
-        CaregiverDraft draft() => CaregiverDraft(id: 'milestone', scope: scope, personId: person.id,
-          kind: CaregiverDraftKind.milestone, questionVersion: CaregiverMilestonePolicy.questionVersion,
-          cohortKey: CaregiverMilestonePolicy.cohortKey(person, band), answers: answers,
-          startedAt: now, updatedAt: now);
-        expect(CaregiverMilestonePolicy.report(draft(), person, now).verdict, MilestoneVerdict.onTrack);
+        final answers = {
+          for (final m in band.milestones) m.id: CaregiverAnswer.yes,
+        };
+        CaregiverDraft draft() => CaregiverDraft(
+          id: 'milestone',
+          scope: scope,
+          personId: person.id,
+          kind: CaregiverDraftKind.milestone,
+          questionVersion: CaregiverMilestonePolicy.questionVersion,
+          cohortKey: CaregiverMilestonePolicy.cohortKey(person, band),
+          answers: answers,
+          startedAt: now,
+          updatedAt: now,
+        );
+        expect(
+          CaregiverMilestonePolicy.report(draft(), person, now).verdict,
+          MilestoneVerdict.onTrack,
+        );
         answers[negativeId.id] = CaregiverAnswer.no;
-        expect(CaregiverMilestonePolicy.report(draft(), person, now).flags, contains(negativeId.question));
+        expect(
+          CaregiverMilestonePolicy.report(draft(), person, now).flags,
+          contains(negativeId.question),
+        );
       }
     }
   });
@@ -114,6 +138,9 @@ void main() {
       child(dob: DateTime(2025, 8, 1)),
       child(type: ClientType.pregnantWoman),
       child(type: ClientType.postpartumWoman),
+      child(type: ClientType.womanOfReproductiveAge),
+      child(type: ClientType.childUnderFive, dob: DateTime(2018)),
+      child(type: ClientType.childUnderFive, unknown: true),
     ]) {
       final label = '${person.clientType.name}-${person.dateOfBirth}';
       test('$label: only all-NO completion is routine', () {
@@ -148,45 +175,56 @@ void main() {
         },
       );
     }
-    test('unknown, future and out-of-range child ages are unsupported', () {
+    test('every registered person can be checked — no record is refused', () {
       for (final person in [
         child(unknown: true),
         child(dob: DateTime(2027)),
         child(dob: DateTime(2018)),
         child(type: ClientType.womanOfReproductiveAge),
       ]) {
-        expect(policy.questionsFor(person), isNull);
-        expect(policy.decide(null, {}), CaregiverCheckDecision.unsupported);
+        expect(
+          policy.questionsFor(person),
+          isNotNull,
+          reason: '${person.clientType.name} dob=${person.dateOfBirth}',
+        );
+        expect(
+          policy.blockReasonFor(person),
+          isNull,
+          reason: person.clientType.name,
+        );
       }
     });
-    test('each blocked record gets its own reason, supported ones none', () {
-      expect(
-        policy.blockReasonFor(child(unknown: true))!.headline,
-        'A birth date is missing',
-      );
-      expect(
-        policy.blockReasonFor(child(dob: DateTime(2027)))!.headline,
-        'The birth date looks wrong',
-      );
-      final aged = policy.blockReasonFor(child(dob: DateTime(2018)))!;
-      expect(aged.headline, 'Past the under-five window');
-      expect(aged.detail, contains('This check covers children under five'));
-      final general = policy.blockReasonFor(
+    test('a general-care woman gets the maternal signs without the '
+        'fetal-movement question', () {
+      final set = policy.questionsFor(
         child(type: ClientType.womanOfReproductiveAge),
       )!;
-      expect(general.headline, 'A different kind of record');
+      expect(set.group, 'mother');
+      expect(set.cohortKey, ClientType.womanOfReproductiveAge.name);
+      expect(set.clientType, ClientType.womanOfReproductiveAge);
+      expect(set.questions.map((q) => q.key), isNot(contains('move')));
+      expect(set.questions.map((q) => q.key), contains('bleed'));
+      // Speech ids stay inside the existing 'mother.' bank.
+      expect(set.speechId(set.questions.first), startsWith('mother.'));
       expect(
-        general.detail,
-        contains(ClientType.womanOfReproductiveAge.label),
+        CaregiverCheckPolicy.concernsFor(
+          set,
+        ).any((c) => c.questionKeys.contains('move')),
+        isFalse,
       );
-      for (final ok in [
-        child(),
-        child(type: ClientType.childUnderFive),
-        child(type: ClientType.pregnantWoman),
-        child(type: ClientType.postpartumWoman),
-      ]) {
-        expect(policy.blockReasonFor(ok), isNull, reason: ok.clientType.name);
-      }
+    });
+    test('a child past the window or without a date falls back sensibly', () {
+      final aged = policy.questionsFor(child(dob: DateTime(2018)))!;
+      expect(aged.group, 'child');
+      expect(aged.clientType, ClientType.childUnderFive);
+      final noDobChild = policy.questionsFor(
+        child(type: ClientType.childUnderFive, unknown: true),
+      )!;
+      expect(noDobChild.group, 'child');
+      final noDobNewborn = policy.questionsFor(child(unknown: true))!;
+      expect(noDobNewborn.group, 'newborn');
+      final future = policy.questionsFor(child(dob: DateTime(2027)))!;
+      expect(future.group, 'newborn');
     });
     test(
       'cohort boundary is 59/60 days and pregnancy-only sign is conditional',
@@ -380,50 +418,56 @@ void main() {
         expect(day.focus.length, lessThanOrEqualTo(3));
       },
     );
-    test('a recheck promise made yesterday surfaces today until discharged', () {
-      final yesterday = DateTime(2026, 8, 9, 12);
-      final promise = CaregiverActivity(
-        id: 'p1',
-        scope: scope,
-        personId: 'baby',
-        kind: CaregiverActivityKind.dailyTask,
-        sourceId: 'check-1',
-        itemKey: 'recheck',
-        occurrenceKey: caregiverDateKey(now),
-        occurredAt: yesterday,
-        updatedAt: yesterday,
-      );
-      final day = todayPlanner.build(
-        scope: scope,
-        members: [child()],
-        checks: const [],
-        activity: [promise],
-      );
-      expect(day.attention.any((f) => f.itemKey == 'recheck-promised'), isTrue);
-      // A check completed today discharges the promise.
-      final discharged = todayPlanner.build(
-        scope: scope,
-        members: [child()],
-        checks: [
-          HomeCheck(
-            id: 'check2',
-            householdId: 'h',
-            personId: 'baby',
-            clientType: ClientType.newborn,
-            verdict: HomeCheckVerdict.fine,
-            yesSigns: const [],
-            unsureSigns: const [],
-            checkedBy: 'u',
-            checkedAt: now,
-          ),
-        ],
-        activity: [promise],
-      );
-      expect(
-        discharged.attention.any((f) => f.itemKey == 'recheck-promised'),
-        isFalse,
-      );
-    });
+    test(
+      'a recheck promise made yesterday surfaces today until discharged',
+      () {
+        final yesterday = DateTime(2026, 8, 9, 12);
+        final promise = CaregiverActivity(
+          id: 'p1',
+          scope: scope,
+          personId: 'baby',
+          kind: CaregiverActivityKind.dailyTask,
+          sourceId: 'check-1',
+          itemKey: 'recheck',
+          occurrenceKey: caregiverDateKey(now),
+          occurredAt: yesterday,
+          updatedAt: yesterday,
+        );
+        final day = todayPlanner.build(
+          scope: scope,
+          members: [child()],
+          checks: const [],
+          activity: [promise],
+        );
+        expect(
+          day.attention.any((f) => f.itemKey == 'recheck-promised'),
+          isTrue,
+        );
+        // A check completed today discharges the promise.
+        final discharged = todayPlanner.build(
+          scope: scope,
+          members: [child()],
+          checks: [
+            HomeCheck(
+              id: 'check2',
+              householdId: 'h',
+              personId: 'baby',
+              clientType: ClientType.newborn,
+              verdict: HomeCheckVerdict.fine,
+              yesSigns: const [],
+              unsureSigns: const [],
+              checkedBy: 'u',
+              checkedAt: now,
+            ),
+          ],
+          activity: [promise],
+        );
+        expect(
+          discharged.attention.any((f) => f.itemKey == 'recheck-promised'),
+          isFalse,
+        );
+      },
+    );
     test('follow-up uses the original assessment date, not today', () {
       final day = todayPlanner.build(
         scope: scope,

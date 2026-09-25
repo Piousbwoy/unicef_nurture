@@ -168,48 +168,70 @@ class GlassSurface extends StatelessWidget {
     final blurOn = blur && fx.blur;
     final r = radius ?? BorderRadius.circular(tier.radius);
 
+    final palette = ClinicalPaletteScope.of(context);
+    final dark = palette.isDark;
     final base = tint ?? Colors.white;
     final isHero = tier == GlassTier.hero;
-    final gradient = blurOn
-        ? LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color.lerp(
-                Colors.white,
-                base,
-                isHero ? 0.10 : 0.0,
-              )!.withValues(alpha: 0.78),
-              Color.lerp(
-                Colors.white,
-                base,
-                isHero ? 0.18 : 0.0,
-              )!.withValues(alpha: 0.58),
-            ],
-          )
-        : LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color.lerp(
-                Colors.white,
-                base,
-                isHero ? 0.06 : 0.0,
-              )!.withValues(alpha: 0.94),
-              Color.lerp(
-                Colors.white,
-                base,
-                isHero ? 0.12 : 0.0,
-              )!.withValues(alpha: 0.94),
-            ],
-          );
+
+    final LinearGradient gradient;
+    final double sheen;
+    if (dark) {
+      // Frosted dark glass: a faint cool-white catch-light lifted off a solid
+      // navy body. Dark surfaces occlude more than light glass, so the fill is
+      // the raised surface colour with only a whisper of translucency.
+      final lift = isHero ? 0.06 : 0.0;
+      gradient = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Colors.white.withValues(alpha: (blurOn ? 0.13 : 0.10) + lift),
+          (tint ?? palette.surface).withValues(alpha: blurOn ? 0.74 : 0.94),
+        ],
+      );
+      sheen = 0.5;
+    } else {
+      sheen = 0.9;
+      gradient = blurOn
+          ? LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color.lerp(
+                  Colors.white,
+                  base,
+                  isHero ? 0.10 : 0.0,
+                )!.withValues(alpha: 0.78),
+                Color.lerp(
+                  Colors.white,
+                  base,
+                  isHero ? 0.18 : 0.0,
+                )!.withValues(alpha: 0.58),
+              ],
+            )
+          : LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color.lerp(
+                  Colors.white,
+                  base,
+                  isHero ? 0.06 : 0.0,
+                )!.withValues(alpha: 0.94),
+                Color.lerp(
+                  Colors.white,
+                  base,
+                  isHero ? 0.12 : 0.0,
+                )!.withValues(alpha: 0.94),
+              ],
+            );
+    }
 
     final decorated = DecoratedBox(
       decoration: BoxDecoration(
         gradient: gradient,
         borderRadius: r,
         border: border
-            ? Border.all(color: AppColors.glassStroke, width: Gap.hairline)
+            ? Border.all(color: palette.glassStroke, width: Gap.hairline)
             : null,
       ),
       child: Stack(
@@ -226,7 +248,7 @@ class GlassSurface extends StatelessWidget {
                   gradient: LinearGradient(
                     colors: [
                       Colors.white.withValues(alpha: 0),
-                      Colors.white.withValues(alpha: 0.9),
+                      Colors.white.withValues(alpha: sheen),
                       Colors.white.withValues(alpha: 0),
                     ],
                   ),
@@ -280,27 +302,34 @@ class AmbientBackdrop extends StatelessWidget {
   final AmbientVariant variant;
 
   @override
-  Widget build(BuildContext context) => Stack(
-    fit: StackFit.expand,
-    children: [
-      RepaintBoundary(child: CustomPaint(painter: _AmbientPainter(variant))),
-      child,
-    ],
-  );
+  Widget build(BuildContext context) {
+    final palette = ClinicalPaletteScope.of(context);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        RepaintBoundary(
+          child: CustomPaint(painter: _AmbientPainter(variant, palette)),
+        ),
+        child,
+      ],
+    );
+  }
 }
 
 class _AmbientPainter extends CustomPainter {
-  const _AmbientPainter(this.variant);
+  const _AmbientPainter(this.variant, this.palette);
 
   final AmbientVariant variant;
+  final ClinicalPalette palette;
 
   static const _warm = Color(0xFFFFE7C2);
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(Offset.zero & size, Paint()..color = AppColors.canvas);
+    canvas.drawRect(Offset.zero & size, Paint()..color = palette.canvas);
     final w = size.width;
     final h = size.height;
+    final dark = palette.isDark;
 
     void blob(Offset c, double r, Color colour, double alpha) {
       final paint = Paint()
@@ -315,18 +344,33 @@ class _AmbientPainter extends CustomPainter {
 
     switch (variant) {
       case AmbientVariant.clinical:
-        blob(Offset(w * 0.15, h * 0.05), w * 0.7, AppColors.primaryGlow, 0.22);
-        blob(Offset(w * 0.95, h * 0.35), w * 0.6, AppColors.surfaceTint, 0.9);
-        blob(Offset(w * 0.3, h * 0.95), w * 0.7, AppColors.primaryLight, 0.9);
+        if (dark) {
+          // Cool blue aurora over midnight navy — the same three anchors, lit
+          // from within rather than washed across white.
+          blob(Offset(w * 0.15, h * 0.05), w * 0.7, palette.primaryGlow, 0.30);
+          blob(Offset(w * 0.95, h * 0.35), w * 0.6, palette.surfaceTint, 1.0);
+          blob(Offset(w * 0.3, h * 0.95), w * 0.7, palette.primary, 0.55);
+        } else {
+          blob(Offset(w * 0.15, h * 0.05), w * 0.7, AppColors.primaryGlow, 0.22);
+          blob(Offset(w * 0.95, h * 0.35), w * 0.6, AppColors.surfaceTint, 0.9);
+          blob(Offset(w * 0.3, h * 0.95), w * 0.7, AppColors.primaryLight, 0.9);
+        }
       case AmbientVariant.warm:
-        blob(Offset(w * 0.1, h * 0.05), w * 0.7, _warm, 0.85);
-        blob(Offset(w * 0.95, h * 0.4), w * 0.6, AppColors.surfaceTint, 0.9);
-        blob(Offset(w * 0.4, h * 0.98), w * 0.7, AppColors.primaryGlow, 0.14);
+        if (dark) {
+          blob(Offset(w * 0.1, h * 0.05), w * 0.7, palette.brass, 0.16);
+          blob(Offset(w * 0.95, h * 0.4), w * 0.6, palette.surfaceTint, 1.0);
+          blob(Offset(w * 0.4, h * 0.98), w * 0.7, palette.primaryGlow, 0.20);
+        } else {
+          blob(Offset(w * 0.1, h * 0.05), w * 0.7, _warm, 0.85);
+          blob(Offset(w * 0.95, h * 0.4), w * 0.6, AppColors.surfaceTint, 0.9);
+          blob(Offset(w * 0.4, h * 0.98), w * 0.7, AppColors.primaryGlow, 0.14);
+        }
     }
   }
 
   @override
-  bool shouldRepaint(_AmbientPainter old) => old.variant != variant;
+  bool shouldRepaint(_AmbientPainter old) =>
+      old.variant != variant || old.palette.isDark != palette.isDark;
 }
 
 // ─── Glass nav bar ────────────────────────────────────────────────────────

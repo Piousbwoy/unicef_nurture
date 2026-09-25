@@ -26,7 +26,6 @@ import '../../domain/engines/immunisation_engine.dart';
 import '../../domain/engines/nurturing_care_engine.dart';
 import '../../domain/engines/nutrition_engine.dart';
 import '../../domain/engines/nutrition/therapeutic_supplements.dart';
-import '../../domain/engines/protocols/dispensing.dart';
 import '../../domain/engines/protocols/stabilization_protocols.dart';
 import '../../domain/engines/recommendation_engine.dart';
 import '../../domain/entities/visit.dart';
@@ -64,23 +63,25 @@ class RecSection extends StatelessWidget {
   final Color? accent;
 
   @override
-  Widget build(BuildContext context) => Column(
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Row(
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 15, color: accent ?? AppColors.inkFaint),
+            Icon(icon, size: 15, color: accent ?? p.inkFaint),
             const SizedBox(width: Gap.sm),
           ],
           Expanded(
             child: Text(
               title.toUpperCase(),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 1.1,
-                color: AppColors.inkMuted,
+                color: p.inkMuted,
               ),
             ),
           ),
@@ -91,9 +92,9 @@ class RecSection extends StatelessWidget {
         const SizedBox(height: Gap.xs),
         SpeakableText(
           subtitle!,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
-            color: AppColors.inkMuted,
+            color: p.inkMuted,
             height: 1.4,
           ),
         ),
@@ -102,6 +103,7 @@ class RecSection extends StatelessWidget {
       child,
     ],
   );
+  }
 }
 
 /// A premium collapsible version of RecSection for secondary care plan info.
@@ -177,7 +179,8 @@ class _CollapsibleRecSectionState extends State<CollapsibleRecSection>
 
   @override
   Widget build(BuildContext context) {
-    final accent = widget.accent ?? AppColors.primary;
+    final p = ClinicalPaletteScope.of(context);
+    final accent = widget.accent ?? p.primary;
     final isHoveredOrActive = _isExpanded;
 
     return AnimatedContainer(
@@ -185,13 +188,13 @@ class _CollapsibleRecSectionState extends State<CollapsibleRecSection>
       curve: Curves.easeOut,
       decoration: BoxDecoration(
         color: isHoveredOrActive
-            ? AppColors.surfaceTint.withValues(alpha: 0.3)
-            : Colors.white,
+            ? p.surfaceTint.withValues(alpha: p.isDark ? 0.5 : 0.3)
+            : p.surfaceSolid,
         borderRadius: BorderRadius.circular(Gap.radius),
         border: Border.all(
           color: isHoveredOrActive
               ? accent.withValues(alpha: 0.3)
-              : AppColors.line,
+              : p.line,
           width: isHoveredOrActive ? 1.5 : Gap.hairline,
         ),
         boxShadow: isHoveredOrActive
@@ -243,7 +246,7 @@ class _CollapsibleRecSectionState extends State<CollapsibleRecSection>
                                 letterSpacing: 1.1,
                                 color: isHoveredOrActive
                                     ? accent
-                                    : AppColors.inkMuted,
+                                    : p.inkMuted,
                               ),
                             ),
                           ),
@@ -257,7 +260,7 @@ class _CollapsibleRecSectionState extends State<CollapsibleRecSection>
                               Icons.keyboard_arrow_down_rounded,
                               color: isHoveredOrActive
                                   ? accent
-                                  : AppColors.inkFaint,
+                                  : p.inkFaint,
                               size: 20,
                             ),
                           ),
@@ -273,9 +276,9 @@ class _CollapsibleRecSectionState extends State<CollapsibleRecSection>
                           ),
                           child: SpeakableText(
                             widget.subtitle!,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12.5,
-                              color: AppColors.inkMuted,
+                              color: p.inkMuted,
                               height: 1.4,
                             ),
                           ),
@@ -289,9 +292,9 @@ class _CollapsibleRecSectionState extends State<CollapsibleRecSection>
             SizeTransition(
               sizeFactor: _heightFactor,
               child: Container(
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   border: Border(
-                    top: BorderSide(color: AppColors.line, width: Gap.hairline),
+                    top: BorderSide(color: p.line, width: Gap.hairline),
                   ),
                 ),
                 padding: const EdgeInsets.all(Gap.md),
@@ -311,10 +314,13 @@ class RecHairline extends StatelessWidget {
   const RecHairline({super.key});
 
   @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.symmetric(vertical: Gap.lg),
-    child: Divider(height: 1, thickness: 1, color: AppColors.line),
-  );
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return Padding(
+    padding: const EdgeInsets.symmetric(vertical: Gap.lg),
+    child: Divider(height: 1, thickness: 1, color: p.line),
+    );
+  }
 }
 
 /// The premium finish every kit card shares: a white surface that reads
@@ -376,33 +382,34 @@ class SafetyNetNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppColors.triageAmberBg,
+        color: p.triageAmberBg,
         borderRadius: BorderRadius.circular(Gap.radiusSm),
       ),
       child: AccentEdge(
-        accent: AppColors.triageAmber,
+        accent: p.triageAmber,
         borderRadius: BorderRadius.circular(Gap.radiusSm),
         child: Padding(
           padding: const EdgeInsets.all(Gap.md),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
+              Icon(
                 Icons.shield_outlined,
                 size: 16,
-                color: AppColors.triageAmber,
+                color: p.triageAmber,
               ),
               const SizedBox(width: Gap.sm),
               Expanded(
                 child: SpeakableText(
                   text,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.triageAmber,
+                    color: p.triageAmber,
                     height: 1.4,
                   ),
                 ),
@@ -436,16 +443,17 @@ class CohortCallout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     final radius = BorderRadius.circular(Gap.radiusSm);
     return SizedBox(
       width: double.infinity,
       child: GlassSurface(
         blur: false,
         radius: radius,
-        tint: AppColors.primaryGlow,
+        tint: p.primaryGlow,
         padding: EdgeInsets.zero,
         child: AccentEdge(
-          accent: AppColors.primary,
+          accent: p.primary,
           borderRadius: radius,
           child: Padding(
             padding: const EdgeInsets.all(Gap.md),
@@ -457,14 +465,14 @@ class CohortCallout extends StatelessWidget {
                   runSpacing: Gap.xs,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Icon(_icon, size: 16, color: AppColors.primaryDeep),
-                    const Text(
+                    Icon(_icon, size: 16, color: p.primaryDark),
+                    Text(
                       'TAILORED PLAN',
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.8,
-                        color: AppColors.primaryDeep,
+                        color: p.primaryDark,
                       ),
                     ),
                     Container(
@@ -473,7 +481,7 @@ class CohortCallout extends StatelessWidget {
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: AppColors.primary,
+                        color: p.primary,
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
@@ -491,18 +499,18 @@ class CohortCallout extends StatelessWidget {
                 const SizedBox(height: Gap.xs),
                 Text(
                   cohort.label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.ink,
+                    color: p.ink,
                   ),
                 ),
                 const SizedBox(height: 4),
                 SpeakableText(
                   note,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: AppColors.inkMuted,
+                    color: p.inkMuted,
                     height: 1.45,
                   ),
                 ),
@@ -608,6 +616,7 @@ class _ActionWorklistState extends State<ActionWorklist> {
 
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     // Every action paired with its plan index, then dealt into bands —
     // each action lands in the first band that claims it.
     // Collapse only exact duplicates, preserving distinct indications/sources.
@@ -637,17 +646,17 @@ class _ActionWorklistState extends State<ActionWorklist> {
           child: LinearProgressIndicator(
             value: unique.isEmpty ? 0 : doneCount / unique.length,
             minHeight: 6,
-            backgroundColor: AppColors.inkFaint.withValues(alpha: 0.2),
-            valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accent),
+            backgroundColor: p.inkFaint.withValues(alpha: 0.2),
+            valueColor: AlwaysStoppedAnimation<Color>(p.primary),
           ),
         ),
         const SizedBox(height: Gap.xs),
         Text(
           '$doneCount of ${unique.length} done',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w700,
-            color: AppColors.inkFaint,
+            color: p.inkFaint,
           ),
         ),
         const SizedBox(height: Gap.md),
@@ -688,7 +697,9 @@ class _BandHeader extends StatelessWidget {
   final int totalCount;
 
   @override
-  Widget build(BuildContext context) => Padding(
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return Padding(
     padding: const EdgeInsets.only(bottom: Gap.sm),
     child: Row(
       children: [
@@ -713,9 +724,9 @@ class _BandHeader extends StatelessWidget {
               ),
               Text(
                 band.note,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: AppColors.inkFaint,
+                  color: p.inkFaint,
                   height: 1.35,
                 ),
               ),
@@ -725,7 +736,9 @@ class _BandHeader extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: Gap.sm, vertical: 3),
           decoration: BoxDecoration(
-            color: band.bg,
+            color: p.isDark
+                ? band.colour.withValues(alpha: 0.16)
+                : band.bg,
             borderRadius: BorderRadius.circular(999),
           ),
           child: Text(
@@ -739,7 +752,8 @@ class _BandHeader extends StatelessWidget {
         ),
       ],
     ),
-  );
+    );
+  }
 }
 
 class _WorklistTile extends StatelessWidget {
@@ -762,17 +776,18 @@ class _WorklistTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     final (icon, colour) = action.isReferral
-        ? (Icons.local_hospital_outlined, AppColors.triageRed)
+        ? (Icons.local_hospital_outlined, p.triageRed)
         : action.isTreatment
-        ? (Icons.medication_outlined, AppColors.triageAmber)
-        : (Icons.chat_bubble_outline_rounded, AppColors.accent);
+        ? (Icons.medication_outlined, p.triageAmber)
+        : (Icons.chat_bubble_outline_rounded, p.primary);
     // Completion micro-interaction: the tick pops, the line strikes through.
     // Both collapse to instant under reduced motion or Lite.
     final d = VisualEffects.of(context).scale(AppMotion.fast);
 
     return KitCard(
-      accent: done ? AppColors.lineStrong : accent,
+      accent: done ? p.lineStrong : accent,
       padding: const EdgeInsets.all(Gap.md),
       child: InkWell(
         onTap: onToggle,
@@ -805,7 +820,7 @@ class _WorklistTile extends StatelessWidget {
               child: Icon(
                 icon,
                 size: 16,
-                color: done ? AppColors.inkFaint : colour,
+                color: done ? p.inkFaint : colour,
               ),
             ),
             const SizedBox(width: Gap.md),
@@ -819,13 +834,14 @@ class _WorklistTile extends StatelessWidget {
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       height: 1.4,
-                      color: done ? AppColors.inkFaint : AppColors.ink,
+                      color: done ? p.inkFaint : p.ink,
                       decoration: done
                           ? TextDecoration.lineThrough
                           : TextDecoration.none,
-                      decorationColor: AppColors.inkFaint,
+                      decorationColor: p.inkFaint,
                     ),
-                    child: SpeakableText(action.instruction, policy: SpeechContentPolicy.clinical),
+                    child: SpeakableText(action.instruction,
+                      policy: SpeechContentPolicy.clinical),
                   ),
                   if (audience == RecAudience.healthWorker &&
                       (action.rationale != null ||
@@ -848,7 +864,8 @@ class _WorklistTile extends StatelessWidget {
                         children: [
                           if (action.rationale != null)
                             SpeakableText(
-                              action.rationale!, policy: SpeechContentPolicy.clinical,
+                              action.rationale!,
+                              policy: SpeechContentPolicy.clinical,
                               style: const TextStyle(fontSize: 14, height: 1.5),
                             ),
                           if (action.protocolSource != null)
@@ -866,7 +883,8 @@ class _WorklistTile extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       child: SpeakableText(
-                        action.rationale!, policy: SpeechContentPolicy.clinical,
+                        action.rationale!,
+                        policy: SpeechContentPolicy.clinical,
                         style: const TextStyle(fontSize: 14, height: 1.5),
                       ),
                     ),
@@ -886,7 +904,7 @@ class _WorklistTile extends StatelessWidget {
                         fontSize: 10.5,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 0.3,
-                        color: done ? AppColors.inkFaint : accent,
+                        color: done ? p.inkFaint : accent,
                       ),
                     ),
                   ),
@@ -918,6 +936,7 @@ class NutritionRecSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     // Build a compact summary of the plan for the header.
     final suppCount = plan.therapeuticPlan?.supplements.length ?? 0;
     final foodCount = plan.suggestions.length;
@@ -929,8 +948,8 @@ class NutritionRecSection extends StatelessWidget {
           padding: const EdgeInsets.all(Gap.md),
           decoration: BoxDecoration(
             color: plan.therapeuticFoodRequired
-                ? AppColors.triageRedBg
-                : AppColors.triageGreenBg,
+                ? p.triageRedBg
+                : p.triageGreenBg,
             borderRadius: BorderRadius.circular(Gap.radiusSm),
           ),
           child: Column(
@@ -943,8 +962,8 @@ class NutritionRecSection extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                   height: 1.4,
                   color: plan.therapeuticFoodRequired
-                      ? AppColors.triageRed
-                      : AppColors.triageGreen,
+                      ? p.triageRed
+                      : p.triageGreen,
                 ),
               ),
               const SizedBox(height: Gap.sm),
@@ -985,7 +1004,7 @@ class NutritionRecSection extends StatelessWidget {
           // engine's own words for the pregnancy, the weaning window, the
           // breastfeeding mother.
           KitCard(
-            accent: AppColors.primary,
+            accent: p.primary,
             margin: EdgeInsets.zero,
             padding: const EdgeInsets.symmetric(
               horizontal: Gap.md,
@@ -994,19 +1013,19 @@ class NutritionRecSection extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(
+                Icon(
                   Icons.person_outline_rounded,
                   size: 16,
-                  color: AppColors.primary,
+                  color: p.primary,
                 ),
                 const SizedBox(width: Gap.sm),
                 Expanded(
                   child: SpeakableText(
                     plan.cohortLine!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.primaryDeep,
+                      color: p.primaryDark,
                       height: 1.45,
                     ),
                   ),
@@ -1018,9 +1037,9 @@ class NutritionRecSection extends StatelessWidget {
         ],
         SpeakableText(
           plan.seasonNote,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12.5,
-            color: AppColors.inkMuted,
+            color: p.inkMuted,
             height: 1.4,
             fontStyle: FontStyle.italic,
           ),
@@ -1035,10 +1054,11 @@ class NutritionRecSection extends StatelessWidget {
           if (plan.therapeuticPlan!.counsellingHeadline.isNotEmpty) ...[
             const SizedBox(height: Gap.xs),
             SpeakableText(
-              plan.therapeuticPlan!.counsellingHeadline, policy: SpeechContentPolicy.clinical,
-              style: const TextStyle(
+              plan.therapeuticPlan!.counsellingHeadline,
+              policy: SpeechContentPolicy.clinical,
+              style: TextStyle(
                 fontSize: 12,
-                color: AppColors.inkMuted,
+                color: p.inkMuted,
                 height: 1.4,
                 fontStyle: FontStyle.italic,
               ),
@@ -1079,25 +1099,25 @@ class NutritionRecSection extends StatelessWidget {
               vertical: Gap.sm,
             ),
             decoration: BoxDecoration(
-              color: AppColors.primaryLight,
+              color: p.primaryLight,
               borderRadius: BorderRadius.circular(Gap.radiusSm),
             ),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.restaurant_outlined,
                   size: 16,
-                  color: AppColors.primaryDeep,
+                  color: p.primaryDark,
                 ),
                 const SizedBox(width: Gap.sm),
                 Expanded(
                   child: SpeakableText(
                     'Feeding target: at least ${plan.mealsPerDayTarget} '
                     'times a day, plus snacks.',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w800,
-                      color: AppColors.primaryDeep,
+                      color: p.primaryDark,
                       height: 1.35,
                     ),
                   ),
@@ -1112,10 +1132,10 @@ class NutritionRecSection extends StatelessWidget {
           if (plan.dayPlanNote != null) ...[
             SpeakableText(
               plan.dayPlanNote!,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: AppColors.inkMuted,
+                color: p.inkMuted,
                 height: 1.4,
                 fontStyle: FontStyle.italic,
               ),
@@ -1161,19 +1181,19 @@ class NutritionRecSection extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.check_circle_outline_rounded,
                     size: 16,
-                    color: AppColors.accent,
+                    color: p.primary,
                   ),
                   const SizedBox(width: Gap.sm),
                   Expanded(
                     child: SpeakableText(
                       rule,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12.5,
                         height: 1.4,
-                        color: AppColors.ink,
+                        color: p.ink,
                       ),
                     ),
                   ),
@@ -1193,23 +1213,23 @@ class NutritionRecSection extends StatelessWidget {
           Container(
             width: double.infinity,
             decoration: BoxDecoration(
-              color: AppColors.triageRedBg,
+              color: p.triageRedBg,
               borderRadius: BorderRadius.circular(Gap.radiusSm),
             ),
             child: AccentEdge(
-              accent: AppColors.triageRed,
+              accent: p.triageRed,
               borderRadius: BorderRadius.circular(Gap.radiusSm),
               child: Padding(
                 padding: const EdgeInsets.all(Gap.md),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const SpeakableText(
+                    SpeakableText(
                       'BRING BACK IMMEDIATELY IF:',
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w900,
-                        color: AppColors.triageRed,
+                        color: p.triageRed,
                         letterSpacing: 0.4,
                       ),
                     ),
@@ -1219,10 +1239,10 @@ class NutritionRecSection extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(vertical: 1),
                         child: SpeakableText(
                           '\u2022 $sign',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.ink,
+                            color: p.ink,
                             height: 1.4,
                           ),
                         ),
@@ -1238,10 +1258,10 @@ class NutritionRecSection extends StatelessWidget {
           SpeakableText(
             'Nutrition review in ${plan.reviewInDays} '
             'day${plan.reviewInDays == 1 ? '' : 's'}.',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w800,
-              color: AppColors.primary,
+              color: p.primary,
             ),
           ),
         ],
@@ -1254,8 +1274,8 @@ class NutritionRecSection extends StatelessWidget {
         subtitle: plan.pathway.label,
         icon: Icons.restaurant_outlined,
         accent: plan.therapeuticFoodRequired
-            ? AppColors.triageRed
-            : AppColors.primary,
+            ? p.triageRed
+            : p.primary,
         child: content,
       );
     }
@@ -1264,8 +1284,8 @@ class NutritionRecSection extends StatelessWidget {
       subtitle: plan.pathway.label,
       icon: Icons.restaurant_outlined,
       accent: plan.therapeuticFoodRequired
-          ? AppColors.triageRed
-          : AppColors.primary,
+          ? p.triageRed
+          : p.primary,
       child: content,
     );
   }
@@ -1284,6 +1304,7 @@ class _DayPlanCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     // The plate: one glass surface, each meal moment revealed in turn so the
     // day reads top to bottom the way it will be eaten.
     return SizedBox(
@@ -1297,12 +1318,12 @@ class _DayPlanCard extends StatelessWidget {
           children: [
             for (var i = 0; i < slots.length; i++) ...[
               if (i > 0)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: Gap.xs),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: Gap.xs),
                   child: Divider(
                     height: 1,
                     thickness: 1,
-                    color: AppColors.line,
+                    color: p.line,
                   ),
                 ),
               StaggeredReveal(
@@ -1323,10 +1344,10 @@ class _DayPlanCard extends StatelessWidget {
                               vertical: 3,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.glassFill,
+                              color: p.glassFill,
                               borderRadius: BorderRadius.circular(999),
                               border: Border.all(
-                                color: AppColors.glassStroke,
+                                color: p.glassStroke,
                                 width: Gap.hairline,
                               ),
                             ),
@@ -1336,16 +1357,16 @@ class _DayPlanCard extends StatelessWidget {
                                 Icon(
                                   _clockIcon,
                                   size: 12,
-                                  color: AppColors.accent,
+                                  color: p.primary,
                                 ),
                                 const SizedBox(width: Gap.xs),
                                 Text(
                                   slots[i].moment.toUpperCase(),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: 0.6,
-                                    color: AppColors.inkMuted,
+                                    color: p.inkMuted,
                                   ),
                                 ),
                               ],
@@ -1355,10 +1376,10 @@ class _DayPlanCard extends StatelessWidget {
                           Expanded(
                             child: SpeakableText(
                               slots[i].foods.join(' + '),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w700,
-                                color: AppColors.ink,
+                                color: p.ink,
                                 height: 1.35,
                               ),
                             ),
@@ -1369,9 +1390,9 @@ class _DayPlanCard extends StatelessWidget {
                         const SizedBox(height: 2),
                         SpeakableText(
                           slots[i].note!,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
-                            color: AppColors.inkFaint,
+                            color: p.inkFaint,
                             height: 1.4,
                           ),
                         ),
@@ -1398,31 +1419,32 @@ class _CoverageChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     // Glass pill; the green lives on the tick and nutrient text only.
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: AppColors.glassFill,
+        color: p.glassFill,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.glassStroke, width: Gap.hairline),
+        border: Border.all(color: p.glassStroke, width: Gap.hairline),
       ),
       child: SpeakableText.rich(
         TextSpan(
           children: [
             TextSpan(
               text: '$nutrient ✓ ',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 10.5,
                 fontWeight: FontWeight.w800,
-                color: AppColors.triageGreen,
+                color: p.triageGreen,
               ),
             ),
             TextSpan(
               text: foods.join(', '),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 10.5,
                 fontWeight: FontWeight.w600,
-                color: AppColors.ink,
+                color: p.ink,
               ),
             ),
           ],
@@ -1497,9 +1519,11 @@ class _FoodTile extends StatelessWidget {
   };
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: Gap.sm),
-    child: GlassSurface(
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Gap.sm),
+      child: GlassSurface(
       blur: false,
       radius: BorderRadius.circular(Gap.radiusSm),
       padding: const EdgeInsets.all(Gap.md),
@@ -1546,6 +1570,7 @@ class _FoodTile extends StatelessWidget {
                       food.localName != null
                           ? '${food.food} (${food.localName})'
                           : food.food,
+                      englishText: food.food,
                       style: const TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w800,
@@ -1558,15 +1583,15 @@ class _FoodTile extends StatelessWidget {
                         vertical: Gap.xs,
                       ),
                       decoration: BoxDecoration(
-                        color: AppColors.primaryLight,
+                        color: p.primaryLight,
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: SpeakableText(
                         food.householdMeasure,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
+                          color: p.primary,
                         ),
                       ),
                     ),
@@ -1578,26 +1603,26 @@ class _FoodTile extends StatelessWidget {
           const SizedBox(height: Gap.xs),
           SpeakableText(
             food.reason,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: AppColors.inkMuted,
+              color: p.inkMuted,
               height: 1.4,
             ),
           ),
           if (food.preparation != null) ...[
             const SizedBox(height: Gap.xs),
-            Text(
+            SpeakableText(
               'How: ${food.preparation}',
               style: const TextStyle(fontSize: 12, height: 1.4),
             ),
           ],
           if (food.caution != null) ...[
             const SizedBox(height: Gap.xs),
-            Text(
+            SpeakableText(
               'Caution: ${food.caution}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: AppColors.triageAmber,
+                color: p.triageAmber,
                 fontWeight: FontWeight.w600,
                 height: 1.4,
               ),
@@ -1607,6 +1632,7 @@ class _FoodTile extends StatelessWidget {
       ),
     ),
   );
+  }
 }
 
 /// One therapeutic prescription — MMS, IFA, RUTF or KMC — rendered the
@@ -1622,7 +1648,9 @@ class _PrescriptionCard extends StatelessWidget {
       supplement.id.startsWith('sam_rutf') ||
       supplement.id.startsWith('kmc_lbw');
 
-  Widget _kv(String key, String value) => Padding(
+  Widget _kv(BuildContext context, String key, String value) {
+    final p = ClinicalPaletteScope.of(context);
+    return Padding(
     padding: const EdgeInsets.only(top: 3),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1631,21 +1659,22 @@ class _PrescriptionCard extends StatelessWidget {
           width: 76,
           child: Text(
             key,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 9.5,
               fontWeight: FontWeight.w900,
               letterSpacing: 0.6,
-              color: AppColors.inkFaint,
+              color: p.inkFaint,
             ),
           ),
         ),
         Expanded(
           child: SpeakableText(
-            value, policy: SpeechContentPolicy.clinical,
-            style: const TextStyle(
+            value,
+            policy: SpeechContentPolicy.clinical,
+            style: TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w600,
-              color: AppColors.ink,
+              color: p.ink,
               height: 1.4,
             ),
           ),
@@ -1653,10 +1682,12 @@ class _PrescriptionCard extends StatelessWidget {
       ],
     ),
   );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final accent = _immediate ? AppColors.triageRed : AppColors.primary;
+    final p = ClinicalPaletteScope.of(context);
+    final accent = _immediate ? p.triageRed : p.primary;
     return KitCard(
       accent: accent,
       child: Column(
@@ -1666,14 +1697,14 @@ class _PrescriptionCard extends StatelessWidget {
             children: [
               Icon(Icons.medication_outlined, size: 15, color: accent),
               const SizedBox(width: Gap.xs),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'THERAPEUTIC PRESCRIPTION',
                   style: TextStyle(
                     fontSize: 9.5,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 0.7,
-                    color: AppColors.inkMuted,
+                    color: p.inkMuted,
                   ),
                 ),
               ),
@@ -1699,47 +1730,50 @@ class _PrescriptionCard extends StatelessWidget {
           ),
           const SizedBox(height: Gap.xs),
           SpeakableText(
-            supplement.label, policy: SpeechContentPolicy.clinical,
-            style: const TextStyle(
+            supplement.label,
+            policy: SpeechContentPolicy.clinical,
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w800,
-              color: AppColors.ink,
+              color: p.ink,
               height: 1.3,
             ),
           ),
           const SizedBox(height: Gap.xs),
-          _kv('DOSE', supplement.dose),
-          _kv('SCHEDULE', supplement.schedule),
-          _kv('DURATION', supplement.duration),
+          _kv(context, 'DOSE', supplement.dose),
+          _kv(context, 'SCHEDULE', supplement.schedule),
+          _kv(context, 'DURATION', supplement.duration),
           const SizedBox(height: Gap.sm),
           SpeakableText(
-            supplement.counsellingNote, policy: SpeechContentPolicy.clinical,
-            style: const TextStyle(
+            supplement.counsellingNote,
+            policy: SpeechContentPolicy.clinical,
+            style: TextStyle(
               fontSize: 12,
-              color: AppColors.inkMuted,
+              color: p.inkMuted,
               height: 1.45,
               fontStyle: FontStyle.italic,
             ),
           ),
           if (supplement.contraindications.isNotEmpty) ...[
             const SizedBox(height: Gap.xs),
-            Text(
+            SpeakableText(
               'Not if: ${supplement.contraindications.join('; ')}.',
-              style: const TextStyle(
+              policy: SpeechContentPolicy.clinical,
+              style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w700,
-                color: AppColors.triageAmber,
+                color: p.triageAmber,
                 height: 1.4,
               ),
             ),
           ],
           if (supplement.localSources.isNotEmpty) ...[
             const SizedBox(height: Gap.xs),
-            Text(
+            SpeakableText(
               'Also available from: ${supplement.localSources.join(', ')}.',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11.5,
-                color: AppColors.inkMuted,
+                color: p.inkMuted,
                 height: 1.4,
               ),
             ),
@@ -1758,19 +1792,21 @@ class _HydrationCard extends StatelessWidget {
   final List<String> lines;
 
   @override
-  Widget build(BuildContext context) => KitCard(
-    accent: AppColors.primary,
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return KitCard(
+    accent: p.primary,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Row(
+        Row(
           children: [
             Icon(
               Icons.local_drink_outlined,
               size: 15,
-              color: AppColors.primary,
+              color: p.primary,
             ),
-            SizedBox(width: Gap.xs),
+            const SizedBox(width: Gap.xs),
             Expanded(
               child: Text(
                 'FLUIDS ARE THE TREATMENT',
@@ -1778,7 +1814,7 @@ class _HydrationCard extends StatelessWidget {
                   fontSize: 10,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 0.7,
-                  color: AppColors.primary,
+                  color: p.primary,
                 ),
               ),
             ),
@@ -1791,19 +1827,20 @@ class _HydrationCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(
+                Icon(
                   Icons.check_circle_outline_rounded,
                   size: 14,
-                  color: AppColors.primary,
+                  color: p.primary,
                 ),
                 const SizedBox(width: Gap.xs),
                 Expanded(
                   child: SpeakableText(
-                    line, policy: SpeechContentPolicy.clinical,
-                    style: const TextStyle(
+                    line,
+                    policy: SpeechContentPolicy.clinical,
+                    style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.ink,
+                      color: p.ink,
                       height: 1.4,
                     ),
                   ),
@@ -1814,6 +1851,7 @@ class _HydrationCard extends StatelessWidget {
       ],
     ),
   );
+  }
 }
 
 /// One diversity gap: the food group missing from yesterday's plate and
@@ -1826,15 +1864,17 @@ class _GapLine extends StatelessWidget {
   final List<String> fillers;
 
   @override
-  Widget build(BuildContext context) => Padding(
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return Padding(
     padding: const EdgeInsets.only(bottom: Gap.xs),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(
+        Icon(
           Icons.add_circle_outline_rounded,
           size: 15,
-          color: AppColors.triageAmber,
+          color: p.triageAmber,
         ),
         const SizedBox(width: Gap.xs),
         Expanded(
@@ -1843,17 +1883,17 @@ class _GapLine extends StatelessWidget {
               children: [
                 TextSpan(
                   text: 'No $group yesterday',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.triageAmber,
+                    color: p.triageAmber,
                   ),
                 ),
                 TextSpan(
                   text: ' — add ${fillers.take(2).join(' or ')}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12.5,
-                    color: AppColors.ink,
+                    color: p.ink,
                     height: 1.4,
                   ),
                 ),
@@ -1864,6 +1904,7 @@ class _GapLine extends StatelessWidget {
       ],
     ),
   );
+  }
 }
 
 // --------------------------------------------------------------- Immunisation
@@ -1896,6 +1937,7 @@ class ImmunisationRecSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     final items = plan.items.toList(growable: false)
       ..sort((a, b) => _order[a.status]!.compareTo(_order[b.status]!));
     final waiting = items
@@ -1914,12 +1956,12 @@ class ImmunisationRecSection extends StatelessWidget {
         Container(
           width: double.infinity,
           decoration: BoxDecoration(
-            color: upToDate ? AppColors.triageGreenBg : AppColors.triageAmberBg,
+            color: upToDate ? p.triageGreenBg : p.triageAmberBg,
             borderRadius: BorderRadius.circular(Gap.radiusSm),
             boxShadow: const [AppShadows.card],
           ),
           child: AccentEdge(
-            accent: upToDate ? AppColors.triageGreen : AppColors.triageAmber,
+            accent: upToDate ? p.triageGreen : p.triageAmber,
             borderRadius: BorderRadius.circular(Gap.radiusSm),
             child: Padding(
               padding: const EdgeInsets.all(Gap.md),
@@ -1932,8 +1974,8 @@ class ImmunisationRecSection extends StatelessWidget {
                         : Icons.warning_amber_rounded,
                     size: 28,
                     color: upToDate
-                        ? AppColors.triageGreen
-                        : AppColors.triageAmber,
+                        ? p.triageGreen
+                        : p.triageAmber,
                   ),
                   const SizedBox(width: Gap.md),
                   Expanded(
@@ -1949,16 +1991,16 @@ class ImmunisationRecSection extends StatelessWidget {
                             fontSize: 14.5,
                             fontWeight: FontWeight.w900,
                             color: upToDate
-                                ? AppColors.triageGreen
-                                : AppColors.triageAmber,
+                                ? p.triageGreen
+                                : p.triageAmber,
                           ),
                         ),
                         const SizedBox(height: 2),
                         SpeakableText(
                           plan.summary,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: AppColors.inkMuted,
+                            color: p.inkMuted,
                             height: 1.4,
                           ),
                         ),
@@ -1974,18 +2016,18 @@ class ImmunisationRecSection extends StatelessWidget {
         // What to draw up in this very session.
         if (plan.giveToday.isNotEmpty) ...[
           KitCard(
-            accent: AppColors.primary,
+            accent: p.primary,
             margin: EdgeInsets.zero,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'GIVE TODAY — IN THIS SAME SESSION',
                   style: TextStyle(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 0.6,
-                    color: AppColors.primary,
+                    color: p.primary,
                   ),
                 ),
                 const SizedBox(height: Gap.xs),
@@ -1995,20 +2037,21 @@ class ImmunisationRecSection extends StatelessWidget {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.vaccines_outlined,
                           size: 14,
-                          color: AppColors.primary,
+                          color: p.primary,
                         ),
                         const SizedBox(width: Gap.xs),
                         Expanded(
-                          child: Text(
+                          child: SpeakableText(
                             '${d.label} — guards against '
                             '${d.protectsAgainst}',
-                            style: const TextStyle(
+                            policy: SpeechContentPolicy.clinical,
+                            style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w700,
-                              color: AppColors.ink,
+                              color: p.ink,
                               height: 1.4,
                             ),
                           ),
@@ -2025,18 +2068,18 @@ class ImmunisationRecSection extends StatelessWidget {
         // list turns a wall of overdue doses into dates on the card.
         if (plan.catchUp.isNotEmpty) ...[
           KitCard(
-            accent: AppColors.accent,
+            accent: p.primary,
             margin: EdgeInsets.zero,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'THEN — THE CATCH-UP SCHEDULE',
                   style: TextStyle(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 0.6,
-                    color: AppColors.accent,
+                    color: p.primary,
                   ),
                 ),
                 const SizedBox(height: Gap.xs),
@@ -2050,20 +2093,22 @@ class ImmunisationRecSection extends StatelessWidget {
                           width: 84,
                           child: SpeakableText(
                             'IN ${s.weeksFromNow} WEEKS',
-                            style: const TextStyle(
+                            policy: SpeechContentPolicy.clinical,
+                            style: TextStyle(
                               fontSize: 10.5,
                               fontWeight: FontWeight.w900,
-                              color: AppColors.inkMuted,
+                              color: p.inkMuted,
                             ),
                           ),
                         ),
                         Expanded(
-                          child: Text(
+                          child: SpeakableText(
                             s.labels.join(', '),
-                            style: const TextStyle(
+                            policy: SpeechContentPolicy.clinical,
+                            style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w700,
-                              color: AppColors.ink,
+                              color: p.ink,
                               height: 1.4,
                             ),
                           ),
@@ -2072,12 +2117,13 @@ class ImmunisationRecSection extends StatelessWidget {
                     ),
                   ),
                 const SizedBox(height: Gap.xs),
-                const Text(
+                SpeakableText(
                   'Doses in the same series need at least 4 weeks between '
                   'them — write each date on the card.',
+                  policy: SpeechContentPolicy.clinical,
                   style: TextStyle(
                     fontSize: 11,
-                    color: AppColors.inkFaint,
+                    color: p.inkFaint,
                     fontStyle: FontStyle.italic,
                     height: 1.4,
                   ),
@@ -2094,9 +2140,9 @@ class ImmunisationRecSection extends StatelessWidget {
             'Next due: ${plan.nextDueLabel} in about '
             '${plan.nextDueInDays} days — note it on the card before '
             'the family leaves.',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12.5,
-              color: AppColors.inkMuted,
+              color: p.inkMuted,
               fontWeight: FontWeight.w700,
               height: 1.4,
             ),
@@ -2113,7 +2159,7 @@ class ImmunisationRecSection extends StatelessWidget {
             'it strikes. Below is today\u2019s reading of the Ghana EPI '
             'schedule for this child.',
         icon: Icons.vaccines_outlined,
-        accent: upToDate ? AppColors.triageGreen : AppColors.triageAmber,
+        accent: upToDate ? p.triageGreen : p.triageAmber,
         child: content,
       );
     }
@@ -2124,7 +2170,7 @@ class ImmunisationRecSection extends StatelessWidget {
           'it strikes. Below is today\u2019s reading of the Ghana EPI '
           'schedule for this child.',
       icon: Icons.vaccines_outlined,
-      accent: upToDate ? AppColors.triageGreen : AppColors.triageAmber,
+      accent: upToDate ? p.triageGreen : p.triageAmber,
       child: content,
     );
   }
@@ -2137,47 +2183,48 @@ class _ImmunisationTile extends StatelessWidget {
 
   final ImmunisationItem item;
 
-  (Color, Color, String) get _pill => switch (item.status) {
+  (Color, Color, String) _pill(ClinicalPalette p) => switch (item.status) {
     ImmunisationStatus.given => (
-      AppColors.triageGreenBg,
-      AppColors.triageGreen,
+      p.triageGreenBg,
+      p.triageGreen,
       'GIVEN',
     ),
     ImmunisationStatus.dueToday => (
-      AppColors.primaryLight,
-      AppColors.primary,
+      p.primaryLight,
+      p.primary,
       'DUE TODAY',
     ),
     ImmunisationStatus.overdue => (
-      AppColors.triageAmberBg,
-      AppColors.triageAmber,
+      p.triageAmberBg,
+      p.triageAmber,
       item.weeksOverdue > 0 ? 'OVERDUE BY ${item.weeksOverdue} WK' : 'OVERDUE',
     ),
     ImmunisationStatus.notYetDue => (
-      AppColors.surface,
-      AppColors.inkMuted,
+      p.surface,
+      p.inkMuted,
       'NOT YET DUE',
     ),
     ImmunisationStatus.ageBarred => (
-      AppColors.surface,
-      AppColors.inkFaint,
+      p.surface,
+      p.inkFaint,
       'TOO OLD — DO NOT GIVE',
     ),
   };
 
-  Color? get _accent => switch (item.status) {
-    ImmunisationStatus.overdue => AppColors.triageAmber,
-    ImmunisationStatus.dueToday => AppColors.primary,
-    ImmunisationStatus.given => AppColors.triageGreen,
-    ImmunisationStatus.ageBarred => AppColors.lineStrong,
+  Color? _accent(ClinicalPalette p) => switch (item.status) {
+    ImmunisationStatus.overdue => p.triageAmber,
+    ImmunisationStatus.dueToday => p.primary,
+    ImmunisationStatus.given => p.triageGreen,
+    ImmunisationStatus.ageBarred => p.lineStrong,
     ImmunisationStatus.notYetDue => null,
   };
 
   @override
   Widget build(BuildContext context) {
-    final (bg, fg, pill) = _pill;
+    final p = ClinicalPaletteScope.of(context);
+    final (bg, fg, pill) = _pill(p);
     return KitCard(
-      accent: _accent,
+      accent: _accent(p),
       padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2191,8 +2238,8 @@ class _ImmunisationTile extends StatelessWidget {
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
                     color: item.status == ImmunisationStatus.given
-                        ? AppColors.inkMuted
-                        : AppColors.ink,
+                        ? p.inkMuted
+                        : p.ink,
                   ),
                 ),
               ),
@@ -2219,10 +2266,11 @@ class _ImmunisationTile extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           SpeakableText(
-            item.detail, policy: SpeechContentPolicy.clinical,
-            style: const TextStyle(
+            item.detail,
+            policy: SpeechContentPolicy.clinical,
+            style: TextStyle(
               fontSize: 11.5,
-              color: AppColors.inkMuted,
+              color: p.inkMuted,
               height: 1.4,
             ),
           ),
@@ -2231,20 +2279,20 @@ class _ImmunisationTile extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
+              Icon(
                 Icons.health_and_safety_outlined,
                 size: 12,
-                color: AppColors.primaryDeep,
+                color: p.primaryDark,
               ),
               const SizedBox(width: 4),
               Expanded(
                 child: SpeakableText(
                   'Why it matters: guards against '
                   '${item.dose.protectsAgainst}.',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.primaryDeep,
+                    color: p.primaryDark,
                     height: 1.4,
                   ),
                 ),
@@ -2326,7 +2374,7 @@ class PreReferralRecSection extends StatelessWidget {
             ),
           ),
           const SizedBox(height: Gap.xs),
-          Text(
+          SpeakableText(
             '${protocols.length} WHO / GHS protocol'
             '${protocols.length == 1 ? '' : 's'} activated. '
             'Initiate before transport is dispatched.',
@@ -2343,7 +2391,6 @@ class PreReferralRecSection extends StatelessWidget {
               protocol: p,
               reason:
                   plan.preReferralActivationReasons[p.id] ?? 'See audit log.',
-              weightKg: plan.preReferralWeightKg,
             ),
             const SizedBox(height: Gap.md),
           ],
@@ -2356,7 +2403,7 @@ class PreReferralRecSection extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(Gap.radiusSm),
             ),
-            child: const Text(
+            child: const SpeakableText(
               'DECISION SUPPORT — You are the licensed clinician. Verify the '
               'dose, route and contraindications against the patient before '
               'administration. Each card below cites the published guideline.',
@@ -2378,26 +2425,13 @@ class PreReferralRecSection extends StatelessWidget {
 /// urgency note, ordered steps (with dose / when / contraindication per
 /// step), and the protocol-level contraindications.
 class _ProtocolCard extends StatelessWidget {
-  const _ProtocolCard({
-    required this.protocol,
-    required this.reason,
-    this.weightKg,
-  });
+  const _ProtocolCard({required this.protocol, required this.reason});
 
   final StabilizationProtocol protocol;
   final String reason;
 
-  /// Recorded weight for the assessment this card belongs to; null when the
-  /// child was not weighed.
-  final double? weightKg;
-
   @override
   Widget build(BuildContext context) {
-    // A step here can be calculated from weight but wasn't, because this
-    // assessment has no weight. Say so — silence would read as "no dose
-    // advice for this child".
-    final wantsWeight =
-        weightKg == null && protocol.steps.any((s) => s.dispensing != null);
     return Container(
       padding: const EdgeInsets.all(Gap.md),
       decoration: BoxDecoration(
@@ -2418,7 +2452,8 @@ class _ProtocolCard extends StatelessWidget {
               const SizedBox(width: Gap.sm),
               Expanded(
                 child: SpeakableText(
-                  protocol.headline, policy: SpeechContentPolicy.clinical,
+                  protocol.headline,
+                  policy: SpeechContentPolicy.clinical,
                   style: const TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w800,
@@ -2475,8 +2510,9 @@ class _ProtocolCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Expanded(
-                  child: Text(
+                  child: SpeakableText(
                     protocol.urgencyNote!,
+                    policy: SpeechContentPolicy.clinical,
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
@@ -2512,8 +2548,9 @@ class _ProtocolCard extends StatelessWidget {
                   for (final c in protocol.contraindications)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 1),
-                      child: Text(
+                      child: SpeakableText(
                         '• $c',
+                        policy: SpeechContentPolicy.clinical,
                         style: const TextStyle(
                           fontSize: 11.5,
                           color: AppColors.ink,
@@ -2536,22 +2573,7 @@ class _ProtocolCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: Gap.xs),
-          for (final s in protocol.steps)
-            _ProtocolStepTile(step: s, weightKg: weightKg),
-          if (wantsWeight)
-            const Padding(
-              padding: EdgeInsets.only(top: 2),
-              child: Text(
-                'No weight recorded for this child, so the tablet count above '
-                'is not shown. Weigh the child to get it.',
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.inkMuted,
-                  height: 1.4,
-                ),
-              ),
-            ),
+          for (final s in protocol.steps) _ProtocolStepTile(step: s),
           const SizedBox(height: Gap.sm),
           // Why this protocol fired — the audit anchor every card must
           // carry: the selector's own reason string (AI rule-in candidate,
@@ -2612,18 +2634,12 @@ class _ProtocolCard extends StatelessWidget {
 
 /// One numbered step in a pre-referral protocol.
 class _ProtocolStepTile extends StatelessWidget {
-  const _ProtocolStepTile({required this.step, this.weightKg});
+  const _ProtocolStepTile({required this.step});
 
   final ProtocolStep step;
 
-  /// The child's recorded weight, when this assessment has one. Null
-  /// suppresses the calculated line entirely — the dose string alone is
-  /// shown rather than a number derived from a guess.
-  final double? weightKg;
-
   @override
   Widget build(BuildContext context) {
-    final dispensed = step.dispensing?.dispense(weightKg);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Gap.xs),
       child: Row(
@@ -2637,8 +2653,8 @@ class _ProtocolStepTile extends StatelessWidget {
               shape: BoxShape.circle,
             ),
             child: Center(
-              child: SpeakableText(
-                '${step.order}', policy: SpeechContentPolicy.clinical,
+              child: Text(
+                '${step.order}',
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w900,
@@ -2653,7 +2669,8 @@ class _ProtocolStepTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SpeakableText(
-                  step.action, policy: SpeechContentPolicy.clinical,
+                  step.action,
+                  policy: SpeechContentPolicy.clinical,
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
@@ -2675,6 +2692,7 @@ class _ProtocolStepTile extends StatelessWidget {
                   ),
                   child: SpeakableText(
                     'DOSE: ${step.dose}',
+                    policy: SpeechContentPolicy.clinical,
                     style: const TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w800,
@@ -2685,12 +2703,9 @@ class _ProtocolStepTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                if (dispensed != null) ...[
-                  _DispensedLine(d: dispensed),
-                  const SizedBox(height: 4),
-                ],
                 SpeakableText(
                   'WHEN: ${step.whenToDo}',
+                  policy: SpeechContentPolicy.clinical,
                   style: const TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
@@ -2700,6 +2715,7 @@ class _ProtocolStepTile extends StatelessWidget {
                 ),
                 SpeakableText(
                   'WHY: ${step.rationale}',
+                  policy: SpeechContentPolicy.clinical,
                   style: const TextStyle(
                     fontSize: 11,
                     color: AppColors.inkMuted,
@@ -2710,6 +2726,7 @@ class _ProtocolStepTile extends StatelessWidget {
                   const SizedBox(height: 2),
                   SpeakableText(
                     'CAUTION: ${step.contraindication!}',
+                    policy: SpeechContentPolicy.clinical,
                     style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
@@ -2719,96 +2736,6 @@ class _ProtocolStepTile extends StatelessWidget {
                   ),
                 ],
               ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ------------------------------------------------------- Weight-based dose
-
-/// The amount this child's weight works out to, shown under the guideline
-/// dose it came from. Distinct from [ProtocolStep.dose] on purpose: the grey
-/// chip above is the published rule, this blue block is arithmetic on one
-/// number the CHO entered, and the citation of the rule is repeated so the
-/// two can never be mistaken for each other.
-class _DispensedLine extends StatelessWidget {
-  const _DispensedLine({required this.d});
-
-  final Dispensed d;
-
-  @override
-  Widget build(BuildContext context) {
-    final drift = d.driftPercent;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: Gap.sm,
-        vertical: Gap.xs + 1,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.primaryLight,
-        borderRadius: BorderRadius.circular(Gap.radiusSm),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'FOR THIS CHILD',
-            style: TextStyle(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0.5,
-              color: AppColors.primaryDeep,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            d.measure,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w900,
-              color: AppColors.primaryDeep,
-              height: 1.35,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            drift == null
-                ? d.working
-                : '${d.working} · the amount above is '
-                      '${drift > 0 ? '+' : '−'}${drift.abs().toStringAsFixed(0)}% '
-                      'from it',
-            style: const TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w600,
-              color: AppColors.inkMuted,
-              height: 1.4,
-            ),
-          ),
-          if (d.caution != null) ...[
-            const SizedBox(height: 3),
-            Text(
-              d.caution!,
-              style: const TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w800,
-                color: AppColors.triageAmber,
-                height: 1.4,
-              ),
-            ),
-          ],
-          const SizedBox(height: 3),
-          Text(
-            'FROM: ${d.citationNote}',
-            style: const TextStyle(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w600,
-              color: AppColors.inkFaint,
-              height: 1.4,
             ),
           ),
         ],
@@ -2841,43 +2768,44 @@ class NurturingCareRecSection extends StatelessWidget {
   /// Each pillar's card styling plus the one line that says why the
   /// pillar matters — the framework in words a CHPS team can use.
   static ({Color colour, Color bg, IconData icon, String why}) _styleOf(
+    ClinicalPalette p,
     NurturingCarePillar pillar,
   ) => switch (pillar) {
     NurturingCarePillar.goodHealth => (
-      colour: AppColors.triageGreen,
-      bg: AppColors.triageGreenBg,
+      colour: p.triageGreen,
+      bg: p.triageGreenBg,
       icon: Icons.favorite_outline,
       why:
           'A treated illness, a kept appointment and a growing body are '
           'the ground the brain builds on.',
     ),
     NurturingCarePillar.adequateNutrition => (
-      colour: AppColors.triageAmber,
-      bg: AppColors.triageAmberBg,
+      colour: p.triageAmber,
+      bg: p.triageAmberBg,
       icon: Icons.restaurant_outlined,
       why:
           'What the mother and child eat in these days is building '
           'brain and body — every meal counts.',
     ),
     NurturingCarePillar.responsiveCaregiving => (
-      colour: AppColors.primary,
-      bg: AppColors.primaryLight,
+      colour: p.primary,
+      bg: p.primaryLight,
       icon: Icons.record_voice_over_outlined,
       why:
           'Serve and return: answer the child when they call, and '
           'every answer lays down brain wiring.',
     ),
     NurturingCarePillar.earlyLearning => (
-      colour: AppColors.offline,
-      bg: AppColors.offlineBg,
+      colour: p.offline,
+      bg: p.offlineBg,
       icon: Icons.toys_outlined,
       why:
           'Talking, singing and playing are the child\u2019s school — '
           'they need no money and no toys.',
     ),
     NurturingCarePillar.securityAndSafety => (
-      colour: AppColors.primaryDeep,
-      bg: AppColors.surfaceTint,
+      colour: p.primaryDark,
+      bg: p.surfaceTint,
       icon: Icons.shield_outlined,
       why:
           'A safe home, clean water and protection from harm let the '
@@ -2887,6 +2815,7 @@ class NurturingCareRecSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = ClinicalPaletteScope.of(context);
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2894,7 +2823,7 @@ class NurturingCareRecSection extends StatelessWidget {
           if (assessment.actions.any((a) => a.pillar == p))
             _PillarCard(
               pillar: p,
-              style: _styleOf(p),
+              style: _styleOf(pal, p),
               summary: assessment.pillarSummaries[p] ?? '',
               actions: assessment.actions
                   .where((a) => a.pillar == p)
@@ -2907,10 +2836,10 @@ class NurturingCareRecSection extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
+              Icon(
                 Icons.menu_book_outlined,
                 size: 12,
-                color: AppColors.inkMuted,
+                color: pal.inkMuted,
               ),
               const SizedBox(width: 4),
               Expanded(
@@ -2921,7 +2850,7 @@ class NurturingCareRecSection extends StatelessWidget {
                   'guideline.',
                   style: TextStyle(
                     fontSize: 10.5,
-                    color: AppColors.inkMuted,
+                    color: pal.inkMuted,
                     fontStyle: FontStyle.italic,
                     height: 1.4,
                   ),
@@ -2974,7 +2903,9 @@ class _PillarCard extends StatelessWidget {
   final RecAudience audience;
 
   @override
-  Widget build(BuildContext context) => KitCard(
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return KitCard(
     accent: style.colour,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3007,9 +2938,9 @@ class _PillarCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   SpeakableText(
                     style.why,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11.5,
-                      color: AppColors.inkMuted,
+                      color: p.inkMuted,
                       height: 1.4,
                     ),
                   ),
@@ -3022,16 +2953,16 @@ class _PillarCard extends StatelessWidget {
           const SizedBox(height: Gap.sm),
           SpeakableText(
             summary,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: AppColors.ink,
+              color: p.ink,
               height: 1.4,
             ),
           ),
         ],
         const SizedBox(height: Gap.sm),
-        const Divider(height: 1, thickness: 1, color: AppColors.line),
+        Divider(height: 1, thickness: 1, color: p.line),
         const SizedBox(height: Gap.sm),
         for (var i = 0; i < actions.length; i++) ...[
           _NurturingCareActionTile(action: actions[i], audience: audience),
@@ -3040,6 +2971,7 @@ class _PillarCard extends StatelessWidget {
       ],
     ),
   );
+  }
 }
 
 /// One action tile within a pillar.
@@ -3054,6 +2986,7 @@ class _NurturingCareActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -3065,12 +2998,12 @@ class _NurturingCareActionTile extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: action.deliveredAtVisit
-                ? AppColors.triageGreen
+                ? p.triageGreen
                 : Colors.transparent,
             border: Border.all(
               color: action.deliveredAtVisit
-                  ? AppColors.triageGreen
-                  : AppColors.inkMuted,
+                  ? p.triageGreen
+                  : p.inkMuted,
               width: 1.5,
             ),
           ),
@@ -3085,19 +3018,19 @@ class _NurturingCareActionTile extends StatelessWidget {
             children: [
               Text(
                 action.title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w800,
-                  color: AppColors.ink,
+                  color: p.ink,
                   height: 1.3,
                 ),
               ),
               const SizedBox(height: 2),
               SpeakableText(
                 action.counsellingNote,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11.5,
-                  color: AppColors.ink,
+                  color: p.ink,
                   height: 1.4,
                 ),
               ),
@@ -3115,15 +3048,15 @@ class _NurturingCareActionTile extends StatelessWidget {
                       ),
                       margin: const EdgeInsets.only(right: 4),
                       decoration: BoxDecoration(
-                        color: AppColors.triageGreenBg,
+                        color: p.triageGreenBg,
                         borderRadius: BorderRadius.circular(Gap.radiusSm),
                       ),
-                      child: const Text(
+                      child: Text(
                         'DELIVERED',
                         style: TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.w900,
-                          color: AppColors.triageGreen,
+                          color: p.triageGreen,
                           letterSpacing: 0.4,
                         ),
                       ),
@@ -3136,15 +3069,15 @@ class _NurturingCareActionTile extends StatelessWidget {
                       ),
                       margin: const EdgeInsets.only(right: 4),
                       decoration: BoxDecoration(
-                        color: AppColors.triageAmberBg,
+                        color: p.triageAmberBg,
                         borderRadius: BorderRadius.circular(Gap.radiusSm),
                       ),
-                      child: const Text(
+                      child: Text(
                         'REFER',
                         style: TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.w900,
-                          color: AppColors.triageAmber,
+                          color: p.triageAmber,
                           letterSpacing: 0.4,
                         ),
                       ),
@@ -3154,10 +3087,10 @@ class _NurturingCareActionTile extends StatelessWidget {
                   if (audience == RecAudience.healthWorker)
                     Text(
                       action.citation.shortName,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10,
                         fontStyle: FontStyle.italic,
-                        color: AppColors.inkMuted,
+                        color: p.inkMuted,
                         height: 1.3,
                       ),
                     ),
@@ -3203,22 +3136,23 @@ class FamilyCarePlanCard extends StatelessWidget {
   /// The caregiver's chosen guidance language, passed to [AudioButton].
   final String language;
 
-  Color get _colour => switch (plan.overallTriage) {
-    TriageLevel.urgent => AppColors.triageRed,
-    TriageLevel.priority || TriageLevel.watch => AppColors.triageAmber,
-    TriageLevel.routine => AppColors.triageGreen,
+  Color _colour(ClinicalPalette p) => switch (plan.overallTriage) {
+    TriageLevel.urgent => p.triageRed,
+    TriageLevel.priority || TriageLevel.watch => p.triageAmber,
+    TriageLevel.routine => p.triageGreen,
   };
 
-  Color get _colourBg => switch (plan.overallTriage) {
-    TriageLevel.urgent => AppColors.triageRedBg,
-    TriageLevel.priority || TriageLevel.watch => AppColors.triageAmberBg,
-    TriageLevel.routine => AppColors.triageGreenBg,
+  Color _colourBg(ClinicalPalette p) => switch (plan.overallTriage) {
+    TriageLevel.urgent => p.triageRedBg,
+    TriageLevel.priority || TriageLevel.watch => p.triageAmberBg,
+    TriageLevel.routine => p.triageGreenBg,
   };
 
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     final message = plan.caregiverMessage ?? plan.summary;
-    final colour = _colour;
+    final colour = _colour(p);
     // In a bank language (Dagbani, Hausa, Twi) the family message is heard
     // as the triage level's family sentence — the actionable content — from
     // the on-device voice bank.
@@ -3227,9 +3161,9 @@ class FamilyCarePlanCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(Gap.lg),
       decoration: BoxDecoration(
-        color: AppColors.canvas,
+        color: p.canvas,
         borderRadius: BorderRadius.circular(Gap.radius),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: p.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3240,10 +3174,10 @@ class FamilyCarePlanCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   personName,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.ink,
+                    color: p.ink,
                   ),
                 ),
               ),
@@ -3253,7 +3187,7 @@ class FamilyCarePlanCard extends StatelessWidget {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: _colourBg,
+                  color: _colourBg(p),
                   borderRadius: BorderRadius.circular(Gap.radiusSm),
                 ),
                 child: Text(
@@ -3309,7 +3243,7 @@ class FamilyCarePlanCard extends StatelessWidget {
                 ),
             ],
           ),
-          if (voiceControl != null) voiceControl!,
+          ?voiceControl,
           if (savedAt != null)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -3379,6 +3313,7 @@ class FamilyCarePlanCard extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: SpeakableText(
                     'Clinic decision • read only\n${action.instruction}\nAsk your health worker about treatment; do not start or change medicines from this checklist.',
+                    policy: SpeechContentPolicy.clinical,
                   ),
                 ),
           ],

@@ -185,6 +185,214 @@ abstract final class AppColors {
   static const Color white60 = Color(0x99FFFFFF);
 }
 
+abstract final class CaregiverLuxePalette {
+  static const celestialCanvas = Color(0xFFF6F9FD);
+  static const pearlSurface = Color(0xFFFFFFFF);
+  static const pearlGlassTint = Color(0xEDFFFFFF);
+  static const pearlSurfaceSunken = Color(0xFFEEF4FA);
+  static const twilightMidnight = Color(0xFF0A1931);
+  static const twilightNavy = Color(0xFF132B50);
+  static const twilightMuted = Color(0xFF536785);
+  static const twilightFaint = Color(0xFF94A7C1);
+  static const azurePrimary = Color(0xFF2563EB);
+  static const azureElectric = Color(0xFF3B82F6);
+  static const azureIce = Color(0xFFEFF6FF);
+  static const specularStroke = Color(0x80FFFFFF);
+  static const hairLineQuiet = Color(0xFFE2EBF5);
+  static const horizon = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF0F264A), Color(0xFF1A3B70), Color(0xFF24529B)],
+  );
+  static const featheredShadow = [
+    BoxShadow(color: Color(0x08132B50), blurRadius: 24, offset: Offset(0, 10)),
+    BoxShadow(color: Color(0x05132B50), blurRadius: 6, offset: Offset(0, 2)),
+  ];
+}
+
+/// A runtime, brightness-aware colour set — the themeable seam the verdict page
+/// reads instead of the compile-time [AppColors] constants.
+///
+/// [AppColors] stays exactly as it is: it is `static const` and used inside
+/// `const` widget expressions across the whole app, so it cannot flip with a
+/// theme. This palette is the *daylight* system re-expressed as values a widget
+/// can pick at build time. Day values mirror [AppColors] one-for-one so wiring
+/// a screen to the palette is non-destructive in light mode. Night is not a
+/// generic near-black: it is the brand's own midnight-to-royal navy
+/// ([AppColors.heroGradient]) pulled down into a canvas, with ivory-cool ink and
+/// a *brighter* brass edge, so a screen at 2am still reads as this product.
+///
+/// The IMCI triage foreground hues are carried over **identically** in both
+/// modes — they belong to clinical safety and are never re-tinted for
+/// aesthetics. Only their background washes are darkened so a verdict colour
+/// stays legible on navy.
+@immutable
+class ClinicalPalette {
+  const ClinicalPalette({
+    required this.isDark,
+    required this.canvas,
+    required this.surface,
+    required this.surfaceSolid,
+    required this.surfaceTint,
+    required this.ink,
+    required this.inkMuted,
+    required this.inkFaint,
+    required this.line,
+    required this.lineStrong,
+    required this.primary,
+    required this.primaryDark,
+    required this.primaryDeep,
+    required this.primaryLight,
+    required this.primaryGlow,
+    required this.brass,
+    required this.brassDeep,
+    required this.brassTint,
+    required this.glassStroke,
+    required this.glassFill,
+    required this.triageRed,
+    required this.triageRedBg,
+    required this.triageAmber,
+    required this.triageAmberBg,
+    required this.triageGreen,
+    required this.triageGreenBg,
+    required this.offline,
+    required this.offlineBg,
+  });
+
+  final bool isDark;
+
+  final Color canvas;
+  final Color surface;
+
+  /// An opaque card fill. Day: pure white (some cards sit brighter than the
+  /// ivory surface). Night: an elevated navy, so a "paper" card lifts off the
+  /// canvas the same way it does in daylight.
+  final Color surfaceSolid;
+  final Color surfaceTint;
+  final Color ink;
+  final Color inkMuted;
+  final Color inkFaint;
+  final Color line;
+  final Color lineStrong;
+  final Color primary;
+  final Color primaryDark;
+  final Color primaryDeep;
+
+  /// Filled-chip / quiet-container tint. Light: a pale blue wash; dark: a
+  /// raised navy fill.
+  final Color primaryLight;
+  final Color primaryGlow;
+  final Color brass;
+  final Color brassDeep;
+  final Color brassTint;
+  final Color glassStroke;
+  final Color glassFill;
+
+  final Color triageRed;
+  final Color triageRedBg;
+  final Color triageAmber;
+  final Color triageAmberBg;
+  final Color triageGreen;
+  final Color triageGreenBg;
+
+  /// The one non-triage accent: early-learning purple for the Nurturing-Care
+  /// "Opportunities for Early Learning" pillar. Never a clinical signal.
+  final Color offline;
+  final Color offlineBg;
+
+  /// The daylight system — byte-identical to [AppColors].
+  static const ClinicalPalette day = ClinicalPalette(
+    isDark: false,
+    canvas: Color(0xFFFBF8F1),
+    surface: Color(0xFFF3EEE3),
+    surfaceSolid: Color(0xFFFFFFFF),
+    surfaceTint: Color(0xFFEAE3D4),
+    ink: Color(0xFF1A2A28),
+    inkMuted: Color(0xFF51615E),
+    inkFaint: Color(0xFF8A968F),
+    line: Color(0xFFE7DFCF),
+    lineStrong: Color(0xFFD3C7AE),
+    primary: Color(0xFF1B56DB),
+    primaryDark: Color(0xFF123F9E),
+    primaryDeep: Color(0xFF0B2A6B),
+    primaryLight: Color(0xFFE3ECFD),
+    primaryGlow: Color(0xFF3B82F6),
+    brass: Color(0xFFB08A4A),
+    brassDeep: Color(0xFF8A6A34),
+    brassTint: Color(0xFFEFE3C8),
+    glassStroke: Color(0xA6FFFFFF),
+    glassFill: Color(0xC7FFFFFF),
+    triageRed: Color(0xFFD32F2F),
+    triageRedBg: Color(0xFFFDECEA),
+    triageAmber: Color(0xFFED9B00),
+    triageAmberBg: Color(0xFFFFF6E5),
+    triageGreen: Color(0xFF2E7D4F),
+    triageGreenBg: Color(0xFFE9F6EE),
+    offline: Color(0xFF6B4FA8),
+    offlineBg: Color(0xFFF1EDF8),
+  );
+
+  /// The night system — the brand's own midnight navy, ivory ink, brighter brass.
+  static const ClinicalPalette night = ClinicalPalette(
+    isDark: true,
+    canvas: Color(0xFF070F22),
+    surface: Color(0xFF0E1D3A),
+    surfaceSolid: Color(0xFF0F2242),
+    surfaceTint: Color(0xFF16294E),
+    ink: Color(0xFFEAF0FB),
+    inkMuted: Color(0xFFB3C1D8),
+    inkFaint: Color(0xFF7C8CA8),
+    line: Color(0xFF1D3057),
+    lineStrong: Color(0xFF2C4470),
+    primary: Color(0xFF6E9BFF),
+    primaryDark: Color(0xFF3E77E0),
+    primaryDeep: Color(0xFF16305E),
+    primaryLight: Color(0xFF15294F),
+    primaryGlow: Color(0xFF3B82F6),
+    brass: Color(0xFFD8B676),
+    brassDeep: Color(0xFFB08A4A),
+    brassTint: Color(0xFF2A2416),
+    glassStroke: Color(0x33FFFFFF),
+    glassFill: Color(0x1FFFFFFF),
+    // Foreground hues are the trained IMCI colours, unchanged.
+    triageRed: Color(0xFFD32F2F),
+    triageRedBg: Color(0xFF3A1618),
+    triageAmber: Color(0xFFED9B00),
+    triageAmberBg: Color(0xFF3A2A10),
+    triageGreen: Color(0xFF2E7D4F),
+    triageGreenBg: Color(0xFF123021),
+    // Early-learning purple, brightened so it stays legible on navy.
+    offline: Color(0xFFB9A3E8),
+    offlineBg: Color(0xFF2A2140),
+  );
+}
+
+/// Mounts a [ClinicalPalette] into the tree. [ClinicalPaletteScope.of] reads
+/// it, falling back to the ambient [Theme] brightness when no scope is present,
+/// so wiring a screen to the palette is opt-in and safe by default.
+class ClinicalPaletteScope extends InheritedWidget {
+  const ClinicalPaletteScope({
+    super.key,
+    required this.palette,
+    required super.child,
+  });
+
+  final ClinicalPalette palette;
+
+  static ClinicalPalette of(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<
+      ClinicalPaletteScope
+    >();
+    if (scope != null) return scope.palette;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return dark ? ClinicalPalette.night : ClinicalPalette.day;
+  }
+
+  @override
+  bool updateShouldNotify(ClinicalPaletteScope oldWidget) =>
+      oldWidget.palette != palette;
+}
+
 /// Strict 8px baseline grid with generous premium radii.
 abstract final class Gap {
   static const double xs = 4;

@@ -1,8 +1,5 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../domain/entities/caregiver.dart';
@@ -31,7 +28,6 @@ class CaregiverNurseSummary extends ConsumerStatefulWidget {
 }
 
 class _CaregiverNurseSummaryState extends ConsumerState<CaregiverNurseSummary> {
-  bool _share = false;
   @override
   Widget build(BuildContext context) {
     final scope = ref.watch(caregiverScopeProvider);
@@ -110,24 +106,6 @@ class _CaregiverNurseSummaryState extends ConsumerState<CaregiverNurseSummary> {
               a.sourceId == report.id,
         ) ??
         false;
-    final payload = jsonEncode({
-      'version': 1,
-      'type': 'caregiver_report',
-      'id': report.id,
-      'personId': report.personId,
-      'name': widget.person.fullName,
-      'time': report.checkedAt.toIso8601String(),
-      'dateOfBirth': widget.person.dateOfBirth?.toIso8601String(),
-      'estimatedBirthDate': widget.person.isDobEstimated,
-      'yes': report.yesSigns,
-      'unsure': report.unsureSigns,
-      'unanswered': unasked,
-      'answers': recorded?.map((k, v) => MapEntry(k, v.name)),
-      'onset': onset,
-      'duration': ?durationKey,
-      if (given.isNotEmpty) 'given': given.toList()..sort(),
-      if (concerns.isNotEmpty) 'concerns': concerns,
-    });
     final durationLine = CaregiverDuration.byKey(durationKey);
     final givenLabels = [
       for (final key in given)
@@ -234,34 +212,6 @@ class _CaregiverNurseSummaryState extends ConsumerState<CaregiverNurseSummary> {
                 const Text(
                   'Show these words directly. A health worker still needs to examine the person. This screen has not been sent to a clinic.',
                 ),
-              ],
-            ),
-          ),
-          CompanionCard(
-            title: 'Optional QR sharing',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'The QR includes the identity, birth date if recorded, original check time, answers, and onset note shown above. Anyone who scans it may read that information. Clinic scanning or import is not guaranteed.',
-                ),
-                OutlinedButton(
-                  onPressed: () => setState(() => _share = !_share),
-                  child: Text(_share ? 'Hide QR' : 'Reveal QR to share'),
-                ),
-                if (_share)
-                  LayoutBuilder(
-                    builder: (context, constraints) => Center(
-                      child: Semantics(
-                        label: 'QR containing the caregiver report shown above',
-                        child: QrImageView(
-                          data: payload,
-                          size: constraints.maxWidth.clamp(0, 220).toDouble(),
-                          backgroundColor: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
               ],
             ),
           ),

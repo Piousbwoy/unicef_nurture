@@ -1,4 +1,7 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
@@ -35,8 +38,7 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
     final user = ref.watch(currentUserProvider);
     final scope = ref.watch(caregiverScopeProvider);
     final isOnline = ref.watch(connectivityProvider).valueOrNull ?? false;
-    // Trigger neural model loading in background (non-blocking; UI works
-    // with English + dictionary until models are ready, then upgrades).
+    // Keep offline speech ready without blocking the shell.
     ref.read(neuralTranslationProvider.future);
     ref.read(piperTtsProvider.future);
     if (user == null) return const SizedBox.shrink();
@@ -74,7 +76,7 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
                     ),
                     const SizedBox(height: 24),
                     const Text(
-                      'Your family is not linked to this phone yet',
+                      'Your family record is unavailable',
                       style: TextStyle(
                         fontFamily: 'Sora',
                         fontSize: 18,
@@ -85,7 +87,7 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Ask your health worker to help link your family.',
+                      'Sign out and sign in with the account you used to create your family.',
                       style: TextStyle(
                         fontSize: 14,
                         color: AppColors.inkMuted,
@@ -118,51 +120,171 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
     ref.watch(caregiverVoiceProvider(scope));
     final household = scope.householdId;
     return CompanionTheme(
-      // White canvas; the deep-navy identity lives on the cards.
-      child: AmbientBackdrop(
-        child: Scaffold(
-          backgroundColor: Colors.transparent,
-          appBar: GlassAppBar(
-            title: const Text(
+      child: Builder(
+        builder: (context) {
+          final fx = VisualEffects.of(context);
+          final page = KeyedSubtree(
+            key: ValueKey('$identity/$_tab'),
+            child: switch (_tab) {
+              0 => CaregiverFamilyTab(
+                householdId: household,
+                onSwitch: _switch,
+              ),
+              1 => CaregiverCheckTab(householdId: household),
+              2 => CaregiverGrowPlayTab(householdId: household),
+              3 => CaregiverCarePlanTab(householdId: household),
+              _ => CaregiverHelpTab(householdId: household),
+            },
+          );
+          return AnnotatedRegion<SystemUiOverlayStyle>(
+            value: SystemUiOverlayStyle.dark.copyWith(
+              statusBarColor: Colors.transparent,
+            ),
+            child: Scaffold(
+              backgroundColor: CaregiverLuxePalette.celestialCanvas,
+              body: SafeArea(
+                bottom: false,
+                child: Column(
+                  children: [
+                    _CaregiverHeader(isOnline: isOnline),
+                    Expanded(
+                      child: fx.motion
+                          ? AnimatedSwitcher(
+                              key: ValueKey(identity),
+                              duration: fx.scale(
+                                const Duration(milliseconds: 220),
+                              ),
+                              switchInCurve: Curves.easeOut,
+                              switchOutCurve: Curves.easeIn,
+                              transitionBuilder: (child, animation) =>
+                                  FadeTransition(
+                                    opacity: animation,
+                                    child: child,
+                                  ),
+                              child: page,
+                            )
+                          : page,
+                    ),
+                  ],
+                ),
+              ),
+              bottomNavigationBar: CaregiverNavigation(
+                index: _tab,
+                onSelect: _switch,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _CaregiverHeader extends ConsumerWidget {
+  const _CaregiverHeader({required this.isOnline});
+
+  final bool isOnline;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final fx = VisualEffects.of(context);
+    final narrationEnabled = ref.watch(narrationEnabledProvider);
+    final theme = Theme.of(context);
+    final title = Semantics(
+      header: true,
+      child: Row(
+        children: [
+          if (Navigator.of(context).canPop())
+            const SizedBox(
+              width: 48,
+              height: 48,
+              child: BackButton(color: CaregiverLuxePalette.twilightNavy),
+            ),
+          const Expanded(
+            child: Text(
               'My family',
+              softWrap: true,
               style: TextStyle(
                 fontFamily: 'Sora',
                 fontWeight: FontWeight.w700,
-                fontSize: 20,
+                fontSize: 22,
+                height: 1.3,
+                letterSpacing: -0.5,
+                color: CaregiverLuxePalette.twilightMidnight,
               ),
             ),
-            actions: [
-              const NarrationButton(compact: true),
-              const CaregiverEmergencyButton(),
-              Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: Center(child: ConnectivityDot(isOnline: isOnline)),
-              ),
-            ],
           ),
-          body: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 220),
-            switchInCurve: Curves.easeOut,
-            switchOutCurve: Curves.easeIn,
-            transitionBuilder: (child, animation) =>
-                FadeTransition(opacity: animation, child: child),
-            child: KeyedSubtree(
-              key: ValueKey('$identity/$_tab'),
-              child: switch (_tab) {
-                0 => CaregiverFamilyTab(
-                  householdId: household,
-                  onSwitch: _switch,
-                ),
-                1 => CaregiverCheckTab(householdId: household),
-                2 => CaregiverGrowPlayTab(householdId: household),
-                3 => CaregiverCarePlanTab(householdId: household),
-                _ => CaregiverHelpTab(householdId: household),
+        ],
+      ),
+    );
+    final controls = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 48,
+          height: 48,
+          child: NarrationButton(
+            key: ValueKey(fx.motion ? null : narrationEnabled),
+            compact: true,
+            iconColor: CaregiverLuxePalette.twilightNavy,
+          ),
+        ),
+        const SizedBox(
+          width: 56,
+          height: 48,
+          child: CaregiverEmergencyButton(),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: ConnectivityDot(
+            key: ValueKey(fx.motion ? null : isOnline),
+            isOnline: isOnline,
+          ),
+        ),
+      ],
+    );
+    return TickerMode(
+      enabled: fx.motion,
+      child: Theme(
+        data: theme.copyWith(
+          splashFactory: fx.motion
+              ? theme.splashFactory
+              : NoSplash.splashFactory,
+          highlightColor: fx.motion ? theme.highlightColor : Colors.transparent,
+        ),
+        child: Material(
+          key: ValueKey(fx.motion),
+          type: MaterialType.transparency,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 16, 12),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final stacked =
+                    constraints.maxWidth < 324 ||
+                    MediaQuery.textScalerOf(context).scale(22) > 28;
+                if (stacked) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      title,
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: controls,
+                      ),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: title),
+                    const SizedBox(width: 12),
+                    controls,
+                  ],
+                );
               },
             ),
-          ),
-          bottomNavigationBar: CaregiverNavigation(
-            index: _tab,
-            onSelect: _switch,
           ),
         ),
       ),
@@ -187,96 +309,246 @@ class CaregiverNavigation extends StatelessWidget {
     Icons.support_agent_outlined,
   ];
   @override
-  Widget build(BuildContext context) => Container(
-    decoration: BoxDecoration(
-      color: AppColors.caregiverCanvas,
-      border: Border(
-        top: BorderSide(color: AppColors.line, width: 1),
-      ),
-    ),
-    child: SafeArea(
-      top: false,
-      child: LayoutBuilder(
-        builder: (context, size) {
-          final columns =
-              size.maxWidth < 360 ||
-                  MediaQuery.textScalerOf(context).scale(14) > 20
-              ? 3
-              : 5;
-          return Wrap(
-            children: [
-              for (var i = 0; i < labels.length; i++)
-                SizedBox(
-                  width: size.maxWidth / columns,
-                  child: Semantics(
-                    selected: index == i,
-                    button: true,
-                    label: labels[i],
-                    child: InkWell(
-                      onTap: () => onSelect(i),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 64),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 10,
-                          ),
-                          child: ExcludeSemantics(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
+  Widget build(BuildContext context) {
+    final fx = VisualEffects.of(context);
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    final defaults = DefaultTextStyle.of(context);
+    final labelStyle = defaults.style.copyWith(
+      fontSize: 12,
+      fontWeight: FontWeight.w700,
+      height: 1.35,
+      letterSpacing: 0,
+    );
+    final radius = BorderRadius.circular(28);
+    return TickerMode(
+      enabled: fx.motion,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final columns =
+                  constraints.maxWidth < 328 || scaler.scale(12) > 16 ? 3 : 5;
+              final cellWidth = (constraints.maxWidth - 16) / columns;
+              final rowCount = (labels.length / columns).ceil();
+              final rowHeights = List<double>.filled(rowCount, 48);
+              // Measure the actual scaled labels, not a fixed grid aspect ratio.
+              for (var i = 0; i < labels.length; i++) {
+                final painter = TextPainter(
+                  text: TextSpan(text: labels[i], style: labelStyle),
+                  textDirection: direction,
+                  textScaler: scaler,
+                  locale: Localizations.maybeLocaleOf(context),
+                  textHeightBehavior: defaults.textHeightBehavior,
+                )..layout(maxWidth: cellWidth - 12);
+                final height = 54 + painter.height.ceilToDouble();
+                final row = i ~/ columns;
+                if (height > rowHeights[row]) rowHeights[row] = height;
+                painter.dispose();
+              }
+              final selectedRow = index ~/ columns;
+              final selectedColumn = index % columns;
+              final selectedRowCount = selectedRow == rowCount - 1
+                  ? labels.length - selectedRow * columns
+                  : columns;
+              final start =
+                  (columns - selectedRowCount) * cellWidth / 2 +
+                  selectedColumn * cellWidth +
+                  2;
+              final top = selectedRow == 0 ? 0.0 : rowHeights[0] + 6;
+              final indicator = IgnorePointer(
+                child: DecoratedBox(
+                  key: const ValueKey('caregiver-dock-indicator'),
+                  decoration: BoxDecoration(
+                    color: CaregiverLuxePalette.azurePrimary,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: CaregiverLuxePalette.specularStroke,
+                    ),
+                    boxShadow: fx.blur
+                        ? [
+                            BoxShadow(
+                              color: CaregiverLuxePalette.azurePrimary
+                                  .withValues(alpha: 0.18),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ]
+                        : const [],
+                  ),
+                ),
+              );
+              final content = Padding(
+                padding: const EdgeInsets.all(8),
+                child: Stack(
+                  children: [
+                    if (fx.motion)
+                      AnimatedPositionedDirectional(
+                        duration: fx.scale(const Duration(milliseconds: 260)),
+                        curve: Curves.easeOutCubic,
+                        start: start,
+                        top: top,
+                        width: cellWidth - 4,
+                        height: rowHeights[selectedRow],
+                        child: indicator,
+                      )
+                    else
+                      PositionedDirectional(
+                        start: start,
+                        top: top,
+                        width: cellWidth - 4,
+                        height: rowHeights[selectedRow],
+                        child: indicator,
+                      ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (var row = 0; row < rowCount; row++) ...[
+                          if (row > 0) const SizedBox(height: 6),
+                          SizedBox(
+                            height: rowHeights[row],
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  curve: Curves.easeOut,
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: BoxDecoration(
-                                    color: index == i
-                                        ? AppColors.primary.withValues(alpha: 0.12)
-                                        : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: AnimatedSwitcher(
-                                    duration: const Duration(milliseconds: 200),
-                                    child: Icon(
-                                      icons[i],
-                                      key: ValueKey('${icons[i]}_$i'),
-                                      color: index == i
-                                          ? AppColors.primary
-                                          : AppColors.caregiverMuted,
-                                      size: index == i ? 24 : 22,
+                                for (
+                                  var i = row * columns;
+                                  i < (row + 1) * columns && i < labels.length;
+                                  i++
+                                )
+                                  SizedBox(
+                                    width: cellWidth,
+                                    child: _destination(
+                                      context,
+                                      i,
+                                      labelStyle,
+                                      fx,
                                     ),
                                   ),
-                                ),
-                                const SizedBox(height: 4),
-                                AnimatedDefaultTextStyle(
-                                  duration: const Duration(milliseconds: 200),
-                                  curve: Curves.easeOut,
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: index == i
-                                        ? FontWeight.w800
-                                        : FontWeight.w500,
-                                    color: index == i
-                                        ? AppColors.primary
-                                        : AppColors.caregiverMuted,
-                                  ),
-                                  child: Text(
-                                    labels[i],
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
                               ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              );
+              final surface = DecoratedBox(
+                decoration: BoxDecoration(
+                  color: fx.blur
+                      ? CaregiverLuxePalette.pearlGlassTint
+                      : CaregiverLuxePalette.pearlSurface,
+                  borderRadius: radius,
+                  border: Border.all(color: CaregiverLuxePalette.hairLineQuiet),
+                ),
+                child: Stack(
+                  children: [
+                    const Positioned(
+                      top: 1,
+                      left: 24,
+                      right: 24,
+                      child: IgnorePointer(
+                        child: SizedBox(
+                          height: 1,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.transparent,
+                                  CaregiverLuxePalette.specularStroke,
+                                  Colors.transparent,
+                                ],
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
+                    content,
+                  ],
                 ),
-            ],
-          );
-        },
+              );
+              return DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: radius,
+                  boxShadow: fx.blur
+                      ? CaregiverLuxePalette.featheredShadow
+                      : const [],
+                ),
+                child: ClipRRect(
+                  borderRadius: radius,
+                  child: fx.blur
+                      ? BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                          child: surface,
+                        )
+                      : surface,
+                ),
+              );
+            },
+          ),
+        ),
       ),
-    ),
-  );
+    );
+  }
+
+  Widget _destination(
+    BuildContext context,
+    int destination,
+    TextStyle labelStyle,
+    VisualEffects fx,
+  ) {
+    final selected = destination == index;
+    final foreground = selected
+        ? CaregiverLuxePalette.pearlSurface
+        : CaregiverLuxePalette.twilightMuted;
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: labels[destination],
+      child: Material(
+        key: ValueKey(fx.motion),
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          splashFactory: fx.motion
+              ? Theme.of(context).splashFactory
+              : NoSplash.splashFactory,
+          highlightColor: fx.motion ? null : Colors.transparent,
+          hoverDuration: fx.scale(const Duration(milliseconds: 50)),
+          focusColor: CaregiverLuxePalette.twilightNavy.withValues(alpha: 0.12),
+          enableFeedback: false,
+          onTap: () {
+            if (!selected) HapticFeedback.lightImpact();
+            onSelect(destination);
+          },
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+              child: ExcludeSemantics(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icons[destination], color: foreground, size: 24),
+                    const SizedBox(height: 6),
+                    Text(
+                      labels[destination],
+                      textAlign: TextAlign.center,
+                      softWrap: true,
+                      style: labelStyle.copyWith(color: foreground),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

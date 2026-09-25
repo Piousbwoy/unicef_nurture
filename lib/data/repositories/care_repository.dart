@@ -634,7 +634,7 @@ class CareRepository {
     return ReferralDao.needingEscalation();
   }
 
-  /// Confirms a family arrived, via QR scan or by typing the short code.
+  /// Confirms a family arrived using the referral reference code.
   Future<Referral?> confirmArrival(AppUser user, String referenceCode) async {
     await _require(
       user,

@@ -220,13 +220,105 @@ class _PlayTogether extends ConsumerWidget {
     final activity = NurturingCareEngine.activityToday(band, now);
     return CompanionCard(
       title: 'Play together today',
-      eyebrow: '${person.fullName} • ${caregiverAge(person)}',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Row(
+            children: [
+              CaregiverPortraitOrb(person: person, size: 54),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      person.fullName,
+                      style: const TextStyle(
+                        fontFamily: 'Sora',
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: CompanionColors.ink,
+                      ),
+                    ),
+                    Text(
+                      caregiverAge(person),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: CompanionColors.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: CompanionColors.blue.withValues(alpha: 0.09),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: CompanionColors.blue.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Text(
+                      band.label,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                        color: CompanionColors.blue,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
           Text(
             activity,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              fontFamily: 'Sora',
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              height: 1.3,
+              letterSpacing: -0.3,
+              color: CompanionColors.ink,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: CompanionColors.blue.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 18,
+                  color: CompanionColors.bronze,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    band.tip,
+                    style: caregiverBody(
+                      size: 14.5,
+                      color: CompanionColors.ink,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
           const Text(
@@ -251,6 +343,7 @@ class _PlayTogether extends ConsumerWidget {
           const Text(
             'This records trying an activity, not a milestone or developmental result.',
           ),
+          _MorePlayIdeas(person: person, band: band, today: activity),
           const SizedBox(height: 12),
           FilledButton(
             onPressed: () => Navigator.of(context).push(
@@ -260,6 +353,72 @@ class _PlayTogether extends ConsumerWidget {
             ),
             child: const Text('Check the milestones'),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The whole band's play list, one tap away. Today's activity stays the
+/// poster line above and is not repeated here.
+class _MorePlayIdeas extends StatelessWidget {
+  const _MorePlayIdeas({
+    required this.person,
+    required this.band,
+    required this.today,
+  });
+  final Person person;
+  final NcAgeBand band;
+  final String today;
+  @override
+  Widget build(BuildContext context) {
+    final ideas = band.activities.where((a) => a != today).toList();
+    if (ideas.length < 2) return const SizedBox.shrink();
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 4),
+        shape: const Border(),
+        collapsedShape: const Border(),
+        title: Text(
+          'More play ideas',
+          style: caregiverBody(size: 15).copyWith(
+            fontWeight: FontWeight.w700,
+            color: CompanionColors.blue,
+          ),
+        ),
+        subtitle: Text(
+          '${ideas.length} more for ${band.label.toLowerCase()} • ${person.fullName}',
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w500,
+            color: CompanionColors.muted,
+          ),
+        ),
+        children: [
+          for (final idea in ideas)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 6, 4, 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 7),
+                    child: Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: CompanionColors.blue.withValues(alpha: 0.45),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(idea)),
+                ],
+              ),
+            ),
         ],
       ),
     );

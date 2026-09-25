@@ -15,7 +15,6 @@ import 'package:sqflite/sqflite.dart';
 
 import '../../domain/entities/core.dart';
 import '../../domain/enums.dart';
-import '../../domain/family_code.dart';
 import 'app_database.dart';
 import 'outbox_dao.dart';
 
@@ -120,23 +119,6 @@ abstract final class HouseholdDao {
       orderBy: 'community ASC, name ASC',
     );
     return rows.map(Household.fromMap).toList(growable: false);
-  }
-
-  /// Resolves the code a CHO read out to a caregiver.
-  ///
-  /// A scan rather than an indexed lookup, because the code is derived from the
-  /// id rather than stored. At zone scale — a few hundred compounds — that is a
-  /// single query and a loop, and it buys a code that needs no column, no
-  /// migration and no coordination between devices.
-  static Future<Household?> byFamilyCode(String typedCode) async {
-    if (!FamilyCode.looksValid(typedCode)) return null;
-    final db = await AppDatabase.instance.database;
-    final rows = await db.query(Tables.households, columns: ['id']);
-    for (final row in rows) {
-      final id = row['id'] as String;
-      if (FamilyCode.matches(id, typedCode)) return byId(id);
-    }
-    return null;
   }
 
   static Future<List<Household>> all() async {

@@ -1,7 +1,6 @@
 import 'package:carebridge_ai/app/providers.dart';
 import 'package:carebridge_ai/core/auth/session.dart';
 import 'package:carebridge_ai/core/router/app_router.dart';
-import 'package:carebridge_ai/core/theme/app_theme.dart';
 import 'package:carebridge_ai/presentation/auth/sign_in_screen.dart';
 import 'package:carebridge_ai/presentation/shared/iphone_frame.dart';
 import 'package:flutter/gestures.dart';
@@ -22,37 +21,44 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   GoogleFonts.config.allowRuntimeFetching = false;
 
-  testWidgets('IPhoneFrame wrapping MaterialApp.router (web simulation) throws NO errors', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await tester.binding.setSurfaceSize(const Size(1280, 800));
+  testWidgets(
+    'IPhoneFrame wrapping MaterialApp.router (web simulation) throws NO errors',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await tester.binding.setSurfaceSize(const Size(1280, 800));
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [sessionProvider.overrideWith(() => _FixedSession(const SessionNeedsSetup()))],
-        child: Consumer(
-          builder: (context, ref, _) {
-            final router = ref.watch(routerProvider);
-            return MaterialApp.router(
-              title: 'CareBridge AI',
-              routerConfig: router,
-              builder: (context, child) => IPhoneFrame(child: child!),
-            );
-          },
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sessionProvider.overrideWith(
+              () => _FixedSession(const SessionNeedsSetup()),
+            ),
+          ],
+          child: Consumer(
+            builder: (context, ref, _) {
+              final router = ref.watch(routerProvider);
+              return MaterialApp.router(
+                title: 'CareBridge AI',
+                routerConfig: router,
+                builder: (context, child) => IPhoneFrame(child: child!),
+              );
+            },
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 2500));
-    // The splash is tap-to-continue; leave it the way a user would.
-    // (Fixed point: the frame harness adds its own Scaffold, so a
-    // byType(Scaffold) finder would be ambiguous here.)
-    await tester.tapAt(const Offset(640, 400));
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 2500));
+      // The splash is tap-to-continue; leave it the way a user would.
+      // (Fixed point: the frame harness adds its own Scaffold, so a
+      // byType(Scaffold) finder would be ambiguous here.)
+      await tester.tapAt(const Offset(640, 400));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
 
-    expect(tester.takeException(), isNull);
-  });
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'IPhoneFrame: caregiver registration step 0 -> step 1 stays rendered '
@@ -65,7 +71,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            sessionProvider.overrideWith(() => _FixedSession(const SessionNeedsSetup())),
+            sessionProvider.overrideWith(
+              () => _FixedSession(const SessionNeedsSetup()),
+            ),
           ],
           child: Consumer(
             builder: (context, ref, _) {
@@ -116,34 +124,56 @@ void main() {
         find.widgetWithText(TextField, '024 000 0000'),
         '0244 111 222',
       );
-      await tester.enterText(find.widgetWithText(TextField, '4 digits'), '5729');
+      await tester.enterText(
+        find.widgetWithText(TextField, '4 digits'),
+        '5729',
+      );
       await tester.enterText(
         find.widgetWithText(TextField, 'Repeat your PIN'),
         '5729',
       );
-      // DIAGNOSTIC: what is on screen right before "Continue"?
-      debugPrint('GradientButtons: ${find.byType(GradientButton).evaluate().length}');
-      for (final t in find.byType(Text).evaluate()) {
-        final w = t.widget as Text;
-        if ((w.data ?? '').trim().isNotEmpty) debugPrint('TEXT: ${w.data}');
-      }
       await tester.ensureVisible(find.text('Continue'));
       await tester.tap(find.text('Continue'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
 
-      // The family step must render inside the simulated phone screen.
+      // The family fields render directly inside the simulated phone screen.
       expect(find.text('Your family'), findsWidgets);
-      // FieldLabel renders its text uppercased.
-      expect(find.text('OR TYPE THE 6-CHARACTER CODE'), findsOneWidget);
+      final familyName = find.widgetWithText(
+        TextField,
+        'e.g. The Dawura family',
+      );
+      expect(familyName, findsOneWidget);
+      expect(find.byType(DropdownButtonFormField<String>), findsNWidgets(3));
+      expect(find.widgetWithText(TextField, 'ABC-D24'), findsNothing);
+      expect(find.text('Check'), findsNothing);
+      expect(find.text('Paste code from a message'), findsNothing);
+      expect(
+        find.text('My family is not registered yet — start our own record'),
+        findsNothing,
+      );
+      expect(tester.getSize(familyName).width.isFinite, isTrue);
 
-      // Regression: the theme gives every OutlinedButton an infinite minimum
-      // width (Size.fromHeight). On web the Check button received unbounded
-      // constraints inside its Row and threw "BoxConstraints forces an
-      // infinite width", blanking the step. It must now have a finite size.
-      final checkButton = find.widgetWithText(OutlinedButton, 'Check');
-      expect(checkButton, findsOneWidget);
-      expect(tester.getSize(checkButton).width.isFinite, isTrue);
+      // Empty family details cannot advance, even in the framed viewport.
+      await tester.tap(find.text('Continue'));
+      await tester.pump();
+      final validation = find.text(
+        'Enter your family name, e.g. “The Dawura family”.',
+      );
+      await tester.scrollUntilVisible(
+        validation,
+        250,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      expect(validation, findsOneWidget);
+      expect(find.text('Data & privacy'), findsNothing);
+      await tester.ensureVisible(familyName);
+      await tester.enterText(familyName, 'The Iddrisu family');
+      expect(find.text('The Iddrisu family'), findsOneWidget);
 
       // Sweep the mouse across the phone screen the way a presenter's
       // cursor would; any size-less render box throws on hit test here.

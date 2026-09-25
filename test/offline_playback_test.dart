@@ -147,7 +147,7 @@ void main() {
   });
 
   group('device playback', () {
-    test('untranslated guidance never initializes TTS or audio', () async {
+    test('untranslated guidance tries English device TTS before giving up', () async {
       final harness = _Harness();
       addTearDown(harness.voice.dispose);
       final events = <CaregiverPlayback>[];
@@ -155,14 +155,13 @@ void main() {
         id: 'level_urgent', english: 'Amina needs a new assessment today.',
         language: 'Dagbani', clipId: 'level_urgent',
       ), events.add);
-      expect(harness.ttsCreated, 0);
-      expect(harness.playersCreated, 0);
-      expect(harness.assets.loaded, isEmpty);
+      // English TTS fallback creates the TTS instance but no voices are
+      // available, so it still falls back to readable text.
+      expect(harness.ttsCreated, 1);
       expect(events.last.phase, CaregiverPlaybackPhase.fallback);
       expect(events.last.language, 'English');
       expect(events.last.transcript, 'Amina needs a new assessment today.');
-      expect(events.last.source,
-          'Dagbani translation is not bundled. Choose English or ask a health worker to read the guidance.');
+      expect(events.last.reasonCode, 'translation_fallback_english');
     });
 
     for (final language in ['Dagbani', 'Hausa', 'Twi']) {
@@ -215,14 +214,16 @@ void main() {
       expect(events.last.transcript, _speech('Dagbani').localizedText);
     });
 
-    test('Dagbani never falls back to Hausa or English device voices', () async {
+    test('Dagbani with translation but no voice falls back to readable text', () async {
       final harness = _Harness()..assets.failAll = true;
       harness.tts.voices = [_offline('ha-NG'), _offline('en-GB')];
       addTearDown(harness.voice.dispose);
       final events = <CaregiverPlayback>[];
       await harness.voice.play(_speech('Dagbani'), events.add);
+      // Translation succeeds (SpeechBank provides Dagbani text) but no
+      // Dagbani device voice exists. Hausa/English voices are not used for
+      // Dagbani text — the readable text is shown instead.
       expect(harness.tts.utterances, isEmpty);
-      expect(harness.tts.locales, isEmpty);
       expect(events.last.language, 'Dagbani');
       expect(events.last.source, contains('draft translation'));
       expect(events.last.phase, CaregiverPlaybackPhase.fallback);

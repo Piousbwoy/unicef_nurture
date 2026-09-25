@@ -8,10 +8,9 @@
 /// of those fields is load-bearing later — the zone decides whose households
 /// appear in the day plan, the facility is printed on referral slips.
 ///
-/// A **caregiver** is being given access to one family. They enter a family
-/// code the health worker reads out, and the account is bound to that
-/// household for good. There is no field on this form that could widen that
-/// scope, which is the point: scope is decided at creation, not at every read.
+/// A **caregiver** creates their family's household record with its name and
+/// location. Their account is bound to that household at creation, so access
+/// stays scoped to their own family.
 ///
 /// The role is picked on the "Who are you?" screen first; the sign-in screen
 /// sits in between (so an existing user can sign in without scrolling past
@@ -20,11 +19,9 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../app/providers.dart';
@@ -32,13 +29,11 @@ import '../../core/auth/session.dart';
 import '../../core/i18n/dagbani_strings.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_theme.dart';
-import '../../data/local/household_dao.dart';
 import '../../data/local/preferences_store.dart';
 import '../../data/local/user_dao.dart';
 import '../../data/reference/northern_ghana.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/enums.dart';
-import '../../domain/family_code.dart';
 import '../shared/app_image.dart';
 import '../shared/audio_button.dart';
 import '../shared/ui.dart';
@@ -487,14 +482,7 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
   String? _zone;
   final _facility = TextEditingController();
 
-  // Caregiver link — two paths to the same place. A family that already
-  // exists in the system is found by its code; a family the system has not
-  // reached yet starts its own record here and the health worker adopts it
-  // the first time they meet.
-  final _familyCode = TextEditingController();
-  Household? _linkedHousehold;
-  bool _checkingCode = false;
-  bool _selfCreate = false;
+  // Caregivers create their own household during registration.
   final _familyName = TextEditingController();
   final _landmark = TextEditingController();
 
@@ -526,7 +514,6 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
       _pin,
       _pinConfirm,
       _facility,
-      _familyCode,
       _familyName,
       _landmark,
     ]) {
@@ -535,17 +522,7 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
     super.dispose();
   }
 
-  Future<void> _next() async {
-    if (_step == 1 &&
-        !_isFhw &&
-        !_selfCreate &&
-        _linkedHousehold == null &&
-        _familyCode.text.trim().isNotEmpty) {
-      await _lookUpCode();
-      if (_linkedHousehold == null) {
-        return;
-      }
-    }
+  void _next() {
     final problem = _validateStep(_step);
     if (problem != null) {
       setState(() => _error = problem);
@@ -577,17 +554,13 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
         if (_pin.text != _pinConfirm.text) return 'The two PINs are different.';
         return null;
       case 1:
-        if (_isFhw && _region.isEmpty) return 'Choose your region.';
-        if (!_isFhw && _selfCreate) {
+        if (_region.isEmpty) return 'Choose your region.';
+        if (!_isFhw) {
           if (_familyName.text.trim().length < 2) {
             return 'Enter your family name, e.g. “The Dawura family”.';
           }
           if (_district == null) return 'Choose your district.';
           if (_community == null) return 'Choose your community.';
-          return null;
-        }
-        if (!_isFhw && _linkedHousehold == null) {
-          return 'Enter the family code the health worker gave you, then tap Check.';
         }
         return null;
       case 2:
@@ -608,65 +581,6 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
     return null;
   }
 
-  Future<void> _lookUpCode() async {
-    setState(() {
-      _checkingCode = true;
-      _error = null;
-      _linkedHousehold = null;
-    });
-    final household = await HouseholdDao.byFamilyCode(_familyCode.text);
-    if (!mounted) return;
-    setState(() {
-      _checkingCode = false;
-      _linkedHousehold = household;
-      _error = household == null
-          ? 'No family found with that code. Ask the health worker to read it '
-                'again — it is six letters and numbers.'
-          : null;
-    });
-  }
-
-  Future<void> _pasteCode() async {
-    final clip = await Clipboard.getData('text/plain');
-    final text = clip?.text?.trim() ?? '';
-    if (text.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Clipboard is empty. Copy a family code or SMS first.'),
-        ),
-      );
-      return;
-    }
-
-    if (text.startsWith('CAREBRIDGE_QR|')) {
-      final decoded = FamilyCode.decodeQrPayload(text);
-      if (decoded != null) {
-        await HouseholdDao.upsert(decoded);
-        if (!mounted) return;
-        setState(() {
-          _familyCode.text = FamilyCode.pretty(decoded.id);
-          _linkedHousehold = decoded;
-          _error = null;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              '⚡ Pasted digital QR pass! Household seeded in local SQLite.',
-            ),
-            backgroundColor: AppColors.triageGreen,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        return;
-      }
-    }
-
-    if (!mounted) return;
-    setState(() => _familyCode.text = text);
-    await _lookUpCode();
-  }
-
   /// [12] Account Created — success animation, ~1.5s, then the account is
   /// actually created and the router auto-routes by role.
   Future<void> _submit() async {
@@ -683,16 +597,11 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
 
     await Future<void>.delayed(const Duration(milliseconds: 1500));
 
-    final household = _linkedHousehold;
     final userId = const Uuid().v4();
-    final selfCreated = !_isFhw && _selfCreate;
 
-    // A caregiver who starts their own family writes the household first, so
-    // the account can be bound to it in the very same step. The record is
-    // ordinary — SQLite plus sync outbox — and carries the caregiver's own id
-    // as `createdBy`, which is how the FHW's caseload picks it up later.
+    // Save the household before binding the caregiver account to it.
     Household? ownHousehold;
-    if (selfCreated) {
+    if (!_isFhw) {
       ownHousehold = Household(
         id: const Uuid().v4(),
         name: _familyName.text.trim(),
@@ -712,13 +621,9 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
       fullName: _name.text.trim(),
       phone: _phone.text.trim(),
       role: widget.role,
-      region: _isFhw ? _region : (household?.region ?? _region),
-      district: _isFhw
-          ? _district!
-          : (household?.district ?? ownHousehold?.district ?? ''),
-      community: _isFhw
-          ? _community!
-          : (household?.community ?? ownHousehold?.community ?? ''),
+      region: _region,
+      district: _district!,
+      community: _community!,
       chpsZone: _isFhw ? _zone : null,
       facilityName: _isFhw && _facility.text.trim().isNotEmpty
           ? _facility.text.trim()
@@ -738,7 +643,7 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
           .register(
             user: user,
             pin: _pin.text,
-            linkedHouseholdId: household?.id ?? ownHousehold?.id,
+            linkedHouseholdId: ownHousehold?.id,
           );
       if (!mounted) return;
       if (!success) {
@@ -802,9 +707,7 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
               ),
               child: isPrivacyStep
                   ? GradientButton(
-                      label: _isFhw
-                          ? 'Agree & Create Account'
-                          : 'Agree & Link My Family',
+                      label: 'Agree & Create Account',
                       icon: Icons.verified_user_rounded,
                       onPressed: _busy ? null : _submit,
                     )
@@ -834,10 +737,7 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
                   child: child,
                 ),
               ),
-              child: KeyedSubtree(
-                key: ValueKey(_step),
-                child: _buildStep(),
-              ),
+              child: KeyedSubtree(key: ValueKey(_step), child: _buildStep()),
             ),
             if (_error != null) ...[
               const SizedBox(height: Gap.lg),
@@ -917,24 +817,11 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
         onRelationshipChanged: (v) => setState(() => _relationship = v),
       ),
       1 => _FamilyStep(
-        code: _familyCode,
-        household: _linkedHousehold,
-        checking: _checkingCode,
-        onCheck: _lookUpCode,
-        onPaste: _pasteCode,
-        selfCreate: _selfCreate,
         familyName: _familyName,
         landmark: _landmark,
         region: _region,
         district: _district,
         community: _community,
-        onSelfCreateChanged: (v) => setState(() {
-          _selfCreate = v;
-          if (v) {
-            _linkedHousehold = null;
-            _district ??= null;
-          }
-        }),
         onRegionChanged: (v) => setState(() {
           _region = v;
           _district = null;
@@ -945,11 +832,6 @@ class _RegistrationFormState extends ConsumerState<_RegistrationForm> {
           _community = null;
         }),
         onCommunityChanged: (v) => setState(() => _community = v),
-        onChanged: (_) {
-          if (_linkedHousehold != null) {
-            setState(() => _linkedHousehold = null);
-          }
-        },
       ),
       _ => const SizedBox.shrink(),
     };
@@ -1322,317 +1204,117 @@ class _CommunityStep extends StatelessWidget {
   }
 }
 
-/// Step 1 of the caregiver wizard: join your family.
-///
-/// Two honest paths, because both happen in real life:
-///
-/// **A code** — the health worker has registered the household and reads out
-/// its six-character code. The account binds to that family.
-///
-/// **Start your own family** — no health worker has reached the compound yet,
-/// or the household lives on a different phone. The caregiver creates the
-/// family record themselves (name, district, community) and the health worker
-/// adopts it the first time they meet. Without this path, caregiver sign-up
-/// is a wall on any fresh device.
+/// Step 1 of the caregiver wizard: create the family's household record.
 class _FamilyStep extends StatelessWidget {
   const _FamilyStep({
-    required this.code,
-    required this.household,
-    required this.checking,
-    required this.onCheck,
-    required this.onPaste,
-    required this.selfCreate,
     required this.familyName,
     required this.landmark,
     required this.region,
     required this.district,
     required this.community,
-    required this.onSelfCreateChanged,
     required this.onRegionChanged,
     required this.onDistrictChanged,
     required this.onCommunityChanged,
-    required this.onChanged,
   });
 
-  final TextEditingController code;
-  final Household? household;
-  final bool checking;
-  final VoidCallback onCheck;
-  final VoidCallback onPaste;
-
-  final bool selfCreate;
   final TextEditingController familyName;
   final TextEditingController landmark;
   final String region;
   final String? district;
   final String? community;
-  final ValueChanged<bool> onSelfCreateChanged;
   final ValueChanged<String> onRegionChanged;
   final ValueChanged<String?> onDistrictChanged;
   final ValueChanged<String?> onCommunityChanged;
-  final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) => SectionCard(
     title: 'Your family',
     subtitle:
-        'If the health worker registered your family, enter the six-character '
-        'code they give you — or paste it if it arrived by SMS. If not, '
-        'start your own family record and the health worker will pick it up '
-        'the first time you meet.',
-    icon: Icons.vpn_key_outlined,
+        'Create your family record so your health worker can support you '
+        'when you meet.',
+    icon: Icons.family_restroom_rounded,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (!selfCreate) ...[
-          Container(
-            padding: const EdgeInsets.all(Gap.md),
-            decoration: BoxDecoration(
-              color: AppColors.primaryLight.withOpacity(0.4),
-              borderRadius: BorderRadius.circular(Gap.radiusSm),
-              border: Border.all(color: AppColors.primary.withOpacity(0.3)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.phonelink_ring_outlined,
-                      color: AppColors.primary,
-                      size: 22,
-                    ),
-                    const SizedBox(width: Gap.sm),
-                    const Expanded(
-                      child: Text(
-                        'With the health worker right now?',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
-                          fontSize: 13.5,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: Gap.xs),
-                const Text(
-                  'They can read the code out for you to type below, or send it by SMS. If it arrived as a message, paste it — no network needed.',
-                  style: TextStyle(
-                    color: AppColors.inkMuted,
-                    fontSize: 12,
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: Gap.md),
-                OutlinedButton.icon(
-                  onPressed: checking ? null : onPaste,
-                  icon: const Icon(Icons.content_paste_rounded, size: 16),
-                  label: const Text('Paste code from a message'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.ink,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: Gap.md),
-        ],
-        const FieldLabel('Or type the 6-character code'),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: code,
-                enabled: !selfCreate,
-                textCapitalization: TextCapitalization.characters,
-                decoration: const InputDecoration(hintText: 'ABC-D24'),
-                onChanged: onChanged,
-              ),
-            ),
-            const SizedBox(width: Gap.sm),
-            SizedBox(
-              height: Gap.tapTarget,
-              // The theme's OutlinedButton style stretches to full width
-              // (minimumSize: Size.fromHeight). Inside this Row the width is
-              // unbounded, which makes the infinite minimum throw during
-              // layout on web and blank the whole step — pin a width.
-              width: 96,
-              child: OutlinedButton(
-                onPressed: checking || selfCreate ? null : onCheck,
-                child: checking
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Check'),
-              ),
-            ),
-          ],
+        const FieldLabel(
+          'Family name',
+          required: true,
+          why: 'How your family will appear to your health worker.',
         ),
-        if (household != null) ...[
-          const SizedBox(height: Gap.md),
-          Container(
-            padding: const EdgeInsets.all(Gap.md),
-            decoration: BoxDecoration(
-              color: AppColors.triageGreenBg,
-              borderRadius: BorderRadius.circular(Gap.radiusSm),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.check_circle_outline_rounded,
-                  color: AppColors.triageGreen,
-                ),
-                const SizedBox(width: Gap.sm),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        household!.name,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      Text(
-                        '${household!.community}, ${household!.district}',
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          color: AppColors.inkMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+        TextField(
+          controller: familyName,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(hintText: 'e.g. The Dawura family'),
+        ),
         const SizedBox(height: Gap.lg),
-        // The second path. Selecting it clears any found household so the
-        // two paths can never contradict each other.
-        InkWell(
-          onTap: () => onSelfCreateChanged(!selfCreate),
-          borderRadius: BorderRadius.circular(Gap.radius),
-          child: Container(
-            padding: const EdgeInsets.all(Gap.md),
-            decoration: BoxDecoration(
-              color: selfCreate ? AppColors.primaryLight : AppColors.surface,
-              borderRadius: BorderRadius.circular(Gap.radius),
-              border: Border.all(
-                color: selfCreate ? AppColors.primary : AppColors.line,
-                width: selfCreate ? 1.4 : Gap.hairline,
+        const FieldLabel('Region', required: true),
+        DropdownButtonFormField<String>(
+          value: region,
+          isExpanded: true,
+          items: [
+            for (final r in NorthernGhana.regionNames)
+              DropdownMenuItem(
+                value: r,
+                child: Text(r, overflow: TextOverflow.ellipsis),
               ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  selfCreate
-                      ? Icons.check_circle_rounded
-                      : Icons.radio_button_unchecked_rounded,
-                  color: selfCreate ? AppColors.primary : AppColors.inkFaint,
-                  size: 22,
+          ],
+          onChanged: (v) => onRegionChanged(v ?? region),
+        ),
+        const SizedBox(height: Gap.lg),
+        const FieldLabel('District', required: true),
+        DropdownButtonFormField<String>(
+          key: ValueKey('district-$region'),
+          value: district,
+          isExpanded: true,
+          hint: const Text(
+            'Choose your district',
+            overflow: TextOverflow.ellipsis,
+          ),
+          items: [
+            for (final d in NorthernGhana.districtsOf(region))
+              DropdownMenuItem(
+                value: d.name,
+                child: Text(d.name, overflow: TextOverflow.ellipsis),
+              ),
+          ],
+          onChanged: onDistrictChanged,
+        ),
+        const SizedBox(height: Gap.lg),
+        const FieldLabel('Community', required: true),
+        DropdownButtonFormField<String>(
+          key: ValueKey('community-$district'),
+          value: community,
+          isExpanded: true,
+          hint: Text(
+            district == null
+                ? 'Choose a district first'
+                : 'Choose your community',
+            overflow: TextOverflow.ellipsis,
+          ),
+          items: [
+            if (district != null)
+              for (final c in NorthernGhana.communitiesOf(region, district!))
+                DropdownMenuItem(
+                  value: c,
+                  child: Text(c, overflow: TextOverflow.ellipsis),
                 ),
-                const SizedBox(width: Gap.sm),
-                Expanded(
-                  child: Text(
-                    'My family is not registered yet — start our own record',
-                    style: AppType.body.copyWith(
-                      fontSize: 14,
-                      fontWeight: selfCreate
-                          ? FontWeight.w700
-                          : FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          ],
+          onChanged: onCommunityChanged,
+        ),
+        const SizedBox(height: Gap.lg),
+        const FieldLabel(
+          'How to find your home',
+          why:
+              'No addresses here — “behind the mosque” is how the health '
+              'worker finds you.',
+        ),
+        TextField(
+          controller: landmark,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            hintText: 'e.g. Behind the primary school',
           ),
         ),
-        if (selfCreate) ...[
-          const SizedBox(height: Gap.lg),
-          const FieldLabel(
-            'Family name',
-            required: true,
-            why: 'How your family will appear to your health worker.',
-          ),
-          TextField(
-            controller: familyName,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              hintText: 'e.g. The Dawura family',
-            ),
-          ),
-          const SizedBox(height: Gap.lg),
-          const FieldLabel('Region', required: true),
-          DropdownButtonFormField<String>(
-            value: region,
-            isExpanded: true,
-            items: [
-              for (final r in NorthernGhana.regionNames)
-                DropdownMenuItem(
-                  value: r,
-                  child: Text(r, overflow: TextOverflow.ellipsis),
-                ),
-            ],
-            onChanged: (v) => onRegionChanged(v ?? region),
-          ),
-          const SizedBox(height: Gap.lg),
-          const FieldLabel('District', required: true),
-          DropdownButtonFormField<String>(
-            key: ValueKey('district-$region'),
-            value: district,
-            isExpanded: true,
-            hint: const Text(
-              'Choose your district',
-              overflow: TextOverflow.ellipsis,
-            ),
-            items: [
-              for (final d in NorthernGhana.districtsOf(region))
-                DropdownMenuItem(
-                  value: d.name,
-                  child: Text(d.name, overflow: TextOverflow.ellipsis),
-                ),
-            ],
-            onChanged: onDistrictChanged,
-          ),
-          const SizedBox(height: Gap.lg),
-          const FieldLabel('Community', required: true),
-          DropdownButtonFormField<String>(
-            key: ValueKey('community-$district'),
-            value: community,
-            isExpanded: true,
-            hint: Text(
-              district == null
-                  ? 'Choose a district first'
-                  : 'Choose your community',
-              overflow: TextOverflow.ellipsis,
-            ),
-            items: [
-              if (district != null)
-                for (final c in NorthernGhana.communitiesOf(region, district!))
-                  DropdownMenuItem(
-                    value: c,
-                    child: Text(c, overflow: TextOverflow.ellipsis),
-                  ),
-            ],
-            onChanged: onCommunityChanged,
-          ),
-          const SizedBox(height: Gap.lg),
-          const FieldLabel(
-            'How to find your home',
-            why:
-                'No addresses here — “behind the mosque” is how the health '
-                'worker finds you.',
-          ),
-          TextField(
-            controller: landmark,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              hintText: 'e.g. Behind the primary school',
-            ),
-          ),
-        ],
       ],
     ),
   );
@@ -1908,162 +1590,6 @@ class _ErrorBox extends StatelessWidget {
       ],
     ),
   );
-}
-
-/// Shows a household's family code so a CHO can read it out.
-///
-/// Lives here rather than in the FHW feature folder because it is the other half
-/// of the caregiver sign-up above, and the two should not drift apart.
-class FamilyCodeSheet extends StatelessWidget {
-  const FamilyCodeSheet({super.key, required this.household});
-
-  final Household household;
-
-  @override
-  Widget build(BuildContext context) {
-    final qrData = FamilyCode.encodeQrPayload(household);
-    final shortCode = FamilyCode.pretty(household.id);
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(Gap.xl),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: Gap.md,
-              vertical: Gap.xs,
-            ),
-            decoration: BoxDecoration(
-              color: AppColors.primaryLight,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Text(
-              'FAMILY CODE',
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w800,
-                color: AppColors.primary,
-                letterSpacing: 0.8,
-              ),
-            ),
-          ),
-          const SizedBox(height: Gap.sm),
-          Text(
-            household.name,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: Gap.xs),
-          const Text(
-            'The caregiver enters the code below when they set up their phone — it links their account to this family, no network needed. They can also scan the QR with any scanner app and paste what it reads.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.inkMuted,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: Gap.lg),
-          Container(
-            padding: const EdgeInsets.all(Gap.md),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(Gap.radius),
-              border: Border.all(color: AppColors.lineStrong, width: 2),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: QrImageView(
-              data: qrData,
-              version: QrVersions.auto,
-              size: 180.0,
-              eyeStyle: const QrEyeStyle(
-                eyeShape: QrEyeShape.square,
-                color: AppColors.primary,
-              ),
-              dataModuleStyle: const QrDataModuleStyle(
-                dataModuleShape: QrDataModuleShape.square,
-                color: AppColors.ink,
-              ),
-            ),
-          ),
-          const SizedBox(height: Gap.lg),
-          const Text(
-            'READ IT OUT, OR SEND IT BY SMS',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: AppColors.inkMuted,
-              letterSpacing: 1.2,
-            ),
-          ),
-          const SizedBox(height: Gap.xs),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: Gap.lg,
-              vertical: Gap.md,
-            ),
-            decoration: BoxDecoration(
-              color: AppColors.primaryLight,
-              borderRadius: BorderRadius.circular(Gap.radius),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  shortCode,
-                  style: const TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 5,
-                    color: AppColors.primary,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
-                ),
-                const SizedBox(width: Gap.sm),
-                IconButton(
-                  tooltip: 'Copy to send by SMS or WhatsApp',
-                  icon: const Icon(
-                    Icons.copy_rounded,
-                    color: AppColors.primary,
-                    size: 24,
-                  ),
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: shortCode));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Code $shortCode copied — send it by SMS or WhatsApp.',
-                        ),
-                        behavior: SnackBarBehavior.floating,
-                        backgroundColor: AppColors.primary,
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: Gap.xl),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.check_rounded, size: 18),
-              label: const Text('Done'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 /// The short script the language-preview speaker reads aloud. We reuse the

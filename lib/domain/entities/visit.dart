@@ -679,11 +679,7 @@ class Assessment {
   );
 }
 
-/// A referral, with a verifiable arrival loop.
-///
-/// The referral ID is short and human-speakable so it survives being read down
-/// a crackly phone line or written on a paper slip, and it is also encoded as a
-/// QR code so a facility with a device can confirm arrival in one scan.
+/// A referral with a short reference code for confirming arrival.
 class Referral {
   const Referral({
     required this.id,
@@ -738,10 +734,6 @@ class Referral {
       hoursOpen >= 48 &&
       (urgency == ReferralUrgency.immediate ||
           urgency == ReferralUrgency.sameDay);
-
-  /// Payload embedded in the QR code. Compact by design: it must scan reliably
-  /// on a cheap phone in poor light.
-  String get qrPayload => 'CAREBRIDGE|$referenceCode|$personId|${urgency.name}';
 
   Map<String, Object?> toMap() => {
     'id': id,

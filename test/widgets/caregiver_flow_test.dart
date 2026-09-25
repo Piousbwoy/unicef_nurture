@@ -1,14 +1,4 @@
-/// Caregiver end-to-end test: the whole journey on a fresh device.
-///
-/// The bug that motivated this suite: caregiver sign-up demanded a family
-/// code that could only exist if a health worker had already registered the
-/// household *on this same phone*, which is impossible on a fresh device,
-/// so the caregiver flow was dead on arrival. The fix added the self-create
-/// path ('My family is not registered yet'), and this test walks it for
-/// real: no session overrides, a genuine SQLite database, a genuine
-/// registration, and everything a family does afterwards: add a member,
-/// run the danger-sign check, see the vaccine plan, sign out, and sign
-/// back in to find their record still there.
+/// Fresh-device registration and family care against a real SQLite database.
 library;
 
 import 'dart:io';
@@ -18,9 +8,15 @@ import 'package:carebridge_ai/core/router/app_router.dart';
 import 'package:carebridge_ai/data/local/app_database.dart';
 import 'package:carebridge_ai/data/reference/northern_ghana.dart';
 import 'package:carebridge_ai/data/sync/sync_service.dart';
+import 'package:carebridge_ai/domain/entities/caregiver.dart';
+import 'package:carebridge_ai/domain/entities/core.dart';
+import 'package:carebridge_ai/domain/entities/visit.dart';
+import 'package:carebridge_ai/domain/enums.dart';
+import 'package:carebridge_ai/presentation/caregiver/check/nurse_summary.dart';
 import 'package:carebridge_ai/presentation/auth/setup_screen.dart';
 import 'package:carebridge_ai/presentation/auth/sign_in_screen.dart';
 import 'package:carebridge_ai/presentation/caregiver/caregiver_home.dart';
+import 'package:carebridge_ai/presentation/caregiver/caregiver_providers.dart';
 import 'package:carebridge_ai/presentation/caregiver/widgets/companion.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -108,7 +104,11 @@ Future<void> _untilVisible(WidgetTester tester, Finder finder) =>
 /// following tap lands on it. The result and nurse-summary screens are lazy
 /// `ListView`s, so their last actions are not even built until the list moves.
 Future<void> _scrollTo(WidgetTester tester, Finder finder) async {
-  final scrollable = find.byType(Scrollable).last;
+  final scrollable = find
+      .byWidgetPredicate(
+        (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+      )
+      .last;
   final height = tester.view.physicalSize.height / tester.view.devicePixelRatio;
   for (var i = 0; i < 30; i++) {
     if (finder.evaluate().isNotEmpty) {
@@ -124,6 +124,52 @@ Future<void> _scrollTo(WidgetTester tester, Finder finder) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   GoogleFonts.config.allowRuntimeFetching = false;
+
+  testWidgets('nurse report keeps readable observations without QR sharing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const scope = CaregiverScope(userId: 'caregiver', householdId: 'family');
+    const person = Person(
+      id: 'child',
+      householdId: 'family',
+      fullName: 'Awah',
+      clientType: ClientType.childUnderFive,
+    );
+    final report = HomeCheck(
+      id: 'check',
+      householdId: 'family',
+      personId: 'child',
+      clientType: ClientType.childUnderFive,
+      verdict: HomeCheckVerdict.urgent,
+      yesSigns: const ['Unable to drink'],
+      unsureSigns: const [],
+      checkedBy: 'caregiver',
+      checkedAt: DateTime(2026, 9, 24),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          currentUserProvider.overrideWithValue(null),
+          caregiverScopeProvider.overrideWithValue(scope),
+          caregiverActivityProvider.overrideWith((ref, scope) async => []),
+        ],
+        child: MaterialApp(
+          home: CaregiverNurseSummary(person: person, report: report),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Call 112 emergency help'), findsOneWidget);
+    expect(find.text('What I noticed: Unable to drink'), findsOneWidget);
+    expect(find.text('Reveal QR to share'), findsNothing);
+    expect(find.text('Optional QR sharing'), findsNothing);
+    expect(find.text('I have arrived'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'caregiver: fresh-device sign-up through the whole family experience',
@@ -212,11 +258,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Your family'), findsWidgets);
-      await tester.ensureVisible(
+      expect(find.text('OR TYPE THE 6-CHARACTER CODE'), findsNothing);
+      expect(
         find.textContaining('My family is not registered yet'),
+        findsNothing,
       );
-      await tester.tap(find.textContaining('My family is not registered yet'));
-      await tester.pumpAndSettle();
 
       await tester.enterText(
         _fieldByHint('e.g. The Dawura family'),
@@ -248,8 +294,8 @@ void main() {
       await tester.ensureVisible(find.byType(Checkbox));
       await tester.tap(find.byType(Checkbox));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Agree & Link My Family'));
-      await tester.tap(find.text('Agree & Link My Family'));
+      await tester.ensureVisible(find.text('Agree & Create Account'));
+      await tester.tap(find.text('Agree & Create Account'));
       await tester.pump(const Duration(milliseconds: 2000));
       await tester.pump(const Duration(milliseconds: 600));
       await _untilVisible(tester, find.byType(CaregiverHome));
@@ -273,7 +319,7 @@ void main() {
       // The household row arrives on the real clock via the SQLite isolate.
       await _untilVisible(tester, find.textContaining('The Test family'));
       expect(find.textContaining('The Test family'), findsWidgets);
-      expect(find.text('Your family code'), findsOneWidget);
+      expect(find.text('Your family code'), findsNothing);
 
       await tester.ensureVisible(find.text('Add a family member').first);
       await tester.tap(find.text('Add a family member').first);
@@ -301,6 +347,58 @@ void main() {
       expect(find.text('Save'), findsNothing);
       await _untilVisible(tester, find.text('Awah'));
       expect(find.text('Awah'), findsWidgets);
+      final awah = find.bySemanticsLabel('Select Awah');
+      await tester.ensureVisible(awah);
+      await tester.pumpAndSettle();
+      await tester.tap(awah);
+      await _untilVisible(tester, find.text('View record'));
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(CaregiverHome)),
+      );
+      final scope = container.read(caregiverScopeProvider)!;
+      final selectedId = container
+          .read(caregiverSettingsProvider(scope))
+          .requireValue
+          .selectedPersonId;
+      expect(selectedId, isNotNull);
+      await tester.tap(find.text('Grow & Play'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Family'));
+      await tester.pumpAndSettle();
+      await _untilVisible(tester, find.text('View record'));
+      expect(
+        container
+            .read(caregiverSettingsProvider(scope))
+            .requireValue
+            .selectedPersonId,
+        selectedId,
+      );
+      expect(
+        tester
+            .widget<Semantics>(find.bySemanticsLabel('Select Awah'))
+            .properties
+            .selected,
+        isTrue,
+      );
+      await tester.tap(find.bySemanticsLabel('Select All family'));
+      await tester.runAsync(() async {
+        for (var i = 0; i < 200; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          await tester.pump(const Duration(milliseconds: 50));
+          final settings = container.read(caregiverSettingsProvider(scope));
+          if (settings.hasValue &&
+              settings.requireValue.selectedPersonId == null) {
+            return;
+          }
+        }
+      });
+      expect(
+        container
+            .read(caregiverSettingsProvider(scope))
+            .requireValue
+            .selectedPersonId,
+        isNull,
+      );
 
       await tester.tap(find.text('Check').first);
       await tester.pumpAndSettle();
@@ -366,7 +464,7 @@ void main() {
 
       // A danger sign raises the alarm; it does not end the check. She is then
       // free to take the advice, or to finish and hand the nurse more.
-      // Sharing remains optional and arrival is only a local caregiver report.
+      // Arrival remains only a local caregiver report.
       await tester.ensureVisible(find.text('Start the check'));
       await tester.tap(find.text('Start the check'));
       await tester.pumpAndSettle();
@@ -416,7 +514,8 @@ void main() {
       expect(find.textContaining('What I noticed:'), findsOneWidget);
       expect(find.textContaining('Unanswered:'), findsOneWidget);
       expect(find.text('SCAN AT CLINIC'), findsNothing);
-      expect(find.text('Reveal QR to share'), findsOneWidget);
+      expect(find.text('Reveal QR to share'), findsNothing);
+      expect(find.text('Optional QR sharing'), findsNothing);
       await _untilVisible(tester, find.text('I have arrived'));
       await tester.ensureVisible(find.text('I have arrived'));
       await tester.tap(find.text('I have arrived'));
@@ -445,7 +544,12 @@ void main() {
       await tester.tap(find.text('Help'));
       await tester.pumpAndSettle();
       expect(find.text('If it is an emergency'), findsWidgets);
-      expect(find.text('Open the voice guide'), findsWidgets);
+      // The hub keeps the quiet settings behind tiles; sign-out lives on
+      // the account page.
+      expect(find.text('Voice guide'), findsWidgets);
+      await tester.ensureVisible(find.text('Account & this phone'));
+      await tester.tap(find.text('Account & this phone'));
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Hand the phone back'));
       expect(find.text('Hand the phone back'), findsWidgets);
       await tester.tap(find.text('Hand the phone back'));
@@ -462,7 +566,17 @@ void main() {
       expect(find.byType(CaregiverHome), findsOneWidget);
       await _untilVisible(tester, find.textContaining('The Test family'));
       expect(find.textContaining('The Test family'), findsWidgets);
-      expect(find.text('Awah'), findsWidgets);
+      final restoredScope = container.read(caregiverScopeProvider)!;
+      await tester.runAsync(() async {
+        final restored = await container.read(
+          householdMembersProvider(restoredScope.householdId).future,
+        );
+        expect(restored.map((person) => person.fullName), contains('Awah'));
+        await container.read(caregiverSettingsProvider(restoredScope).future);
+      });
+      await tester.pumpAndSettle();
+      await _scrollTo(tester, find.bySemanticsLabel('Select Awah'));
+      expect(find.bySemanticsLabel('Select Awah'), findsOneWidget);
 
       // Drain the voice chain: VoiceService polls the TTS engine in
       // 250 ms steps, and the auto-played questions leave those timers

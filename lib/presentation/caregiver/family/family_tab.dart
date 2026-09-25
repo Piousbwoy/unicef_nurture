@@ -1,31 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../app/providers.dart';
+import '../../../core/audio/speech_content_policy.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/glass.dart';
 import '../../../core/theme/motion.dart';
 import '../../../domain/entities/caregiver.dart';
 import '../../../domain/entities/core.dart';
-import '../../../domain/family_code.dart';
+import '../../../domain/enums.dart';
 import '../../../domain/services/caregiver_today_planner.dart';
 import '../../shared/app_image.dart';
+import '../../shared/audio_button.dart';
 import '../caregiver_providers.dart';
-import '../check/check_widgets.dart';
 import '../check/triage_screen.dart';
 import '../food/food_page.dart';
 import '../help/audio_guide_screen.dart';
 import '../widgets/companion.dart';
-import '../widgets/premium_button.dart';
 import 'add_member.dart';
 import 'person_detail.dart';
 
-/// The caregiver dashboard, dressed in the flow's one identity: deep navy.
-///
-/// Every card here is a shade of the same dark blue — navy glass, white ink,
-/// one royal-blue accent — so the screen reads as a single premium surface.
-/// Red appears for danger only, exactly as IMCI training expects.
 class CaregiverFamilyTab extends ConsumerWidget {
   const CaregiverFamilyTab({
     super.key,
@@ -41,11 +36,6 @@ class CaregiverFamilyTab extends ConsumerWidget {
     final scope = ref.watch(caregiverScopeProvider);
     if (scope == null) return const SizedBox.shrink();
     final now = ref.watch(caregiverCalendarProvider).toLocal();
-    final part = now.hour < 12
-        ? 'Good morning'
-        : now.hour < 17
-        ? 'Good afternoon'
-        : 'Good evening';
     final name = user?.fullName.trim().split(RegExp(r'\s+')).first ?? 'Friend';
     final members = ref.watch(householdMembersProvider(householdId));
     final settings = ref.watch(caregiverSettingsProvider(scope));
@@ -100,12 +90,16 @@ class CaregiverFamilyTab extends ConsumerWidget {
           onOpen: () => open(focus),
         );
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
-        _FamilyHero(part: part, name: name, now: now),
-        const SizedBox(height: 24),
+        StaggeredReveal(
+          index: 0,
+          child: _FamilyHero(name: name, now: now, householdId: householdId),
+        ),
+        const SizedBox(height: 28),
         day.when(
-          loading: () => const _ShimmerLine(),
+          loading: () =>
+              const _LocalPlaceholder(label: 'Reading family priorities…'),
           error: (_, _) => CompanionLoadError(
             message:
                 'Could not read family priorities. If anyone is very unwell, use Emergency help now.',
@@ -114,668 +108,554 @@ class CaregiverFamilyTab extends ConsumerWidget {
               ref.invalidate(caregiverTodayProvider(scope));
             },
           ),
-          data: (d) => d.attention.isNotEmpty
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          data: (d) => d.attention.isEmpty
+              ? const SizedBox.shrink()
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const _SectionHeader(attention: true),
+                    const _SectionTitle(title: 'Needs attention'),
                     for (final focus in d.attention)
                       focusCard(focus, d.dateKey),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 16),
                   ],
-                )
-              : const SizedBox.shrink(),
+                ),
         ),
-        members.when(
-          loading: () => const _ShimmerLine(),
-          error: (_, _) => CompanionLoadError(
-            onRetry: () =>
-                ref.invalidate(householdMembersProvider(householdId)),
+        StaggeredReveal(
+          index: 1,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const _SectionTitle(
+                title: 'Our family',
+                subtitle: 'Choose who you are caring for',
+              ),
+              members.when(
+                loading: () =>
+                    const _LocalPlaceholder(label: 'Reading your family list…'),
+                error: (_, _) => CompanionLoadError(
+                  onRetry: () =>
+                      ref.invalidate(householdMembersProvider(householdId)),
+                ),
+                data: (people) =>
+                    _FamilyCarousel(members: people, householdId: householdId),
+              ),
+            ],
           ),
-          data: (people) => _CaringCard(members: people),
         ),
-        const SizedBox(height: 8),
-        _QuickActions(
-          onCheck: () => check(),
-          onFood: () => Navigator.of(context).push(
-            GlassPageRoute<void>(
-              builder: (_) => CaregiverFoodPage(
-                householdId: householdId,
-                personId: selected,
+        const SizedBox(height: 24),
+        StaggeredReveal(
+          index: 2,
+          child: _QuickActions(
+            onCheck: () => check(),
+            onFood: () => Navigator.of(context).push(
+              GlassPageRoute<void>(
+                builder: (_) => CaregiverFoodPage(
+                  householdId: householdId,
+                  personId: selected,
+                ),
+              ),
+            ),
+            onPlay: () => onSwitch(2),
+            onListen: () => Navigator.of(context).push(
+              GlassPageRoute<void>(
+                builder: (_) =>
+                    CaregiverAudioGuideScreen(householdId: householdId),
               ),
             ),
           ),
-          onPlay: () => onSwitch(2),
-          onListen: () => Navigator.of(context).push(
-            GlassPageRoute<void>(
-              builder: (_) =>
-                  CaregiverAudioGuideScreen(householdId: householdId),
-            ),
-          ),
         ),
         const SizedBox(height: 28),
-        _NavyCard(
-          title: 'Today for your family',
-          eyebrow: 'DAILY GUIDANCE',
-          child: day.when(
-            loading: () => const Text("Preparing today's guidance\u2026"),
-            error: (_, _) => const Text(
-              "Today's list is unavailable. You can still check on someone or get help.",
-            ),
-            data: (d) => Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (d.routine.isEmpty)
-                  _EmptyRoutine(
-                    onAdd: () => CaregiverAddMemberButton(
-                      householdId: householdId,
-                      dark: true,
-                    ),
+        StaggeredReveal(
+          index: 3,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const _SectionTitle(
+                title: 'Today for your family',
+                subtitle: 'Little moments of care, one at a time',
+              ),
+              day.when(
+                loading: () => const _LocalPlaceholder(
+                  label: "Preparing today's guidance…",
+                ),
+                error: (_, _) => const _PearlCard(
+                  child: Text(
+                    "Today's list is unavailable. You can still check on someone or get help.",
                   ),
-                for (final focus in d.focus) focusCard(focus, d.dateKey),
-                if (d.routine.length > 3) ...[
-                  const SizedBox(height: 8),
-                  _SeeAllButton(
-                    onPressed: () => Navigator.of(context).push(
-                      GlassPageRoute<void>(
-                        builder: (routeContext) => CompanionPage(
-                          title: 'All family priorities',
-                          child: Consumer(
-                            builder: (context, ref, _) => ref
-                                .watch(caregiverTodayProvider(scope))
-                                .when(
-                                  loading: () => const Center(
-                                    child: CircularProgressIndicator(),
-                                  ),
-                                  error: (_, _) => CompanionLoadError(
-                                    onRetry: () => ref.invalidate(
-                                      caregiverTodayProvider(scope),
-                                    ),
-                                  ),
-                                  data: (all) => ListView(
-                                    padding: const EdgeInsets.all(20),
-                                    children: [
-                                      for (final f in [
-                                        ...all.attention,
-                                        ...all.routine,
-                                      ])
-                                        CaregiverFocusCard(
-                                          focus: f,
-                                          dateKey: all.dateKey,
-                                          person: members.valueOrNull
-                                              ?.where((p) => p.id == f.personId)
-                                              .firstOrNull,
-                                          onOpen: () async {
-                                            Navigator.pop(routeContext);
-                                            await open(f);
-                                          },
-                                        ),
-                                    ],
-                                  ),
-                                ),
+                ),
+                data: (d) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (d.routine.isEmpty)
+                      _PearlCard(
+                        child: Text(
+                          members.valueOrNull?.isEmpty == true
+                              ? 'Add a family member above to see everyday ideas.'
+                              : 'No everyday ideas are listed here yet. Confirm ages in the family record for age-specific guidance.',
+                          style: AppType.body.copyWith(
+                            color: CompanionColors.muted,
                           ),
                         ),
                       ),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final split =
+                            constraints.maxWidth >= 620 &&
+                            MediaQuery.textScalerOf(context).scale(14) < 21;
+                        return Wrap(
+                          spacing: 16,
+                          children: [
+                            for (final (i, focus) in d.focus.indexed)
+                              SizedBox(
+                                width: split && i > 0
+                                    ? (constraints.maxWidth - 16) / 2
+                                    : constraints.maxWidth,
+                                child: focusCard(focus, d.dateKey),
+                              ),
+                          ],
+                        );
+                      },
                     ),
-                    count: d.routine.length,
-                  ),
-                ],
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.06),
-                    borderRadius: BorderRadius.circular(Gap.radiusSm),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      width: 1,
-                    ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(
-                        Icons.info_outline_rounded,
-                        size: 16,
-                        color: AppColors.checkBlueBright,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Done means you reported trying an activity today. It does not confirm recovery or close a referral.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.white70,
-                            height: 1.45,
+                    if (d.routine.length > 3)
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.view_list_rounded),
+                        label: Text('See all ${d.routine.length} priorities'),
+                        onPressed: () => Navigator.of(context).push(
+                          GlassPageRoute<void>(
+                            builder: (routeContext) => CompanionPage(
+                              title: 'All family priorities',
+                              child: Consumer(
+                                builder: (context, ref, _) => ref
+                                    .watch(caregiverTodayProvider(scope))
+                                    .when(
+                                      loading: () => const _LocalPlaceholder(
+                                        label: 'Reading priorities…',
+                                      ),
+                                      error: (_, _) => CompanionLoadError(
+                                        onRetry: () => ref.invalidate(
+                                          caregiverTodayProvider(scope),
+                                        ),
+                                      ),
+                                      data: (all) => ListView(
+                                        padding: const EdgeInsets.all(20),
+                                        children: [
+                                          for (final f in [
+                                            ...all.attention,
+                                            ...all.routine,
+                                          ])
+                                            CaregiverFocusCard(
+                                              focus: f,
+                                              dateKey: all.dateKey,
+                                              person: members.valueOrNull
+                                                  ?.where(
+                                                    (p) => p.id == f.personId,
+                                                  )
+                                                  .firstOrNull,
+                                              onOpen: () async {
+                                                Navigator.pop(routeContext);
+                                                await open(f);
+                                              },
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                              ),
+                            ),
                           ),
+                        ),
+                      ),
+                    if (d.focus.any((f) => f.canComplete)) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Done means you reported trying an activity today. It does not confirm recovery or close a referral.',
+                        style: AppType.caption.copyWith(
+                          color: CompanionColors.muted,
                         ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 28),
-        _FamilySection(householdId: householdId),
-        const SizedBox(height: 20),
-        _FamilyCodeCard(householdId: householdId),
       ],
     );
   }
 }
 
-/// A section heading on the navy ground: white Sora with an optional red
-/// pulse for the one section that is allowed to say "danger".
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({this.attention = false});
-  final bool attention;
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({required this.title, this.subtitle});
+  final String title;
+  final String? subtitle;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14, left: 2),
-      child: Row(
-        children: [
-          if (attention) ...[
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: AppColors.triageRed,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.triageRed.withValues(alpha: 0.5),
-                    blurRadius: 6,
-                    spreadRadius: 1,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: AppType.title.copyWith(
+            fontSize: 19,
+            color: CompanionColors.ink,
+          ),
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 5),
           Text(
-            attention ? 'Needs attention' : '',
-            style: GoogleFonts.sora(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: AppColors.ink,
-            ),
+            subtitle!,
+            style: AppType.caption.copyWith(color: CompanionColors.muted),
           ),
         ],
-      ),
-    );
-  }
+      ],
+    ),
+  );
 }
 
-/// The navy card body shared by every dashboard card: the same midnight
-/// gradient, the same hairline catch-light, the same white ink.
-class _NavyCard extends StatelessWidget {
-  const _NavyCard({required this.title, this.eyebrow, required this.child});
-  final String title;
-  final String? eyebrow;
+class _PearlCard extends StatelessWidget {
+  const _PearlCard({required this.child});
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppColors.checkNavyMid, AppColors.checkNavy],
-          ),
-          borderRadius: BorderRadius.circular(Gap.radius),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.08),
-            width: 1,
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x59000000),
-              blurRadius: 24,
-              offset: Offset(0, 10),
-            ),
-          ],
-        ),
-        child: DefaultTextStyle.merge(
-          style: caregiverBody(color: AppColors.white70),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (eyebrow != null) ...[
-                Text(
-                  eyebrow!,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.1,
-                    height: 1.2,
-                    color: AppColors.checkBlueBright,
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
-              Text(
-                title,
-                style: GoogleFonts.sora(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 20,
-                  height: 1.25,
-                  letterSpacing: -0.2,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 12),
-              child,
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: CaregiverLuxePalette.pearlSurface,
+      borderRadius: BorderRadius.circular(28),
+      border: Border.all(color: CaregiverLuxePalette.hairLineQuiet, width: 0.5),
+      boxShadow: CaregiverLuxePalette.featheredShadow,
+    ),
+    child: child,
+  );
 }
 
-class _ShimmerLine extends StatelessWidget {
-  const _ShimmerLine();
+class _LocalPlaceholder extends StatelessWidget {
+  const _LocalPlaceholder({required this.label});
+  final String label;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 16,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: AppColors.checkNavy.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 16),
+    child: Text(
+      label,
+      style: AppType.body.copyWith(color: CompanionColors.muted),
+    ),
+  );
 }
 
-class _EmptyRoutine extends StatelessWidget {
-  const _EmptyRoutine({required this.onAdd});
-  final Widget Function() onAdd;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(Gap.radius),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: AppColors.checkBlue.withValues(alpha: 0.22),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.group_add_outlined,
-              size: 24,
-              color: AppColors.checkBlueBright,
-            ),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Add a family member to see everyday ideas',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Unknown ages need confirmation before age-specific guidance.',
-            style: TextStyle(
-              fontSize: 12.5,
-              color: AppColors.white60,
-              height: 1.4,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SeeAllButton extends StatelessWidget {
-  const _SeeAllButton({required this.onPressed, required this.count});
-  final VoidCallback onPressed;
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.white,
-        side: const BorderSide(color: AppColors.white70, width: 1.2),
-        minimumSize: const Size.fromHeight(48),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      ),
-      icon: const Icon(Icons.view_list_rounded, size: 18),
-      label: Text(
-        'See all $count priorities',
-        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-      ),
-    );
-  }
-}
-
-/// The greeting hero — midnight navy glass with two quiet glows, the date,
-/// the greeting and the family picture. It is the deepest, richest blue on
-/// the screen, so the page reads as one dark jewel rather than a banner.
-class _FamilyHero extends StatelessWidget {
+class _FamilyHero extends ConsumerWidget {
   const _FamilyHero({
-    required this.part,
     required this.name,
     required this.now,
+    required this.householdId,
   });
-  final String part;
   final String name;
   final DateTime now;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF061023), Color(0xFF0C2E66), Color(0xFF1B4FB0)],
-          stops: [0.0, 0.5, 1.0],
-        ),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.12),
-          width: 1,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x66000000),
-            blurRadius: 30,
-            offset: Offset(0, 14),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(28),
-        child: Stack(
-          children: [
-            const Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    center: Alignment(0.95, -0.6),
-                    radius: 1.3,
-                    colors: [Color(0x383B82F6), Color(0x00000000)],
-                  ),
-                ),
-              ),
-            ),
-            const Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    center: Alignment(-0.5, 1.25),
-                    radius: 1.1,
-                    colors: [Color(0x2E1B56DB), Color(0x00000000)],
-                  ),
-                ),
-              ),
-            ),
-            // The catch-light: a thin bright line across the top edge.
-            Positioned(
-              top: 0,
-              left: 20,
-              right: 20,
-              child: IgnorePointer(
-                child: Container(
-                  height: 1,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.white.withValues(alpha: 0),
-                        Colors.white.withValues(alpha: 0.35),
-                        Colors.white.withValues(alpha: 0),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.1),
-                            width: 1,
-                          ),
-                        ),
-                        child: Text(
-                          DateFormat('EEEE, d MMMM').format(now),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.12),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.1),
-                            width: 1,
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.family_restroom_rounded,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 22),
-                  Text(
-                    '$part, $name',
-                    style: GoogleFonts.sora(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      height: 1.15,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Small moments of care. A place for everyone in your family.',
-                    style: TextStyle(
-                      color: AppColors.white70,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.12),
-                        width: 1,
-                      ),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(15),
-                      child: Image.asset(
-                        AppImages.caregiverHero,
-                        height: 110,
-                        fit: BoxFit.cover,
-                        excludeFromSemantics: true,
-                        errorBuilder: (_, _, _) => Container(
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                          child: const Icon(
-                            Icons.family_restroom,
-                            size: 40,
-                            color: Colors.white38,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// The family selection card — same job and behaviour as the old light
-/// selector, dressed in navy and themed so its outlined buttons read white.
-class _CaringCard extends ConsumerWidget {
-  const _CaringCard({required this.members});
-  final List<Person> members;
+  final String householdId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final household = ref.watch(householdProvider(householdId)).valueOrNull;
+    final part = now.hour < 12
+        ? 'Good morning'
+        : now.hour < 17
+        ? 'Good afternoon'
+        : 'Good evening';
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        gradient: CaregiverLuxePalette.horizon,
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(
+          color: CaregiverLuxePalette.specularStroke,
+          width: 0.5,
+        ),
+        boxShadow: CaregiverLuxePalette.featheredShadow,
+      ),
+      child: Stack(
+        children: [
+          const Positioned(
+            right: -22,
+            top: -28,
+            child: ExcludeSemantics(
+              child: Icon(
+                Icons.wb_sunny_outlined,
+                size: 170,
+                color: Color(0x0FFFFFFF),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  DateFormat('EEEE, d MMMM').format(now),
+                  style: AppType.caption.copyWith(color: Colors.white70),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  '$part,\n$name',
+                  style: AppType.headline.copyWith(
+                    color: Colors.white,
+                    fontSize: 26,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  household?.name ?? 'A little care, every day.',
+                  style: AppType.body.copyWith(color: Colors.white),
+                ),
+                if (household != null && household.community.isNotEmpty)
+                  Text(
+                    household.community,
+                    style: AppType.caption.copyWith(color: Colors.white70),
+                  ),
+                const SizedBox(height: 16),
+                Text(
+                  'Local-only notes and home checks are not automatically uploaded.',
+                  style: AppType.caption.copyWith(
+                    color: Colors.white70,
+                    fontSize: 11.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FamilyCarousel extends ConsumerStatefulWidget {
+  const _FamilyCarousel({required this.members, required this.householdId});
+  final List<Person> members;
+  final String householdId;
+
+  @override
+  ConsumerState<_FamilyCarousel> createState() => _FamilyCarouselState();
+}
+
+class _FamilyCarouselState extends ConsumerState<_FamilyCarousel> {
+  bool _saving = false;
+  bool _failed = false;
+
+  Future<void> _select(String? id) async {
+    if (_saving) return;
+    final scope = ref.read(caregiverScopeProvider);
+    if (scope == null) return;
+    setState(() {
+      _saving = true;
+      _failed = false;
+    });
+    try {
+      await ref
+          .read(caregiverWriterProvider(scope))
+          .settings(
+            (s) => id == null
+                ? s.copyWith(allFamily: true)
+                : s.copyWith(selectedPersonId: id),
+          );
+    } catch (_) {
+      if (mounted) setState(() => _failed = true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final scope = ref.watch(caregiverScopeProvider);
     if (scope == null) return const SizedBox.shrink();
-    final writer = ref.watch(caregiverWriterProvider(scope));
-    return Theme(
-      // Outlined controls on this navy card keep their contrast.
-      data: Theme.of(context).copyWith(
-        outlinedButtonTheme: OutlinedButtonThemeData(
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(48, 48),
-            foregroundColor: Colors.white,
-            side: const BorderSide(color: AppColors.white70, width: 1.4),
-          ),
+    final settings = ref.watch(caregiverSettingsProvider(scope));
+    final selected = widget.members
+        .where((p) => p.id == settings.valueOrNull?.selectedPersonId)
+        .firstOrNull;
+    final wide = MediaQuery.textScalerOf(context).scale(14) > 21;
+    final orbs = [
+      _MemberOrb(
+        label: 'All family',
+        selected: selected == null,
+        wide: wide,
+        onTap: () => _select(null),
+      ),
+      for (final person in widget.members)
+        _MemberOrb(
+          label: person.fullName,
+          person: person,
+          selected: selected?.id == person.id,
+          wide: wide,
+          onTap: () => _select(person.id),
         ),
-        textButtonTheme: TextButtonThemeData(
-          style: TextButton.styleFrom(
-            minimumSize: const Size(48, 48),
-            foregroundColor: Colors.white,
+    ];
+    void viewRecord(Person person) => Navigator.of(context).push(
+      GlassPageRoute<void>(
+        builder: (_) => CaregiverPersonDetail(personId: person.id),
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (widget.members.isEmpty)
+          Text(
+            'Add the people you care for to get started.',
+            style: AppType.body.copyWith(color: CompanionColors.muted),
+          )
+        else if (!settings.hasValue) ...[
+          if (settings.hasError)
+            CompanionLoadError(
+              message:
+                  'Could not read your selection. Family records are still available.',
+              onRetry: () => ref.invalidate(caregiverSettingsProvider(scope)),
+            )
+          else
+            const _LocalPlaceholder(label: 'Reading your family selection…'),
+          for (final person in widget.members)
+            TextButton.icon(
+              icon: const Icon(Icons.person_outline_rounded),
+              label: Text('View record: ${person.fullName}'),
+              onPressed: () => viewRecord(person),
+            ),
+        ] else if (wide)
+          Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: orbs)
+        else
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: orbs,
+            ),
+          ),
+        if (_saving || _failed)
+          Semantics(
+            liveRegion: true,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                _saving
+                    ? 'Saving selection…'
+                    : 'Could not save. Tap the family member to retry.',
+              ),
+            ),
+          ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          children: [
+            CaregiverAddMemberButton(householdId: widget.householdId),
+            if (selected != null)
+              TextButton.icon(
+                icon: const Icon(Icons.person_outline_rounded),
+                label: const Text('View record'),
+                onPressed: () => viewRecord(selected),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _MemberOrb extends StatelessWidget {
+  const _MemberOrb({
+    required this.label,
+    required this.selected,
+    required this.wide,
+    required this.onTap,
+    this.person,
+  });
+  final String label;
+  final bool selected;
+  final bool wide;
+  final VoidCallback onTap;
+  final Person? person;
+
+  @override
+  Widget build(BuildContext context) {
+    final image = switch (person?.clientType) {
+      ClientType.newborn => AppImages.cardNewborn,
+      ClientType.childUnderFive => AppImages.cardChild,
+      ClientType.pregnantWoman ||
+      ClientType.postpartumWoman => AppImages.cardMother,
+      ClientType.womanOfReproductiveAge => AppImages.cardWoman,
+      _ => null,
+    };
+    final portrait = Container(
+      width: 76,
+      height: 76,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: CaregiverLuxePalette.pearlSurface,
+        border: Border.all(
+          color: selected
+              ? CaregiverLuxePalette.azurePrimary
+              : CaregiverLuxePalette.hairLineQuiet,
+          width: selected ? 2.5 : 1,
+        ),
+      ),
+      child: ClipOval(
+        child: image == null
+            ? ColoredBox(
+                color: CaregiverLuxePalette.azureIce,
+                child: Icon(
+                  person == null
+                      ? Icons.family_restroom_rounded
+                      : Icons.person_outline_rounded,
+                  color: CompanionColors.blue,
+                  size: 30,
+                ),
+              )
+            : Image.asset(image, fit: BoxFit.cover, excludeFromSemantics: true),
+      ),
+    );
+    final name = Text(
+      label,
+      textAlign: wide ? TextAlign.start : TextAlign.center,
+      style: AppType.label.copyWith(
+        color: selected ? CompanionColors.blue : CompanionColors.ink,
+        fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+      ),
+    );
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: 'Select $label',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          splashFactory: VisualEffects.of(context).motion
+              ? null
+              : NoSplash.splashFactory,
+          child: ExcludeSemantics(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+              child: wide
+                  ? Row(
+                      children: [
+                        portrait,
+                        const SizedBox(width: 14),
+                        Expanded(child: name),
+                      ],
+                    )
+                  : SizedBox(
+                      width: 100,
+                      child: Column(
+                        children: [portrait, const SizedBox(height: 10), name],
+                      ),
+                    ),
+            ),
           ),
         ),
       ),
-      child: ref
-          .watch(caregiverSettingsProvider(scope))
-          .when(
-            loading: () => const _NavyCard(
-              title: 'All family',
-              eyebrow: 'CARING FOR',
-              child: Text('Loading your family selection\u2026'),
-            ),
-            error: (_, _) => _NavyCard(
-              title: 'All family',
-              eyebrow: 'CARING FOR',
-              child: CaregiverSaveAction(
-                label: 'Retry family selection',
-                onSave: () async {
-                  ref.invalidate(caregiverSettingsProvider(scope));
-                  await ref.read(caregiverSettingsProvider(scope).future);
-                },
-              ),
-            ),
-            data: (settings) {
-              final selected = members
-                  .where((p) => p.id == settings.selectedPersonId)
-                  .firstOrNull;
-              return _NavyCard(
-                title: selected?.fullName ?? 'All family',
-                eyebrow: 'CARING FOR',
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (selected != null)
-                      Text(
-                        caregiverAge(selected),
-                        style: const TextStyle(color: AppColors.white60),
-                      ),
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.people_outline),
-                      label: const Text('Choose family member'),
-                      onPressed: () => showModalBottomSheet<void>(
-                        context: context,
-                        isScrollControlled: true,
-                        builder: (context) => SafeArea(
-                          child: ListView(
-                            shrinkWrap: true,
-                            padding: const EdgeInsets.all(20),
-                            children: [
-                              CaregiverSaveAction(
-                                label: 'All family',
-                                onSave: () async {
-                                  await writer.settings(
-                                    (s) => s.copyWith(allFamily: true),
-                                  );
-                                  if (context.mounted) Navigator.pop(context);
-                                },
-                              ),
-                              for (final p in members)
-                                CaregiverSaveAction(
-                                  label: '${p.fullName} • ${caregiverAge(p)}',
-                                  onSave: () async {
-                                    await writer.settings(
-                                      (s) => s.copyWith(selectedPersonId: p.id),
-                                    );
-                                    if (context.mounted) Navigator.pop(context);
-                                  },
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
     );
   }
 }
@@ -793,380 +673,82 @@ class _QuickActions extends StatelessWidget {
   final VoidCallback onListen;
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        PremiumCheckButton(
-          label: 'Check on someone now',
-          icon: Icons.health_and_safety_outlined,
-          height: 58,
-          bright: true,
-          onPressed: onCheck,
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _QuickTile(
-                icon: Icons.restaurant_outlined,
-                label: 'Food',
-                subtitle: 'Meals & feeding',
-                onTap: onFood,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _QuickTile(
-                icon: Icons.toys_outlined,
-                label: 'Play',
-                subtitle: 'Activities & bonding',
-                onTap: onPlay,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _QuickTile(
-                icon: Icons.volume_up_outlined,
-                label: 'Listen',
-                subtitle: 'Audio guides',
-                onTap: onListen,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _QuickTile extends StatelessWidget {
-  const _QuickTile({
-    required this.icon,
-    required this.label,
-    required this.subtitle,
-    required this.onTap,
-  });
-  final IconData icon;
-  final String label;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppColors.checkNavyMid, AppColors.checkNavy],
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      FilledButton.icon(
+        onPressed: onCheck,
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(48, 56),
+          padding: const EdgeInsets.all(16),
+          backgroundColor: CompanionColors.blue,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
           ),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.08),
-            width: 1,
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x40000000),
-              blurRadius: 16,
-              offset: Offset(0, 6),
-            ),
-          ],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.checkBlue.withValues(alpha: 0.22),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: AppColors.checkBlueBright, size: 20),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: const TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w500,
-                color: AppColors.white60,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
+        icon: const Icon(Icons.health_and_safety_outlined),
+        label: const Text('Check on someone now', textAlign: TextAlign.center),
       ),
-    );
-  }
-}
-
-class _FamilySection extends ConsumerWidget {
-  const _FamilySection({required this.householdId});
-  final String householdId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final members = ref.watch(householdMembersProvider(householdId));
-    final household = ref.watch(householdProvider(householdId));
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 14, left: 2),
-          child: Text(
-            'Our family',
-            style: GoogleFonts.sora(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: AppColors.ink,
-            ),
-          ),
-        ),
-        household.when(
-          loading: () => const SizedBox.shrink(),
-          error: (_, _) => const SizedBox.shrink(),
-          data: (h) => h == null
-              ? const SizedBox.shrink()
-              : Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [AppColors.checkNavyMid, AppColors.checkNavy],
-                      ),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.08),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: AppColors.checkBlue.withValues(alpha: 0.22),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.home_outlined,
-                            color: AppColors.checkBlueBright,
-                            size: 18,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                h.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 14,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 1),
-                              Text(
-                                h.community,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppColors.white60,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-        ),
-        members.when(
-          loading: () => const SizedBox.shrink(),
-          error: (_, _) => const Text(
-            'Family members could not be loaded.',
-            style: TextStyle(color: AppColors.inkMuted),
-          ),
-          data: (people) => Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+      const SizedBox(height: 12),
+      LayoutBuilder(
+        builder: (context, constraints) {
+          final wideText = MediaQuery.textScalerOf(context).scale(14) > 21;
+          return Wrap(
+            spacing: 10,
+            runSpacing: 10,
             children: [
-              if (people.isEmpty)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.04),
-                    borderRadius: BorderRadius.circular(Gap.radius),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.1),
-                      width: 1,
-                    ),
-                  ),
-                  child: const Text(
-                    'No one is on your family list yet. Add the people you care for to get started.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.white60,
-                      height: 1.5,
-                    ),
-                  ),
-                ),
-              for (final p in people)
-                CaregiverPersonCard(
-                  person: p,
-                  dark: true,
-                  onTap: () => Navigator.of(context).push(
-                    GlassPageRoute<void>(
-                      builder: (_) => CaregiverPersonDetail(personId: p.id),
-                    ),
-                  ),
-                ),
-              CaregiverAddMemberButton(householdId: householdId, dark: true),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _FamilyCodeCard extends StatelessWidget {
-  const _FamilyCodeCard({required this.householdId});
-  final String householdId;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.checkNavyMid, AppColors.checkNavy],
-        ),
-        borderRadius: BorderRadius.circular(Gap.radius),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.08),
-          width: 1,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x59000000),
-            blurRadius: 24,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: AppColors.checkBlue.withValues(alpha: 0.22),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.key_outlined,
-                  size: 16,
-                  color: AppColors.checkBlueBright,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Your family code',
-                      style: GoogleFonts.sora(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
+              for (final (label, icon, action) in [
+                ('Local foods', Icons.restaurant_outlined, onFood),
+                ('Play & learn', Icons.toys_outlined, onPlay),
+                ('Audio guides', Icons.volume_up_outlined, onListen),
+              ])
+                SizedBox(
+                  width: wideText
+                      ? constraints.maxWidth
+                      : (constraints.maxWidth - 20) / 3,
+                  child: Material(
+                    color: CaregiverLuxePalette.pearlSurface,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(22),
+                      side: const BorderSide(
+                        color: CaregiverLuxePalette.hairLineQuiet,
                       ),
                     ),
-                    const Text(
-                      'FOR HEALTH WORKERS',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.white60,
-                        letterSpacing: 0.8,
+                    child: InkWell(
+                      onTap: action,
+                      borderRadius: BorderRadius.circular(22),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 16,
+                        ),
+                        child: Column(
+                          children: [
+                            Icon(icon, color: CompanionColors.blue, size: 25),
+                            const SizedBox(height: 10),
+                            Text(
+                              label,
+                              textAlign: TextAlign.center,
+                              style: AppType.label.copyWith(
+                                color: CompanionColors.ink,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
             ],
-          ),
-          const SizedBox(height: 14),
-          const Text(
-            'Show this code when discussing your family record with a health worker. Local-only notes and home checks are not automatically uploaded.',
-            style: TextStyle(
-              fontSize: 12.5,
-              color: AppColors.white60,
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.checkNavyDeep,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.12),
-                width: 1,
-              ),
-            ),
-            child: SelectableText(
-              FamilyCode.pretty(householdId),
-              textAlign: TextAlign.center,
-              style: GoogleFonts.sora(
-                fontWeight: FontWeight.w800,
-                fontSize: 24,
-                color: AppColors.checkBlueBright,
-                letterSpacing: 1.5,
-              ),
-            ),
-          ),
-        ],
+          );
+        },
       ),
-    );
-  }
+    ],
+  );
 }
 
-/// One family priority as a navy card. Urgent stays red — the IMCI red is the
-/// one colour allowed to break the navy — and the tap opens the guidance.
-class CaregiverFocusCard extends StatelessWidget {
+class CaregiverFocusCard extends ConsumerWidget {
   const CaregiverFocusCard({
     super.key,
     required this.focus,
@@ -1178,180 +760,104 @@ class CaregiverFocusCard extends StatelessWidget {
   final String dateKey;
   final Person? person;
   final Future<void> Function() onOpen;
+
   @override
-  Widget build(BuildContext context) {
-    final isUrgent = focus.priority <= 1;
-    final accent = isUrgent ? AppColors.triageRed : AppColors.checkBlue;
-    // The ink used for the accent's text and top band: the pure triage red
-    // and royal blue are too dark to read on navy, so they brighten here.
-    final accentText = isUrgent
-        ? const Color(0xFFFF8A80)
-        : AppColors.checkBlueBright;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final accent = focus.priority <= 1
+        ? AppColors.triageRed
+        : CompanionColors.blue;
+    final now = ref.watch(caregiverCalendarProvider).toLocal();
     final overdue =
-        focus.dueDate != null && focus.dueDate!.isBefore(DateTime.now());
+        focus.dueDate != null &&
+        DateUtils.dateOnly(focus.dueDate!).isBefore(DateUtils.dateOnly(now));
+    final due = focus.dueDate == null
+        ? null
+        : '${overdue ? 'Overdue' : 'Due'} ${DateFormat('d MMM').format(focus.dueDate!)}';
+    final who =
+        '${person?.fullName ?? 'Family member'} • ${person == null ? 'Age unavailable' : caregiverAge(person!)}';
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppColors.checkNavyMid, AppColors.checkNavy],
-          ),
-          borderRadius: BorderRadius.circular(Gap.radius),
-          border: Border.all(
-            color: isUrgent
-                ? accentText.withValues(alpha: 0.3)
-                : Colors.white.withValues(alpha: 0.08),
-            width: isUrgent ? 1.2 : 1,
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x59000000),
-              blurRadius: 24,
-              offset: Offset(0, 10),
+      padding: const EdgeInsets.only(bottom: 16),
+      child: _PearlCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    focus.source.label,
+                    style: AppType.label.copyWith(color: accent),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                AudioButton(
+                  text:
+                      '$who. ${focus.title}. ${focus.detail}${due == null ? '' : ' $due.'}',
+                  language: ref.watch(narrationLanguageProvider),
+                  policy: focus.source == CaregiverFocusSource.everyday
+                      ? SpeechContentPolicy.guidance
+                      : SpeechContentPolicy.clinical,
+                  id: 'family-${focus.identity}',
+                  compact: true,
+                ),
+              ],
             ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(Gap.radius),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Colour rides the top edge as a slim band — visible, but it
-              // can never squeeze content the way a side bar could.
-              Container(height: 3, color: accentText),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: accent.withValues(alpha: 0.16),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            focus.source.label,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: accentText,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ),
-                        const Spacer(),
-                        if (overdue)
-                          Container(
-                            margin: const EdgeInsets.only(right: 6),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.triageRed.withValues(
-                                alpha: 0.18,
-                              ),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Text(
-                              'Overdue',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFFFF8A80),
-                                letterSpacing: 0.3,
-                              ),
-                            ),
-                          ),
-                        if (focus.dueDate != null)
-                          Text(
-                            'Due ${DateFormat('d MMM').format(focus.dueDate!)}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.white60,
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      focus.title,
-                      style: const TextStyle(
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        height: 1.25,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '${person?.fullName ?? 'Family member'}'
-                      ' \u2022 ${person == null ? 'Age unavailable' : caregiverAge(person!)}',
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.white60,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      focus.detail,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.white60,
-                        height: 1.45,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    // Actions stack, never share a row: two buttons of
-                    // unknown width side by side is exactly how labels end
-                    // up wrapping one letter per line on a narrow screen.
-                    SizedBox(
-                      height: 44,
-                      child: FilledButton.icon(
-                        onPressed: () => onOpen(),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: accent,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        icon: const Icon(Icons.arrow_forward_rounded, size: 17),
-                        label: const Text('Open guidance'),
-                      ),
-                    ),
-                    if (focus.canComplete) ...[
-                      const SizedBox(height: 8),
-                      CaregiverTaskToggle(
-                        personId: focus.personId,
-                        kind: CaregiverActivityKind.dailyTask,
-                        sourceId: focus.sourceId,
-                        itemKey: focus.itemKey,
-                        occurrenceKey: dateKey,
-                        label: "Today's activity",
-                        light: true,
-                        tone: accentText,
-                      ),
-                    ],
-                  ],
+            const SizedBox(height: 10),
+            Text(
+              focus.title,
+              style: AppType.title.copyWith(
+                color: CompanionColors.ink,
+                fontSize: 18,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              who,
+              style: AppType.caption.copyWith(color: CompanionColors.muted),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              focus.detail,
+              style: AppType.body.copyWith(color: CompanionColors.muted),
+            ),
+            if (due != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                due,
+                style: AppType.label.copyWith(
+                  color: overdue ? AppColors.triageRed : CompanionColors.muted,
                 ),
               ),
             ],
-          ),
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: () => onOpen(),
+              style: FilledButton.styleFrom(
+                backgroundColor: accent,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(48, 48),
+                padding: const EdgeInsets.all(14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+              label: const Text('Open guidance', textAlign: TextAlign.center),
+            ),
+            if (focus.canComplete) ...[
+              const SizedBox(height: 8),
+              CaregiverTaskToggle(
+                personId: focus.personId,
+                kind: CaregiverActivityKind.dailyTask,
+                sourceId: focus.sourceId,
+                itemKey: focus.itemKey,
+                occurrenceKey: dateKey,
+                label: "Today's activity",
+                tone: accent,
+              ),
+            ],
+          ],
         ),
       ),
     );

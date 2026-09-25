@@ -7,19 +7,18 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/glass.dart';
 import '../../../domain/entities/core.dart';
 import '../../../domain/entities/caregiver.dart';
+import '../../../domain/enums.dart';
+import '../../shared/app_image.dart';
 import '../caregiver_providers.dart';
 
 abstract final class CompanionColors {
-  static const canvas = AppColors.caregiverCanvas;
-  static const blue = AppColors.primary;
-
-  /// Cool navy, not the app-wide warm teal ink: every caregiver surface is
-  /// blue-tinted, and warm text on a cool ground reads green and muddy.
-  static const ink = AppColors.checkNavy;
+  static const canvas = CaregiverLuxePalette.celestialCanvas;
+  static const blue = CaregiverLuxePalette.azurePrimary;
+  static const ink = CaregiverLuxePalette.twilightMidnight;
   static const bronze = AppColors.caregiverWarm;
-  static const muted = AppColors.caregiverMuted;
-  static const accent = AppColors.caregiverAccent;
-  static const surface = AppColors.caregiverSurface;
+  static const muted = CaregiverLuxePalette.twilightMuted;
+  static const accent = CaregiverLuxePalette.azurePrimary;
+  static const surface = CaregiverLuxePalette.pearlSurface;
 }
 
 String caregiverWhen(DateTime time) =>
@@ -92,6 +91,49 @@ class CompanionCard extends StatelessWidget {
   );
 }
 
+/// A member's face in the navy ring the family hub already uses, so the same
+/// person reads the same everywhere. Types with no artwork fall back to the
+/// neutral glyph rather than showing the wrong face.
+class CaregiverPortraitOrb extends StatelessWidget {
+  const CaregiverPortraitOrb({
+    super.key,
+    required this.person,
+    this.size = 56,
+  });
+  final Person person;
+  final double size;
+  @override
+  Widget build(BuildContext context) {
+    final image = switch (person.clientType) {
+      ClientType.newborn => AppImages.cardNewborn,
+      ClientType.childUnderFive => AppImages.cardChild,
+      ClientType.pregnantWoman ||
+      ClientType.postpartumWoman => AppImages.cardMother,
+      ClientType.womanOfReproductiveAge => AppImages.cardWoman,
+    };
+    return Container(
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(size / 12),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: CaregiverLuxePalette.pearlSurface,
+        border: Border.all(
+          color: CaregiverLuxePalette.azurePrimary.withValues(alpha: 0.4),
+          width: 1.5,
+        ),
+      ),
+      child: ClipOval(
+        child: Image.asset(
+          image,
+          fit: BoxFit.cover,
+          semanticLabel: person.fullName,
+        ),
+      ),
+    );
+  }
+}
+
 class CaregiverPriorityBadge extends StatelessWidget {
   const CaregiverPriorityBadge({
     super.key,
@@ -128,12 +170,18 @@ class CompanionTheme extends StatelessWidget {
     return VisualEffectsScope(
       child: Theme(
         data: base.copyWith(
-          scaffoldBackgroundColor: AppColors.caregiverCanvas,
+          scaffoldBackgroundColor: CompanionColors.canvas,
+          textTheme: base.textTheme.apply(
+            bodyColor: CompanionColors.ink,
+            displayColor: CompanionColors.ink,
+          ),
           colorScheme: base.colorScheme.copyWith(
-            primary: AppColors.primary,
+            primary: CompanionColors.blue,
             onPrimary: Colors.white,
-            surface: AppColors.caregiverSurface,
+            surface: CompanionColors.surface,
             onSurface: CompanionColors.ink,
+            onSurfaceVariant: CompanionColors.muted,
+            outline: CaregiverLuxePalette.hairLineQuiet,
           ),
           filledButtonTheme: FilledButtonThemeData(
             style: FilledButton.styleFrom(
@@ -798,7 +846,32 @@ class CaregiverPersonSelector extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (selected != null) Text(caregiverAge(selected)),
+                  if (selected != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        children: [
+                          CaregiverPortraitOrb(person: selected, size: 52),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(caregiverAge(selected)),
+                                Text(
+                                  selected.clientType.label,
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: CompanionColors.muted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   OutlinedButton.icon(
                     icon: const Icon(Icons.people_outline),
                     label: const Text('Choose family member'),

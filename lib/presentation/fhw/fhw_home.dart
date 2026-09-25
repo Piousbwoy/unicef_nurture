@@ -288,8 +288,17 @@ class _ClinicHeader extends StatelessWidget {
                                 runSpacing: 6,
                                 crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
-                                  Flexible(
+                                  // A Wrap hands its children unbounded width,
+                                  // so `Flexible` is invalid here and throws at
+                                  // build time; the line needs its own ceiling
+                                  // for the ellipsis to have anything to work
+                                  // against.
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 220,
+                                    ),
                                     child: Row(
+                                      mainAxisSize: MainAxisSize.min,
                                       children: [
                                         const Icon(
                                           Icons.place_outlined,

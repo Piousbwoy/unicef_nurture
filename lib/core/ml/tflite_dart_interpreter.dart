@@ -55,7 +55,20 @@ class _Fb {
   int u32(int pos) => bd.getUint32(pos, Endian.little);
   int i32(int pos) => bd.getInt32(pos, Endian.little);
   int u16(int pos) => bd.getUint16(pos, Endian.little);
-  int i64(int pos) => bd.getInt64(pos, Endian.little);
+
+  /// FlatBuffers stores quantization zero points as `long`, but dart2js has no
+  /// 64-bit [ByteData] accessor and throws the moment one is reached — which
+  /// silently took the whole model pack offline on web. Read the little-endian
+  /// pair of words instead, and fail closed on anything wider than 32 bits:
+  /// no real quantization parameter needs that range.
+  int i64(int pos) {
+    final low = u32(pos);
+    final high = u32(pos + 4);
+    if (high == 0) return low;
+    if (high == 0xFFFFFFFF) return low - 0x100000000;
+    throw const FormatException('Unsupported 64-bit quantization value');
+  }
+
   double f32(int pos) => bd.getFloat32(pos, Endian.little);
 
   int root() => u32(0);

@@ -97,7 +97,7 @@ class ClinicalDecisionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (flat) {
-      return _flatContent();
+      return _flatContent(context);
     }
     return Container(
       decoration: BoxDecoration(
@@ -137,7 +137,7 @@ class ClinicalDecisionHeader extends StatelessWidget {
               ),
             ),
           ),
-          _flatContent(),
+          _flatContent(context),
         ],
       ),
     );
@@ -150,7 +150,15 @@ class ClinicalDecisionHeader extends StatelessWidget {
     TriageLevel.routine => const Color(0xFF10B981).withValues(alpha: 0.25),
   };
 
-  Widget _flatContent() {
+  Widget _flatContent(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    final tc = triageColours(level);
+    // Trained foreground hue never shifts; only the light pastel wash is
+    // swapped for a hue-tinted dark wash when the surface is night.
+    final chipFg = flat ? tc.fg : Colors.white;
+    final chipBg = flat
+        ? (p.isDark ? tc.fg.withValues(alpha: 0.16) : tc.bg)
+        : Colors.white.withValues(alpha: 0.18);
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -167,9 +175,7 @@ class ClinicalDecisionHeader extends StatelessWidget {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: flat
-                        ? triageColours(level).bg
-                        : Colors.white.withValues(alpha: 0.18),
+                    color: chipBg,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
@@ -179,7 +185,7 @@ class ClinicalDecisionHeader extends StatelessWidget {
                         level == TriageLevel.urgent
                             ? Icons.warning_amber_rounded
                             : Icons.fact_check_outlined,
-                        color: flat ? triageColours(level).fg : Colors.white,
+                        color: chipFg,
                         size: 16,
                       ),
                       const SizedBox(width: 6),
@@ -189,9 +195,7 @@ class ClinicalDecisionHeader extends StatelessWidget {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: flat
-                                ? triageColours(level).fg
-                                : Colors.white,
+                            color: chipFg,
                             fontSize: 13,
                             fontWeight: FontWeight.w800,
                             height: 1.2,
@@ -216,7 +220,7 @@ class ClinicalDecisionHeader extends StatelessWidget {
               fontWeight: FontWeight.w700,
               fontSize: 11,
               color: flat
-                  ? AppColors.inkMuted
+                  ? p.inkMuted
                   : Colors.white.withValues(alpha: 0.6),
             ),
           ),
@@ -227,7 +231,7 @@ class ClinicalDecisionHeader extends StatelessWidget {
               fontSize: 22,
               fontWeight: FontWeight.w800,
               height: 1.25,
-              color: flat ? AppColors.ink : Colors.white,
+              color: flat ? p.ink : Colors.white,
             ),
           ),
           const SizedBox(height: 10),
@@ -237,7 +241,7 @@ class ClinicalDecisionHeader extends StatelessWidget {
               fontSize: 14.5,
               height: 1.5,
               color: flat
-                  ? AppColors.inkMuted
+                  ? p.inkMuted
                   : Colors.white.withValues(alpha: 0.8),
             ),
           ),
@@ -246,7 +250,7 @@ class ClinicalDecisionHeader extends StatelessWidget {
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: flat
-                  ? AppColors.surfaceTint.withValues(alpha: 0.3)
+                  ? p.surfaceTint.withValues(alpha: p.isDark ? 0.5 : 0.3)
                   : Colors.white.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(14),
             ),
@@ -258,9 +262,9 @@ class ClinicalDecisionHeader extends StatelessWidget {
                   child: CustomPaint(
                     painter: _ConfidenceRing(
                       fraction: _confidenceFraction,
-                      ringColor: flat ? triageColours(level).fg : Colors.white,
+                      ringColor: flat ? tc.fg : Colors.white,
                       trackColor: flat
-                          ? AppColors.line
+                          ? p.line
                           : Colors.white.withValues(alpha: 0.15),
                     ),
                   ),
@@ -272,7 +276,7 @@ class ClinicalDecisionHeader extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: flat ? AppColors.ink : Colors.white,
+                      color: flat ? p.ink : Colors.white,
                     ),
                   ),
                 ),
@@ -358,7 +362,9 @@ class ResearchAnalysisPanel extends StatelessWidget {
   final bool showEvidence;
 
   @override
-  Widget build(BuildContext context) => Padding(
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return Padding(
     // Neutral glass: research output carries no tone colour, ever.
     padding: const EdgeInsets.symmetric(vertical: 16),
     child: GlassSurface(
@@ -373,17 +379,17 @@ class ResearchAnalysisPanel extends StatelessWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
+                  color: p.primaryLight,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.science_outlined,
                   size: 18,
-                  color: AppColors.primaryDeep,
+                  color: p.primaryDark,
                 ),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -393,16 +399,16 @@ class ResearchAnalysisPanel extends StatelessWidget {
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1.2,
-                        color: AppColors.inkMuted,
+                        color: p.inkMuted,
                       ),
                     ),
-                    SizedBox(height: 2),
+                    const SizedBox(height: 2),
                     Text(
                       'Experimental model evidence',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.ink,
+                        color: p.ink,
                       ),
                     ),
                   ],
@@ -415,16 +421,16 @@ class ResearchAnalysisPanel extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.surfaceTint.withValues(alpha: 0.3),
+              color: p.surfaceTint.withValues(alpha: p.isDark ? 0.5 : 0.3),
               borderRadius: BorderRadius.circular(Gap.radiusSm),
             ),
-            child: const Text(
+            child: Text(
               'Clinical guidance uses observed findings and protocol rules. '
               'Experimental models do not change treatment or referral.',
               style: TextStyle(
                 fontSize: 12.5,
                 height: 1.5,
-                color: AppColors.inkMuted,
+                color: p.inkMuted,
               ),
             ),
           ),
@@ -484,8 +490,8 @@ class ResearchAnalysisPanel extends StatelessWidget {
                             onPressed: onEdit,
                             style: OutlinedButton.styleFrom(
                               minimumSize: const Size(48, 44),
-                              side: const BorderSide(color: AppColors.primary),
-                              foregroundColor: AppColors.primaryDeep,
+                              side: BorderSide(color: p.primary),
+                              foregroundColor: p.primaryDark,
                             ),
                             icon: const Icon(Icons.edit_outlined, size: 16),
                             label: const Text('Review assessment inputs'),
@@ -500,7 +506,8 @@ class ResearchAnalysisPanel extends StatelessWidget {
         ],
       ),
     ),
-  );
+    );
+  }
 }
 
 /// Skeleton placeholder shown while model predictions are loading.
@@ -536,26 +543,29 @@ class _AnalysisError extends StatelessWidget {
   final IconData icon;
 
   @override
-  Widget build(BuildContext context) => Padding(
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return Padding(
     padding: const EdgeInsets.only(top: Gap.md),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 18, color: AppColors.inkMuted),
+        Icon(icon, size: 18, color: p.inkMuted),
         const SizedBox(width: Gap.sm),
         Expanded(
           child: Text(
             message,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12.5,
-              color: AppColors.inkMuted,
+              color: p.inkMuted,
               height: 1.5,
             ),
           ),
         ),
       ],
     ),
-  );
+    );
+  }
 }
 
 /// A modern expandable card for model evidence. Replaces ExpansionTile with
@@ -608,6 +618,7 @@ class _ModelEvidenceCardState extends State<_ModelEvidenceCard>
 
   @override
   Widget build(BuildContext context) {
+    final pal = ClinicalPaletteScope.of(context);
     final p = widget.model.prediction;
     final c = widget.status?.contract ?? const <String, Object?>{};
     final usable = widget.status?.isModelUsable == true;
@@ -620,9 +631,9 @@ class _ModelEvidenceCardState extends State<_ModelEvidenceCard>
     return Container(
       margin: const EdgeInsets.only(top: Gap.md),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: pal.surface,
         borderRadius: BorderRadius.circular(Gap.radius),
-        border: Border.all(color: AppColors.line, width: Gap.hairline),
+        border: Border.all(color: pal.line, width: Gap.hairline),
         boxShadow: const [AppShadows.card],
       ),
       child: Column(
@@ -645,28 +656,28 @@ class _ModelEvidenceCardState extends State<_ModelEvidenceCard>
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: usable
-                              ? AppColors.triageGreen
-                              : AppColors.inkFaint,
+                              ? pal.triageGreen
+                              : pal.inkFaint,
                         ),
                       ),
                       const SizedBox(width: Gap.sm),
                       Expanded(
                         child: Text(
                           widget.model.title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: AppColors.ink,
+                            color: pal.ink,
                           ),
                         ),
                       ),
                       if (widget.expandedAvailable)
                         RotationTransition(
                           turns: Tween(begin: 0.0, end: 0.5).animate(_anim),
-                          child: const Icon(
+                          child: Icon(
                             Icons.expand_more_rounded,
                             size: 20,
-                            color: AppColors.inkMuted,
+                            color: pal.inkMuted,
                           ),
                         ),
                     ],
@@ -674,9 +685,9 @@ class _ModelEvidenceCardState extends State<_ModelEvidenceCard>
                   const SizedBox(height: 4),
                   Text(
                     widget.model.status,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.inkMuted,
+                      color: pal.inkMuted,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -732,6 +743,7 @@ class _EvidenceDetail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = ClinicalPaletteScope.of(context);
     final p = model.prediction;
     final c = status?.contract ?? const <String, Object?>{};
     String names(List<String> values) => values.isEmpty
@@ -744,14 +756,14 @@ class _EvidenceDetail extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Divider(height: 1, thickness: 1, color: AppColors.line),
+          Divider(height: 1, thickness: 1, color: pal.line),
           const SizedBox(height: Gap.md),
-          const Text(
+          Text(
             'Experimental model output — not a diagnosis or treatment threshold.',
             style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w700,
-              color: AppColors.inkMuted,
+              color: pal.inkMuted,
               height: 1.5,
             ),
           ),
@@ -812,12 +824,12 @@ class _EvidenceDetail extends StatelessWidget {
               in c['limitations'] is List ? c['limitations'] as List : const [])
             _DetailRow(label: 'Limitation', value: limitation.toString()),
           const SizedBox(height: Gap.sm),
-          const Text(
+          Text(
             'Repository datasets have been explored previously. Retrospective results do not establish clinical readiness in Northern Ghana.',
             style: TextStyle(
               fontSize: 11.5,
               height: 1.5,
-              color: AppColors.inkMuted,
+              color: pal.inkMuted,
             ),
           ),
         ],
@@ -834,29 +846,32 @@ class _DetailRow extends StatelessWidget {
   final String value;
 
   @override
-  Widget build(BuildContext context) => Padding(
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return Padding(
     padding: const EdgeInsets.symmetric(vertical: 4),
     child: Text.rich(
       TextSpan(
         children: [
           TextSpan(
             text: '$label  ',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w700,
-              color: AppColors.inkMuted,
+              color: p.inkMuted,
             ),
           ),
           TextSpan(
             text: value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11.5,
-              color: AppColors.ink,
+              color: p.ink,
               height: 1.4,
             ),
           ),
         ],
       ),
     ),
-  );
+    );
+  }
 }

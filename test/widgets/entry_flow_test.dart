@@ -50,7 +50,9 @@ Future<void> _pumpApp(WidgetTester tester, SessionState session) {
 Future<void> _leaveSplash(WidgetTester tester) async {
   await tester.pump(); // Build the splash.
   await tester.pump(const Duration(milliseconds: 300)); // First paint.
-  await tester.tapAt(tester.getCenter(find.byType(Scaffold))); // Tap to continue.
+  await tester.tapAt(
+    tester.getCenter(find.byType(Scaffold)),
+  ); // Tap to continue.
   await tester.pump(const Duration(milliseconds: 100)); // Flush session reads.
   await tester.pump(const Duration(milliseconds: 100)); // Flush the navigation.
   await tester.pump(const Duration(milliseconds: 600)); // Settle the fade.
@@ -69,10 +71,7 @@ void main() {
     await _leaveSplash(tester);
 
     expect(find.byType(OnboardingScreen), findsOneWidget);
-    expect(
-      find.text('Supporting mothers through every stage'),
-      findsOneWidget,
-    );
+    expect(find.text('Supporting mothers through every stage'), findsOneWidget);
   });
 
   testWidgets('fresh install, onboarding seen: splash leads to role choice', (
@@ -90,9 +89,7 @@ void main() {
   testWidgets('returning signed-out device: splash leads to sign-in', (
     tester,
   ) async {
-    SharedPreferences.setMockInitialValues({
-      'onboarding_seen': true,
-    });
+    SharedPreferences.setMockInitialValues({'onboarding_seen': true});
     await _pumpApp(tester, const SessionSignedOut(lastPhone: '024 000 0000'));
 
     await _leaveSplash(tester);
@@ -128,9 +125,8 @@ void main() {
   );
 
   testWidgets(
-    'caregiver: filling "Your details" and continuing renders the family '
-    'step without layout errors (regression: blank screen + hit-test on a '
-    'size-less render box)',
+    'caregiver: family creation is directly available and requires a name, '
+    'district and community before consent',
     (tester) async {
       tester.view.physicalSize = const Size(900, 1600);
       tester.view.devicePixelRatio = 1.0;
@@ -142,9 +138,7 @@ void main() {
       await _leaveSplash(tester);
 
       // Pick the caregiver role, route through sign-in, create an account.
-      await tester.tap(
-        find.text('Caregiver', findRichText: true).first,
-      );
+      await tester.tap(find.text('Caregiver', findRichText: true).first);
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(milliseconds: 500));
       expect(find.byType(SignInScreen), findsOneWidget);
@@ -174,28 +168,76 @@ void main() {
       // Continue to the "Your family" step.
       await tester.ensureVisible(find.text('Continue'));
       await tester.tap(find.text('Continue'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
 
-      // The family step must actually render — the reported freeze was a
-      // blank body on this step.
+      // Family creation must not depend on a code or a mode toggle.
       expect(find.text('Your family'), findsWidgets);
-      // FieldLabel renders its text uppercased.
-      expect(find.text('OR TYPE THE 6-CHARACTER CODE'), findsOneWidget);
-      expect(find.text('Check'), findsOneWidget);
+      final familyName = find.widgetWithText(
+        TextField,
+        'e.g. The Dawura family',
+      );
+      expect(familyName, findsOneWidget);
+      expect(find.byType(DropdownButtonFormField<String>), findsNWidgets(3));
+      expect(find.widgetWithText(TextField, 'ABC-D24'), findsNothing);
+      expect(find.text('Check'), findsNothing);
+      expect(find.text('Paste code from a message'), findsNothing);
+      expect(
+        find.text('My family is not registered yet — start our own record'),
+        findsNothing,
+      );
 
-      // Tapping Continue without a code shows the validation error, and
-      // the form must still be interactive afterwards.
-      await tester.ensureVisible(find.text('Continue'));
       await tester.tap(find.text('Continue'));
       await tester.pump();
       expect(
+        find.text('Enter your family name, e.g. “The Dawura family”.'),
+        findsOneWidget,
+      );
+      expect(find.text('Data & privacy'), findsNothing);
+
+      await tester.enterText(familyName, 'The Iddrisu family');
+      await tester.tap(find.text('Continue'));
+      await tester.pump();
+      expect(find.text('Choose your district.'), findsOneWidget);
+      expect(find.text('Data & privacy'), findsNothing);
+
+      await tester.tap(
+        find.widgetWithText(
+          DropdownButtonFormField<String>,
+          'Choose your district',
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Tamale').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue'));
+      await tester.pump();
+      expect(find.text('Choose your community.'), findsOneWidget);
+      expect(find.text('Data & privacy'), findsNothing);
+
+      await tester.tap(
+        find.widgetWithText(
+          DropdownButtonFormField<String>,
+          'Choose your community',
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Tamale Central').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Data & privacy'), findsOneWidget);
+      expect(find.text('Agree & Create Account'), findsOneWidget);
+      await tester.tap(find.text('Agree & Create Account'));
+      await tester.pump();
+      expect(
         find.text(
-          'Enter the family code the health worker gave you, then tap Check.',
+          'Tap the agreement box to continue — your consent is required.',
         ),
         findsOneWidget,
       );
-      expect(find.text('OR TYPE THE 6-CHARACTER CODE'), findsOneWidget);
+      expect(find.text('Data & privacy'), findsOneWidget);
+      expect(find.text('All set'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );

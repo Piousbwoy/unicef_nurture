@@ -178,9 +178,9 @@ class FhwHomeTab extends ConsumerWidget {
                 body: NarrationSection(
                   narrationKey: 'fhw:home:intro',
                   text:
-                      'Find a household. Confirm who is here.\nKeep everyone’s care in one session.',
+                      'Find a household. Confirm who is here.\nKeep the care of everyone in one session.',
                   child: SpeakableText(
-                    'Find a household. Confirm who is here.\nKeep everyone’s care in one session.',
+                    'Find a household. Confirm who is here.\nKeep the care of everyone in one session.',
                     style: AppType.body.copyWith(
                       color: Colors.white,
                       fontSize: 14,

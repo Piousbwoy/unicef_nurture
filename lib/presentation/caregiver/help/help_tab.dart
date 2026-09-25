@@ -1,3 +1,9 @@
+/// The Help tab as a care hub. What a worried caregiver needs is on this
+/// screen: the emergency path and the people who may help. Everything quiet
+/// (language, voice library, display, account) sits behind one focused tile
+/// each, and every honesty notice travels with the section it describes.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/providers.dart';
@@ -9,6 +15,7 @@ import '../caregiver_providers.dart';
 import '../widgets/companion.dart';
 import 'audio_guide_screen.dart';
 import 'caregiver_voice.dart';
+import 'help_hub_screens.dart';
 
 class CaregiverHelpTab extends ConsumerWidget {
   const CaregiverHelpTab({super.key, required this.householdId});
@@ -20,237 +27,81 @@ class CaregiverHelpTab extends ConsumerWidget {
     final scope = ref.watch(caregiverScopeProvider);
     if (user == null || scope == null) return const SizedBox.shrink();
     final settings = ref.watch(caregiverSettingsProvider(scope));
-    final writer = ref.watch(caregiverWriterProvider(scope));
-    final lite = ref.watch(visualEffectsProvider);
+    void push(Widget page) =>
+        Navigator.of(context).push(GlassPageRoute<void>(builder: (_) => page));
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
       children: [
-        GlassSurface(
-          tier: GlassTier.hero,
-          blur: false,
-          padding: EdgeInsets.zero,
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(GlassTier.hero.radius),
-              gradient: AppColors.caregiverGradient,
+        StaggeredReveal(index: 0, child: const _HelpHero()),
+        const SizedBox(height: 12),
+        StaggeredReveal(index: 1, child: const _EmergencyCard()),
+        const SizedBox(height: 12),
+        StaggeredReveal(
+          index: 2,
+          child: settings.when(
+            loading: () => const CompanionCard(
+              title: 'People who may help',
+              child: Text('Loading your support plan…'),
             ),
-            child: const Padding(
-              padding: EdgeInsets.all(24),
+            error: (_, _) => CompanionLoadError(
+              onRetry: () => ref.invalidate(caregiverSettingsProvider(scope)),
+            ),
+            data: (saved) => CompanionCard(
+              title: 'People who may help',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.support_agent_rounded,
-                        color: Colors.white,
-                        size: 32,
-                      ),
-                      SizedBox(width: 14),
-                      Expanded(
-                        child: Text(
-                          'Help and support',
-                          style: TextStyle(
-                            fontFamily: 'Sora',
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            height: 1.2,
-                          ),
+                  for (final kind in SupportContactKind.values)
+                    _ContactTile(
+                      kind: kind,
+                      contact: saved.contacts
+                          .where((c) => c.kind == kind)
+                          .firstOrNull,
+                      onOpen: () => push(
+                        HelpContactEditor(
+                          kind: kind,
+                          contact: saved.contacts
+                              .where((c) => c.kind == kind)
+                              .firstOrNull,
                         ),
                       ),
-                    ],
-                  ),
-                  SizedBox(height: 14),
-                  Text(
-                    'Emergency contacts, people who may help, listening options, and display settings.',
-                    style: TextStyle(
-                      color: AppColors.white85,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      height: 1.45,
                     ),
-                  ),
                 ],
               ),
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        CompanionCard(
-          title: 'If it is an emergency',
-          tone: AppColors.triageRed,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'If someone is very unwell or has a danger sign, go to the nearest health facility now. Do not wait for morning, a saved check, documents, or a completed checklist.',
+        const SizedBox(height: 4),
+        StaggeredReveal(
+          index: 3,
+          child: _HubGrid(
+            tiles: [
+              _HubEntry(
+                title: 'Language & listening',
+                hint: 'Preferred language and automatic reading',
+                icon: Icons.record_voice_over_outlined,
+                onTap: () => push(const HelpListeningScreen()),
               ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: () => caregiverDial(context, '112'),
-                icon: const Icon(Icons.call_outlined),
-                label: const Text('Call 112 — emergency line'),
-              ),
-              const Text(
-                'Calling needs a supported phone and cellular coverage. If calling fails, ask someone nearby to help you reach a facility. This app does not dispatch help or arrange transport.',
-              ),
-            ],
-          ),
-        ),
-        settings.when(
-          loading: () => const Text('Loading your support plan…'),
-          error: (_, _) => CompanionLoadError(
-            onRetry: () => ref.invalidate(caregiverSettingsProvider(scope)),
-          ),
-          data: (saved) => Column(
-            children: [
-              CompanionCard(
-                title: 'People who may help',
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      'Contacts you enter stay on this phone. Numbers and availability are not verified; saving a contact does not ask them for help.',
-                    ),
-                    for (final kind in SupportContactKind.values)
-                      _ContactCard(
-                        kind: kind,
-                        contact: saved.contacts
-                            .where((c) => c.kind == kind)
-                            .firstOrNull,
-                      ),
-                  ],
-                ),
-              ),
-              CompanionCard(
-                title: 'Listening preferences',
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text('Preferred language: ${user.preferredLanguage}'),
-                    const Text(
-                      'Only matching bundled guidance uses a local-language clip. Revised or personalized guidance uses English device speech when available, or readable text. Each item shows the actual language and transcript. Bundled synthetic/draft-language audio still needs qualified and native-speaker review.',
-                    ),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final language in const [
-                          'Dagbani',
-                          'Hausa',
-                          'Twi',
-                          'English',
-                        ])
-                          CaregiverSaveAction(
-                            label: language == user.preferredLanguage
-                                ? '$language • selected'
-                                : language,
-                            onSave: () async {
-                              if (ref.read(caregiverScopeProvider) != scope) {
-                                throw const CaregiverDataException(
-                                  'Your account changed.',
-                                );
-                              }
-                              ref.read(caregiverVoiceProvider(scope)).stop();
-                              await ref
-                                  .read(sessionProvider.notifier)
-                                  .updateLanguage(language);
-                            },
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      "Automatic question reading: ${saved.autoRead ? 'On' : 'Off'}",
-                    ),
-                    CaregiverSaveAction(
-                      label: saved.autoRead
-                          ? 'Turn automatic reading off'
-                          : 'Turn automatic reading on',
-                      onSave: () => writer.settings(
-                        (s) => s.copyWith(autoRead: !saved.autoRead),
-                      ),
-                    ),
-                    const Text(
-                      'Optional. You can always answer or open urgent help without waiting for audio.',
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        CompanionCard(
-          title: 'Voice topic library',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Listen, stop, or replay a topic. Read its transcript if audio is unavailable.',
-              ),
-              OutlinedButton.icon(
-                onPressed: () {
+              _HubEntry(
+                title: 'Voice guide',
+                hint: 'Listen, stop, or replay a topic.',
+                icon: Icons.headphones_outlined,
+                onTap: () {
                   ref.read(caregiverVoiceProvider(scope)).stop();
-                  Navigator.of(context).push(
-                    GlassPageRoute<void>(
-                      builder: (_) =>
-                          CaregiverAudioGuideScreen(householdId: householdId),
-                    ),
-                  );
+                  push(CaregiverAudioGuideScreen(householdId: householdId));
                 },
-                icon: const Icon(Icons.headphones_outlined),
-                label: const Text('Open the voice guide'),
               ),
-            ],
-          ),
-        ),
-        CompanionCard(
-          title: 'Display',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Lite display'),
-                subtitle: Text(
-                  lite
-                      ? 'Blur and decorative motion are off.'
-                      : 'Full display; device reduced-motion settings still apply.',
-                ),
-                value: lite,
-                onChanged: (value) =>
-                    ref.read(visualEffectsProvider.notifier).setLite(value),
+              _HubEntry(
+                title: 'Display',
+                hint: 'Full or lite for slow phones',
+                icon: Icons.brightness_6_outlined,
+                onTap: () => push(const HelpDisplayScreen()),
               ),
-              const Text(
-                'This device preference applies immediately. If device storage is unavailable it may not survive a restart.',
-              ),
-            ],
-          ),
-        ),
-        CompanionCard(
-          title: 'Your account and this phone',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('${user.fullName}\n${user.phone}'),
-              const SizedBox(height: 12),
-              const Text(
-                'Home and milestone checks, notes, food choices, shopping, preparation, support contacts, and routine progress are local-only. They are not sent to a health worker automatically and are not restored by account recovery on another device. Existing clinical records and barrier reports keep their existing sync behavior; syncing does not prove a worker has read or responded.',
-              ),
-              const SizedBox(height: 12),
-              CaregiverSaveAction(
-                primary: true,
-                label: 'Hand the phone back',
-                onSave: () async {
-                  ref.read(caregiverVoiceProvider(scope)).stop();
-                  // No provider invalidation here: sign-out makes
-                  // caregiverScopeProvider null (every tab early-returns) and the
-                  // autoDispose scoped providers clean themselves up. Forcing an
-                  // invalidate after the user is gone re-runs _owner() and throws
-                  // CaregiverDataException as a pending teardown error.
-                  await ref.read(sessionProvider.notifier).signOut();
-                },
+              _HubEntry(
+                title: 'Account & this phone',
+                hint: 'Your details and handing back',
+                icon: Icons.badge_outlined,
+                onTap: () => push(const HelpAccountScreen()),
               ),
             ],
           ),
@@ -260,166 +111,458 @@ class CaregiverHelpTab extends ConsumerWidget {
   }
 }
 
-String supportContactLabel(SupportContactKind kind) => switch (kind) {
-  SupportContactKind.healthWorker => 'Health facility or worker',
-  SupportContactKind.trustedPerson => 'Trusted person',
-  SupportContactKind.transport => 'Transport contact',
-};
-
-class _ContactCard extends StatelessWidget {
-  const _ContactCard({required this.kind, this.contact});
-  final SupportContactKind kind;
-  final SupportContact? contact;
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 16),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          supportContactLabel(kind),
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-        if (contact == null)
-          const Text('No contact saved.')
-        else ...[
-          Text('${contact!.name}\n${contact!.number}'),
-          if (contact!.landmark.isNotEmpty)
-            Text('Landmark: ${contact!.landmark}'),
-          OutlinedButton.icon(
-            onPressed: () => caregiverDial(context, contact!.number),
-            icon: const Icon(Icons.call_outlined),
-            label: Text('Call ${contact!.name}'),
-          ),
-        ],
-        OutlinedButton(
-          onPressed: () => Navigator.of(context).push(
-            GlassPageRoute<void>(
-              builder: (_) => _ContactEditor(kind: kind, contact: contact),
-            ),
-          ),
-          child: Text(
-            "${contact == null ? 'Add' : 'Edit'} ${supportContactLabel(kind).toLowerCase()}",
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _ContactEditor extends ConsumerStatefulWidget {
-  const _ContactEditor({required this.kind, this.contact});
-  final SupportContactKind kind;
-  final SupportContact? contact;
-  @override
-  ConsumerState<_ContactEditor> createState() => _ContactEditorState();
-}
-
-class _ContactEditorState extends ConsumerState<_ContactEditor> {
-  final _form = GlobalKey<FormState>();
-  late final _name = TextEditingController(text: widget.contact?.name ?? '');
-  late final _number = TextEditingController(
-    text: widget.contact?.number ?? '',
-  );
-  late final _landmark = TextEditingController(
-    text: widget.contact?.landmark ?? '',
-  );
-  bool _saving = false;
-  @override
-  void dispose() {
-    _name.dispose();
-    _number.dispose();
-    _landmark.dispose();
-    super.dispose();
-  }
+/// The gradient header: who this tab is, said once, in one breath.
+class _HelpHero extends StatelessWidget {
+  const _HelpHero();
 
   @override
-  Widget build(BuildContext context) {
-    final scope = ref.watch(caregiverScopeProvider);
-    if (scope == null) return const SizedBox.shrink();
-    final writer = ref.watch(caregiverWriterProvider(scope));
-    Future<void> save({bool remove = false}) async {
-      if (!remove && !_form.currentState!.validate()) return;
-      setState(() => _saving = true);
-      try {
-        await writer.settings(
-          (s) => s.copyWith(
-            contacts: [
-              ...s.contacts.where((c) => c.kind != widget.kind),
-              if (!remove)
-                SupportContact(
-                  kind: widget.kind,
-                  name: _name.text.trim(),
-                  number: _number.text.trim(),
-                  landmark: _landmark.text.trim(),
-                ),
-            ],
-          ),
-        );
-        if (context.mounted) Navigator.pop(context);
-      } finally {
-        if (mounted) setState(() => _saving = false);
-      }
-    }
-
-    return CompanionPage(
-      title: supportContactLabel(widget.kind),
-      child: Form(
-        key: _form,
-        child: ListView(
-          padding: const EdgeInsets.all(20),
+  Widget build(BuildContext context) => GlassSurface(
+    tier: GlassTier.hero,
+    blur: false,
+    padding: EdgeInsets.zero,
+    child: Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(GlassTier.hero.radius),
+        gradient: AppColors.caregiverGradient,
+      ),
+      child: const Padding(
+        padding: EdgeInsets.all(20),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const Text(
-              "Ask permission before saving someone's contact details. The app cannot verify the number or whether they can help.",
-            ),
-            TextFormField(
-              controller: _name,
-              enabled: !_saving,
-              maxLength: 80,
-              decoration: const InputDecoration(labelText: 'Contact name'),
-              validator: (v) =>
-                  (v ?? '').trim().isEmpty ? 'Enter a name.' : null,
-            ),
-            TextFormField(
-              controller: _number,
-              enabled: !_saving,
-              maxLength: 24,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Phone number'),
-              validator: (v) => SupportContact.validNumber(v ?? '')
-                  ? null
-                  : 'Enter a phone number using digits, spaces, and an optional leading +.',
-            ),
-            TextFormField(
-              controller: _landmark,
-              enabled: !_saving,
-              maxLength: 160,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Landmark or directions (optional)',
-              ),
-            ),
-            AbsorbPointer(
-              absorbing: _saving,
+            Icon(Icons.support_agent_rounded, color: Colors.white, size: 40),
+            SizedBox(width: 14),
+            Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  CaregiverSaveAction(
-                    primary: true,
-                    label: 'Save contact on this phone',
-                    onSave: save,
-                  ),
-                  if (widget.contact != null)
-                    CaregiverSaveAction(
-                      label: 'Remove saved contact',
-                      onSave: () => save(remove: true),
+                  Text(
+                    'Help and support',
+                    style: TextStyle(
+                      fontFamily: 'Sora',
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      height: 1.2,
                     ),
+                  ),
+                  SizedBox(height: 6),
+                  Text(
+                    'Emergency contacts, people who may help, listening '
+                    'options, and display settings.',
+                    style: TextStyle(
+                      color: AppColors.white85,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w500,
+                      height: 1.4,
+                    ),
+                  ),
                 ],
               ),
             ),
           ],
         ),
       ),
+    ),
+  );
+}
+
+/// The one card that shouts: get to a facility, and the line to call. The
+/// caveat about calling stays true to the device's limits — quiet, not gone.
+class _EmergencyCard extends StatefulWidget {
+  const _EmergencyCard();
+
+  @override
+  State<_EmergencyCard> createState() => _EmergencyCardState();
+}
+
+class _EmergencyCardState extends State<_EmergencyCard> {
+  bool _know = false;
+
+  @override
+  Widget build(BuildContext context) => GlassSurface(
+    blur: false,
+    tier: GlassTier.card,
+    padding: const EdgeInsets.all(20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.triageRed.withValues(alpha: 0.10),
+              ),
+              child: const Icon(
+                Icons.emergency_outlined,
+                color: AppColors.triageRed,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'If it is an emergency',
+                style: TextStyle(
+                  fontFamily: 'Sora',
+                  fontWeight: FontWeight.w700,
+                  fontSize: 20,
+                  height: 1.25,
+                  letterSpacing: -0.2,
+                  color: AppColors.triageRed,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'If someone is very unwell or has a danger sign, go to the '
+          'nearest health facility now. Do not wait for morning, a saved '
+          'check, documents, or a completed checklist.',
+          style: TextStyle(
+            fontSize: 15.5,
+            fontWeight: FontWeight.w600,
+            height: 1.45,
+          ),
+        ),
+        const SizedBox(height: 14),
+        FilledButton(
+          onPressed: () => caregiverDial(context, '112'),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.triageRed,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(48, 56),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.call_outlined, size: 22),
+              SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  'Call 112 — emergency line',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+        ),
+        InkWell(
+          onTap: () => setState(() => _know = !_know),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.info_outline_rounded,
+                  size: 18,
+                  color: CompanionColors.muted,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'What to know',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: CompanionColors.blue,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.expand_more_rounded,
+                  size: 20,
+                  color: CompanionColors.muted,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_know)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 6),
+            child: Text(
+              'Calling needs a supported phone and cellular coverage. If '
+              'calling fails, ask someone nearby to help you reach a '
+              'facility. This app does not dispatch help or arrange '
+              'transport.',
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+/// One saved (or missing) helper, as a live tile: the call is a tap away,
+/// the editing lives on its own page.
+class _ContactTile extends StatelessWidget {
+  const _ContactTile({
+    required this.kind,
+    required this.contact,
+    required this.onOpen,
+  });
+  final SupportContactKind kind;
+  final SupportContact? contact;
+  final VoidCallback onOpen;
+
+  IconData get _icon => switch (kind) {
+    SupportContactKind.healthWorker => Icons.local_hospital_outlined,
+    SupportContactKind.trustedPerson => Icons.diversity_3_outlined,
+    SupportContactKind.transport => Icons.directions_car_outlined,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final label = supportContactLabel(kind);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Semantics(
+        button: true,
+        label: '$label: ${contact?.name ?? 'no contact saved'}',
+        child: Material(
+          color: CaregiverLuxePalette.pearlSurfaceSunken,
+          borderRadius: BorderRadius.circular(18),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: onOpen,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: CaregiverLuxePalette.azureIce,
+                        ),
+                        child: Icon(
+                          _icon,
+                          size: 20,
+                          color: CompanionColors.blue,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              label,
+                              style: AppType.eyebrow.copyWith(
+                                fontSize: 10.5,
+                                letterSpacing: 0.9,
+                                color: CompanionColors.muted,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              contact?.name ?? 'No contact saved.',
+                              style: TextStyle(
+                                fontWeight: contact == null
+                                    ? FontWeight.w500
+                                    : FontWeight.w700,
+                                fontSize: 15,
+                                height: 1.35,
+                                color: contact == null
+                                    ? CompanionColors.muted
+                                    : CompanionColors.ink,
+                              ),
+                            ),
+                            if (contact != null) ...[
+                              Text(
+                                contact!.number,
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  height: 1.35,
+                                  color: CompanionColors.muted,
+                                ),
+                              ),
+                              if (contact!.landmark.isNotEmpty)
+                                Text(
+                                  'Landmark: ${contact!.landmark}',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    height: 1.35,
+                                    color: CompanionColors.muted,
+                                  ),
+                                ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: CompanionColors.muted,
+                      ),
+                    ],
+                  ),
+                  if (contact != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: OutlinedButton(
+                        onPressed: () =>
+                            caregiverDial(context, contact!.number),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(48, 48),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        // The phone action stays with the number it dials.
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.call_outlined, size: 18),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                'Call ${contact!.name}',
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
+}
+
+class _HubEntry {
+  const _HubEntry({
+    required this.title,
+    required this.hint,
+    required this.icon,
+    required this.onTap,
+  });
+  final String title;
+  final String hint;
+  final IconData icon;
+  final VoidCallback onTap;
+}
+
+/// The four quiet settings as tiles. Two columns at normal sizes; each tile
+/// takes the full row when the text is scaled up, so nothing ever clips.
+class _HubGrid extends StatelessWidget {
+  const _HubGrid({required this.tiles});
+  final List<_HubEntry> tiles;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wideText = MediaQuery.textScalerOf(context).scale(14) > 21;
+        return Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            for (final tile in tiles)
+              SizedBox(
+                width: wideText
+                    ? constraints.maxWidth
+                    : (constraints.maxWidth - 10) / 2,
+                child: _HubTile(entry: tile),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _HubTile extends StatelessWidget {
+  const _HubTile({required this.entry});
+  final _HubEntry entry;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: entry.title,
+    child: Material(
+      color: CaregiverLuxePalette.pearlSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: CaregiverLuxePalette.hairLineQuiet),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: entry.onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      CaregiverLuxePalette.azureElectric,
+                      CaregiverLuxePalette.azurePrimary,
+                    ],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: CaregiverLuxePalette.azurePrimary.withValues(
+                        alpha: 0.28,
+                      ),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Icon(entry.icon, size: 20, color: Colors.white),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                entry.title,
+                style: const TextStyle(
+                  fontFamily: 'Sora',
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                  height: 1.3,
+                  color: CompanionColors.ink,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                entry.hint,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.35,
+                  color: CompanionColors.muted,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }

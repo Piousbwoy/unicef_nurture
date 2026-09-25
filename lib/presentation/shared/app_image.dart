@@ -47,6 +47,9 @@ abstract final class AppImages {
   /// Pregnant woman — Mother/Woman category.
   static const String cardMother = '${_base}card_mother.png';
 
+  /// Woman recorded for general care — the fifth client type.
+  static const String cardWoman = '${_base}card_woman.png';
+
   /// Sleeping newborn — Newborn category.
   static const String cardNewborn = '${_base}card_newborn.png';
 
@@ -99,8 +102,7 @@ class AppImage extends StatelessWidget {
               child: child,
             );
           },
-          errorBuilder: (context, error, stackTrace) =>
-              const SizedBox.shrink(),
+          errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
         ),
       ],
     );

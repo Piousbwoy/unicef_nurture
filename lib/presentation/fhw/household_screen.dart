@@ -38,7 +38,6 @@ import '../../domain/engines/vulnerability_engine.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
 import '../../domain/enums.dart';
-import '../auth/setup_screen.dart' show FamilyCodeSheet;
 import '../registration/member_form_screen.dart';
 import '../shared/ui.dart';
 import '../visit/barrier_check_screen.dart';
@@ -60,18 +59,6 @@ class HouseholdScreen extends ConsumerWidget {
           household.valueOrNull?.name ?? 'Household',
           overflow: TextOverflow.ellipsis,
         ),
-        actions: [
-          if (household.valueOrNull != null)
-            IconButton(
-              tooltip: 'Family code',
-              icon: const Icon(Icons.qr_code_2_rounded),
-              onPressed: () => showModalBottomSheet<void>(
-                context: context,
-                showDragHandle: true,
-                builder: (_) => FamilyCodeSheet(household: household.value!),
-              ),
-            ),
-        ],
       ),
       body: AmbientBackdrop(
         child: household.when(

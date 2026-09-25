@@ -87,11 +87,11 @@ const _kPitchScenes = <PitchScene>[
     points: [
       'Offline account creation wizard operates seamlessly without cloud identity servers or SMS gateway dependencies.',
       'PBKDF2 cryptographic PIN stretching optimized with environment-aware dynamic iteration scaling to safeguard edge handsets.',
-      'Caregivers are securely bound to a single household via a unique 6-character verification code, stopping data leakage.',
+      'Caregiver registration creates a family record and scopes the account to that household.',
       'Mandatory ethical clinical data consent and privacy agreement notices embedded directly into the registration flow.',
     ],
     narration:
-        'As our live presenter now selects the Frontline Health Worker role and initiates account registration, take notice of our secure offline sign-up and sign-in architecture. In remote health zones, practitioners frequently share community tablets or handsets. To ensure absolute patient privacy without relying on cloud identity authentication, CareBridge AI implements local cryptographic PIN hashing using the PBKDF2 algorithm with unique salts. During sign-up, the health worker establishes a secure four-digit PIN alongside their regional facility details, while caregivers are securely linked to their specific household using a unique six-character verification code provided by their worker. This guarantees zero patient data leakage. Furthermore, explicit data privacy and patient consent agreements are baked directly into the registration steps, ensuring strict compliance with ethical medical data governance before any assessment can begin.',
+        'As our live presenter now selects the Frontline Health Worker role and initiates account registration, take notice of our secure offline sign-up and sign-in architecture. In remote health zones, practitioners frequently share community tablets or handsets. To ensure absolute patient privacy without relying on cloud identity authentication, CareBridge AI implements local cryptographic PIN hashing using the PBKDF2 algorithm with unique salts. During sign-up, the health worker establishes a secure four-digit PIN alongside their regional facility details, while caregivers create their own family record. Their account is scoped to that household, with access checks at the repository boundary. Furthermore, explicit data privacy and patient consent agreements are baked directly into the registration steps, ensuring strict compliance with ethical medical data governance before any assessment can begin.',
   ),
   PitchScene(
     title: 'Household Check-In & Family Roll Call',
@@ -129,11 +129,11 @@ const _kPitchScenes = <PitchScene>[
     durationEstimate: '~50s',
     points: [
       'Deterministic diagnostic engine immediately generates clinical treatment recommendations and referral advice upon assessment.',
-      'When severe danger signs appear, an Emergency Hospital Referral code and offline QR transfer pass are instantly generated.',
+      'When severe danger signs appear, the app recommends urgent referral; health workers can issue a referral with a short reference code.',
       'Human-in-the-Loop Override: Experienced Community Health Officers can securely override automated referral triggers with documented clinical justification.',
     ],
     narration:
-        'As soon as the assessment inputs are recorded, our built-in clinical diagnostic engines calculate immediate, actionable medical recommendations on the evaluation results screen. If critical danger signs or severe wasting are detected, the system issues a firm recommendation for emergency hospital referral, generating a verifiable digital referral code and QR transfer pass that closes the last-mile communication loop with regional hospitals. However, CareBridge AI respects professional human clinical judgment above all else. Notice our robust Human-in-the-Loop feature: if an experienced Community Health Officer determines that a routine referral is unnecessary—perhaps because treatment is already actively underway or local clinical context dictates an alternative care plan—they can securely override the app\'s referral recommendation. The app logs their clinical justification, ensuring total diagnostic accountability.',
+        'As soon as the assessment inputs are recorded, our built-in clinical diagnostic engines calculate immediate, actionable medical recommendations on the evaluation results screen. If critical danger signs or severe wasting are detected, the system recommends emergency hospital referral. The health worker can issue a referral with a short reference code and record arrival confirmation. However, CareBridge AI respects professional human clinical judgment above all else. Notice our robust Human-in-the-Loop feature: if an experienced Community Health Officer determines that a routine referral is unnecessary—perhaps because treatment is already actively underway or local clinical context dictates an alternative care plan—they can securely override the app\'s referral recommendation. The app logs their clinical justification, ensuring total diagnostic accountability.',
   ),
   PitchScene(
     title: 'Inside Our Deterministic AI & Voice Engines',

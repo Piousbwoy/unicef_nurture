@@ -116,5 +116,5 @@ String _script(AudioTopic topic) => switch (topic) {
   AudioTopic.feeding =>
     'Under six months, support breastfeeding and seek individual feeding help when needed. Do not add water, porridge, or family foods. If breastfeeding is not possible, ask a qualified health worker for safe feeding support. From six months, offer safely prepared age-appropriate foods alongside breastfeeding if you breastfeed. Follow any prescribed feeding plan. The food planner provides general ideas, not a prescribed diet.',
   AudioTopic.referral =>
-    'Follow the urgency and instructions on the referral given by your health worker. Take available records, but do not delay emergency care for missing documents. Ask a trusted person or health worker about transport if needed. This app cannot arrange transport or guarantee help. Show the readable report at the facility; scanning is optional and may not be supported.',
+    'Follow the urgency and instructions on the referral given by your health worker. Take available records, but do not delay emergency care for missing documents. Ask a trusted person or health worker about transport if needed. This app cannot arrange transport or guarantee help. Show the readable report to the health worker at the facility.',
 };

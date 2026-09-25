@@ -27,6 +27,7 @@ class CaregiverPersonCard extends StatelessWidget {
   String get _image => switch (person.effectiveClientType) {
     ClientType.newborn => AppImages.cardNewborn,
     ClientType.childUnderFive => AppImages.cardChild,
+    ClientType.womanOfReproductiveAge => AppImages.cardWoman,
     _ => AppImages.cardMother,
   };
 

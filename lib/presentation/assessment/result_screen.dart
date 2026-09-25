@@ -112,6 +112,12 @@ class _AssessmentResultScreenState
   /// result screen is a decision, not a data dump — the drivers lead.
   bool _showAllFindings = false;
 
+  /// Whether the clinical-detail fold is open. The verdict page leads with the
+  /// decision and what to do; the working material behind it — the vitals as
+  /// taken, every finding card, the growth chart — is one honest tap away and
+  /// folded away by default, so it never competes with the decision.
+  bool _showDetail = false;
+
   /// Whether the clinical override panel is unfolded.
   bool _showOverride = false;
 
@@ -1084,45 +1090,23 @@ class _AssessmentResultScreenState
                         ),
                       ],
 
-                      // ------------------------- The vitals, as they were taken
-                      // The station's numbers directly under the verdict, with
-                      // the band tone they earned and the change since last
-                      // visit. Hidden when this visit recorded none. Breathing
-                      // rate leads only when a respiratory finding carried it —
-                      // a number that decided nothing doesn't headline here.
-                      _Entrance(
-                        index: 1,
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: Gap.md),
-                          child: VitalsStrip(
-                            input: input,
-                            inputs: draft.inputs,
-                            omitKeys: _breathingDroveDecision(plan)
-                                ? const {}
-                                : const {'respiratory_rate'},
-                          ),
-                        ),
-                      ),
-
                       // ------------------------- The decision, handoff-ready
                       // One structured card a receiving clinician can act on
-                      // without scrolling: what was found, the honest AI
-                      // line, and the plan of action. Every number on it
-                      // appears nowhere else on this page.
+                      // without scrolling: what drove it, the honest AI
+                      // line, and what was not measured. It never restates
+                      // the verdict — that is said exactly once, above.
                       _Entrance(
                         index: 2,
                         child: Padding(
                           padding: const EdgeInsets.only(top: Gap.md),
                           child: _DecisionBriefCard(
                             level: effective,
-                            classification: _classificationOf(plan),
                             plan: plan,
                             drivers: briefDrivers,
                             driversFolded: epiGaps > 0 && briefDrivers.isEmpty,
                             aiLine: _reasoning.briefLine,
                             trajectory: _trajectory,
                             needsReferral: _refer,
-                            onOpenReport: () => setState(() => _view = 2),
                           ),
                         ),
                       ),
@@ -1136,18 +1120,39 @@ class _AssessmentResultScreenState
                           onEdit: () => Navigator.of(context).pop(),
                         ),
 
-                      // -------------------------------------- What we found
-                      // The findings as severity-coloured cards: each one wears
-                      // the IMCI colour of its severity, its measured number and
-                      // its cut-off — the verdict is shown, not asserted.
-                      // The section is skipped when nothing is left for it to
-                      // own: an all-clear card under a non-routine verdict would
-                      // contradict the section that took its findings.
+                      // -------------------------------------- Clinical detail
+                      // Everything the decision was read from — the station's
+                      // numbers, the finding cards, the Road-to-Health chart
+                      // and the growth slope — folded behind one control so
+                      // the decision is the page, not the dossier. Nothing a
+                      // clinician *acts* on is in here; only what proves it.
                       _Entrance(
                         index: 3,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        child: _ClinicalDetailFold(
+                          expanded: _showDetail,
+                          onToggle: () =>
+                              setState(() => _showDetail = !_showDetail),
                           children: [
+                            // The band tone each number earned, and the change
+                            // since last visit. Breathing rate leads only when
+                            // a respiratory finding carried it — a number that
+                            // decided nothing doesn't headline here.
+                            VitalsStrip(
+                              input: input,
+                              inputs: draft.inputs,
+                              omitKeys: _breathingDroveDecision(plan)
+                                  ? const {}
+                                  : const {'respiratory_rate'},
+                            ),
+                            const SizedBox(height: Gap.lg),
+
+                            // The findings as severity-coloured cards: each one
+                            // wears the IMCI colour of its severity, its
+                            // measured number and its cut-off — the verdict is
+                            // shown, not asserted. The section is skipped when
+                            // nothing is left for it to own: an all-clear card
+                            // under a non-routine verdict would contradict the
+                            // section that took its findings.
                             if (deckFindings.isNotEmpty ||
                                 plan.findings.isEmpty) ...[
                               RecSection(
@@ -1163,23 +1168,17 @@ class _AssessmentResultScreenState
                               ),
                             ],
 
-                            // ------------------- The card, drawn properly
-                            // The Road-to-Health chart is the object the
-                            // mother already trusts and the supervisor
-                            // already audits. Here it is computed from the
-                            // weighings on this phone rather than left on
-                            // paper: the same green/yellow/red bands, the
-                            // same question — is the line climbing through
-                            // the standard, or has it crossed down?
+                            // The Road-to-Health chart: the object the mother
+                            // already trusts and the supervisor already
+                            // audits, computed from the weighings on this
+                            // phone rather than left on paper.
                             if (roadToHealth != null) ...[
                               const SizedBox(height: Gap.lg),
                               RoadToHealthCard(reading: roadToHealth),
                             ],
 
-                            // --------------------- The slope, not just today
-                            // A child with earlier measurements gets the
-                            // trajectory at the moment of decision: the
-                            // direction of travel a paper card cannot show.
+                            // The slope, not just today: the direction of
+                            // travel a paper card cannot show.
                             if (_trajectory != null) ...[
                               const SizedBox(height: Gap.lg),
                               _TrajectoryCard(result: _trajectory!),
@@ -1230,9 +1229,12 @@ class _AssessmentResultScreenState
                         const SizedBox(height: Gap.lg),
                       ],
 
-                      // ------------------------------------------------------- Referral
+                      // -------------------------------------------- Disposition
+                      // Does this case travel, and when is it seen again — the
+                      // two answers that close a visit, held in one card
+                      // rather than two competing sections.
                       _Entrance(
-                        index: 4,
+                        index: 5,
                         child: _ReferralSection(
                           refer: _refer,
                           onRefer: (v) => setState(() {
@@ -1244,27 +1246,8 @@ class _AssessmentResultScreenState
                           urgency: _urgency,
                           onUrgency: (u) => setState(() => _urgency = u),
                           capabilities: result.referralCapabilitiesNeeded,
-                        ),
-                      ),
-
-                      // ------------------------------------------------------ Follow-up
-                      const SizedBox(height: Gap.lg),
-                      _Entrance(
-                        index: 4,
-                        child: RecSection(
-                          title: 'Follow-up contact',
-                          icon: Icons.event_repeat_outlined,
-                          subtitle:
-                              'Added to your queue. The worker who started this '
-                              'case should be the one who closes it.',
-                          child: ChoiceChipsField<int>(
-                            label: 'Review in',
-                            options: const [1, 2, 3, 7, 14, 30],
-                            labelOf: (d) => '$d day${d == 1 ? '' : 's'}',
-                            value: _followDays,
-                            onChanged: (d) =>
-                                setState(() => _followDays = d ?? 7),
-                          ),
+                          followDays: _followDays,
+                          onFollow: (d) => setState(() => _followDays = d ?? 7),
                         ),
                       ),
 
@@ -1358,7 +1341,7 @@ class _AssessmentResultScreenState
                       // pictured foods leading, impossible to miss.
                       if (nutrition != null) ...[
                         _Entrance(
-                          index: 4,
+                          index: 6,
                           child: _NutritionCta(
                             onOpen: () => setState(() => _view = 1),
                           ),
@@ -1371,7 +1354,7 @@ class _AssessmentResultScreenState
                       // carries home — plain words, speakable aloud, with
                       // the return date attached.
                       _Entrance(
-                        index: 5,
+                        index: 7,
                         child: _FamilyBrief(
                           message: _familyBriefLine(plan),
                           followUpInDays: plan.followUpInDays,
@@ -1391,7 +1374,7 @@ class _AssessmentResultScreenState
 
                       // ----------------------------- The report, one tap away
                       _Entrance(
-                        index: 6,
+                        index: 8,
                         child: _ReportTeaser(
                           findingsCount: plan.findings.length,
                           actionsCount: plan.actions.length,
@@ -1637,18 +1620,15 @@ class _AssessmentResultScreenState
 class _DecisionBriefCard extends StatelessWidget {
   const _DecisionBriefCard({
     required this.level,
-    required this.classification,
     required this.plan,
     required this.drivers,
     required this.driversFolded,
     required this.aiLine,
     required this.trajectory,
     required this.needsReferral,
-    required this.onOpenReport,
   });
 
   final TriageLevel level;
-  final String classification;
   final CarePlan plan;
   final List<ClinicalFinding> drivers;
 
@@ -1658,7 +1638,6 @@ class _DecisionBriefCard extends StatelessWidget {
   final String? aiLine;
   final TrajectoryResult? trajectory;
   final bool needsReferral;
-  final VoidCallback onOpenReport;
 
   Gradient get _headerGradient => switch (level) {
     TriageLevel.urgent => const LinearGradient(
@@ -1685,7 +1664,6 @@ class _DecisionBriefCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = triageColours(level);
     final shown = drivers.take(2).toList(growable: false);
     return GlassSurface(
       blur: false,
@@ -1724,7 +1702,7 @@ class _DecisionBriefCard extends StatelessWidget {
                   const SizedBox(width: Gap.sm),
                   Expanded(
                     child: Text(
-                      classification,
+                      'Handoff brief',
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
@@ -1838,7 +1816,7 @@ class _DecisionBriefCard extends StatelessWidget {
                     const SizedBox(height: Gap.xs),
                     _BriefLine(
                       'The growth trend is ${trajectory!.trend.label.toLowerCase()} '
-                      '— the slope is charted below.',
+                      '— charted with the full clinical detail.',
                     ),
                   ],
                   if (plan.missingData.isNotEmpty) ...[
@@ -1853,20 +1831,6 @@ class _DecisionBriefCard extends StatelessWidget {
                       'input completeness; danger-sign care remains active.',
                     ),
                   ],
-                  const SizedBox(height: Gap.sm),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: onOpenReport,
-                      icon: const Icon(Icons.description_outlined, size: 16),
-                      label: const Text('Open the full evidence'),
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(0, Gap.tapTarget),
-                        foregroundColor: c.fg,
-                        padding: const EdgeInsets.symmetric(horizontal: Gap.sm),
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -2309,6 +2273,115 @@ class _EntranceState extends State<_Entrance>
     },
     child: widget.child,
   );
+}
+
+// ------------------------------------------------------- Clinical detail fold
+
+/// The evidence behind the decision, behind one honest control.
+///
+/// The verdict page is read by a worker who must act: the decision, the
+/// pre-referral doses and the worklist are the page. What the decision was
+/// *read from* — the station's numbers, every finding card, the
+/// Road-to-Health chart and the growth slope — matters to the clinician who
+/// questions the verdict, not to the one who carries it out. So it folds:
+/// collapsed by default, expanded by a single tap, and never hidden inside
+/// another document.
+class _ClinicalDetailFold extends StatelessWidget {
+  const _ClinicalDetailFold({
+    required this.expanded,
+    required this.onToggle,
+    required this.children,
+  });
+
+  final bool expanded;
+  final VoidCallback onToggle;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final motion = !MediaQuery.disableAnimationsOf(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GlassSurface(
+          blur: false,
+          padding: EdgeInsets.zero,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onToggle,
+              borderRadius: BorderRadius.circular(GlassTier.card.radius),
+              child: Padding(
+                padding: const EdgeInsets.all(Gap.md),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: const BoxDecoration(
+                        color: AppColors.primaryLight,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.monitor_heart_outlined,
+                        size: 18,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(width: Gap.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Full clinical detail',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            expanded
+                                ? 'Vitals, findings and the growth chart — '
+                                      'tap to fold away.'
+                                : 'Vitals, findings and the growth chart — '
+                                      'one tap away.',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              color: AppColors.inkMuted,
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    AnimatedRotation(
+                      turns: expanded ? 0.5 : 0,
+                      duration: motion
+                          ? AppMotion.duration
+                          : Duration.zero,
+                      child: const Icon(
+                        Icons.expand_more_rounded,
+                        color: AppColors.inkMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        // Built only while open: folded away must mean *away*, not painted
+        // smaller — the decision gets the whole page back.
+        if (expanded) ...[
+          const SizedBox(height: Gap.md),
+          ...children,
+        ],
+      ],
+    );
+  }
 }
 
 // ---------------------------------------------------------- Findings deck
@@ -3033,92 +3106,93 @@ class _ReportTeaser extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // One doorway, not a doorway with a door painted on it: the whole card is
+    // the tap target, so the report is named exactly once on this page.
     return Container(
-      padding: const EdgeInsets.all(Gap.lg),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(Gap.radius),
         border: Border.all(color: AppColors.line, width: Gap.hairline),
         boxShadow: const [AppShadows.card],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: const BoxDecoration(
-                  color: AppColors.primaryLight,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.description_outlined,
-                  size: 20,
-                  color: AppColors.primary,
-                ),
-              ),
-              const SizedBox(width: Gap.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text(
-                      'Full clinical report',
-                      style: TextStyle(
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.ink,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onOpen,
+          borderRadius: BorderRadius.circular(Gap.radius),
+          child: Padding(
+            padding: const EdgeInsets.all(Gap.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: const BoxDecoration(
+                        color: AppColors.primaryLight,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.description_outlined,
+                        size: 20,
+                        color: AppColors.primary,
                       ),
                     ),
-                    SizedBox(height: 2),
-                    Text(
-                      'The evidence behind this verdict',
-                      style: TextStyle(fontSize: 12, color: AppColors.inkMuted),
+                    const SizedBox(width: Gap.md),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Full clinical report',
+                            style: TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'The evidence behind this verdict — tap to open',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.inkMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 20,
+                      color: AppColors.primary,
                     ),
                   ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: Gap.md),
-          Wrap(
-            spacing: Gap.sm,
-            runSpacing: Gap.sm,
-            children: [
-              _TeaserStat(
-                label: '$findingsCount finding${findingsCount == 1 ? '' : 's'}',
-              ),
-              _TeaserStat(label: '$actionsCount-step plan'),
-              _TeaserStat(
-                label: needsReferral
-                    ? 'Referral prepared'
-                    : 'No referral needed',
-              ),
-              _TeaserStat(label: 'On-device AI evidence'),
-            ],
-          ),
-          const SizedBox(height: Gap.md),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: onOpen,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(0, Gap.tapTarget),
-              ),
-              child: const Wrap(
-                alignment: WrapAlignment.center,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: Gap.sm,
-                children: [
-                  Text('Open full clinical report'),
-                  Icon(Icons.arrow_forward_rounded, size: 18),
-                ],
-              ),
+                const SizedBox(height: Gap.md),
+                Wrap(
+                  spacing: Gap.sm,
+                  runSpacing: Gap.sm,
+                  children: [
+                    _TeaserStat(
+                      label:
+                          '$findingsCount finding${findingsCount == 1 ? '' : 's'}',
+                    ),
+                    _TeaserStat(label: '$actionsCount-step plan'),
+                    _TeaserStat(
+                      label: needsReferral
+                          ? 'Referral prepared'
+                          : 'No referral needed',
+                    ),
+                    _TeaserStat(label: 'On-device AI evidence'),
+                  ],
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -3432,6 +3506,8 @@ class _ReferralSection extends StatelessWidget {
     required this.urgency,
     required this.onUrgency,
     required this.capabilities,
+    required this.followDays,
+    required this.onFollow,
   });
 
   final bool refer;
@@ -3442,30 +3518,61 @@ class _ReferralSection extends StatelessWidget {
   final ReferralUrgency urgency;
   final ValueChanged<ReferralUrgency> onUrgency;
   final Set<String> capabilities;
+  final int followDays;
+  final ValueChanged<int?> onFollow;
 
   // A referral is a disposition, not a settings panel: when none is ordered
   // the sheet says so in one quiet row, and the arrangement controls exist
-  // only while a referral is actually being issued.
+  // only while a referral is actually being issued. The review date lives
+  // here too — where a case ends, it also says when it is picked up again.
   @override
   Widget build(BuildContext context) {
+    final followUp = [
+      const SizedBox(height: Gap.md),
+      const Divider(height: 1, thickness: 1, color: AppColors.line),
+      const SizedBox(height: Gap.md),
+      const Text(
+        'Added to your queue. The worker who started this case should be '
+        'the one who closes it.',
+        style: TextStyle(
+          fontSize: 12,
+          color: AppColors.inkMuted,
+          height: 1.4,
+        ),
+      ),
+      const SizedBox(height: Gap.sm),
+      ChoiceChipsField<int>(
+        label: 'Review in',
+        options: const [1, 2, 3, 7, 14, 30],
+        labelOf: (d) => '$d day${d == 1 ? '' : 's'}',
+        value: followDays,
+        onChanged: onFollow,
+      ),
+    ];
     if (!refer) {
       return RecSection(
-        title: 'Referral',
-        subtitle: 'Not indicated for this case — care continues here.',
+        title: 'Disposition',
+        subtitle: 'No referral — care continues here, on this review date.',
         icon: Icons.local_hospital_outlined,
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: () => onRefer(true),
-            icon: const Icon(Icons.add_rounded, size: 18),
-            label: const Text('Add a referral (clinical judgement)'),
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => onRefer(true),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Add a referral (clinical judgement)'),
+              ),
+            ),
+            ...followUp,
+          ],
         ),
       );
     }
     final urgent = urgency == ReferralUrgency.immediate;
     return RecSection(
-      title: 'Referral',
+      title: 'Disposition',
       subtitle: urgent
           ? 'This case travels now — the receiving facility must be able to '
                 'do what it needs.'
@@ -3539,6 +3646,7 @@ class _ReferralSection extends StatelessWidget {
               child: const Text('Remove referral'),
             ),
           ),
+          ...followUp,
         ],
       ),
     );

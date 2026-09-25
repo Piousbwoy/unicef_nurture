@@ -174,13 +174,28 @@ Future<void> _toSheet(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// Opens the clinical-detail fold. `pumpWidget` reuses the screen's state
+/// across re-pumps within one test, so the fold may already be open from a
+/// previous scenario — only tap when it is closed, and gate on `evaluate()`
+/// (the truthful built-tree signal) so the helper is idempotent.
+Future<void> _openDetail(WidgetTester tester) async {
+  for (var i = 0; i < 2; i++) {
+    if (find.byType(VitalsStrip).evaluate().isNotEmpty) return;
+    await tester.tap(find.text('Full clinical detail'));
+    await tester.pumpAndSettle();
+  }
+}
+
 Future<void> _report(WidgetTester tester, {bool experimental = false}) async {
-  await tester.scrollUntilVisible(
-    find.text('Open full clinical report'),
-    400,
-    scrollable: _page,
-  );
-  await tester.tap(find.text('Open full clinical report'));
+  // The report doorway is the whole teaser card now — one tap target,
+  // labelled once. `ensureVisible` (not just `scrollUntilVisible`) because
+  // the widget may already be built but dragged outside the viewport: it
+  // exists, so the "is it visible yet" loop no-ops and the tap misses.
+  final doorway = find.text('Full clinical report');
+  await tester.scrollUntilVisible(doorway, 400, scrollable: _page);
+  await tester.ensureVisible(doorway);
+  await tester.pumpAndSettle();
+  await tester.tap(doorway);
   await tester.pumpAndSettle();
   if (experimental) {
     await tester.scrollUntilVisible(find.byType(AiInsightCard), 300);
@@ -818,7 +833,7 @@ void main() {
     await _pump(tester, _draft(), size: const Size(320, 1000), textScale: 2);
     await _toSheet(tester);
     await tester.scrollUntilVisible(
-      find.text('Open full clinical report'),
+      find.text('Full clinical report'),
       400,
       scrollable: _page,
     );
@@ -932,6 +947,11 @@ void main() {
     // finding of its own, and must still keep the doses out.
     await _pump(tester, _epiDraft(), age: 270);
 
+    // The deck is the working material behind the verdict — it lives inside
+    // the clinical-detail fold, so open it before asserting on the deck.
+    await tester.tap(find.text('Full clinical detail'));
+    await tester.pumpAndSettle();
+
     // No measured value is restated as a chip row above the findings deck.
     expect(find.text('THE NUMBERS BEHIND THE VERDICT'), findsNothing);
 
@@ -999,7 +1019,9 @@ void main() {
 
       // Every finding this visit produced is a dose. The section that would
       // otherwise answer with a green all-clear card under a priority verdict
-      // is skipped outright.
+      // is skipped outright — inside the fold too, so open it first.
+      await tester.tap(find.text('Full clinical detail'));
+      await tester.pumpAndSettle();
       expect(find.text('WHAT WE FOUND'), findsNothing);
       expect(find.text('No concerning findings'), findsNothing);
       expect(find.text('IMMUNISATION'), findsOneWidget);
@@ -1057,6 +1079,7 @@ void main() {
     'vitals strip shows decision-relevant vitals and hides when none',
     (tester) async {
       await _pump(tester, _draft());
+      await _openDetail(tester);
       expect(find.byType(VitalsStrip), findsOneWidget);
       expect(
         find.bySemanticsLabel('Vitals recorded this visit'),
@@ -1070,6 +1093,7 @@ void main() {
 
       // A respiratory danger sign earns the breathing-rate chip its place.
       await _pump(tester, _draft(dangerSigns: const ['Difficulty breathing']));
+      await _openDetail(tester);
       expect(find.byType(VitalsStrip), findsOneWidget);
       expect(find.text('BREATHING RATE'), findsOneWidget);
 
@@ -1077,6 +1101,7 @@ void main() {
         tester,
         _draft(inputs: const {'age_in_days': 2, 'danger_signs': <String>[]}),
       );
+      await _openDetail(tester);
       expect(find.byType(VitalsStrip), findsOneWidget);
       expect(find.bySemanticsLabel('Vitals recorded this visit'), findsNothing);
       expect(find.text('TEMPERATURE'), findsNothing);

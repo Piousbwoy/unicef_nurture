@@ -103,6 +103,7 @@ class _VitalChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     // The pair (diastolic) can only worsen the tone, never soften it.
     var band = spec.bandFor(value, ctx);
     if (pairValue != null && spec.pair != null) {
@@ -113,7 +114,7 @@ class _VitalChip extends StatelessWidget {
       }
     }
     final tone = band?.tone;
-    final numberColour = tone?.fg ?? AppColors.ink;
+    final numberColour = tone?.fg ?? p.ink;
 
     final readout = pairValue == null
         ? spec.format(value)
@@ -144,13 +145,13 @@ class _VitalChip extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(spec.icon, size: 13, color: AppColors.inkMuted),
+                Icon(spec.icon, size: 13, color: p.inkMuted),
                 const SizedBox(width: Gap.xs),
                 Text(
                   spec.label.toUpperCase(),
                   style: AppType.eyebrow.copyWith(
                     fontSize: 9.5,
-                    color: AppColors.inkMuted,
+                    color: p.inkMuted,
                   ),
                 ),
               ],
@@ -170,7 +171,7 @@ class _VitalChip extends StatelessWidget {
                     text: ' ${spec.unit}',
                     style: AppType.numeralUnit.copyWith(
                       fontSize: 11,
-                      color: AppColors.inkMuted,
+                      color: p.inkMuted,
                     ),
                   ),
                 ],
@@ -183,7 +184,7 @@ class _VitalChip extends StatelessWidget {
                 style: AppType.caption.copyWith(
                   fontSize: 10.5,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.primaryDark,
+                  color: p.primaryDark,
                 ),
               ),
             ],
