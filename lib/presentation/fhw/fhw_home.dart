@@ -42,6 +42,7 @@ class _FhwHomeState extends ConsumerState<FhwHome> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(fhwLanguageWarmupProvider);
     final user = ref.watch(currentUserProvider);
     if (user == null) return const SizedBox.shrink();
     final queue = ref.watch(clinicQueueProvider);

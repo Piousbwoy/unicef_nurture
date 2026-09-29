@@ -130,12 +130,23 @@ class CaregiverTodayPlanner {
         urgent: urgent,
       );
     }
+    // "I have arrived" closes the reminder, not the danger sign. The report
+    // itself still reads as un-cleared wherever it is shown; what stops here is
+    // a Today card nagging a family that already went and came back.
+    bool reachedFacility(HomeCheck check) => activity.any(
+      (a) =>
+          a.scope == scope &&
+          a.personId == check.personId &&
+          a.kind == CaregiverActivityKind.arrival &&
+          a.occurredAt.isAfter(check.checkedAt),
+    );
     final concerning =
         checks
             .where(
               (c) =>
                   c.householdId == scope.householdId &&
-                  c.verdict != HomeCheckVerdict.fine,
+                  c.verdict != HomeCheckVerdict.fine &&
+                  !reachedFacility(c),
             )
             .toList()
           ..sort((a, b) => b.checkedAt.compareTo(a.checkedAt));

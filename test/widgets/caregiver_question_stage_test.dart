@@ -9,6 +9,7 @@ import 'dart:async';
 import 'package:carebridge_ai/app/providers.dart';
 import 'package:carebridge_ai/core/audio/caregiver_playback.dart';
 import 'package:carebridge_ai/core/theme/app_theme.dart';
+import 'package:carebridge_ai/core/theme/lumina.dart';
 import 'package:carebridge_ai/data/repositories/care_repository.dart';
 import 'package:carebridge_ai/domain/entities/caregiver.dart';
 import 'package:carebridge_ai/domain/entities/core.dart';
@@ -65,6 +66,12 @@ class _FamilyRepository extends CareRepository {
   Future<CaregiverSettings?> caregiverSettings(
     AppUser user,
     CaregiverScope scope,
+  ) async => null;
+
+  @override
+  Future<GrowthMeasurement?> latestGrowth(
+    AppUser user,
+    String personId,
   ) async => null;
 }
 
@@ -169,7 +176,7 @@ void main() {
     await _open(tester);
     expect(tester.takeException(), isNull);
 
-    await _expectText(tester, 'QUESTION 1 OF 8');
+    await _expectText(tester, '01 / 08');
     await _expectText(tester, 'Fusea Issah');
     await _expectText(tester, 'Hear this question');
     await _expectText(tester, 'YOUR ANSWER');
@@ -239,9 +246,31 @@ void main() {
     await _expectText(tester, 'Continue');
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
-    await _expectText(tester, 'QUESTION 2 OF 8');
-    // The step back lives on the stage, so an answer is never a one-way door.
-    expect(find.byIcon(Icons.chevron_left_rounded), findsOneWidget);
+    await _expectText(tester, '02 / 08');
+    // An answer is never a one-way door: the chevron is the way back, and it
+    // is a plain control because going back is a plain need.
+    await _tap(tester, find.byIcon(Icons.chevron_left_rounded));
+    await _expectText(tester, '01 / 08');
+    // And it is gone on the first question — nowhere left to go.
+    expect(find.byIcon(Icons.chevron_left_rounded), findsNothing);
+  });
+
+  testWidgets('a danger sign dims the whole page — the interface dives', (
+    tester,
+  ) async {
+    await _open(tester);
+    Color? ground() => tester
+        .widget<Scaffold>(find.byType(Scaffold).last)
+        .backgroundColor;
+    // Ordinary light: the page sits on the pearl canvas.
+    expect(ground(), isNot(Lumina.abyss));
+
+    await tester.tap(find.text('Yes'));
+    await tester.pumpAndSettle();
+    // The alarm does not paste red over a bright screen; it takes the light
+    // away, and every card on the page reads LumeField and dives with it.
+    expect(ground(), Lumina.abyss);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('the stage holds together on a 320px handset at 200% text', (
@@ -251,7 +280,7 @@ void main() {
     expect(tester.takeException(), isNull);
     // The voice control is read first: at this size the stage below it is not
     // built until she scrolls, and the hero must survive being scrolled past.
-    await _expectText(tester, 'QUESTION 1 OF 8');
+    await _expectText(tester, '01 / 08');
     await _tap(tester, find.byTooltip('Read this in another language'));
     expect(find.byType(SpeechLanguageTile), findsNWidgets(4));
     expect(tester.takeException(), isNull);

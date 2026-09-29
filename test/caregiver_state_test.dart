@@ -174,7 +174,10 @@ void main() {
     db = await AppDatabase
         .instance
         .database; // Actual production onUpgrade callback.
-    expect(await db.getVersion(), 7);
+    // A v6 device reopens through every migration since, landing on the
+    // current schema version rather than the one this test was first written
+    // against.
+    expect(await db.getVersion(), kDatabaseVersion);
     expect(await schema(db), fresh);
     expect((await repo.homeChecks(user, 'family')).single.id, 'legacy');
     expect((await db.query(Tables.syncState)).single['value'], 'unchanged');

@@ -727,12 +727,12 @@ class _OfflineTile extends StatelessWidget {
     final headline = !engineReady
         ? 'Reading local records'
         : allClear
-        ? 'Offline engine ready'
+        ? 'Everything saved'
         : '$pending changes waiting';
     final caption = failing != null && failing > 0
         ? '$failing need retry'
         : allClear
-        ? 'Zero pending data loss'
+        ? 'Nothing waiting to send'
         : 'Saved on this phone, sending when able';
     return Row(
       children: [

@@ -1,3 +1,4 @@
+import '../../core/i18n/speech_bank.dart';
 import '../entities/caregiver.dart';
 import '../entities/core.dart';
 import '../enums.dart';
@@ -376,10 +377,16 @@ class CaregiverCheckPolicy {
         draft.answers.keys.every((k) => set.questions.any((q) => q.key == k));
   }
 
+  /// [growth] is the last arm-tape reading already stored on this device, if
+  /// there is one. A mother's answers and a health worker's tape are two views
+  /// of the same child, so when the tape already says severe wasting an
+  /// all-clear answer set is not all-clear. The tape can only raise a verdict,
+  /// never lower one, and it can never finish an unfinished check.
   CaregiverCheckDecision decide(
     CaregiverQuestionSet? set,
-    Map<String, CaregiverAnswer> answers,
-  ) {
+    Map<String, CaregiverAnswer> answers, {
+    GrowthMeasurement? growth,
+  }) {
     if (set == null) return CaregiverCheckDecision.unsupported;
     final values = set.questions.map((q) => answers[q.key]);
     if (values.contains(CaregiverAnswer.yes))
@@ -387,10 +394,68 @@ class CaregiverCheckPolicy {
     if (answers.keys.any((k) => !set.questions.any((q) => q.key == k)))
       return CaregiverCheckDecision.incomplete;
     if (values.contains(CaregiverAnswer.unsure))
-      return CaregiverCheckDecision.contactToday;
+      return _raisedByTape(
+        CaregiverCheckDecision.contactToday,
+        growth,
+        set.clientType,
+      );
     if (values.any((v) => v != CaregiverAnswer.no))
       return CaregiverCheckDecision.incomplete;
-    return CaregiverCheckDecision.routine;
+    return _raisedByTape(CaregiverCheckDecision.routine, growth, set.clientType);
+  }
+
+  static const List<CaregiverCheckDecision> _ladder = [
+    CaregiverCheckDecision.routine,
+    CaregiverCheckDecision.contactToday,
+    CaregiverCheckDecision.urgent,
+  ];
+
+  /// True when a stored reading is evidence about this record at all. The arm
+  /// tape is read from 6 months, so a measurement attached to a young infant,
+  /// a woman or nobody is not evidence for this check.
+  static bool _tapeApplies(GrowthMeasurement? growth, ClientType clientType) =>
+      growth != null && clientType == ClientType.childUnderFive;
+
+  /// Severe wasting moves a verdict two steps up the ladder, moderate one step.
+  /// The IMCI cut-offs belong to [GrowthMeasurement]; nothing new is invented
+  /// here.
+  static CaregiverCheckDecision _raisedByTape(
+    CaregiverCheckDecision decision,
+    GrowthMeasurement? growth,
+    ClientType clientType,
+  ) {
+    if (!_tapeApplies(growth, clientType)) return decision;
+    final steps = growth!.isSamByMuacOrOedema
+        ? 2
+        : growth.isMamByMuac
+        ? 1
+        : 0;
+    if (steps == 0) return decision;
+    final index = _ladder.indexOf(decision);
+    if (index < 0) return decision;
+    return _ladder[(index + steps).clamp(0, _ladder.length - 1)];
+  }
+
+  /// Why a stored reading moved the verdict, in words rather than a number the
+  /// caregiver never entered. Names no diagnosis and promises no transmission:
+  /// the reading stays on this phone.
+  String? nutritionNote(CaregiverQuestionSet? set, GrowthMeasurement? growth) {
+    if (set == null || !_tapeApplies(growth, set.clientType)) return null;
+    if (growth!.isSamByMuacOrOedema) {
+      return growth.hasBilateralOedema
+          ? 'The last recorded check found swelling in both feet. That counts '
+                'as severe wasting whatever the arm tape said, so a health '
+                'worker needs to see them today.'
+          : 'Their last arm-tape reading was below the red line. On its own '
+                'that is enough for a health worker to see them today, so this '
+                'check is not all-clear.';
+    }
+    if (growth.isMamByMuac) {
+      return 'Their last arm-tape reading was in the yellow band. That is not '
+          'an emergency by itself, but a health worker should see them, so '
+          'this check is not all-clear.';
+    }
+    return null;
   }
 
   static String feedingSupport(Person person, DateTime now) {
@@ -482,18 +547,79 @@ class CaregiverCheckPolicy {
     return buf.toString();
   }
 
+  /// Whether a verdict justifies asking a health worker to come.
+  ///
+  /// Mirrors [verdictSpeech]: urgent and caution both already tell the family to
+  /// reach a worker today, so a request is the same instruction with a channel.
+  /// `fine` does not — and a request a family can file when nothing is wrong
+  /// stops meaning anything to whoever reads the queue.
+  static bool canAskForHelp(HomeCheckVerdict verdict) =>
+      verdict != HomeCheckVerdict.fine;
+
+  /// The sentence the verdict button speaks, and the reviewed bank clip that
+  /// carries it — when a clip exists whose wording is actually true of this
+  /// result.
+  ///
+  /// Bank clips are human-reviewed in four languages, so they cannot be
+  /// re-worded on the fly. "Danger signs are present" reports what the family
+  /// said, never what a tape reading said, so a verdict the stored
+  /// measurement raised alone uses the plain facility clip instead, and a
+  /// caution raised the same way has no clip at all: it falls back to
+  /// composed English, which the on-device translator voices the way the rest
+  /// of her prose already does.
+  static ({String english, String? clipId})? verdictSpeech(
+    CaregiverCheckDecision decision, {
+    required bool signsReported,
+    required bool uncertain,
+  }) {
+    String? bank(String id) => SpeechBank.byId(id)?.english;
+    return switch (decision) {
+      CaregiverCheckDecision.urgent when signsReported => (
+        english: bank('caregiver_verdict_urgent')!,
+        clipId: 'caregiver_verdict_urgent',
+      ),
+      CaregiverCheckDecision.urgent => (
+        english: bank('level_urgent')!,
+        clipId: 'level_urgent',
+      ),
+      CaregiverCheckDecision.contactToday when uncertain => (
+        english: bank('caregiver_verdict_caution')!,
+        clipId: 'caregiver_verdict_caution',
+      ),
+      CaregiverCheckDecision.contactToday => (
+        english:
+            'A measurement taken at the clinic was in the yellow band on the '
+            'arm tape. Show this check to a health worker today.',
+        clipId: null,
+      ),
+      CaregiverCheckDecision.routine => (
+        english: bank('caregiver_verdict_fine')!,
+        clipId: 'caregiver_verdict_fine',
+      ),
+      _ => null,
+    };
+  }
+
   /// Personalised advice that names the person and references the specific
   /// signs found. Falls back to a safe generic message if nothing specific
   /// applies.
+  ///
+  /// [growth] is the stored measurement [decide] may have used. When it did,
+  /// and she reported no danger sign, the reason has to be named as the
+  /// measurement: telling a mother she noticed signs she answered "no" to
+  /// would attribute a report she never made.
   static String contextualAdvice({
     required Person person,
     required CaregiverCheckDecision decision,
     required CaregiverQuestionSet set,
     required Map<String, CaregiverAnswer> answers,
+    GrowthMeasurement? growth,
   }) {
     final first = _displayName(person.fullName.split(" ").first);
     final yesSigns = signsFound(set, answers);
     final hasUnsure = answers.values.contains(CaregiverAnswer.unsure);
+    final fromMeasurement =
+        yesSigns.isEmpty && _tapeApplies(growth, set.clientType);
     final mother =
         person.effectiveClientType != ClientType.newborn &&
         person.effectiveClientType != ClientType.childUnderFive;
@@ -501,7 +627,16 @@ class CaregiverCheckPolicy {
     switch (decision) {
       case CaregiverCheckDecision.urgent:
         final buf = StringBuffer();
-        buf.write("You noticed danger signs in $first. ");
+        if (fromMeasurement) {
+          buf.write(
+            "The last measurement taken at the clinic was below the red line "
+            "on the arm tape, so $first needs to be seen at a health facility "
+            "now \u2014 even though you have not noticed these danger signs "
+            "today. ",
+          );
+        } else {
+          buf.write("You noticed danger signs in $first. ");
+        }
         if (yesSigns.length == 1) {
           buf.write("${yesSigns.single} needs attention now. ");
         } else if (yesSigns.length > 1) {
@@ -523,6 +658,16 @@ class CaregiverCheckPolicy {
 
       case CaregiverCheckDecision.contactToday:
         final buf = StringBuffer();
+        if (fromMeasurement) {
+          buf.write(
+            "The last measurement taken at the clinic was in the yellow band "
+            "on the arm tape, so a health worker should see $first. "
+            "Contact your health worker or CHPS compound today. "
+            "If $first becomes very unwell before then, go to the health "
+            "facility immediately.",
+          );
+          return buf.toString();
+        }
         if (hasUnsure) {
           buf.write("Some of your answers for $first were not clear. ");
         }

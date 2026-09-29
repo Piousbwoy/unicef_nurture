@@ -19,10 +19,13 @@
 /// to leaf through a register to notice.
 library;
 
+import 'dart:math' as math;
+
 import 'package:sqflite/sqflite.dart';
 
 import '../../domain/entities/visit.dart';
 import '../../domain/enums.dart';
+import '../../domain/services/follow_up_policy.dart';
 import 'app_database.dart';
 import 'outbox_dao.dart';
 
@@ -628,24 +631,29 @@ abstract final class AssessmentDao {
 abstract final class ReferralDao {
   static Future<void> upsert(Referral r) async {
     final db = await AppDatabase.instance.database;
-    await db.transaction((txn) async {
-      final map = r.toMap();
-      await txn.insert(
-        Tables.referrals,
-        map,
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-      await OutboxDao.enqueue(
-        txn,
-        table: Tables.referrals,
-        entityId: r.id,
-        operation: SyncOperation.update,
-        payload: map,
-        priority: r.urgency == ReferralUrgency.immediate
-            ? SyncPriority.critical
-            : SyncPriority.clinical,
-      );
-    });
+    await db.transaction((txn) => upsertIn(txn, r));
+  }
+
+  /// The transaction-scoped half of [upsert], so a follow-up answer can write
+  /// its ledger row, advance the referral and raise a chained one in a single
+  /// commit. Callers must already hold a [DatabaseExecutor].
+  static Future<void> upsertIn(DatabaseExecutor db, Referral r) async {
+    final map = r.toMap();
+    await db.insert(
+      Tables.referrals,
+      map,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    await OutboxDao.enqueue(
+      db,
+      table: Tables.referrals,
+      entityId: r.id,
+      operation: SyncOperation.update,
+      payload: map,
+      priority: r.urgency == ReferralUrgency.immediate
+          ? SyncPriority.critical
+          : SyncPriority.clinical,
+    );
   }
 
   static Future<Referral?> byId(String id) async {
@@ -673,6 +681,61 @@ abstract final class ReferralDao {
     return rows.isEmpty ? null : Referral.fromMap(rows.first);
   }
 
+  /// Whether any referral already carries [code]. Case-insensitive, matching
+  /// [byCode].
+  static Future<bool> codeExists(String code) async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query(
+      Tables.referrals,
+      columns: const ['id'],
+      where: 'UPPER(reference_code) = ?',
+      whereArgs: [code.trim().toUpperCase()],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
+  /// Mints a short, human-speakable referral code that is not already in use.
+  ///
+  /// Ambiguous letters and digits are excluded so the code survives being read
+  /// down a crackly phone line. `reference_code` has a UNIQUE index and the
+  /// district resolves a family by this code, so two referrals must never share
+  /// one — yet the space of a 4-character code is only ~810k, and by the
+  /// birthday bound a device holding a few hundred referrals collides with real
+  /// probability, which would throw at insert and fail the save. Candidates are
+  /// drawn until one is unused; if 4-character draws somehow all collide the
+  /// code is widened rather than returned dirty. Every mint site uses this so
+  /// the check and the format cannot drift apart.
+  static Future<String> mintReferenceCode() async {
+    for (var attempt = 0; attempt < 40; attempt++) {
+      final code = _randomReferenceCode(4);
+      if (!await codeExists(code)) return code;
+    }
+    for (var attempt = 0; attempt < 40; attempt++) {
+      final code = _randomReferenceCode(5);
+      if (!await codeExists(code)) return code;
+    }
+    // Pathological — every 4- and 5-character draw hit an existing row.
+    // Widen and let the UNIQUE index be the honest backstop rather than hand
+    // the family a code we already know is taken.
+    return _randomReferenceCode(6);
+  }
+
+  static final math.Random _referenceCodeRandom = math.Random.secure();
+
+  /// A single random code with NO uniqueness check. Only for callers that cannot
+  /// reach the database (a widget test with a mocked repository, or a transient
+  /// DB error); prefer [mintReferenceCode], which guarantees the code is free.
+  static String randomReferenceCode() => _randomReferenceCode(4);
+
+  static String _randomReferenceCode(int length) {
+    const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    return 'CB-${List.generate(
+      length,
+      (_) => alphabet[_referenceCodeRandom.nextInt(alphabet.length)],
+    ).join()}';
+  }
+
   static Future<List<Referral>> open() async {
     final db = await AppDatabase.instance.database;
     final rows = await db.query(
@@ -695,6 +758,44 @@ abstract final class ReferralDao {
     return rows.map(Referral.fromMap).toList(growable: false);
   }
 
+  /// Referrals issued inside the window, newest first, **whatever their
+  /// status**.
+  ///
+  /// [open] answers "what is still unresolved". The desk needs a different
+  /// question: "what did this week's work amount to" — which includes the
+  /// settled cases, because a register that hides its outcomes cannot show a
+  /// completion rate. The window exists because a field phone holds a growing
+  /// history and the desk is a working list, not an archive.
+  static Future<List<Referral>> recent({
+    int withinDays = 21,
+    DateTime? now,
+  }) async {
+    final db = await AppDatabase.instance.database;
+    final cutoff =
+        (now ?? DateTime.now()).subtract(Duration(days: withinDays));
+    final rows = await db.query(
+      Tables.referrals,
+      where: 'issued_at >= ?',
+      whereArgs: [cutoff.toIso8601String()],
+      orderBy: 'issued_at DESC',
+    );
+    return rows.map(Referral.fromMap).toList(growable: false);
+  }
+
+  /// The referrals raised in answer to this one — the second visit of a trace
+  /// that is still running. Read straight from `link_from_referral_id`, so a
+  /// chain is a property of the data rather than something the UI remembers.
+  static Future<List<Referral>> linkedChildren(String parentId) async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query(
+      Tables.referrals,
+      where: 'link_from_referral_id = ?',
+      whereArgs: [parentId],
+      orderBy: 'issued_at ASC',
+    );
+    return rows.map(Referral.fromMap).toList(growable: false);
+  }
+
   /// Urgent referrals with no confirmed arrival after 48 hours.
   ///
   /// This is the query the entire last-mile challenge reduces to. Every entry is
@@ -711,44 +812,75 @@ abstract final class ReferralDao {
     String? outcomeNotes,
   }) async {
     final db = await AppDatabase.instance.database;
-    final now = DateTime.now().toIso8601String();
-    await db.transaction((txn) async {
-      await txn.update(
-        Tables.referrals,
-        {
-          'status': status.name,
-          'status_updated_at': now,
-          'arrival_confirmed_by': ?confirmedBy,
-          'outcome_notes': ?outcomeNotes,
-          'sync_state': SyncState.pending.name,
-        },
-        where: 'id = ?',
-        whereArgs: [referralId],
-      );
-      await OutboxDao.enqueue(
+    await db.transaction(
+      (txn) => updateStatusIn(
         txn,
-        table: Tables.referrals,
-        entityId: referralId,
-        operation: SyncOperation.update,
-        payload: {
-          'id': referralId,
-          'status': status.name,
-          'status_updated_at': now,
-          'arrival_confirmed_by': confirmedBy,
-          'outcome_notes': outcomeNotes,
-        },
-        priority: SyncPriority.clinical,
-      );
-    });
+        referralId: referralId,
+        status: status,
+        confirmedBy: confirmedBy,
+        outcomeNotes: outcomeNotes,
+      ),
+    );
+  }
+
+  /// The transaction-scoped half of [updateStatus], so the follow-up answer,
+  /// the status it implies and any referral it raises commit as one record.
+  static Future<void> updateStatusIn(
+    DatabaseExecutor db, {
+    required String referralId,
+    required ReferralStatus status,
+    String? confirmedBy,
+    String? outcomeNotes,
+  }) async {
+    final now = DateTime.now().toIso8601String();
+    await db.update(
+      Tables.referrals,
+      {
+        'status': status.name,
+        'status_updated_at': now,
+        'arrival_confirmed_by': ?confirmedBy,
+        'outcome_notes': ?outcomeNotes,
+        'sync_state': SyncState.pending.name,
+      },
+      where: 'id = ?',
+      whereArgs: [referralId],
+    );
+    await OutboxDao.enqueue(
+      db,
+      table: Tables.referrals,
+      entityId: referralId,
+      operation: SyncOperation.update,
+      payload: {
+        'id': referralId,
+        'status': status.name,
+        'status_updated_at': now,
+        'arrival_confirmed_by': confirmedBy,
+        'outcome_notes': outcomeNotes,
+      },
+      priority: SyncPriority.clinical,
+    );
   }
 
   static Future<void> markEscalated(String referralId) async {
     final db = await AppDatabase.instance.database;
-    await db.update(
-      Tables.referrals,
-      {'escalated_at': DateTime.now().toIso8601String()},
-      where: 'id = ?',
-      whereArgs: [referralId],
+    await db.transaction((txn) => markEscalatedIn(txn, referralId));
+  }
+
+  /// Stamps the escalation once and never moves it.
+  ///
+  /// The 48-hour banner is only honest if it fires the first time and then
+  /// stops: `WHERE escalated_at IS NULL` means a second chase finds the date
+  /// already set and changes nothing, so the trace keeps the day the case
+  /// actually became overdue rather than the day someone last looked.
+  static Future<void> markEscalatedIn(
+    DatabaseExecutor db,
+    String referralId, {
+    DateTime? at,
+  }) async {
+    await db.rawUpdate(
+      'UPDATE ${Tables.referrals} SET escalated_at = ? '
+      'WHERE id = ? AND escalated_at IS NULL',
+      [(at ?? DateTime.now()).toIso8601String(), referralId],
     );
   }
 
@@ -794,25 +926,287 @@ abstract final class ReferralDao {
   }
 }
 
+/// The follow-up answer ledger.
+///
+/// Where the referral lifecycle records what the *worker decided*, this records
+/// what the *family did* — which is the only half of the story the last mile
+/// actually turns on. Reads here are deliberately referral-centred and
+/// chronological: a case is reviewed as a trace ("referred Tuesday, visited
+/// Thursday and nobody was home, went again Monday and he was still on the
+/// bench"), never as a status field.
+abstract final class FollowUpDao {
+  static Future<void> insert(FollowUpContact c) async {
+    final db = await AppDatabase.instance.database;
+    await db.transaction((txn) => insertIn(txn, c));
+  }
+
+  /// Transaction-scoped write, used by the repository's single atomic
+  /// follow-up commit. Replace-on-conflict is what makes a retry safe: the
+  /// screen freezes the contact ID when it opens, so a second tap after a slow
+  /// save rewrites the same row instead of logging an answer twice.
+  static Future<void> insertIn(DatabaseExecutor db, FollowUpContact c) async {
+    final map = c.toMap();
+    await db.insert(
+      Tables.followUpContacts,
+      map,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    await OutboxDao.enqueue(
+      db,
+      table: Tables.followUpContacts,
+      entityId: c.id,
+      operation: SyncOperation.insert,
+      payload: map,
+      priority: SyncPriority.clinical,
+    );
+  }
+
+  /// One follow-up answered, committed as one record.
+  ///
+  /// This is the whole write path for the follow-up desk: the ledger row, the
+  /// referral status the answer implies, the barrier behind a failure, the
+  /// visit that produced the answer, the next visit, and the chained referral
+  /// a worsening child needs — in one transaction, so a phone dying mid-write
+  /// leaves either a complete answer or none at all.
+  ///
+  /// Every row is keyed off [contactId], which the check-in screen mints once
+  /// when it opens and keeps across retries. That is what makes a second tap
+  /// safe: the writes collide with themselves instead of inventing a second
+  /// answer, a second barrier or — worst of all — a second child in the
+  /// register.
+  ///
+  /// [at] and [recordedBy] are passed in rather than read from the clock and
+  /// the session, so the whole trace is stamped from the same instant the
+  /// answer was accepted.
+  static Future<FollowUpResult> record({
+    required Referral referral,
+    required String householdId,
+    required String contactId,
+    required FollowUpAnswer answer,
+    required String recordedBy,
+    required DateTime at,
+    FollowUpReReferral? alsoReRefer,
+    DateTime? nextVisitAt,
+    String? completedContactId,
+  }) async {
+    final db = await AppDatabase.instance.database;
+    return db.transaction<FollowUpResult>((txn) async {
+      // The chained referral is built before the answer row because the answer
+      // names it: a trace with a dangling end reads as a lost child.
+      final raised = alsoReRefer == null
+          ? null
+          : Referral(
+              id: alsoReRefer.id,
+              referenceCode: alsoReRefer.referenceCode,
+              personId: referral.personId,
+              assessmentId: referral.assessmentId,
+              facilityName: alsoReRefer.facilityName,
+              reason: alsoReRefer.reason,
+              urgency: alsoReRefer.urgency,
+              issuedBy: recordedBy,
+              issuedAt: at,
+              // The receiving facility is handed the evidence from the first
+              // visit, not a blank slip.
+              clinicalSummary: referral.clinicalSummary,
+              linkFromReferralId: referral.id,
+            );
+
+      final contact = FollowUpContact(
+        id: contactId,
+        referralId: referral.id,
+        personId: referral.personId,
+        householdId: householdId,
+        at: at,
+        channel: answer.channel,
+        reached: answer.reached,
+        care: answer.care,
+        condition: answer.condition,
+        barriers: answer.barriers,
+        note: answer.note,
+        linkedReferralId: raised?.id,
+        recordedBy: recordedBy,
+      );
+      await insertIn(txn, contact);
+      if (raised != null) await ReferralDao.upsertIn(txn, raised);
+
+      final target = statusImpliedBy(answer, from: referral.status);
+      if (target != null) {
+        await ReferralDao.updateStatusIn(
+          txn,
+          referralId: referral.id,
+          status: target,
+          // The answer is given by a named worker, so the record can always
+          // be asked who says so.
+          confirmedBy: recordedBy,
+        );
+      }
+
+      if (answer.barriers.isNotEmpty) {
+        await BarrierDao.saveIn(
+          txn,
+          BarrierReport(
+            id: 'bar-$contactId',
+            householdId: householdId,
+            personId: referral.personId,
+            referralId: referral.id,
+            barriers: answer.barriers.toList(growable: false),
+            recordedBy: recordedBy,
+            recordedAt: at,
+            notes: answer.note,
+          ),
+        );
+      }
+
+      if (completedContactId != null) {
+        await ScheduleDao.markDoneIn(txn, completedContactId);
+      }
+      if (nextVisitAt != null) {
+        await ScheduleDao.upsertIn(
+          txn,
+          ScheduledContact(
+            id: 'sc-$contactId',
+            personId: referral.personId,
+            householdId: householdId,
+            dueDate: nextVisitAt,
+            purpose: 'Re-check after referral ${referral.referenceCode}',
+            createdBy: recordedBy,
+            referralId: referral.id,
+            priority: referral.urgency == ReferralUrgency.immediate
+                ? TriageLevel.urgent
+                : TriageLevel.priority,
+          ),
+        );
+      }
+
+      // Two visits that found nobody is a trace, not a forgetful afternoon.
+      // Stamped inside this transaction and only where `escalated_at` is still
+      // null, so the 48-hour banner fires once and keeps the date the case
+      // actually became overdue.
+      if (answer.isAttemptOnly &&
+          await unansweredAttemptsIn(txn, referral.id) >=
+              kUnansweredAttemptsBeforeTrace) {
+        await ReferralDao.markEscalatedIn(txn, referral.id, at: at);
+      }
+
+      // Read the case back instead of rebuilding it in memory: the stored row
+      // is the record, and the desk should show what the device holds.
+      final rows = await txn.query(
+        Tables.referrals,
+        where: 'id = ?',
+        whereArgs: [referral.id],
+        limit: 1,
+      );
+      final updated = Referral.fromMap(rows.single);
+
+      return (
+        outcome: followUpOutcomeFor(
+          answer: answer,
+          referral: updated,
+          raised: raised,
+        ),
+        contact: contact,
+        referral: updated,
+        raised: raised,
+      );
+    });
+  }
+
+  /// One referral's whole trace, oldest first.
+  static Future<List<FollowUpContact>> forReferral(String referralId) async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query(
+      Tables.followUpContacts,
+      where: 'referral_id = ?',
+      whereArgs: [referralId],
+      orderBy: 'at ASC',
+    );
+    return rows.map(FollowUpContact.fromMap).toList(growable: false);
+  }
+
+  /// Every referral's trace in one pass. The desk lists a dozen cases; loading
+  /// them one query each would be a slow screen on a low-end phone, and the
+  /// desk is read every morning.
+  static Future<Map<String, List<FollowUpContact>>> forReferrals(
+    Iterable<String> referralIds,
+  ) async {
+    final ids = referralIds.toSet();
+    if (ids.isEmpty) return const {};
+    final db = await AppDatabase.instance.database;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final rows = await db.query(
+      Tables.followUpContacts,
+      where: 'referral_id IN ($placeholders)',
+      whereArgs: ids.toList(growable: false),
+      orderBy: 'referral_id, at ASC',
+    );
+    final out = <String, List<FollowUpContact>>{
+      for (final id in ids) id: <FollowUpContact>[],
+    };
+    for (final row in rows) {
+      final c = FollowUpContact.fromMap(row);
+      out.putIfAbsent(c.referralId, () => <FollowUpContact>[]).add(c);
+    }
+    return out;
+  }
+
+  static Future<FollowUpContact?> latestFor(String referralId) async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query(
+      Tables.followUpContacts,
+      where: 'referral_id = ?',
+      whereArgs: [referralId],
+      orderBy: 'at DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : FollowUpContact.fromMap(rows.first);
+  }
+
+  /// Attempts that found nothing to report. Two of these is the trigger for a
+  /// trace, because "we went twice and nobody was home" is a family avoiding
+  /// care, not a worker forgetting one visit.
+  static Future<int> unansweredAttempts(String referralId) async {
+    final db = await AppDatabase.instance.database;
+    return unansweredAttemptsIn(db, referralId);
+  }
+
+  /// Transaction-scoped half of [unansweredAttempts], so the escalation rule
+  /// can count the attempt it has just written before the commit lands.
+  static Future<int> unansweredAttemptsIn(
+    DatabaseExecutor db,
+    String referralId,
+  ) async {
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM ${Tables.followUpContacts} '
+      'WHERE referral_id = ? AND reached = ?',
+      [referralId, FollowUpReach.unknown.name],
+    );
+    return (rows.first['c'] as num).toInt();
+  }
+}
+
 abstract final class BarrierDao {
   static Future<void> save(BarrierReport report) async {
     final db = await AppDatabase.instance.database;
-    await db.transaction((txn) async {
-      final map = report.toMap();
-      await txn.insert(
-        Tables.barrierReports,
-        map,
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-      await OutboxDao.enqueue(
-        txn,
-        table: Tables.barrierReports,
-        entityId: report.id,
-        operation: SyncOperation.insert,
-        payload: map,
-        priority: SyncPriority.clinical,
-      );
-    });
+    await db.transaction((txn) => saveIn(txn, report));
+  }
+
+  /// Transaction-scoped half of [save], so the barrier behind a "did not go"
+  /// answer commits with the answer that surfaced it.
+  static Future<void> saveIn(DatabaseExecutor db, BarrierReport report) async {
+    final map = report.toMap();
+    await db.insert(
+      Tables.barrierReports,
+      map,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    await OutboxDao.enqueue(
+      db,
+      table: Tables.barrierReports,
+      entityId: report.id,
+      operation: SyncOperation.insert,
+      payload: map,
+      priority: SyncPriority.clinical,
+    );
   }
 
   static Future<List<BarrierReport>> forHousehold(String householdId) async {
@@ -874,21 +1268,25 @@ abstract final class BarrierDao {
 abstract final class ScheduleDao {
   static Future<void> upsert(ScheduledContact c) async {
     final db = await AppDatabase.instance.database;
-    await db.transaction((txn) async {
-      final map = c.toMap();
-      await txn.insert(
-        Tables.scheduledContacts,
-        map,
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-      await OutboxDao.enqueue(
-        txn,
-        table: Tables.scheduledContacts,
-        entityId: c.id,
-        operation: SyncOperation.update,
-        payload: map,
-      );
-    });
+    await db.transaction((txn) => upsertIn(txn, c));
+  }
+
+  /// Transaction-scoped half of [upsert], so the visit that chases a referral
+  /// can be written in the same commit as the referral itself.
+  static Future<void> upsertIn(DatabaseExecutor db, ScheduledContact c) async {
+    final map = c.toMap();
+    await db.insert(
+      Tables.scheduledContacts,
+      map,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    await OutboxDao.enqueue(
+      db,
+      table: Tables.scheduledContacts,
+      entityId: c.id,
+      operation: SyncOperation.update,
+      payload: map,
+    );
   }
 
   static Future<void> upsertAll(List<ScheduledContact> contacts) async {
@@ -952,24 +1350,77 @@ abstract final class ScheduleDao {
     return rows.map(ScheduledContact.fromMap).toList(growable: false);
   }
 
+  static Future<ScheduledContact?> byId(String id) async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query(
+      Tables.scheduledContacts,
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : ScheduledContact.fromMap(rows.first);
+  }
+
+  /// The visits still scheduled to chase one referral.
+  ///
+  /// This is what stitches the desk to the day plan: a referral on "no visit
+  /// soon" and a contact in "Plan My Day" used to be two clocks nobody could
+  /// reconcile. Done contacts are excluded because the ledger, not the
+  /// calendar, is what proves a family was seen.
+  static Future<List<ScheduledContact>> forReferral(String referralId) async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query(
+      Tables.scheduledContacts,
+      where: 'referral_id = ? AND completed_at IS NULL',
+      whereArgs: [referralId],
+      orderBy: 'due_date ASC',
+    );
+    return rows.map(ScheduledContact.fromMap).toList(growable: false);
+  }
+
+  /// Pending chases for a whole desk of referrals, in one pass.
+  ///
+  /// [forReferral] is the right call for one case; the desk has dozens, and
+  /// looping it there turned a single screen into a query per card — audible on
+  /// the low-end Androids this app is written for.
+  static Future<List<ScheduledContact>> openChasesFor(
+    Iterable<String> referralIds,
+  ) async {
+    final unique = referralIds.toSet();
+    if (unique.isEmpty) return const [];
+    final db = await AppDatabase.instance.database;
+    final placeholders = List.filled(unique.length, '?').join(', ');
+    final rows = await db.rawQuery(
+      'SELECT * FROM ${Tables.scheduledContacts} '
+      'WHERE completed_at IS NULL AND referral_id IN ($placeholders) '
+      'ORDER BY due_date ASC',
+      unique.toList(),
+    );
+    return rows.map(ScheduledContact.fromMap).toList(growable: false);
+  }
+
   static Future<void> markDone(String id) async {
     final db = await AppDatabase.instance.database;
+    await db.transaction((txn) => markDoneIn(txn, id));
+  }
+
+  /// Transaction-scoped half of [markDone], so recording an answer can close
+  /// the visit that produced it in the same commit.
+  static Future<void> markDoneIn(DatabaseExecutor db, String id) async {
     final now = DateTime.now().toIso8601String();
-    await db.transaction((txn) async {
-      await txn.update(
-        Tables.scheduledContacts,
-        {'completed_at': now, 'sync_state': SyncState.pending.name},
-        where: 'id = ?',
-        whereArgs: [id],
-      );
-      await OutboxDao.enqueue(
-        txn,
-        table: Tables.scheduledContacts,
-        entityId: id,
-        operation: SyncOperation.update,
-        payload: {'id': id, 'completed_at': now},
-      );
-    });
+    await db.update(
+      Tables.scheduledContacts,
+      {'completed_at': now, 'sync_state': SyncState.pending.name},
+      where: 'id = ? AND completed_at IS NULL',
+      whereArgs: [id],
+    );
+    await OutboxDao.enqueue(
+      db,
+      table: Tables.scheduledContacts,
+      entityId: id,
+      operation: SyncOperation.update,
+      payload: {'id': id, 'completed_at': now},
+    );
   }
 
   /// How many contacts a person has missed. Feeds the vulnerability score,

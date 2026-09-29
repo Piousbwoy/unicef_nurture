@@ -356,6 +356,24 @@ class PullService {
         skipped++;
       }
     }
+    // The family's ask answers back: a worker changes the status on their own
+    // device and the family must receive it, so this table merges
+    // last-write-wins rather than insert-if-absent. sync_state is normalised
+    // here because push never touches the entity row — the server's copy of a
+    // request still reads 'pending' on the phone that wrote it, and a pulled
+    // row is by definition already on the server.
+    for (final row in _rows(data[Tables.careRequests])) {
+      if (await _mergeLww(
+        txn,
+        Tables.careRequests,
+        {...row, 'sync_state': 'synced'},
+        columns,
+      )) {
+        applied++;
+      } else {
+        skipped++;
+      }
+    }
     for (final table in const [
       Tables.visits,
       Tables.assessments,
@@ -394,6 +412,7 @@ class PullService {
       Tables.visits,
       Tables.assessments,
       Tables.referrals,
+      Tables.careRequests,
       Tables.users,
     ]) {
       if (cache.containsKey(table)) continue;

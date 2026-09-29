@@ -11,7 +11,7 @@
 //
 // WATERMARK / CURSOR CONTRACT (second-precision UTC):
 //
-//   Every row of the five pullable clinical tables carries a server-managed
+//   Every row of the six pullable clinical tables carries a server-managed
 //   `pull_updated_at` marker (UTC, second precision) maintained by triggers —
 //   see migrations/002_delta_pull.sql. The client stores the `server_time`
 //   returned with the FIRST page of a pull session and sends it back (minus a
@@ -27,12 +27,15 @@
 //     (linked_household_id). No binding → an honest, empty page.
 //   * frontlineHealthWorker / supervisor: households in the JWT's
 //     (region, district, community) tuple OR created_by === JWT sub;
-//     persons/visits of those households; assessments/referrals of those
-//     persons; plus the caller's own users row (profile refresh).
+//     persons/visits/care_requests of those households; assessments/referrals of
+//     those persons; plus the caller's own users row (profile refresh).
 //
 // The client's querystring is never trusted for scope — same rule as
-// recovery.js. pull_updated_at is server-internal and is stripped from every
-// response row.
+// recovery.js. pull_updated_at is now DELIVERED, not stripped: the client
+// persists it into a local `pull_updated_at` column (households, persons,
+// referrals) so it can merge on the server's trusted clock instead of
+// device-written time. It is never on the write whitelist, so no client can
+// push it back.
 'use strict';
 
 const { pool } = require('./db');
@@ -48,6 +51,10 @@ const PULL_TABLES = [
   { name: 'visits', pk: 'id' },
   { name: 'assessments', pk: 'id' },
   { name: 'referrals', pk: 'id' },
+  // After households, whose row a family's request points at: a device that
+  // lost its household must receive the parent first or the child is an
+  // FK failure mid-page.
+  { name: 'care_requests', pk: 'id' },
 ];
 
 // Accepts the exact ISO string this API issued earlier (server_time), with or
@@ -108,8 +115,12 @@ function tableFilter(tableName, scope) {
   switch (tableName) {
     case 'households':
       return hh;
+    // Household-scoped, and deliberately one case for all three: a worker who
+    // covers the zone receives the family's ask, a worker two districts over
+    // never learns it exists, and a bound caregiver receives exactly their own.
     case 'persons':
     case 'visits':
+    case 'care_requests':
       return {
         sql: `household_id IN (SELECT id FROM households WHERE ${hh.sql})`,
         params: hh.params,
@@ -179,6 +190,7 @@ async function handlePull(req, res) {
       visits: [],
       assessments: [],
       referrals: [],
+      care_requests: [],
     };
 
     let users = null;
@@ -219,7 +231,9 @@ async function handlePull(req, res) {
           `ORDER BY pull_updated_at ASC, \`${t.pk}\` ASC LIMIT ? OFFSET ?`,
         [...f.params, ...(since ? [since] : []), remaining, offset]
       );
-      for (const r of rows) delete r.pull_updated_at; // server-internal marker
+      // Phase 1 (sync correctness): deliver the marker. The client intersects
+      // each row with its own local columns, so it is stored where the schema
+      // has a `pull_updated_at` column and harmlessly dropped elsewhere.
       data[t.name] = rows;
       delivered += rows.length;
       if (rows.length < remaining) {

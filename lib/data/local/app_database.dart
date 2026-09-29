@@ -13,7 +13,7 @@
 /// **Hand-written SQL, no code generation.** Drift would be prettier. It would
 /// also put `build_runner` between this team and a working build, and a codegen
 /// failure at 2am before a pitch is not a risk worth taking for syntactic
-/// sugar. The schema is 14 tables; it fits in one file a judge can read.
+/// sugar. The schema is 23 tables; it fits in one file a judge can read.
 ///
 /// **Soft deletes and append-only clinical history.** Growth measurements and
 /// assessments are never updated in place. A CHO who mis-measures adds a new
@@ -57,7 +57,34 @@ import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 ///     next to the rows they describe so GET /api/pull resumes where this
 ///     device left off instead of re-downloading the whole caseload.
 /// Version 7: local-only caregiver drafts, activities, and settings.
-const int kDatabaseVersion = 7;
+///
+/// Version 8 (September 2026 — answer-led referral follow-up)
+///   • New follow_up_contacts table: one row per check-in, with the four
+///     answers a worker taps (channel, reached, care, condition) as enums
+///     instead of prose glued onto referrals.outcome_notes. This is what makes
+///     "which referrals did we chase, and what did we find?" a query.
+///   • referrals.link_from_referral_id: a re-referral names the referral it
+///     answers, so a worsening child reads as one continuous trace rather than
+///     two unrelated cases.
+///   • scheduled_contacts.referral_id: the visit that exists to chase a
+///     referral now knows which one, joining the desk and the day plan onto one
+///     clock. Legacy rows keep NULL — the old app never recorded the link, and
+///     guessing one would invent an obligation on a real family.
+/// Version 9 (September 2026 — the family's request for help)
+///   • New care_requests table: who the family is worried about, how urgent the
+///     check judged it, and that they asked. The home check itself stays
+///     device-only; this is the first record a caregiver has ever been able to
+///     choose to send, and it carries no symptom detail.
+/// Version 10 (September 2026 — cross-device sync correctness): expose the
+/// server-owned `pull_updated_at` revision marker in the local schema for the
+/// three tables that carry mutable, in-place edits (households, persons,
+/// referrals). Until now pull and recovery both stripped it because "no client
+/// schema has a column for it", leaving the client to resolve conflicts on
+/// device-written `updated_at` (which clock skew can corrupt) and to drop
+/// same-id peer mutations entirely. Storing the server's trusted marker is the
+/// enabler for merging on server order instead of device clocks. Nullable: a
+/// row that has never been pulled simply has no stored marker yet.
+const int kDatabaseVersion = 10;
 
 const String kDatabaseName = 'carebridge.db';
 
@@ -189,10 +216,12 @@ class AppDatabase {
         Tables.caregiverDrafts,
         Tables.caregiverActivity,
         Tables.caregiverSettings,
+        Tables.careRequests,
         Tables.scheduledContacts,
         Tables.milestoneChecks,
         Tables.homeChecks,
         Tables.barrierReports,
+        Tables.followUpContacts,
         Tables.referrals,
         Tables.childAssessmentSnapshots,
         Tables.assessments,
@@ -289,6 +318,96 @@ class AppDatabase {
         await db.execute(statement);
       }
     }
+    if (from < 8) {
+      // Version 8: the answer-led follow-up ledger.
+      //
+      // Every statement is written to be safe to re-run. SQLite has no
+      // `ADD COLUMN IF NOT EXISTS`, so a bare ALTER throws on a database that
+      // already carries the column — and a throw inside `onUpgrade` fails the
+      // whole open. On a device with no network that is not a stack trace, it
+      // is a health worker who cannot reach a single referral. The pre-checks
+      // below cost one PRAGMA and guarantee the phone still opens.
+      //   (a) the two chain columns, on tables every device already holds
+      await _addColumnIfMissing(
+        db,
+        Tables.referrals,
+        'link_from_referral_id',
+        'TEXT',
+      );
+      await _addColumnIfMissing(
+        db,
+        Tables.scheduledContacts,
+        'referral_id',
+        'TEXT',
+      );
+      //   (b) the ledger itself, starting empty. Legacy `outcome_notes` prose is
+      // left exactly where it is: it is the only record of what those families
+      // said, and no follow-up answer is invented from a sentence.
+      await db.execute(_followUpContactsTable);
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_follow_up_referral ON '
+        '${Tables.followUpContacts}(referral_id, at)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_follow_up_household ON '
+        '${Tables.followUpContacts}(household_id, at DESC)',
+      );
+    }
+    if (from < 9) {
+      // Version 9: the family's request for help. Its own table rather than a
+      // row in scheduled_contacts, because a family asking and a worker
+      // committing to come are different facts and a supervisor reads them
+      // differently.
+      await db.execute(_careRequestsTable);
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_care_requests_household ON '
+        '${Tables.careRequests}(household_id, created_at DESC)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_care_requests_check ON '
+        '${Tables.careRequests}(home_check_id)',
+      );
+    }
+    if (from < 10) {
+      // Version 10: store the server-owned revision marker locally on the three
+      // in-place-edit tables so a future merge can order by the server clock
+      // instead of device clocks. Idempotent — safe to re-run on a device that
+      // already carries the column.
+      await _addColumnIfMissing(
+        db,
+        Tables.households,
+        'pull_updated_at',
+        'TEXT',
+      );
+      await _addColumnIfMissing(
+        db,
+        Tables.persons,
+        'pull_updated_at',
+        'TEXT',
+      );
+      await _addColumnIfMissing(
+        db,
+        Tables.referrals,
+        'pull_updated_at',
+        'TEXT',
+      );
+    }
+  }
+
+  /// Adds [column] to [table] only when the table does not already have it.
+  ///
+  /// Backs the version-8 migration's "safe to re-run" guarantee for the two
+  /// chain columns. [table], [column] and [definition] are compile-time
+  /// constants from this file, never caller or user input.
+  static Future<void> _addColumnIfMissing(
+    Database db,
+    String table,
+    String column,
+    String definition,
+  ) async {
+    final existing = await db.rawQuery('PRAGMA table_info($table)');
+    if (existing.any((c) => c['name'] == column)) return;
+    await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
   }
 
   @visibleForTesting
@@ -317,6 +436,8 @@ abstract final class Tables {
   static const visitParticipants = 'visit_participants';
   static const assessments = 'assessments';
   static const referrals = 'referrals';
+  static const followUpContacts = 'follow_up_contacts';
+  static const careRequests = 'care_requests';
   static const barrierReports = 'barrier_reports';
   static const homeChecks = 'home_checks';
   static const milestoneChecks = 'milestone_checks';
@@ -379,7 +500,8 @@ const List<String> _schema = [
     walking_minutes_to_facility INTEGER,
     landmark                    TEXT,
     created_at                  TEXT NOT NULL,
-    updated_at                  TEXT NOT NULL
+    updated_at                  TEXT NOT NULL,
+    pull_updated_at             TEXT
   )
   ''',
   // The zone list query: every household in one community, newest first.
@@ -407,6 +529,7 @@ const List<String> _schema = [
     created_at       TEXT NOT NULL,
     updated_at       TEXT NOT NULL,
     is_active        INTEGER NOT NULL DEFAULT 1,
+    pull_updated_at  TEXT,
     FOREIGN KEY (household_id) REFERENCES ${Tables.households}(id) ON DELETE CASCADE,
     FOREIGN KEY (mother_id) REFERENCES ${Tables.persons}(id) ON DELETE SET NULL
   )
@@ -705,7 +828,9 @@ const List<String> _schema = [
     arrival_confirmed_by TEXT,
     outcome_notes        TEXT,
     escalated_at         TEXT,
+    link_from_referral_id TEXT,
     sync_state           TEXT NOT NULL DEFAULT 'pending',
+    pull_updated_at      TEXT,
     FOREIGN KEY (person_id) REFERENCES ${Tables.persons}(id) ON DELETE CASCADE
   )
   ''',
@@ -713,6 +838,36 @@ const List<String> _schema = [
   'CREATE UNIQUE INDEX idx_referrals_code ON ${Tables.referrals}(reference_code)',
   'CREATE INDEX idx_referrals_status ON ${Tables.referrals}(status, issued_at DESC)',
   'CREATE INDEX idx_referrals_person ON ${Tables.referrals}(person_id, issued_at DESC)',
+
+  // --------------------------------------------------------------------------
+  // Follow-up contacts. One row per answer: how the worker found out, whether
+  // the family went, what happened at the facility, and how the patient is now.
+  //
+  // This table is the reason the follow-up desk can show a trace instead of a
+  // pile of prose. `outcome_notes` stays exactly as it was — a device upgrading
+  // into v8 must not lose the sentences that are the only record of what a
+  // family said, and no answer is reconstructed from them.
+  // --------------------------------------------------------------------------
+  _followUpContactsTable,
+  'CREATE INDEX idx_follow_up_referral ON ${Tables.followUpContacts}'
+      '(referral_id, at)',
+  'CREATE INDEX idx_follow_up_household ON ${Tables.followUpContacts}'
+      '(household_id, at DESC)',
+
+  // --------------------------------------------------------------------------
+  // Care requests. The one record a family chooses to send.
+  //
+  // A home check is a clinical report and it stays on the device. This row says
+  // only who the family is worried about, how urgent the check judged it, and
+  // that they asked — so a phone lost in a market cannot hand over anybody's
+  // signs. `home_check_id` points at a row the server cannot read on purpose:
+  // it exists so a health worker can ask the family to show the check in person.
+  // --------------------------------------------------------------------------
+  _careRequestsTable,
+  'CREATE INDEX idx_care_requests_household ON ${Tables.careRequests}'
+      '(household_id, created_at DESC)',
+  'CREATE INDEX idx_care_requests_check ON ${Tables.careRequests}'
+      '(home_check_id)',
 
   // --------------------------------------------------------------------------
   // Barrier reports. Why care did not happen — the sixth challenge area, and
@@ -775,6 +930,7 @@ const List<String> _schema = [
     created_by    TEXT NOT NULL,
     completed_at  TEXT,
     assessment_id TEXT,
+    referral_id   TEXT,
     priority      TEXT NOT NULL DEFAULT 'routine',
     sync_state    TEXT NOT NULL DEFAULT 'pending',
     FOREIGN KEY (person_id) REFERENCES ${Tables.persons}(id) ON DELETE CASCADE,
@@ -889,6 +1045,58 @@ const List<String> _caregiverSchema = [
   )
   ''',
 ];
+
+/// The follow-up answer DDL stands alone so the version-8 migration runs the
+/// identical statement a fresh install does. `IF NOT EXISTS` is a no-op on a
+/// fresh create and the reason a re-run migration does not throw.
+const String _followUpContactsTable =
+    '''
+  CREATE TABLE IF NOT EXISTS ${Tables.followUpContacts} (
+    id                 TEXT PRIMARY KEY,
+    referral_id        TEXT NOT NULL,
+    person_id          TEXT,
+    household_id       TEXT NOT NULL,
+    at                 TEXT NOT NULL,
+    channel            TEXT NOT NULL,
+    reached            TEXT NOT NULL,
+    care               TEXT NOT NULL,
+    condition          TEXT NOT NULL,
+    barriers           TEXT NOT NULL DEFAULT '',
+    note               TEXT,
+    linked_referral_id TEXT,
+    recorded_by        TEXT NOT NULL,
+    sync_state         TEXT NOT NULL DEFAULT 'pending',
+    FOREIGN KEY (referral_id) REFERENCES ${Tables.referrals}(id)
+      ON DELETE CASCADE,
+    FOREIGN KEY (person_id) REFERENCES ${Tables.persons}(id) ON DELETE CASCADE,
+    FOREIGN KEY (household_id) REFERENCES ${Tables.households}(id)
+      ON DELETE CASCADE
+  )
+  ''';
+
+/// The care-request DDL stands alone for the same reason. `home_check_id` is
+/// deliberately not a foreign key: the request must outlive the check row if a
+/// family ever clears local history, and a dangling id is an honest "their check
+/// is on their phone", not a lost request.
+const String _careRequestsTable =
+    '''
+  CREATE TABLE IF NOT EXISTS ${Tables.careRequests} (
+    id            TEXT PRIMARY KEY,
+    household_id  TEXT NOT NULL,
+    person_id     TEXT NOT NULL,
+    level         TEXT NOT NULL,
+    home_check_id TEXT NOT NULL,
+    created_by    TEXT NOT NULL,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'open',
+    answered_at   TEXT,
+    sync_state    TEXT NOT NULL DEFAULT 'pending',
+    FOREIGN KEY (household_id) REFERENCES ${Tables.households}(id)
+      ON DELETE CASCADE,
+    FOREIGN KEY (person_id) REFERENCES ${Tables.persons}(id) ON DELETE CASCADE
+  )
+  ''';
 
 /// The sync-state DDL stands alone so the version-6 migration can run the
 /// exact same statement on devices that predate the table.

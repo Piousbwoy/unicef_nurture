@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/lumina.dart';
 import '../../../core/theme/motion.dart';
 import '../../../domain/entities/core.dart';
 import '../../../domain/entities/visit.dart';
@@ -11,7 +12,6 @@ import '../../shared/speakable_text.dart';
 import '../caregiver_providers.dart';
 import '../family/person_detail.dart';
 import '../widgets/companion.dart';
-import '../widgets/premium_button.dart';
 import 'triage_screen.dart';
 
 class CaregiverCheckTab extends ConsumerWidget {
@@ -31,11 +31,14 @@ class CaregiverCheckTab extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        _CheckHero(
-          householdId: householdId,
-          selectedPersonId: selected,
-          members: members.valueOrNull ?? const [],
-          checks: checks.valueOrNull ?? const [],
+        StaggerReveal(
+          order: 0,
+          child: _CheckHero(
+            householdId: householdId,
+            selectedPersonId: selected,
+            members: members.valueOrNull ?? const [],
+            checks: checks.valueOrNull ?? const [],
+          ),
         ),
         const SizedBox(height: 24),
         members.when(
@@ -47,19 +50,25 @@ class CaregiverCheckTab extends ConsumerWidget {
             onRetry: () =>
                 ref.invalidate(householdMembersProvider(householdId)),
           ),
-          data: (people) => _PersonList(
-            people: people,
-            selectedId: selected,
-            householdId: householdId,
-            checks: checks.valueOrNull ?? const [],
+          data: (people) => StaggerReveal(
+            order: 1,
+            child: _PersonList(
+              people: people,
+              selectedId: selected,
+              householdId: householdId,
+              checks: checks.valueOrNull ?? const [],
+            ),
           ),
         ),
         const SizedBox(height: 28),
-        _HistorySection(
-          householdId: householdId,
-          selectedPersonId: selected,
-          checks: checks,
-          members: members.valueOrNull ?? const [],
+        StaggerReveal(
+          order: 2,
+          child: _HistorySection(
+            householdId: householdId,
+            selectedPersonId: selected,
+            checks: checks,
+            members: members.valueOrNull ?? const [],
+          ),
         ),
       ],
     );
@@ -112,13 +121,15 @@ class _CheckHero extends StatelessWidget {
 
     return Column(
       children: [
+        // The sunlit swatch: one thin band of caught light over the dive card.
         Container(
-          height: 2,
-          decoration: const BoxDecoration(
+          height: 1.4,
+          margin: const EdgeInsets.only(bottom: 3),
+          decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
                 Colors.transparent,
-                AppColors.checkBlueLight,
+                Lumina.glow.withValues(alpha: 0.7),
                 Colors.transparent,
               ],
             ),
@@ -126,39 +137,43 @@ class _CheckHero extends StatelessWidget {
         ),
         Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            color: AppColors.checkNavyDeep,
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.08),
-              width: 1,
+            borderRadius: BorderRadius.circular(Lumina.rLg),
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Lumina.deep, Lumina.navy, Color(0xFF1E4785)],
+              stops: [0.0, 0.55, 1.0],
             ),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x59000000),
-                blurRadius: 24,
-                offset: Offset(0, 10),
+                color: Color(0x4D040E1F),
+                blurRadius: 34,
+                offset: Offset(0, 14),
               ),
             ],
           ),
           child: Stack(
             children: [
               Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(24),
-                    gradient: RadialGradient(
-                      center: Alignment.topRight,
-                      radius: 1.2,
-                      colors: [
-                        AppColors.checkBlue.withValues(alpha: 0.08),
-                        Colors.transparent,
-                      ],
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(Lumina.rLg),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        center: const Alignment(1.1, -1.1),
+                        radius: 1.15,
+                        colors: [
+                          Lumina.bright.withValues(alpha: 0.26),
+                          Colors.transparent,
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.fromLTRB(22, 20, 22, 22),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -170,8 +185,11 @@ class _CheckHero extends StatelessWidget {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(20),
+                            color: Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.12),
+                            ),
                           ),
                           child: Text(
                             '$dayLabel \u2022 $dateStr',
@@ -188,8 +206,11 @@ class _CheckHero extends StatelessWidget {
                           width: 44,
                           height: 44,
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.15),
+                            color: Colors.white.withValues(alpha: 0.10),
                             shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.14),
+                            ),
                           ),
                           child: const Icon(
                             Icons.shield_outlined,
@@ -199,16 +220,12 @@ class _CheckHero extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
-                    const Text(
+                    const SizedBox(height: 22),
+                    const MicroLabel('Aura Nurture', color: Lumina.glow),
+                    const SizedBox(height: 8),
+                    Text(
                       'Danger-sign check',
-                      style: TextStyle(
-                        fontFamily: 'Sora',
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        height: 1.15,
-                      ),
+                      style: Lumina.display(26, color: Colors.white),
                     ),
                     const SizedBox(height: 8),
                     Row(
@@ -225,21 +242,34 @@ class _CheckHero extends StatelessWidget {
                         Expanded(
                           child: Text(
                             statusLine,
-                            style: TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w600,
+                            style: Lumina.body(
+                              size: 13.5,
                               color: AppColors.white85,
-                              height: 1.3,
+                              weight: 600,
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 24),
-                    PremiumCheckButton(
+                    const SizedBox(height: 20),
+                    Container(
+                      height: 1,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.transparent,
+                            Colors.white.withValues(alpha: 0.12),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    SapphireButton(
                       label: person != null
                           ? 'Check ${person.fullName.split(' ').first}'
                           : 'Start the check',
+                      expand: true,
                       onPressed: () => Navigator.of(context).push(
                         GlassPageRoute<void>(
                           builder: (_) => CaregiverTriageScreen(
@@ -266,8 +296,10 @@ class _CheckHero extends StatelessWidget {
                             vertical: 10,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(14),
+                            color: const Color(0xFFFF6B6B).withValues(
+                              alpha: 0.07,
+                            ),
+                            borderRadius: BorderRadius.circular(Lumina.rSm),
                             border: Border.all(
                               color: const Color(
                                 0xFFFF6B6B,
@@ -391,12 +423,7 @@ class _PersonList extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 14, left: 2),
           child: Text(
             'Who are you checking?',
-            style: TextStyle(
-              fontFamily: 'Sora',
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: AppColors.ink,
-            ),
+            style: Lumina.display(17),
           ),
         ),
         for (final person in people)
@@ -446,31 +473,19 @@ class _PersonTile extends StatelessWidget {
           };
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: AppColors.checkNavy.withValues(alpha: 0.08),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.checkNavyDeep.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
+      child: LumenCard(
+        onTap: onTap,
+        radius: Lumina.rMd,
         padding: const EdgeInsets.all(16),
+        shadow: Lumina.liftQuiet,
         child: Row(
           children: [
-            // Navy circle with white initials
+            // Tide-lit circle with white initials
             Container(
               width: 52,
               height: 52,
-              decoration: BoxDecoration(
-                color: AppColors.checkNavy,
+              decoration: const BoxDecoration(
+                gradient: Lumina.tide,
                 shape: BoxShape.circle,
               ),
               alignment: Alignment.center,
@@ -494,21 +509,12 @@ class _PersonTile extends StatelessWidget {
                 children: [
                   Text(
                     person.fullName,
-                    style: const TextStyle(
-                      fontFamily: 'Sora',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.checkNavy,
-                    ),
+                    style: Lumina.display(16, weight: 700),
                   ),
                   const SizedBox(height: 3),
                   Text(
                     '${person.ageLabel} \u2022 ${person.effectiveClientType.label}',
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      color: AppColors.inkMuted,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: Lumina.body(size: 12.5, weight: 500),
                   ),
                 ],
               ),
@@ -558,12 +564,7 @@ class _HistorySection extends ConsumerWidget {
           padding: const EdgeInsets.only(bottom: 14, left: 2),
           child: Text(
             'Check history',
-            style: TextStyle(
-              fontFamily: 'Sora',
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: AppColors.ink,
-            ),
+            style: Lumina.display(17),
           ),
         ),
         checks.when(
@@ -582,29 +583,21 @@ class _HistorySection extends ConsumerWidget {
             final sorted = filtered.toList()
               ..sort((a, b) => b.checkedAt.compareTo(a.checkedAt));
             if (sorted.isEmpty) {
-              return Container(
-                width: double.infinity,
+              return LumenCard(
                 padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: AppColors.caregiverSurface,
-                  borderRadius: BorderRadius.circular(Gap.radius),
-                  border: Border.all(color: AppColors.line, width: 1),
-                ),
+                radius: Lumina.rMd,
+                shadow: Lumina.liftQuiet,
                 child: Column(
                   children: [
                     Icon(
                       Icons.history_rounded,
                       size: 36,
-                      color: AppColors.inkFaint,
+                      color: Lumina.glow,
                     ),
                     const SizedBox(height: 10),
-                    const Text(
+                    Text(
                       'No completed checks yet',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ink,
-                      ),
+                      style: Lumina.display(14, weight: 700),
                     ),
                     const SizedBox(height: 4),
                     // Force the parent Column's cross-axis to be tight so
@@ -665,63 +658,49 @@ class _HistoryTile extends StatelessWidget {
     };
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
+      child: LumenCard(
         onTap: () => Navigator.of(context).push(
           GlassPageRoute<void>(
             builder: (_) => CaregiverPersonDetail(personId: check.personId),
           ),
         ),
-        borderRadius: BorderRadius.circular(Gap.radius),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppColors.caregiverSurface,
-            borderRadius: BorderRadius.circular(Gap.radius),
-            border: Border.all(color: AppColors.line, width: 1),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 18, color: color),
+        radius: Lumina.rMd,
+        padding: const EdgeInsets.all(14),
+        shadow: Lumina.liftQuiet,
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      memberName ?? 'Family member',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ink,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${caregiverWhen(check.checkedAt)}  \u2022  ${caregiverCheckLabel(check.verdict)}',
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        color: AppColors.inkMuted,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
+              child: Icon(icon, size: 18, color: color),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    memberName ?? 'Family member',
+                    style: Lumina.display(14, weight: 700),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${caregiverWhen(check.checkedAt)}  \u2022  ${caregiverCheckLabel(check.verdict)}',
+                    style: Lumina.body(size: 12.5, weight: 500),
+                  ),
+                ],
               ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: AppColors.inkFaint,
-                size: 20,
-              ),
-            ],
-          ),
+            ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: Lumina.glow,
+              size: 20,
+            ),
+          ],
         ),
       ),
     );

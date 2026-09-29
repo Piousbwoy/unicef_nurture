@@ -26,8 +26,11 @@
 library;
 
 import '../../domain/entities/caregiver.dart';
+import '../../domain/entities/care_request.dart';
 import '../../domain/services/caregiver_check_policy.dart';
 import '../../domain/services/caregiver_milestone_policy.dart';
+import '../../domain/services/follow_up_policy.dart';
+import '../local/care_request_dao.dart';
 import '../local/caregiver_dao.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
@@ -403,6 +406,18 @@ class CareRepository {
     return GrowthDao.series(personId);
   }
 
+  /// The most recent measurement on this device, for the caregiver home check
+  /// to consult. Reading is not writing — a family still cannot enter a
+  /// measurement — but a tape reading a health worker already took on this
+  /// phone is evidence the check would otherwise ignore.
+  Future<GrowthMeasurement?> latestGrowth(
+    AppUser user,
+    String personId,
+  ) async {
+    await _requirePersonScope(user, personId, 'view the last measurement');
+    return GrowthDao.latest(personId);
+  }
+
   // ---------------------------------------------------------------------------
   // Visits
   // ---------------------------------------------------------------------------
@@ -651,6 +666,43 @@ class CareRepository {
     return ReferralDao.byId(referral.id);
   }
 
+  /// Records what the facility actually did, against the reference code, named
+  /// by the verifier. The stronger sibling of [confirmArrival]: arrival is a
+  /// footfall, this is the outcome. Only the three states a verifier can
+  /// witness ([ReferralStatus.arrived], [ReferralStatus.treated],
+  /// [ReferralStatus.died]) may be confirmed here, and a settled case is never
+  /// reopened — so this is how `treated` finally stops being only a family's
+  /// report and can carry the name of someone who saw it happen.
+  ///
+  /// Returns null when the code matches nothing or the case is already closed;
+  /// the caller shows one message for both, because neither is a success and
+  /// distinguishing them only helps someone game the code.
+  Future<Referral?> confirmReferralOutcome(
+    AppUser user,
+    String referenceCode, {
+    required ReferralStatus outcome,
+    String? outcomeNotes,
+  }) async {
+    await _require(
+      user,
+      Permission.confirmReferralArrival,
+      'confirm a referral outcome',
+    );
+    if (!outcome.isFacilityConfirmable) {
+      throw ArgumentError.value(outcome, 'outcome', 'not a facility-confirmable state');
+    }
+    final referral = await ReferralDao.byCode(referenceCode);
+    if (referral == null) return null;
+    if (!facilityOutcomeAllowed(referral.status, outcome)) return null;
+    await ReferralDao.updateStatus(
+      referralId: referral.id,
+      status: outcome,
+      confirmedBy: user.id,
+      outcomeNotes: outcomeNotes,
+    );
+    return ReferralDao.byId(referral.id);
+  }
+
   Future<void> updateReferralStatus(
     AppUser user, {
     required String referralId,
@@ -669,6 +721,115 @@ class CareRepository {
       status: status,
       outcomeNotes: outcomeNotes,
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Follow-up: the answer ledger
+  // ---------------------------------------------------------------------------
+
+  /// Records what a worker found when they went looking.
+  ///
+  /// One call, one commit — see [FollowUpDao.record]. The failure this shape
+  /// exists to prevent is the half-written follow-up: a referral marked
+  /// attended with no answer behind it, or an answer with no barrier recorded,
+  /// which is a district report that reads as effort rather than care.
+  ///
+  /// The gate is [Permission.issueReferral], the same one that wrote the
+  /// referral in the first place: answering for a family is the authority to
+  /// act on them. Notably this does *not* route through [scheduleContacts],
+  /// which asks for `runClinicalAssessment` — a worker chasing a referral is
+  /// not performing an assessment, and making them hold that permission to
+  /// close a loop is how loops stop being closed.
+  Future<FollowUpResult> recordFollowUp(
+    AppUser user, {
+    required Referral referral,
+    required String householdId,
+    required String contactId,
+    required FollowUpAnswer answer,
+    FollowUpReReferral? alsoReRefer,
+    DateTime? nextVisitAt,
+    String? completedContactId,
+  }) async {
+    await _require(
+      user,
+      Permission.issueReferral,
+      'record a referral follow-up',
+      entityTable: 'referrals',
+      entityId: referral.id,
+    );
+    return FollowUpDao.record(
+      referral: referral,
+      householdId: householdId,
+      contactId: contactId,
+      answer: answer,
+      recordedBy: user.id,
+      at: _clock(),
+      alsoReRefer: alsoReRefer,
+      nextVisitAt: nextVisitAt,
+      completedContactId: completedContactId,
+    );
+  }
+
+  /// The referral desk: everything issued in the window, with its answers and
+  /// the people behind them.
+  ///
+  /// Three batched reads, not one per case: a desk that fires a query per card
+  /// is a slow morning on the low-end Androids this runs on. The zone gate at
+  /// the top covers all three — [Permission.viewAllHouseholds] is what makes a
+  /// zone-wide read lawful here, so no row is filtered afterwards because none
+  /// of them were individually scoped.
+  Future<
+    ({
+      List<Referral> referrals,
+      Map<String, List<FollowUpContact>> ledger,
+      Map<String, Person> people,
+      List<ScheduledContact> chases,
+    })
+  >
+  followUpDesk(AppUser user, {int withinDays = 21}) async {
+    await _require(
+      user,
+      Permission.viewAllHouseholds,
+      'view the follow-up desk',
+    );
+    final referrals = await ReferralDao.recent(withinDays: withinDays);
+    final ids = referrals.map((r) => r.id);
+    final ledger = await FollowUpDao.forReferrals(ids);
+    final people = await PersonDao.byIdMany(
+      referrals.map((r) => r.personId),
+    );
+    // A chase already on the calendar is the only thing that stops the desk
+    // offering the same visit twice.
+    final chases = await ScheduleDao.openChasesFor(ids);
+    return (
+      referrals: referrals,
+      ledger: ledger,
+      people: people,
+      chases: chases,
+    );
+  }
+
+  /// Puts a chase onto the route: one visit, tied to the referral it answers.
+  ///
+  /// Gated on [Permission.planVisitRoute] — the authority the Route tab already
+  /// reads with. A worker deciding to go and look should not need to hold the
+  /// clinical-assessment permission to make the app put the household in front
+  /// of them tomorrow.
+  Future<void> planChaseVisit(
+    AppUser user,
+    ScheduledContact contact,
+  ) async {
+    await _require(
+      user,
+      Permission.planVisitRoute,
+      'plan a visit for this household',
+    );
+    await _requireHouseholdScope(
+      user,
+      contact.householdId,
+      'plan a visit for this household',
+    );
+    await ScheduleDao.upsert(contact);
   }
 
   // ---------------------------------------------------------------------------
@@ -747,6 +908,103 @@ class CareRepository {
     );
     await _requireCaregiverScope(user, scope, personId: check.personId);
     await CaregiverDao.saveLegacyHomeCheck(scope, check);
+  }
+
+  /// Sends the one thing a home check is allowed to send: the family asking for
+  /// help. The check itself stays on their device (see `recordHomeCheck`), so
+  /// this carries who they are worried about and how urgent the check judged it,
+  /// never what they answered.
+  ///
+  /// Returns the request that now exists — including the one this check already
+  /// raised, so a second tap cannot summon two people — or null when the verdict
+  /// asks for nothing.
+  Future<CareRequest?> raiseCareRequest(
+    AppUser user,
+    CaregiverScope scope,
+    HomeCheck check,
+  ) async {
+    await _require(
+      user,
+      Permission.requestCare,
+      'ask for a health worker',
+      entityTable: 'care_requests',
+      entityId: 'req-${check.id}',
+    );
+    await _requireCaregiverScope(user, scope, personId: check.personId);
+    // Not redundant with the helper above: that proves the person belongs to
+    // this family. This proves the *check* handed over belongs to it too, so a
+    // family cannot point a request at the household next door.
+    if (check.householdId != scope.householdId) {
+      throw const AccessDenied(
+        'ask for help for another household',
+        Permission.requestCare,
+      );
+    }
+
+    // Any status, not just open. `CareRequest.id` is derived from the check, so
+    // an answered request has this same primary key: finding only open rows here
+    // would let a second tap replace the health worker's reply with a fresh open
+    // request and queue a second summons for a family someone has already
+    // answered.
+    final existing = await CareRequestDao.forCheck(check.id);
+    if (existing != null) return existing;
+
+    final request = CareRequest.fromCheck(
+      check: check,
+      userId: user.id,
+      at: _clock(),
+    );
+    if (request == null) return null;
+
+    await CareRequestDao.create(request);
+    return request;
+  }
+
+  /// Calls back a request the family sent but that has not reached the network.
+  ///
+  /// Once the server has it, this returns false rather than deleting: the health
+  /// worker already knows, and a family whose screen now says "nobody was told"
+  /// would be believing the less true of the two statements. Refusing an
+  /// answered request is the same rule — the reply is theirs to keep.
+  Future<bool> withdrawCareRequest(
+    AppUser user,
+    CaregiverScope scope,
+    String homeCheckId,
+  ) async {
+    await _require(
+      user,
+      Permission.requestCare,
+      'withdraw your request',
+      entityTable: 'care_requests',
+    );
+    await _requireCaregiverScope(user, scope);
+    final request = await CareRequestDao.openForCheck(homeCheckId);
+    if (request == null) return false;
+    if (request.householdId != scope.householdId) {
+      throw const AccessDenied(
+        'withdraw another household’s request',
+        Permission.requestCare,
+      );
+    }
+    return CareRequestDao.withdraw(request.id);
+  }
+
+  /// What the family already asked for this check, and whether the phone has
+  /// managed to send it — one read, because the card that shows the state must
+  /// not pair a request with a delivery flag taken from somewhere else.
+  Future<({CareRequest request, bool sent})?> careRequestState(
+    AppUser user,
+    CaregiverScope scope,
+    String homeCheckId,
+  ) async {
+    await _require(user, Permission.requestCare, 'view your request');
+    await _requireCaregiverScope(user, scope);
+    final request = await CareRequestDao.forCheck(homeCheckId);
+    if (request == null) return null;
+    return (
+      request: request,
+      sent: await CareRequestDao.isSent(request.id),
+    );
   }
 
   /// The home checks a family has run, newest first. Both roles may read
@@ -1027,7 +1285,10 @@ class CareRepository {
       );
     }
     final questions = policy.questionsFor(person)!;
-    final decision = policy.decide(questions, draft.answers);
+    // The same reading the screen saw, so the saved verdict and the verdict the
+    // family was shown cannot disagree.
+    final growth = await GrowthDao.latest(draft.personId);
+    final decision = policy.decide(questions, draft.answers, growth: growth);
     final verdict = switch (decision) {
       CaregiverCheckDecision.urgent => HomeCheckVerdict.urgent,
       CaregiverCheckDecision.contactToday => HomeCheckVerdict.caution,

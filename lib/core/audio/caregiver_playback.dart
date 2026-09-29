@@ -161,8 +161,13 @@ abstract final class OfflineSpeechLanguage {
   /// Missing (including native iOS) or conflicting metadata is declined.
   static Map<String, String>? deviceVoice(
     String language,
-    List<dynamic> voices,
-  ) {
+    List<dynamic> voices, {
+    bool allowUnverified = false,
+  }) {
+    if (allowUnverified) {
+      final proven = deviceVoice(language, voices);
+      if (proven != null) return proven;
+    }
     final primaries = switch (canonical(language)) {
       'English' => const ['en'],
       'Twi' => const ['tw', 'ak'],
@@ -185,7 +190,7 @@ abstract final class OfflineSpeechLanguage {
         final local = _flag(voice['localService']);
         final network = _flag(voice['network_required']);
         if (local == false || network == true) continue;
-        if (local != true && network != false) continue;
+        if (!allowUnverified && local != true && network != false) continue;
         return {'name': name, 'locale': locale};
       }
     }
@@ -296,7 +301,8 @@ abstract final class _PlaybackCoordinator {
   }
 }
 
-/// Only bundled assets or explicitly offline, same-language TTS are used.
+/// Bundled/model audio comes first. Personalized speech requires local TTS;
+/// unchanged bank guidance may use a voice with missing offline metadata.
 class DeviceCaregiverVoice implements CaregiverVoiceBackend {
   DeviceCaregiverVoice({
     AudioPlayer Function()? playerFactory,
@@ -422,8 +428,8 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
         run.reasonCode = 'clinical_english_required';
         run.source =
             'English for safety: treatment, measurements and identifiers '
-            'are not machine-translated. Choose English playback.';
-        run.emit(CaregiverPlaybackPhase.fallback);
+            'are not machine-translated.';
+        await _recoverSpeech(run);
         return;
       }
       if (localized == null &&
@@ -454,20 +460,7 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
         }
       }
       if (localized == null) {
-        // Translation failed — try English device TTS so the user hears
-        // something rather than silence.
-        if (speech.english.trim().isNotEmpty) {
-          run.transcript = speech.english;
-          run.language = speech.sourceLanguage;
-          run.reasonCode = 'translation_fallback_english';
-          run.source =
-              '$selected translation unavailable — speaking English instead.';
-          if (await _synthesize(run)) {
-            if (_current(run)) run.emit(CaregiverPlaybackPhase.completed);
-            return;
-          }
-        }
-        _fallback(run);
+        await _recoverSpeech(run);
         return;
       }
       if (!_PlaybackCoordinator.quiet || localized.trim().isEmpty) {
@@ -522,26 +515,79 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
         _fallback(run);
         return;
       }
-      // Device fallback requires a proven offline voice in the same language.
-      if (await _synthesize(run)) {
-        if (_current(run)) run.emit(CaregiverPlaybackPhase.completed);
-      } else if (_current(run)) {
-        await _PlaybackCoordinator.serialize(() async {
-          if (_current(run)) _PlaybackCoordinator.quiet = await _stopDevices();
-        });
-        if (_current(run)) _fallback(run);
-      }
+      await _recoverSpeech(run);
     } catch (_) {
       if (_current(run)) {
         await _PlaybackCoordinator.serialize(() async {
           if (_current(run)) _PlaybackCoordinator.quiet = await _stopDevices();
         });
-        if (_current(run)) _fallback(run);
+        if (_current(run)) await _recoverSpeech(run);
       }
     } finally {
       if (identical(_run, run)) _run = null;
     }
   }
+
+  Future<void> _recoverSpeech(_PlaybackRun run) async {
+    if (!_current(run)) return;
+    if (!_PlaybackCoordinator.quiet || run.transcript.trim().isEmpty) {
+      _fallback(run);
+      return;
+    }
+    final sourceLanguage = OfflineSpeechLanguage.canonical(
+      run.speech.sourceLanguage,
+    );
+    if (run.language == 'English' &&
+        OfflineSpeechLanguage.canonical(run.speech.language) != 'English') {
+      run.reasonCode ??= 'translation_fallback_english';
+    }
+    if (await _synthesize(run)) {
+      if (_current(run)) run.emit(CaregiverPlaybackPhase.completed);
+      return;
+    }
+    await _quietForRecovery(run);
+    if (!_current(run)) return;
+
+    // Never read translated words with an English voice or overlap a failed
+    // engine. Keep the localized transcript if no recovery voice succeeds.
+    if (_PlaybackCoordinator.quiet &&
+        sourceLanguage == 'English' &&
+        run.language != 'English' &&
+        run.speech.english.trim().isNotEmpty) {
+      final transcript = run.transcript;
+      final language = run.language;
+      final provenance = run.provenance;
+      final reason = run.reasonCode;
+      run.transcript = run.speech.english;
+      run.language = 'English';
+      run.provenance = '';
+      run.reasonCode = 'translation_fallback_english';
+      if (await _synthesize(run)) {
+        if (_current(run)) run.emit(CaregiverPlaybackPhase.completed);
+        return;
+      }
+      await _quietForRecovery(run);
+      if (!_current(run)) return;
+      run.transcript = transcript;
+      run.language = language;
+      run.provenance = provenance;
+      run.reasonCode = reason;
+    }
+    if (_current(run)) _fallback(run);
+  }
+
+  Future<void> _quietForRecovery(_PlaybackRun run) =>
+      _PlaybackCoordinator.serialize(() async {
+        if (_current(run)) _PlaybackCoordinator.quiet = await _stopDevices();
+      });
+
+  String _speechNotice(_PlaybackRun run) => switch (run.reasonCode) {
+    'clinical_english_required' =>
+      'English for safety: treatment, measurements and identifiers are not machine-translated. ',
+    'translation_fallback_english' =>
+      '${run.speech.language} audio unavailable — speaking English instead. ',
+    _ => '',
+  };
 
   void _fallback(_PlaybackRun run) {
     run.reasonCode ??= 'offline_audio_unavailable';
@@ -679,7 +725,7 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
 
     try {
       await _PlaybackCoordinator.serialize(() async {
-        if (!_current(run)) return;
+        if (!_current(run) || !_PlaybackCoordinator.quiet) return;
         final tts = _tts ??= _ttsFactory();
         final voices = await _wait(
           offlineDeviceVoices(tts),
@@ -687,11 +733,28 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
           operationTimeout,
         );
         if (!_current(run)) return;
-        final voice = voices is List
+        final offline = voices is List
             ? OfflineSpeechLanguage.deviceVoice(run.language, voices)
             : null;
+        // Only immutable bank guidance is eligible for missing metadata.
+        // A guidance policy alone does not prove the absence of patient data.
+        final publicGuidance =
+            run.speech.matchingClips != null &&
+            !SpeechSafety.requiresEnglish(
+              run.speech.english,
+              run.speech.policy,
+            );
+        final voice =
+            offline ??
+            (publicGuidance && voices is List
+                ? OfflineSpeechLanguage.deviceVoice(
+                    run.language,
+                    voices,
+                    allowUnverified: true,
+                  )
+                : null);
         if (voice == null) {
-          run.reasonCode = 'offline_voice_missing';
+          run.reasonCode ??= 'offline_voice_missing';
           throw StateError('No explicitly offline voice');
         }
         Future<void> configure(Future<dynamic> result) async {
@@ -709,7 +772,8 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
         await configure(tts.awaitSpeakCompletion(true));
         if (!_current(run)) return;
         run.source =
-            '${run.language} offline device speech'
+            '${_speechNotice(run)}${run.language} '
+            '${offline != null ? 'offline device speech' : 'device speech • unverified offline; may require internet'}'
             '${run.language == 'English' ? '' : ' • draft translation'}';
         if (run.provenance.isNotEmpty) run.source += ' - ${run.provenance}';
         tts.setStartHandler(() {

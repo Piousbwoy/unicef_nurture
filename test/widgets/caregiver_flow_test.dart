@@ -447,8 +447,11 @@ void main() {
       );
       await tester.ensureVisible(find.text('Skip — just show me what to do'));
       await tester.tap(find.text('Skip — just show me what to do'));
-      await _untilVisible(tester, find.textContaining('signs answered'));
-      expect(find.textContaining('signs answered'), findsOneWidget);
+      await _untilVisible(tester, find.text('ANSWERED'));
+      // The movement face carries the tally as complications: questions
+      // answered, signs seen, and the duration she chose — never a sentence.
+      expect(find.text('8/8'), findsOneWidget);
+      expect(find.text('SIGNS SEEN'), findsOneWidget);
       await tester.ensureVisible(find.text('What should I do?'));
       await tester.tap(find.text('What should I do?'));
       await tester.pumpAndSettle();

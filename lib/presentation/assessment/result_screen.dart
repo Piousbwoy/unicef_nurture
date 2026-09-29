@@ -15,7 +15,6 @@
 library;
 
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,6 +31,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/glass.dart';
 import '../../data/reference/facilities.dart';
 import '../../data/reference/local_foods.dart';
+import '../../data/local/visit_dao.dart';
 import '../../data/repositories/care_repository.dart';
 import '../../domain/engines/growth_zscore_engine.dart';
 import '../../domain/engines/immunisation_engine.dart';
@@ -96,6 +96,11 @@ class _AssessmentResultScreenState
 
   bool _saving = false;
   String? _error;
+
+  /// Midnight-navy reading mode for the verdict page. Day is the default so
+  /// the clinical page the worker is trained on stays byte-for-byte familiar;
+  /// the toggle is chrome, and it never carries a verdict.
+  bool _night = false;
 
   // ------------------------------------------------------------------ Referral
   late bool _refer;
@@ -742,7 +747,7 @@ class _AssessmentResultScreenState
       }
       referral = Referral(
         id: _uuid.v4(),
-        referenceCode: _referenceCode(),
+        referenceCode: await ReferralDao.mintReferenceCode(),
         personId: input.person.id,
         assessmentId: assessmentId,
         facilityName: facility.name,
@@ -827,14 +832,6 @@ class _AssessmentResultScreenState
     }
   }
 
-  /// A short, human-speakable referral code. Ambiguous letters and digits are
-  /// excluded so it survives being read down a crackly phone line.
-  String _referenceCode() {
-    const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-    final r = Random.secure();
-    return 'CB-${List.generate(4, (_) => alphabet[r.nextInt(alphabet.length)]).join()}';
-  }
-
   /// Appends one de-identified [RecalibrationRecord] per model prediction
   /// to the on-device recalibration batch. Fail-safe by design: an unarmed
   /// device (no GHS salt provisioned) collects nothing, and any storage
@@ -893,6 +890,7 @@ class _AssessmentResultScreenState
     final nurturingCare = _nurturingCareAssessment(immunisation, nutrition);
     final roadToHealth = _roadToHealth;
     final motion = !MediaQuery.disableAnimationsOf(context);
+    final p = _night ? ClinicalPalette.night : ClinicalPalette.day;
 
     // The worklist is what the CHO actually ticks through. It drops the
     // immunisation and food headline actions the engines fold into the plan:
@@ -924,12 +922,42 @@ class _AssessmentResultScreenState
         .where((f) => f.protocolSource == ImmunisationEngine.protocolSource)
         .length;
 
-    return Scaffold(
-      backgroundColor: AppColors.canvas,
+    return ClinicalPaletteScope(
+      palette: p,
+      child: Theme(
+        data: _night
+            ? Theme.of(context).copyWith(
+                brightness: Brightness.dark,
+                colorScheme: ColorScheme.dark(
+                  primary: p.primary,
+                  onPrimary: Colors.white,
+                  error: p.triageRed,
+                  onError: Colors.white,
+                  surface: p.surface,
+                  onSurface: p.ink,
+                  outline: p.line,
+                ),
+                textTheme: Theme.of(
+                  context,
+                ).textTheme.apply(bodyColor: p.ink, displayColor: p.ink),
+              )
+            : Theme.of(context),
+        child: Scaffold(
+      backgroundColor: p.canvas,
       appBar: _view == 0
           ? GlassAppBar(
               hero: true,
               title: Text(input.person.fullName),
+              actions: [
+                IconButton(
+                  tooltip: _night ? 'Day mode' : 'Night mode',
+                  onPressed: () => setState(() => _night = !_night),
+                  icon: Icon(
+                    _night ? Icons.wb_sunny_rounded : Icons.nightlight_round,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
               bottom: PreferredSize(
                 preferredSize: Size.fromHeight(
                   MediaQuery.textScalerOf(context).scale(24) + 8,
@@ -1075,20 +1103,6 @@ class _AssessmentResultScreenState
                                 ),
                         ),
                       ),
-
-                      // ----------------------------------- Tailored plan
-                      // Who this plan is for, immediately under the verdict:
-                      // the synthesizer names the cohort and its deterioration
-                      // pattern, so the same page reads differently for a
-                      // newborn, a child under five and a mother.
-                      if (plan.patientCohort != null &&
-                          plan.cohortNote != null) ...[
-                        const SizedBox(height: Gap.md),
-                        CohortCallout(
-                          cohort: plan.patientCohort!,
-                          note: plan.cohortNote!,
-                        ),
-                      ],
 
                       // ------------------------- The decision, handoff-ready
                       // One structured card a receiving clinician can act on
@@ -1318,14 +1332,14 @@ class _AssessmentResultScreenState
                         Container(
                           padding: const EdgeInsets.all(Gap.md),
                           decoration: BoxDecoration(
-                            color: AppColors.triageRedBg,
+                            color: p.triageRedBg,
                             borderRadius: BorderRadius.circular(Gap.radiusSm),
                           ),
                           child: Text(
                             _error!,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
-                              color: AppColors.triageRed,
+                              color: p.triageRed,
                               fontWeight: FontWeight.w600,
                               height: 1.4,
                             ),
@@ -1416,17 +1430,17 @@ class _AssessmentResultScreenState
                           width: double.infinity,
                           padding: const EdgeInsets.all(Gap.md),
                           decoration: BoxDecoration(
-                            color: AppColors.surface,
+                            color: p.surface,
                             borderRadius: BorderRadius.circular(Gap.radiusSm),
-                            border: Border.all(color: AppColors.line),
+                            border: Border.all(color: p.line),
                           ),
-                          child: const Text(
+                          child: Text(
                             'No tailored food plan for this visit — the model '
                             'withholds food counselling when it is not safe '
                             'or not applicable.',
                             style: TextStyle(
                               fontSize: 13,
-                              color: AppColors.inkMuted,
+                              color: p.inkMuted,
                               height: 1.45,
                             ),
                           ),
@@ -1553,9 +1567,9 @@ class _AssessmentResultScreenState
                                 'Not measured: ${plan.missingData.join(', ')}. '
                                 'These are input-completeness gaps. The protocol '
                                 'still acts on observed danger signs.',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
-                                  color: AppColors.inkMuted,
+                                  color: p.inkMuted,
                                   height: 1.4,
                                 ),
                               ),
@@ -1597,6 +1611,8 @@ class _AssessmentResultScreenState
           onPressed: _saving ? null : _save,
           icon: const Icon(Icons.save_outlined),
           label: Text(_saving ? 'Saving…' : 'Save assessment'),
+        ),
+      ),
         ),
       ),
     );
@@ -1665,6 +1681,7 @@ class _DecisionBriefCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shown = drivers.take(2).toList(growable: false);
+    final p = ClinicalPaletteScope.of(context);
     return GlassSurface(
       blur: false,
       padding: EdgeInsets.zero,
@@ -1677,56 +1694,71 @@ class _DecisionBriefCard extends StatelessWidget {
               decoration: BoxDecoration(gradient: _headerGradient),
               padding: const EdgeInsets.symmetric(
                 horizontal: Gap.md,
-                vertical: 12,
+                vertical: 14,
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Text(
-                      level.label.split(' — ').first,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          level.label.split(' — ').first.toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: 'Sora',
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
+                            height: 1.1,
+                            color: Colors.white,
+                          ),
+                        ),
                       ),
+                      if (needsReferral) ...[
+                        const SizedBox(width: Gap.sm),
+                        Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.forward_rounded,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Handoff brief',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.4,
+                      color: Colors.white.withValues(alpha: 0.92),
                     ),
                   ),
-                  const SizedBox(width: Gap.sm),
-                  Expanded(
-                    child: Text(
-                      'Handoff brief',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        height: 1.2,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (needsReferral)
-                    Container(
-                      padding: const EdgeInsets.all(5),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.forward_rounded,
-                        size: 14,
-                        color: Colors.white,
-                      ),
-                    ),
                 ],
+              ),
+            ),
+            // Signature foil edge: a hairline brass rule laid along the base of
+            // the verdict plate. Brass is chrome — it frames the decision, it
+            // never signals it — so it stays put across day and night.
+            Container(
+              height: 2,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [p.brass, p.brassDeep],
+                ),
               ),
             ),
             Padding(
@@ -1738,15 +1770,15 @@ class _DecisionBriefCard extends StatelessWidget {
                     needsReferral
                         ? 'A referral is issued — this brief travels with the child.'
                         : 'Care continues here, under the plan this verdict opens.',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
-                      color: AppColors.inkMuted,
+                      color: p.inkMuted,
                       fontWeight: FontWeight.w600,
                       height: 1.4,
                     ),
                   ),
                   const SizedBox(height: Gap.md),
-                  const Divider(height: 1, thickness: 1, color: AppColors.line),
+                  Divider(height: 1, thickness: 1, color: p.line),
                   const SizedBox(height: Gap.md),
                   if (shown.isNotEmpty || !driversFolded) ...[
                     _BriefEyebrow(
@@ -1849,23 +1881,26 @@ class _BriefEyebrow extends StatelessWidget {
   final IconData icon;
 
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Icon(icon, size: 13, color: AppColors.inkMuted),
-      const SizedBox(width: 5),
-      Expanded(
-        child: Text(
-          text.toUpperCase(),
-          style: const TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.2,
-            color: AppColors.inkMuted,
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return Row(
+      children: [
+        Icon(icon, size: 13, color: p.inkMuted),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Text(
+            text.toUpperCase(),
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.2,
+              color: p.inkMuted,
+            ),
           ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 /// One quiet line of brief text.
@@ -1875,15 +1910,18 @@ class _BriefLine extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) => Text(
-    text,
-    style: const TextStyle(
-      fontSize: 12.5,
-      fontWeight: FontWeight.w600,
-      color: AppColors.ink,
-      height: 1.45,
-    ),
-  );
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 12.5,
+        fontWeight: FontWeight.w600,
+        color: p.ink,
+        height: 1.45,
+      ),
+    );
+  }
 }
 
 /// The report's opening statement, for the receiving clinician.
@@ -1915,11 +1953,12 @@ class _HandoffSummary extends StatelessWidget {
     final c = triageColours(level);
     final shown = drivers.take(2).toList(growable: false);
     final actions = plan.actions.take(2).toList(growable: false);
+    final p = ClinicalPaletteScope.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: p.surface,
         borderRadius: BorderRadius.circular(Gap.radius),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: p.line),
         boxShadow: const [AppShadows.card],
       ),
       child: Container(
@@ -1939,14 +1978,14 @@ class _HandoffSummary extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'HANDOFF SUMMARY',
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 1.4,
-                        color: AppColors.inkMuted,
+                        color: p.inkMuted,
                       ),
                     ),
                   ),
@@ -1983,16 +2022,16 @@ class _HandoffSummary extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 3),
-              const Text(
+              Text(
                 'For the receiving clinician — the full evidence follows below.',
                 style: TextStyle(
                   fontSize: 11.5,
-                  color: AppColors.inkMuted,
+                  color: p.inkMuted,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: Gap.md),
-              const Divider(height: 1, thickness: 1, color: AppColors.line),
+              Divider(height: 1, thickness: 1, color: p.line),
               const SizedBox(height: Gap.md),
               Text(
                 classification,
@@ -2007,9 +2046,9 @@ class _HandoffSummary extends StatelessWidget {
                 needsReferral
                     ? 'Referral issued — pre-referral steps are listed in this report.'
                     : 'Managed here — review date on the plan.',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12.5,
-                  color: AppColors.inkMuted,
+                  color: p.inkMuted,
                   fontWeight: FontWeight.w600,
                   height: 1.4,
                 ),
@@ -2122,25 +2161,26 @@ class _VerdictFeedbackStripState extends State<_VerdictFeedbackStrip> {
 
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.sm),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: p.surface,
         borderRadius: BorderRadius.circular(Gap.radiusSm),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: p.line),
       ),
       child: _answer == null
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Did this plan match your clinical judgment? Feedback is '
                   'decision audit data, not a confirmed diagnosis.',
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.ink,
+                    color: p.ink,
                     height: 1.4,
                   ),
                 ),
@@ -2155,7 +2195,7 @@ class _VerdictFeedbackStripState extends State<_VerdictFeedbackStrip> {
                         label: const Text('It held up'),
                         style: TextButton.styleFrom(
                           minimumSize: const Size(0, Gap.tapTarget),
-                          foregroundColor: AppColors.triageGreen,
+                          foregroundColor: p.triageGreen,
                           padding: const EdgeInsets.symmetric(
                             horizontal: Gap.sm,
                           ),
@@ -2169,7 +2209,7 @@ class _VerdictFeedbackStripState extends State<_VerdictFeedbackStrip> {
                         label: const Text("It didn't"),
                         style: TextButton.styleFrom(
                           minimumSize: const Size(0, Gap.tapTarget),
-                          foregroundColor: AppColors.triageAmber,
+                          foregroundColor: p.triageAmber,
                           padding: const EdgeInsets.symmetric(
                             horizontal: Gap.sm,
                           ),
@@ -2186,18 +2226,18 @@ class _VerdictFeedbackStripState extends State<_VerdictFeedbackStrip> {
                   Icons.check_circle_rounded,
                   size: 16,
                   color: _answer!
-                      ? AppColors.triageGreen
-                      : AppColors.triageAmber,
+                      ? p.triageGreen
+                      : p.triageAmber,
                 ),
                 const SizedBox(width: Gap.sm),
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Thank you — logged on this device, de-identified, for '
                     'the next model review.',
                     style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.inkMuted,
+                      color: p.inkMuted,
                       height: 1.4,
                     ),
                   ),
@@ -2300,6 +2340,7 @@ class _ClinicalDetailFold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final motion = !MediaQuery.disableAnimationsOf(context);
+    final p = ClinicalPaletteScope.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2318,14 +2359,14 @@ class _ClinicalDetailFold extends StatelessWidget {
                     Container(
                       width: 36,
                       height: 36,
-                      decoration: const BoxDecoration(
-                        color: AppColors.primaryLight,
+                      decoration: BoxDecoration(
+                        color: p.primaryLight,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.monitor_heart_outlined,
                         size: 18,
-                        color: AppColors.primary,
+                        color: p.primary,
                       ),
                     ),
                     const SizedBox(width: Gap.md),
@@ -2333,12 +2374,12 @@ class _ClinicalDetailFold extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'Full clinical detail',
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w800,
-                              color: AppColors.ink,
+                              color: p.ink,
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -2348,9 +2389,9 @@ class _ClinicalDetailFold extends StatelessWidget {
                                       'tap to fold away.'
                                 : 'Vitals, findings and the growth chart — '
                                       'one tap away.',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11.5,
-                              color: AppColors.inkMuted,
+                              color: p.inkMuted,
                               height: 1.35,
                             ),
                           ),
@@ -2362,9 +2403,9 @@ class _ClinicalDetailFold extends StatelessWidget {
                       duration: motion
                           ? AppMotion.duration
                           : Duration.zero,
-                      child: const Icon(
+                      child: Icon(
                         Icons.expand_more_rounded,
-                        color: AppColors.inkMuted,
+                        color: p.inkMuted,
                       ),
                     ),
                   ],
@@ -2399,6 +2440,7 @@ class _FindingsDeck extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     if (findings.isEmpty) return const _AllClearCard();
     // Severity summary: count findings by severity band.
     final bySeverity = <TriageLevel, int>{};
@@ -2419,10 +2461,10 @@ class _FindingsDeck extends StatelessWidget {
               '${totalCount - findings.length} more '
               '${totalCount - findings.length == 1 ? 'finding' : 'findings'} '
               '— the full clinical report lists them all.',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: AppColors.inkMuted,
+                color: p.inkMuted,
                 height: 1.4,
               ),
             ),
@@ -2442,27 +2484,28 @@ class _FindingsSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     final entries = bySeverity.entries.toList()
       ..sort((a, b) => _severityOrder(a.key).compareTo(_severityOrder(b.key)));
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(Gap.md),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: p.surface,
         borderRadius: BorderRadius.circular(Gap.radius),
-        border: Border.all(color: AppColors.line, width: Gap.hairline),
+        border: Border.all(color: p.line, width: Gap.hairline),
         boxShadow: const [AppShadows.card],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'FINDINGS SUMMARY',
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w800,
               letterSpacing: 1.2,
-              color: AppColors.inkMuted,
+              color: p.inkMuted,
             ),
           ),
           const SizedBox(height: Gap.sm),
@@ -2478,9 +2521,9 @@ class _FindingsSummary extends StatelessWidget {
             const SizedBox(height: Gap.sm),
             Text(
               '$totalCount finding${totalCount == 1 ? '' : 's'} in total',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11.5,
-                color: AppColors.inkMuted,
+                color: p.inkMuted,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -2541,59 +2584,62 @@ class _AllClearCard extends StatelessWidget {
   const _AllClearCard();
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(Gap.lg),
-    decoration: BoxDecoration(
-      color: AppColors.triageGreenBg,
-      borderRadius: BorderRadius.circular(Gap.radius),
-      border: Border.all(
-        color: AppColors.triageGreen.withValues(alpha: 0.35),
-        width: Gap.hairline,
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return Container(
+      padding: const EdgeInsets.all(Gap.lg),
+      decoration: BoxDecoration(
+        color: p.triageGreenBg,
+        borderRadius: BorderRadius.circular(Gap.radius),
+        border: Border.all(
+          color: p.triageGreen.withValues(alpha: 0.35),
+          width: Gap.hairline,
+        ),
       ),
-    ),
-    child: Row(
-      children: [
-        Container(
-          width: 42,
-          height: 42,
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.check_circle_rounded,
+              size: 24,
+              color: p.triageGreen,
+            ),
           ),
-          child: const Icon(
-            Icons.check_circle_rounded,
-            size: 24,
-            color: AppColors.triageGreen,
-          ),
-        ),
-        const SizedBox(width: Gap.md),
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'No concerning findings',
-                style: TextStyle(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.triageGreen,
+          const SizedBox(width: Gap.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'No concerning findings',
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w800,
+                    color: p.triageGreen,
+                  ),
                 ),
-              ),
-              SizedBox(height: 3),
-              Text(
-                'Routine care continues at the next scheduled contact.',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color: AppColors.inkMuted,
-                  height: 1.4,
+                const SizedBox(height: 3),
+                Text(
+                  'Routine care continues at the next scheduled contact.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: p.inkMuted,
+                    height: 1.4,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
 
 /// One finding as a card: the severity badge, the IMCI pill, the measured
@@ -2607,12 +2653,13 @@ class _FindingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = triageColours(finding.severity);
+    final p = ClinicalPaletteScope.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: Gap.sm),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: p.surface,
         borderRadius: BorderRadius.circular(Gap.radius),
-        border: Border.all(color: AppColors.line, width: Gap.hairline),
+        border: Border.all(color: p.line, width: Gap.hairline),
         boxShadow: const [AppShadows.card],
       ),
       child: AccentEdge(
@@ -2647,10 +2694,10 @@ class _FindingCard extends StatelessWidget {
                       children: [
                         Text(
                           finding.label,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14.5,
                             fontWeight: FontWeight.w800,
-                            color: AppColors.ink,
+                            color: p.ink,
                             height: 1.3,
                           ),
                         ),
@@ -2658,11 +2705,11 @@ class _FindingCard extends StatelessWidget {
                           const SizedBox(height: 2),
                           Text(
                             finding.protocolSource!,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 10.5,
                               fontWeight: FontWeight.w700,
                               letterSpacing: 0.4,
-                              color: AppColors.inkMuted,
+                              color: p.inkMuted,
                             ),
                           ),
                         ],
@@ -2699,9 +2746,9 @@ class _FindingCard extends StatelessWidget {
                 padding: const EdgeInsets.only(left: 50),
                 child: Text(
                   finding.detail,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12.5,
-                    color: AppColors.inkMuted,
+                    color: p.inkMuted,
                     height: 1.45,
                   ),
                 ),
@@ -2723,7 +2770,7 @@ class _FindingCard extends StatelessWidget {
                         _MeasureChip(
                           label: 'Cut-off',
                           value: finding.threshold!,
-                          colour: AppColors.inkMuted,
+                          colour: p.inkMuted,
                         ),
                     ],
                   ),
@@ -2749,33 +2796,36 @@ class _MeasureChip extends StatelessWidget {
   final Color colour;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-    decoration: BoxDecoration(
-      color: AppColors.canvas,
-      borderRadius: BorderRadius.circular(999),
-    ),
-    child: Text.rich(
-      TextSpan(
-        text: '$label ',
-        style: const TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w700,
-          color: AppColors.inkMuted,
-        ),
-        children: [
-          TextSpan(
-            text: value,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              color: colour,
-            ),
-          ),
-        ],
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: p.canvas,
+        borderRadius: BorderRadius.circular(999),
       ),
-    ),
-  );
+      child: Text.rich(
+        TextSpan(
+          text: '$label ',
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w700,
+            color: p.inkMuted,
+          ),
+          children: [
+            TextSpan(
+              text: value,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: colour,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// The doorway into the care plan: the verdict is read first, the
@@ -2898,13 +2948,15 @@ class _FamilyBrief extends StatelessWidget {
   final Widget audio;
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return Container(
     width: double.infinity,
     padding: const EdgeInsets.all(Gap.lg),
     decoration: BoxDecoration(
-      color: AppColors.surface,
+      color: p.surface,
       borderRadius: BorderRadius.circular(Gap.radius + 6),
-      border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+      border: Border.all(color: p.primary.withValues(alpha: 0.25)),
       boxShadow: const [AppShadows.card],
     ),
     child: Column(
@@ -2915,8 +2967,8 @@ class _FamilyBrief extends StatelessWidget {
             Container(
               width: 38,
               height: 38,
-              decoration: const BoxDecoration(
-                color: AppColors.primary,
+              decoration: BoxDecoration(
+                color: p.primary,
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -2926,14 +2978,14 @@ class _FamilyBrief extends StatelessWidget {
               ),
             ),
             const SizedBox(width: Gap.sm),
-            const Expanded(
+            Expanded(
               child: Text(
                 'WHAT TO TELL THE FAMILY',
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 0.7,
-                  color: AppColors.primary,
+                  color: p.primary,
                 ),
               ),
             ),
@@ -2945,10 +2997,10 @@ class _FamilyBrief extends StatelessWidget {
         // sentence the nurse says out loud on the way out.
         Text(
           '\u201C$message\u201D',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: AppColors.ink,
+            color: p.ink,
             height: 1.55,
           ),
         ),
@@ -2958,9 +3010,9 @@ class _FamilyBrief extends StatelessWidget {
             'Ask them to come back in $followUpInDays '
             'day${followUpInDays == 1 ? '' : 's'} — and sooner if '
             'anything worries them.',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: AppColors.inkMuted,
+              color: p.inkMuted,
               fontStyle: FontStyle.italic,
               height: 1.4,
             ),
@@ -2969,6 +3021,7 @@ class _FamilyBrief extends StatelessWidget {
       ],
     ),
   );
+  }
 }
 
 /// The doorway to the tailored food plan: pictured local foods lead, so
@@ -2988,6 +3041,7 @@ class _NutritionCta extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -2996,9 +3050,9 @@ class _NutritionCta extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(Gap.lg),
           decoration: BoxDecoration(
-            color: AppColors.triageGreenBg,
+            color: p.triageGreenBg,
             borderRadius: BorderRadius.circular(Gap.radius),
-            border: Border.all(color: AppColors.accent, width: 1),
+            border: Border.all(color: p.primary, width: 1),
             boxShadow: const [AppShadows.card],
           ),
           child: Column(
@@ -3009,8 +3063,8 @@ class _NutritionCta extends StatelessWidget {
                   Container(
                     width: 40,
                     height: 40,
-                    decoration: const BoxDecoration(
-                      color: AppColors.accent,
+                    decoration: BoxDecoration(
+                      color: p.primary,
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -3020,7 +3074,7 @@ class _NutritionCta extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: Gap.md),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -3029,24 +3083,24 @@ class _NutritionCta extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 15.5,
                             fontWeight: FontWeight.w800,
-                            color: AppColors.ink,
+                            color: p.ink,
                           ),
                         ),
-                        SizedBox(height: 2),
+                        const SizedBox(height: 2),
                         Text(
                           'The foods for this person — pictured, measured, local',
                           style: TextStyle(
                             fontSize: 12,
-                            color: AppColors.inkMuted,
+                            color: p.inkMuted,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const Icon(
+                  Icon(
                     Icons.arrow_forward_rounded,
                     size: 20,
-                    color: AppColors.accent,
+                    color: p.primary,
                   ),
                 ],
               ),
@@ -3064,14 +3118,14 @@ class _NutritionCta extends StatelessWidget {
                     ),
                     const SizedBox(width: Gap.xs),
                   ],
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Tap to open',
                       textAlign: TextAlign.right,
                       style: TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.accent,
+                        color: p.primary,
                       ),
                     ),
                   ),
@@ -3106,13 +3160,14 @@ class _ReportTeaser extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     // One doorway, not a doorway with a door painted on it: the whole card is
     // the tap target, so the report is named exactly once on this page.
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: p.surface,
         borderRadius: BorderRadius.circular(Gap.radius),
-        border: Border.all(color: AppColors.line, width: Gap.hairline),
+        border: Border.all(color: p.line, width: Gap.hairline),
         boxShadow: const [AppShadows.card],
       ),
       child: Material(
@@ -3130,18 +3185,18 @@ class _ReportTeaser extends StatelessWidget {
                     Container(
                       width: 40,
                       height: 40,
-                      decoration: const BoxDecoration(
-                        color: AppColors.primaryLight,
+                      decoration: BoxDecoration(
+                        color: p.primaryLight,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.description_outlined,
                         size: 20,
-                        color: AppColors.primary,
+                        color: p.primary,
                       ),
                     ),
                     const SizedBox(width: Gap.md),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -3150,24 +3205,24 @@ class _ReportTeaser extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 15.5,
                               fontWeight: FontWeight.w800,
-                              color: AppColors.ink,
+                              color: p.ink,
                             ),
                           ),
-                          SizedBox(height: 2),
+                          const SizedBox(height: 2),
                           Text(
                             'The evidence behind this verdict — tap to open',
                             style: TextStyle(
                               fontSize: 12,
-                              color: AppColors.inkMuted,
+                              color: p.inkMuted,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const Icon(
+                    Icon(
                       Icons.arrow_forward_rounded,
                       size: 20,
-                      color: AppColors.primary,
+                      color: p.primary,
                     ),
                   ],
                 ),
@@ -3205,22 +3260,25 @@ class _TeaserStat extends StatelessWidget {
   final String label;
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
     decoration: BoxDecoration(
-      color: AppColors.canvas,
-      border: Border.all(color: AppColors.line, width: Gap.hairline),
+      color: p.canvas,
+      border: Border.all(color: p.line, width: Gap.hairline),
       borderRadius: BorderRadius.circular(999),
     ),
     child: Text(
       label,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w700,
-        color: AppColors.inkMuted,
+        color: p.inkMuted,
       ),
     ),
   );
+  }
 }
 
 // ------------------------------------------------------------------ Override
@@ -3285,8 +3343,9 @@ class _OverrideSectionState extends State<_OverrideSection>
 
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     final isActive = widget.overrideLevel != null;
-    final accent = isActive ? AppColors.triageAmber : AppColors.inkMuted;
+    final accent = isActive ? p.triageAmber : p.inkMuted;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
@@ -3294,19 +3353,19 @@ class _OverrideSectionState extends State<_OverrideSection>
       padding: const EdgeInsets.all(Gap.md),
       decoration: BoxDecoration(
         color: isActive
-            ? AppColors.triageAmberBg.withValues(alpha: 0.3)
-            : Colors.white,
+            ? p.triageAmberBg.withValues(alpha: 0.3)
+            : p.surfaceSolid,
         borderRadius: BorderRadius.circular(Gap.radius),
         border: Border.all(
           color: isActive
-              ? AppColors.triageAmber.withValues(alpha: 0.5)
-              : AppColors.line,
+              ? p.triageAmber.withValues(alpha: 0.5)
+              : p.line,
           width: isActive ? 1.5 : Gap.hairline,
         ),
         boxShadow: isActive
             ? [
                 BoxShadow(
-                  color: AppColors.triageAmber.withValues(alpha: 0.1),
+                  color: p.triageAmber.withValues(alpha: 0.1),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),
@@ -3344,8 +3403,8 @@ class _OverrideSectionState extends State<_OverrideSection>
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1.1,
                         color: isActive
-                            ? AppColors.triageAmber
-                            : AppColors.inkMuted,
+                            ? p.triageAmber
+                            : p.inkMuted,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -3353,9 +3412,9 @@ class _OverrideSectionState extends State<_OverrideSection>
                       isActive
                           ? 'You have taken accountability for this decision.'
                           : 'The protocol stands unless you overrule it.',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11.5,
-                        color: AppColors.inkFaint,
+                        color: p.inkFaint,
                       ),
                     ),
                   ],
@@ -3388,25 +3447,25 @@ class _OverrideSectionState extends State<_OverrideSection>
                   maxLines: 3,
                   decoration: InputDecoration(
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: p.surfaceSolid,
                     hintText:
                         'e.g. Child appears unwell on examination — referring on clinical grounds.',
-                    hintStyle: const TextStyle(
-                      color: AppColors.inkFaint,
+                    hintStyle: TextStyle(
+                      color: p.inkFaint,
                       fontSize: 13,
                     ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(Gap.radiusSm),
-                      borderSide: const BorderSide(color: AppColors.line),
+                      borderSide: BorderSide(color: p.line),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(Gap.radiusSm),
-                      borderSide: const BorderSide(color: AppColors.line),
+                      borderSide: BorderSide(color: p.line),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(Gap.radiusSm),
-                      borderSide: const BorderSide(
-                        color: AppColors.triageAmber,
+                      borderSide: BorderSide(
+                        color: p.triageAmber,
                         width: 2,
                       ),
                     ),
@@ -3415,18 +3474,18 @@ class _OverrideSectionState extends State<_OverrideSection>
                 const SizedBox(height: Gap.sm),
                 Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.lock_outline,
                       size: 14,
-                      color: AppColors.inkFaint,
+                      color: p.inkFaint,
                     ),
                     const SizedBox(width: 4),
-                    const Expanded(
+                    Expanded(
                       child: Text(
                         'Saved securely with your digital signature. A supervisor can review every override.',
                         style: TextStyle(
                           fontSize: 11,
-                          color: AppColors.inkFaint,
+                          color: p.inkFaint,
                           height: 1.3,
                         ),
                       ),
@@ -3452,13 +3511,14 @@ class _OverrideNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.triageAmberBg,
+        color: p.triageAmberBg,
         borderRadius: BorderRadius.circular(Gap.radiusSm),
       ),
       child: AccentEdge(
-        accent: AppColors.triageAmber,
+        accent: p.triageAmber,
         borderRadius: BorderRadius.circular(Gap.radiusSm),
         child: Padding(
           padding: const EdgeInsets.symmetric(
@@ -3468,20 +3528,20 @@ class _OverrideNote extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
+              Icon(
                 Icons.gavel_outlined,
                 size: 15,
-                color: AppColors.triageAmber,
+                color: p.triageAmber,
               ),
               const SizedBox(width: Gap.sm),
               Expanded(
                 child: Text(
                   'You overruled the engine (${engine.label}) and set this to '
                   '${chosen.label}. Your name and reason are saved with the record.',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.triageAmber,
+                    color: p.triageAmber,
                     height: 1.4,
                   ),
                 ),
@@ -3527,16 +3587,17 @@ class _ReferralSection extends StatelessWidget {
   // here too — where a case ends, it also says when it is picked up again.
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     final followUp = [
       const SizedBox(height: Gap.md),
-      const Divider(height: 1, thickness: 1, color: AppColors.line),
+      Divider(height: 1, thickness: 1, color: p.line),
       const SizedBox(height: Gap.md),
-      const Text(
+      Text(
         'Added to your queue. The worker who started this case should be '
         'the one who closes it.',
         style: TextStyle(
           fontSize: 12,
-          color: AppColors.inkMuted,
+          color: p.inkMuted,
           height: 1.4,
         ),
       ),
@@ -3578,18 +3639,18 @@ class _ReferralSection extends StatelessWidget {
                 'do what it needs.'
           : 'The receiving facility must be able to do what this case needs.',
       icon: Icons.local_hospital_outlined,
-      accent: urgent ? AppColors.triageRed : AppColors.triageAmber,
+      accent: urgent ? p.triageRed : p.triageAmber,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (capabilities.isNotEmpty) ...[
-            const Text(
+            Text(
               'FACILITY NEEDS',
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 1.0,
-                color: AppColors.inkMuted,
+                color: p.inkMuted,
               ),
             ),
             const SizedBox(height: Gap.xs),
@@ -3605,8 +3666,8 @@ class _ReferralSection extends StatelessWidget {
                     ),
                     decoration: BoxDecoration(
                       color: urgent
-                          ? AppColors.triageRed.withValues(alpha: 0.08)
-                          : AppColors.triageAmber.withValues(alpha: 0.08),
+                          ? p.triageRed.withValues(alpha: 0.08)
+                          : p.triageAmber.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
@@ -3615,8 +3676,8 @@ class _ReferralSection extends StatelessWidget {
                         fontSize: 10.5,
                         fontWeight: FontWeight.w700,
                         color: urgent
-                            ? AppColors.triageRed
-                            : AppColors.triageAmber,
+                            ? p.triageRed
+                            : p.triageAmber,
                       ),
                     ),
                   ),
@@ -3665,15 +3726,17 @@ class _FacilityTile extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Padding(
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return Padding(
     padding: const EdgeInsets.only(bottom: Gap.sm),
     child: Container(
       decoration: BoxDecoration(
-        color: selected ? AppColors.primaryLight : AppColors.canvas,
+        color: selected ? p.primaryLight : p.canvas,
         borderRadius: BorderRadius.circular(Gap.radiusSm),
         border: selected
-            ? Border.all(color: AppColors.primary, width: 1.5)
-            : Border.all(color: AppColors.line, width: Gap.hairline),
+            ? Border.all(color: p.primary, width: 1.5)
+            : Border.all(color: p.line, width: Gap.hairline),
       ),
       child: Material(
         color: Colors.transparent,
@@ -3690,14 +3753,14 @@ class _FacilityTile extends StatelessWidget {
                   height: 36,
                   decoration: BoxDecoration(
                     color: selected
-                        ? AppColors.primary.withValues(alpha: 0.12)
-                        : AppColors.surfaceTint,
+                        ? p.primary.withValues(alpha: 0.12)
+                        : p.surfaceTint,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
                     Icons.local_hospital_outlined,
                     size: 18,
-                    color: selected ? AppColors.primary : AppColors.inkMuted,
+                    color: selected ? p.primary : p.inkMuted,
                   ),
                 ),
                 const SizedBox(width: Gap.md),
@@ -3711,8 +3774,8 @@ class _FacilityTile extends StatelessWidget {
                           fontSize: 13.5,
                           fontWeight: FontWeight.w700,
                           color: selected
-                              ? AppColors.primaryDeep
-                              : AppColors.ink,
+                              ? p.primaryDark
+                              : p.ink,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -3724,24 +3787,24 @@ class _FacilityTile extends StatelessWidget {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.surfaceTint,
+                              color: p.surfaceTint,
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
                               facility.tier.label,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
-                                color: AppColors.inkMuted,
+                                color: p.inkMuted,
                               ),
                             ),
                           ),
                           const SizedBox(width: 6),
                           Text(
                             facility.district,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11.5,
-                              color: AppColors.inkMuted,
+                              color: p.inkMuted,
                             ),
                           ),
                         ],
@@ -3750,10 +3813,10 @@ class _FacilityTile extends StatelessWidget {
                   ),
                 ),
                 if (selected)
-                  const Icon(
+                  Icon(
                     Icons.check_circle_rounded,
                     size: 20,
-                    color: AppColors.primary,
+                    color: p.primary,
                   ),
               ],
             ),
@@ -3762,6 +3825,7 @@ class _FacilityTile extends StatelessWidget {
       ),
     ),
   );
+  }
 }
 
 /// The growth slope at the moment of decision: a paper card shows the
@@ -3775,14 +3839,15 @@ class _TrajectoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
     final rising = result.trend == GrowthTrend.rising;
     final falling = result.trend == GrowthTrend.falling;
     final nearSam = (result.daysToSamThreshold ?? 10000) <= 60;
     final accent = rising
-        ? AppColors.triageGreen
+        ? p.triageGreen
         : falling && nearSam
-        ? AppColors.triageRed
-        : AppColors.triageAmber;
+        ? p.triageRed
+        : p.triageAmber;
     final icon = rising
         ? Icons.trending_up_rounded
         : falling
@@ -3790,9 +3855,9 @@ class _TrajectoryCard extends StatelessWidget {
         : Icons.trending_flat_rounded;
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: p.surface,
         borderRadius: BorderRadius.circular(Gap.radius),
-        border: Border.all(color: AppColors.line, width: Gap.hairline),
+        border: Border.all(color: p.line, width: Gap.hairline),
         boxShadow: const [AppShadows.card],
       ),
       child: AccentEdge(
@@ -3820,13 +3885,13 @@ class _TrajectoryCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'WHERE THIS CHILD IS HEADING',
                           style: TextStyle(
                             fontSize: 9.5,
                             fontWeight: FontWeight.w900,
                             letterSpacing: 0.8,
-                            color: AppColors.inkMuted,
+                            color: p.inkMuted,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -3847,10 +3912,10 @@ class _TrajectoryCard extends StatelessWidget {
               const SizedBox(height: Gap.sm),
               Text(
                 result.trend.meaning,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.ink,
+                  color: p.ink,
                   height: 1.45,
                 ),
               ),
@@ -3879,9 +3944,9 @@ class _TrajectoryCard extends StatelessWidget {
               const SizedBox(height: Gap.sm),
               Text(
                 result.explanation,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12.5,
-                  color: AppColors.inkMuted,
+                  color: p.inkMuted,
                   height: 1.5,
                 ),
               ),

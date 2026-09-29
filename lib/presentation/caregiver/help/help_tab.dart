@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/providers.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/glass.dart';
+import '../../../core/theme/lumina.dart';
 import '../../../core/theme/motion.dart';
 import '../../../domain/entities/caregiver.dart';
 import '../caregiver_providers.dart';
@@ -39,14 +39,14 @@ class CaregiverHelpTab extends ConsumerWidget {
         StaggeredReveal(
           index: 2,
           child: settings.when(
-            loading: () => const CompanionCard(
+            loading: () => const LumeSection(
               title: 'People who may help',
               child: Text('Loading your support plan…'),
             ),
             error: (_, _) => CompanionLoadError(
               onRetry: () => ref.invalidate(caregiverSettingsProvider(scope)),
             ),
-            data: (saved) => CompanionCard(
+            data: (saved) => LumeSection(
               title: 'People who may help',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -116,45 +116,96 @@ class _HelpHero extends StatelessWidget {
   const _HelpHero();
 
   @override
-  Widget build(BuildContext context) => GlassSurface(
-    tier: GlassTier.hero,
-    blur: false,
-    padding: EdgeInsets.zero,
-    child: Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(GlassTier.hero.radius),
-        gradient: AppColors.caregiverGradient,
+  Widget build(BuildContext context) => Column(
+    children: [
+      Container(
+        height: 1.4,
+        margin: const EdgeInsets.only(bottom: 3),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Colors.transparent,
+              Lumina.glow.withValues(alpha: 0.7),
+              Colors.transparent,
+            ],
+          ),
+        ),
       ),
-      child: const Padding(
-        padding: EdgeInsets.all(20),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+      Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(Lumina.rLg),
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Lumina.deep, Lumina.navy, Color(0xFF1E4785)],
+            stops: [0.0, 0.55, 1.0],
+          ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x4D040E1F),
+              blurRadius: 34,
+              offset: Offset(0, 14),
+            ),
+          ],
+        ),
+        child: Stack(
           children: [
-            Icon(Icons.support_agent_rounded, color: Colors.white, size: 40),
-            SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Help and support',
-                    style: TextStyle(
-                      fontFamily: 'Sora',
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      height: 1.2,
+            Positioned.fill(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(Lumina.rLg),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: const Alignment(1.1, -1.1),
+                      radius: 1.15,
+                      colors: [
+                        Lumina.bright.withValues(alpha: 0.26),
+                        Colors.transparent,
+                      ],
                     ),
                   ),
-                  SizedBox(height: 6),
-                  Text(
-                    'Emergency contacts, people who may help, listening '
-                    'options, and display settings.',
-                    style: TextStyle(
-                      color: AppColors.white85,
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w500,
-                      height: 1.4,
+                ),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.all(20),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.support_agent_rounded,
+                    color: Colors.white,
+                    size: 40,
+                  ),
+                  SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Help and support',
+                          style: TextStyle(
+                            fontFamily: 'Sora',
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            height: 1.2,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        SizedBox(height: 6),
+                        Text(
+                          'Emergency contacts, people who may help, listening '
+                          'options, and display settings.',
+                          style: TextStyle(
+                            color: Lumina.diveMuted,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w500,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -163,7 +214,7 @@ class _HelpHero extends StatelessWidget {
           ],
         ),
       ),
-    ),
+    ],
   );
 }
 
@@ -180,10 +231,9 @@ class _EmergencyCardState extends State<_EmergencyCard> {
   bool _know = false;
 
   @override
-  Widget build(BuildContext context) => GlassSurface(
-    blur: false,
-    tier: GlassTier.card,
+  Widget build(BuildContext context) => LumenCard(
     padding: const EdgeInsets.all(20),
+    radius: Lumina.rMd,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -206,14 +256,7 @@ class _EmergencyCardState extends State<_EmergencyCard> {
             Expanded(
               child: Text(
                 'If it is an emergency',
-                style: TextStyle(
-                  fontFamily: 'Sora',
-                  fontWeight: FontWeight.w700,
-                  fontSize: 20,
-                  height: 1.25,
-                  letterSpacing: -0.2,
-                  color: AppColors.triageRed,
-                ),
+                style: Lumina.display(20, color: AppColors.triageRed),
               ),
             ),
           ],
@@ -266,7 +309,7 @@ class _EmergencyCardState extends State<_EmergencyCard> {
                 Icon(
                   Icons.info_outline_rounded,
                   size: 18,
-                  color: CompanionColors.muted,
+                  color: Lumina.inkMuted,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -275,14 +318,14 @@ class _EmergencyCardState extends State<_EmergencyCard> {
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
-                      color: CompanionColors.blue,
+                      color: Lumina.azure,
                     ),
                   ),
                 ),
                 Icon(
                   Icons.expand_more_rounded,
                   size: 20,
-                  color: CompanionColors.muted,
+                  color: Lumina.inkMuted,
                 ),
               ],
             ),
@@ -330,7 +373,7 @@ class _ContactTile extends StatelessWidget {
         button: true,
         label: '$label: ${contact?.name ?? 'no contact saved'}',
         child: Material(
-          color: CaregiverLuxePalette.pearlSurfaceSunken,
+          color: Lumina.mist,
           borderRadius: BorderRadius.circular(18),
           child: InkWell(
             borderRadius: BorderRadius.circular(18),
@@ -348,12 +391,12 @@ class _ContactTile extends StatelessWidget {
                         height: 38,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: CaregiverLuxePalette.azureIce,
+                          color: Lumina.tint,
                         ),
                         child: Icon(
                           _icon,
                           size: 20,
-                          color: CompanionColors.blue,
+                          color: Lumina.azure,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -366,7 +409,7 @@ class _ContactTile extends StatelessWidget {
                               style: AppType.eyebrow.copyWith(
                                 fontSize: 10.5,
                                 letterSpacing: 0.9,
-                                color: CompanionColors.muted,
+                                color: Lumina.inkMuted,
                               ),
                             ),
                             const SizedBox(height: 3),
@@ -379,8 +422,8 @@ class _ContactTile extends StatelessWidget {
                                 fontSize: 15,
                                 height: 1.35,
                                 color: contact == null
-                                    ? CompanionColors.muted
-                                    : CompanionColors.ink,
+                                    ? Lumina.inkMuted
+                                    : Lumina.ink,
                               ),
                             ),
                             if (contact != null) ...[
@@ -389,7 +432,7 @@ class _ContactTile extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 13.5,
                                   height: 1.35,
-                                  color: CompanionColors.muted,
+                                  color: Lumina.inkMuted,
                                 ),
                               ),
                               if (contact!.landmark.isNotEmpty)
@@ -398,7 +441,7 @@ class _ContactTile extends StatelessWidget {
                                   style: TextStyle(
                                     fontSize: 12.5,
                                     height: 1.35,
-                                    color: CompanionColors.muted,
+                                    color: Lumina.inkMuted,
                                   ),
                                 ),
                             ],
@@ -408,7 +451,7 @@ class _ContactTile extends StatelessWidget {
                       const SizedBox(width: 6),
                       Icon(
                         Icons.chevron_right_rounded,
-                        color: CompanionColors.muted,
+                        color: Lumina.inkMuted,
                       ),
                     ],
                   ),
@@ -500,68 +543,31 @@ class _HubTile extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     button: true,
     label: entry.title,
-    child: Material(
-      color: CaregiverLuxePalette.pearlSurface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: const BorderSide(color: CaregiverLuxePalette.hairLineQuiet),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: entry.onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      CaregiverLuxePalette.azureElectric,
-                      CaregiverLuxePalette.azurePrimary,
-                    ],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: CaregiverLuxePalette.azurePrimary.withValues(
-                        alpha: 0.28,
-                      ),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Icon(entry.icon, size: 20, color: Colors.white),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                entry.title,
-                style: const TextStyle(
-                  fontFamily: 'Sora',
-                  fontWeight: FontWeight.w700,
-                  fontSize: 15,
-                  height: 1.3,
-                  color: CompanionColors.ink,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                entry.hint,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  height: 1.35,
-                  color: CompanionColors.muted,
-                ),
-              ),
-            ],
+    child: LumenCard(
+      onTap: entry.onTap,
+      radius: Lumina.rMd,
+      padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+      shadow: Lumina.liftQuiet,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: Lumina.tide,
+            ),
+            child: Icon(entry.icon, size: 20, color: Colors.white),
           ),
-        ),
+          const SizedBox(height: 12),
+          Text(
+            entry.title,
+            style: Lumina.display(15, weight: 700),
+          ),
+          const SizedBox(height: 4),
+          Text(entry.hint, style: Lumina.body(size: 12.5)),
+        ],
       ),
     ),
   );

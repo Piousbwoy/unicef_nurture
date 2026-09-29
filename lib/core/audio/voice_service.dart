@@ -175,7 +175,7 @@ abstract final class VoiceService {
         : playback!.source.startsWith('Bundled synthetic voice') ||
               playback.source.startsWith('Piper offline voice')
         ? VoiceSource.synthesized
-        : playback.source.contains('offline device speech')
+        : playback.source.contains('device speech')
         ? VoiceSource.systemTts
         : VoiceSource.readAloud;
     return VoiceOutcome(

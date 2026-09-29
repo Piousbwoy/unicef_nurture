@@ -25,6 +25,7 @@ import 'dart:convert';
 import '../local/outbox_dao.dart';
 import '../local/preferences_store.dart';
 import 'http_client.dart';
+import 'recovery_service.dart' show kDemoMode;
 import 'server_auth_client.dart';
 import 'sync_service.dart';
 
@@ -152,7 +153,9 @@ class HttpSyncTransport implements SyncTransport {
   }
 
   /// Creates a transport from the configured preferences, or returns null if
-  /// no sync URL has been set (in which case [LoopbackTransport] is used).
+  /// no sync URL has been set. Callers should not default null to
+  /// [LoopbackTransport] in a field build — use [resolveSyncTransport], which
+  /// only reaches the loopback demonstration transport under `DEMO_MODE`.
   static Future<HttpSyncTransport?> fromPreferences() async {
     final url = await PreferencesStore.effectiveSyncApiUrl();
     if (url.isEmpty) return null;
@@ -161,4 +164,18 @@ class HttpSyncTransport implements SyncTransport {
     // a rebuild of the transport on sign-in / sign-out events.
     return HttpSyncTransport(baseUrl: url, token: null);
   }
+}
+
+/// The transport the app should actually use, resolved in one place so the
+/// composition root and the ephemeral sign-in drain cannot drift apart.
+///
+/// A configured sync URL always wins. With none set, only an explicit
+/// `DEMO_MODE` build falls back to [LoopbackTransport] (so the outbox lifecycle
+/// can be demonstrated end to end); a real field build gets
+/// [NotConfiguredTransport], which leaves records honestly pending instead of
+/// marking them delivered to a district server that does not exist.
+Future<SyncTransport> resolveSyncTransport() async {
+  final http = await HttpSyncTransport.fromPreferences();
+  if (http != null) return http;
+  return kDemoMode ? const LoopbackTransport() : const NotConfiguredTransport();
 }

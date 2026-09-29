@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/glass.dart';
+import '../../../core/theme/lumina.dart';
 import '../../../domain/engines/immunisation_engine.dart';
 import '../../../domain/entities/core.dart';
 import '../../../domain/enums.dart';
@@ -39,55 +38,113 @@ class CaregiverCarePlanTab extends ConsumerWidget {
             return ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                GlassSurface(
-                  tier: GlassTier.hero,
-                  blur: false,
-                  padding: EdgeInsets.zero,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(GlassTier.hero.radius),
-                      gradient: AppColors.caregiverGradient,
-                    ),
-                    child: const Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.event_note_rounded,
-                                color: Colors.white,
-                                size: 32,
-                              ),
-                              SizedBox(width: 14),
-                              Expanded(
-                                child: Text(
-                                  'Next clinic step',
-                                  style: TextStyle(
-                                    fontFamily: 'Sora',
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white,
-                                    height: 1.2,
+                StaggerReveal(
+                  order: 0,
+                  child: Column(
+                    children: [
+                      Container(
+                        height: 1.4,
+                        margin: const EdgeInsets.only(bottom: 3),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.transparent,
+                              Lumina.glow.withValues(alpha: 0.7),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                      ),
+                      Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(Lumina.rLg),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Lumina.deep,
+                              Lumina.navy,
+                              Color(0xFF1E4785),
+                            ],
+                            stops: [0.0, 0.55, 1.0],
+                          ),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.09),
+                          ),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x4D040E1F),
+                              blurRadius: 34,
+                              offset: Offset(0, 14),
+                            ),
+                          ],
+                        ),
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(
+                                  Lumina.rLg,
+                                ),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: RadialGradient(
+                                      center: const Alignment(1.1, -1.1),
+                                      radius: 1.15,
+                                      colors: [
+                                        Lumina.bright.withValues(alpha: 0.26),
+                                        Colors.transparent,
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
-                          SizedBox(height: 14),
-                          SpeakableText(
-                            'Saved requests from your clinic, followed by advice and your preparation. This app does not book appointments.',
-                            style: TextStyle(
-                              color: AppColors.white85,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              height: 1.45,
                             ),
-                          ),
-                        ],
+                            const Padding(
+                              padding: EdgeInsets.all(24),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.event_note_rounded,
+                                        color: Colors.white,
+                                        size: 32,
+                                      ),
+                                      SizedBox(width: 14),
+                                      Expanded(
+                                        child: Text(
+                                          'Next clinic step',
+                                          style: TextStyle(
+                                            fontFamily: 'Sora',
+                                            fontSize: 22,
+                                            fontWeight: FontWeight.w800,
+                                            color: Colors.white,
+                                            height: 1.2,
+                                            letterSpacing: -0.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  SizedBox(height: 14),
+                                  SpeakableText(
+                                    'Saved requests from your clinic, followed by advice and your preparation. This app does not book appointments.',
+                                    style: TextStyle(
+                                      color: Lumina.diveMuted,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      height: 1.45,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -108,14 +165,14 @@ class CaregiverCarePlanTab extends ConsumerWidget {
                         return Column(
                           children: [
                             if (steps.isEmpty)
-                              const CompanionCard(
+                              const LumeSection(
                                 title: 'No open clinic step saved',
                                 child: SpeakableText(
                                   'This does not mean no care is needed. Check the paper record or contact your health worker.',
                                 ),
                               ),
                             for (final step in steps)
-                              CompanionCard(
+                              LumeSection(
                                 title: step.title,
                                 eyebrow: step.source.label,
                                 child: Column(
@@ -150,7 +207,7 @@ class CaregiverCarePlanTab extends ConsumerWidget {
                       },
                     ),
                 CaregiverPersonSelector(members: data.members),
-                const CompanionCard(
+                const LumeSection(
                   title: 'Advice from the clinic',
                   child: SpeakableText(
                     "Each saved plan keeps its original date. Contact the clinic if advice is unclear or the person's condition changes.",
@@ -169,7 +226,7 @@ class CaregiverCarePlanTab extends ConsumerWidget {
                               (a, b) => b.performedAt.compareTo(a.performedAt),
                             );
                       return records.isEmpty
-                          ? CompanionCard(
+                          ? LumeSection(
                               title: person.fullName,
                               eyebrow: caregiverAge(person),
                               child: const Text(
@@ -185,7 +242,7 @@ class CaregiverCarePlanTab extends ConsumerWidget {
                   ),
                 for (final person in people)
                   CaregiverPreparation(person: person),
-                CompanionCard(
+                LumeSection(
                   title: 'Digital Yellow Card',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,

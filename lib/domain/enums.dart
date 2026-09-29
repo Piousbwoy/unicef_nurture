@@ -41,6 +41,9 @@ enum Permission {
   overrideAiRecommendation,
   viewCommunityInsights,
   recordBarrier,
+  /// Asking a health worker to come. Held by families only; deliberately not
+  /// bundled with runCaregiverTriage, which is about a screen working.
+  requestCare,
   planVisitRoute,
   exportRecords;
 
@@ -62,6 +65,7 @@ enum Permission {
     viewOwnFamilyOnly,
     runCaregiverTriage,
     recordBarrier,
+    requestCare,
     // A family can start its own record before a health worker ever reaches
     // it: create the household and add the people they care for. Strictly
     // self-service — the repository refuses any household other than the one
@@ -352,13 +356,129 @@ enum ReferralStatus {
   treated('Treated and discharged'),
   didNotAttend('Did not attend'),
   refused('Family declined referral'),
-  cancelled('Cancelled');
+  cancelled('Cancelled'),
+  died('Patient died');
 
   const ReferralStatus(this.label);
   final String label;
 
   bool get isOpen => this == issued || this == travelling;
   bool get isFailure => this == didNotAttend || this == refused;
+
+  /// A decision was made on purpose about this case — treated, declined,
+  /// cancelled, or the patient died. A later answer about the patient is
+  /// evidence, not a licence to reopen the paperwork.
+  bool get isSettled =>
+      this == treated || this == refused || this == cancelled || this == died;
+
+  /// The three outcomes a verifier can witness at the point of care and record
+  /// against a reference code: the family arrived, they were treated, or they
+  /// died. Refusal and non-attendance are family-side and belong to the
+  /// worker's follow-up answer, not the facility ledger.
+  bool get isFacilityConfirmable =>
+      this == arrived || this == treated || this == died;
+}
+
+// ------------------------------------------------- Caregiver help requests
+
+/// What the family is asking for. `urgent` is "come today, this may kill them";
+/// `today` is the check's contact-today verdict. There is deliberately no
+/// `routine` — a request that means "I am worried" stops meaning anything if a
+/// family can also file it as a scheduling convenience.
+enum CareRequestLevel {
+  urgent('urgent', 'Come today'),
+  today('today', 'Come when you can today');
+
+  const CareRequestLevel(this.wireValue, this.label);
+  final String wireValue;
+  final String label;
+
+  /// Null for an unreadable value: the parser does not invent an urgency, it
+  /// leaves that call to whoever reads the row.
+  static CareRequestLevel? fromWire(String raw) {
+    for (final value in CareRequestLevel.values) {
+      if (value.wireValue == raw) return value;
+    }
+    return null;
+  }
+}
+
+/// A request is answered by a person, never by a timer. `answered` is written on
+/// the worker's device and reaches the family through the delta pull.
+enum CareRequestStatus {
+  open('open'),
+  answered('answered');
+
+  const CareRequestStatus(this.wireValue);
+  final String wireValue;
+
+  bool get isOpen => this == CareRequestStatus.open;
+
+  /// Unknown reads as `open` on purpose: a request the phone cannot parse is
+  /// still a request, and treating it as gone would tell the family nobody was
+  /// ever asked.
+  static CareRequestStatus fromWire(String raw) =>
+      CareRequestStatus.values.firstWhere(
+        (value) => value.wireValue == raw,
+        orElse: () => CareRequestStatus.open,
+      );
+}
+
+// ------------------------------------------------- Follow-up (answer ledger)
+
+/// How the worker got the answer. Only two channels exist in the field: a body
+/// at the compound, or a phone call. Anything else is not an answer.
+enum FollowUpChannel {
+  householdVisit('Household visit'),
+  phoneCall('Phone call'),
+  unknown('Not recorded');
+
+  const FollowUpChannel(this.label);
+  final String label;
+}
+
+/// Did the family actually go to the facility?
+enum FollowUpReach {
+  went('Went to the facility'),
+  didNotGo('Did not go'),
+  declined('Family declined to go'),
+  unknown('Still unknown');
+
+  const FollowUpReach(this.label);
+  final String label;
+}
+
+/// What happened at the facility, as the family reports it. The distinction
+/// between `seenTreated` and `seenWaiting` is the one that catches a child who
+/// attended, queued, and went home untreated.
+enum FollowUpCare {
+  seenTreated('Seen and treated'),
+  seenWaiting('Seen, still waiting'),
+  none('No care received'),
+  unknown('Not known');
+
+  const FollowUpCare(this.label);
+  final String label;
+}
+
+/// The child or mother's condition since the referral was issued. `worse` and
+/// `same` are the states that must be able to raise a fresh, chained referral
+/// — the IMCI case that dies at home because the first referral was marked
+/// "attended" and nobody asked how the patient was.
+enum FollowUpCondition {
+  better('Better'),
+  same('Same'),
+  worse('Worse'),
+  died('Died'),
+  notSeen('Not seen');
+
+  const FollowUpCondition(this.label);
+  final String label;
+
+  /// Needs a clinical decision now, not another check-in. `died` is
+  /// deliberately absent — a death closes the case, it does not raise a
+  /// fresh referral for someone who has died.
+  bool get needsAction => this == worse || this == same;
 }
 
 // ----------------------------------------------------------------- Barriers

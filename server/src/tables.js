@@ -199,6 +199,23 @@ const TABLES = {
       'outcome_notes', 'escalated_at', 'sync_state',
     ],
   },
+  //
+  // The answer-led referral follow-up ledger (v8). visit_dao.dart enqueues one
+  // row per check-in here, so it MUST be on this whitelist: sync.js answers 400
+  // "Unknown entity_table" for anything absent, and the client classifies 4xx
+  // as a permanent SendRejected, so an unlisted table poisons every contact row
+  // into an outbox entry that never retries and never lands. `at` and
+  // `condition` are MySQL reserved words — safe here only because sync.js
+  // backtick-quotes every identifier when it builds the upsert.
+  //
+  follow_up_contacts: {
+    pk: ['id'],
+    columns: [
+      'id', 'referral_id', 'person_id', 'household_id', 'at', 'channel',
+      'reached', 'care', 'condition', 'barriers', 'note',
+      'linked_referral_id', 'recorded_by', 'sync_state',
+    ],
+  },
   barrier_reports: {
     pk: ['id'],
     columns: [
@@ -211,6 +228,22 @@ const TABLES = {
     columns: [
       'id', 'person_id', 'household_id', 'due_date', 'purpose', 'created_by',
       'completed_at', 'assessment_id', 'priority', 'sync_state',
+    ],
+  },
+  //
+  // The family's ask (v9). Unlike every other row a caregiver can write, this
+  // one also goes out on the pull stream (src/pull.js), because a worker has to
+  // answer it on a different device — and an answer the family never receives
+  // is a family that waits at home for a visitor who already came.
+  // `pull_updated_at` is deliberately absent: the triggers own it, and a client
+  // that could set it could set its own watermark.
+  //
+  care_requests: {
+    pk: ['id'],
+    columns: [
+      'id', 'household_id', 'person_id', 'level', 'home_check_id',
+      'created_by', 'created_at', 'updated_at', 'status', 'answered_at',
+      'sync_state',
     ],
   },
 };

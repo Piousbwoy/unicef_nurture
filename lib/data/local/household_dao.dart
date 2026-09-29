@@ -313,6 +313,27 @@ abstract final class PersonDao {
     return rows.map(Person.fromMap).toList(growable: false);
   }
 
+  /// A set of people in one pass, keyed by id.
+  ///
+  /// The follow-up desk needs a name and a household for every case it is about
+  /// to draw. Resolving them one at a time turned one screen into as many
+  /// queries as there are referrals, which is audible on the low-end Androids
+  /// this app is written for.
+  static Future<Map<String, Person>> byIdMany(Iterable<String> ids) async {
+    final unique = ids.toSet();
+    if (unique.isEmpty) return const {};
+    final db = await AppDatabase.instance.database;
+    final placeholders = List.filled(unique.length, '?').join(', ');
+    final rows = await db.rawQuery(
+      'SELECT * FROM ${Tables.persons} WHERE id IN ($placeholders)',
+      unique.toList(),
+    );
+    return {
+      for (final row in rows)
+        (row['id'] as String): Person.fromMap(row),
+    };
+  }
+
   /// The multi-client queue for one visit, ordered the way care is actually
   /// delivered: the mother first, then any newborn (most fragile, and the young
   /// infant protocol has the tightest time constraints), then the under-fives

@@ -149,7 +149,8 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
                   icon: Icons.science_outlined,
                   title: 'Recalibration export (Kintampo/Navrongo)',
                   subtitle:
-                      'De-identified records that retrain these checks on real Northern Ghana data.',
+                      'De-identified records kept on this phone so the checks '
+                      'can be recalibrated on real Northern Ghana data.',
                   onTap: () async {
                     await showModalBottomSheet<void>(
                       context: context,
@@ -245,12 +246,26 @@ class _SyncHealthCardState extends ConsumerState<_SyncHealthCard> {
       final service = await ref.read(syncServiceProvider.future);
       final report = await service.runOnce();
       if (!mounted) return;
-      setState(() {
-        _result = report.attempted == 0
+      // Three honest outcomes, kept apart on purpose. "attempted == 0" alone is
+      // ambiguous — it is also what a not-configured or offline device returns —
+      // so the server-configured and connectivity state is checked first
+      // instead of letting all three claim the work already reached the server.
+      String result;
+      if (!service.serverConfigured) {
+        result =
+            'No district server is configured on this device. Your records '
+            'are saved here and will send automatically once a server is set '
+            'up in Sync settings.';
+      } else if (report.attempted == 0) {
+        result = await service.isOnline
             ? 'Everything is already on the server.'
-            : 'Sent ${report.accepted} of ${report.attempted}. '
-                '${report.deferred > 0 ? '${report.deferred} deferred — the app keeps trying.' : 'All clear.'}';
-      });
+            : 'You are offline. Saved records will send automatically when '
+                  'signal returns.';
+      } else {
+        result = 'Sent ${report.accepted} of ${report.attempted}. '
+            '${report.deferred > 0 ? '${report.deferred} deferred — the app keeps trying.' : 'All clear.'}';
+      }
+      setState(() => _result = result);
       ref.invalidate(syncStatusProvider);
     } catch (_) {
       if (!mounted) return;

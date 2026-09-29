@@ -238,16 +238,17 @@ abstract final class CloudRecoveryService {
           rawBinding is String && rawBinding.isNotEmpty ? rawBinding : null;
 
       // The server rows are `SELECT *`-shaped: they can carry server-owned
-      // bookkeeping columns the local schema does not have — pull_updated_at
-      // since the delta-pull work, and whatever the server grows next — plus
-      // NULLs where the local schema promises defaults. Writing them verbatim
-      // is how cloud recovery died in the field: "table households has no
-      // column named pull_updated_at" the moment a caregiver with a caseload
-      // tried to come back. Intersect every row with the local columns
-      // first, exactly as the delta-pull path does. The PRAGMA reads happen
-      // before the transaction opens, keeping the same no-DB-work-in-prepare
-      // rule as the network read above. (The server also strips the marker
-      // from caseload replies; the client does not have to trust that.)
+      // bookkeeping columns plus NULLs where the local schema promises
+      // defaults. pull_updated_at is now DELIVERED rather than stripped (a real
+      // local column on households, persons and referrals since v10, still
+      // absent on visits and assessments), and the server may grow more next.
+      // Writing them verbatim is how cloud recovery died in the field: "table
+      // households has no column named pull_updated_at" the moment a caregiver
+      // with a caseload tried to come back. Intersect every row with the local
+      // columns first, exactly as the delta-pull path does — that stores the
+      // marker where the schema has a column for it and drops it where it does
+      // not. The PRAGMA reads happen before the transaction opens, keeping the
+      // same no-DB-work-in-prepare rule as the network read above.
       final localColumns = <String, Set<String>>{};
       if (caseloadData != null) {
         for (final table in [

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/glass.dart';
+import '../../core/theme/lumina.dart';
 import '../shared/narration_button.dart';
 import '../shared/ui.dart';
 import 'caregiver_providers.dart';
@@ -38,9 +39,8 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
     final user = ref.watch(currentUserProvider);
     final scope = ref.watch(caregiverScopeProvider);
     final isOnline = ref.watch(connectivityProvider).valueOrNull ?? false;
-    // Keep offline speech ready without blocking the shell.
-    ref.read(neuralTranslationProvider.future);
-    ref.read(piperTtsProvider.future);
+    // Warm the family's language in the background; never blocks the shell.
+    ref.watch(caregiverLanguageWarmupProvider);
     if (user == null) return const SizedBox.shrink();
     if (scope == null) {
       return CompanionTheme(
@@ -154,12 +154,18 @@ class _CaregiverHomeState extends ConsumerState<CaregiverHome> {
                               duration: fx.scale(
                                 const Duration(milliseconds: 220),
                               ),
-                              switchInCurve: Curves.easeOut,
+                              switchInCurve: Lumina.glide,
                               switchOutCurve: Curves.easeIn,
                               transitionBuilder: (child, animation) =>
                                   FadeTransition(
                                     opacity: animation,
-                                    child: child,
+                                    child: SlideTransition(
+                                      position: Tween(
+                                        begin: const Offset(0, 0.015),
+                                        end: Offset.zero,
+                                      ).animate(animation),
+                                      child: child,
+                                    ),
                                   ),
                               child: page,
                             )
@@ -362,7 +368,7 @@ class CaregiverNavigation extends StatelessWidget {
                 child: DecoratedBox(
                   key: const ValueKey('caregiver-dock-indicator'),
                   decoration: BoxDecoration(
-                    color: CaregiverLuxePalette.azurePrimary,
+                    gradient: Lumina.tide,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: CaregiverLuxePalette.specularStroke,
@@ -370,10 +376,9 @@ class CaregiverNavigation extends StatelessWidget {
                     boxShadow: fx.blur
                         ? [
                             BoxShadow(
-                              color: CaregiverLuxePalette.azurePrimary
-                                  .withValues(alpha: 0.18),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
+                              color: Lumina.azure.withValues(alpha: 0.32),
+                              blurRadius: 16,
+                              offset: const Offset(0, 5),
                             ),
                           ]
                         : const [],
@@ -387,7 +392,7 @@ class CaregiverNavigation extends StatelessWidget {
                     if (fx.motion)
                       AnimatedPositionedDirectional(
                         duration: fx.scale(const Duration(milliseconds: 260)),
-                        curve: Curves.easeOutCubic,
+                        curve: Lumina.glide,
                         start: start,
                         top: top,
                         width: cellWidth - 4,

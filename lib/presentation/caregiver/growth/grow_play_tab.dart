@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/providers.dart';
 import '../../../core/audio/caregiver_playback.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/glass.dart';
+import '../../../core/theme/lumina.dart';
 import '../../../core/theme/motion.dart';
 import '../../../domain/engines/nurturing_care_engine.dart';
 import '../../../domain/entities/caregiver.dart';
@@ -31,55 +30,107 @@ class CaregiverGrowPlayTab extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        GlassSurface(
-          tier: GlassTier.hero,
-          blur: false,
-          padding: EdgeInsets.zero,
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(GlassTier.hero.radius),
-              gradient: AppColors.caregiverGradient,
-            ),
-            child: const Padding(
-              padding: EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.toys_rounded,
-                        color: Colors.white,
-                        size: 32,
-                      ),
-                      SizedBox(width: 14),
-                      Expanded(
-                        child: Text(
-                          'Grow and play',
-                          style: TextStyle(
-                            fontFamily: 'Sora',
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            height: 1.2,
+        StaggerReveal(
+          order: 0,
+          child: Column(
+            children: [
+              Container(
+                height: 1.4,
+                margin: const EdgeInsets.only(bottom: 3),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      Lumina.glow.withValues(alpha: 0.7),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(Lumina.rLg),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Lumina.deep, Lumina.navy, Color(0xFF1E4785)],
+                    stops: [0.0, 0.55, 1.0],
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.09),
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x4D040E1F),
+                      blurRadius: 34,
+                      offset: Offset(0, 14),
+                    ),
+                  ],
+                ),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(Lumina.rLg),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: RadialGradient(
+                              center: const Alignment(1.1, -1.1),
+                              radius: 1.15,
+                              colors: [
+                                Lumina.bright.withValues(alpha: 0.26),
+                                Colors.transparent,
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                  SizedBox(height: 14),
-                  Text(
-                    "Notice, talk, and play at your own pace. No scores or competition \u2014 every family\u2019s day is different.",
-                    style: TextStyle(
-                      color: AppColors.white85,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      height: 1.45,
                     ),
-                  ),
-                ],
+                    const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.toys_rounded,
+                                color: Colors.white,
+                                size: 32,
+                              ),
+                              SizedBox(width: 14),
+                              Expanded(
+                                child: Text(
+                                  'Grow and play',
+                                  style: TextStyle(
+                                    fontFamily: 'Sora',
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                    height: 1.2,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 14),
+                          Text(
+                            "Notice, talk, and play at your own pace. No scores or competition \u2014 every family\u2019s day is different.",
+                            style: TextStyle(
+                              color: Lumina.diveMuted,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              height: 1.45,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
+            ],
           ),
         ),
         const SizedBox(height: 12),
@@ -109,7 +160,7 @@ class CaregiverGrowPlayTab extends ConsumerWidget {
                     children: [
                       CaregiverPersonSelector(members: data.members),
                       if (members.isEmpty)
-                        const CompanionCard(
+                        const LumeSection(
                           title: 'Start with your family',
                           child: Text(
                             'Add a family member from Family to see play ideas and saved growth records.',
@@ -126,7 +177,7 @@ class CaregiverGrowPlayTab extends ConsumerWidget {
                             now: now,
                           ),
                           _GrowthRecords(person: person),
-                          CompanionCard(
+                          LumeSection(
                             title:
                                 'Your dated observations • ${person.fullName}',
                             child: Column(
@@ -210,7 +261,7 @@ class _PlayTogether extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final band = CaregiverMilestonePolicy.bandFor(person, now);
     if (band == null) {
-      return CompanionCard(
+      return LumeSection(
         title: 'Play together • ${person.fullName}',
         child: const Text(
           "Confirm the child's date of birth for age-band activities. These milestone checks cover birth to under five years. You can still talk, sing, and respond to the child.",
@@ -218,7 +269,7 @@ class _PlayTogether extends ConsumerWidget {
       );
     }
     final activity = NurturingCareEngine.activityToday(band, now);
-    return CompanionCard(
+    return LumeSection(
       title: 'Play together today',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -233,20 +284,11 @@ class _PlayTogether extends ConsumerWidget {
                   children: [
                     Text(
                       person.fullName,
-                      style: const TextStyle(
-                        fontFamily: 'Sora',
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: CompanionColors.ink,
-                      ),
+                      style: Lumina.display(16, weight: 700),
                     ),
                     Text(
                       caregiverAge(person),
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: CompanionColors.muted,
-                      ),
+                      style: Lumina.body(size: 13, weight: 600),
                     ),
                   ],
                 ),
@@ -261,18 +303,18 @@ class _PlayTogether extends ConsumerWidget {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: CompanionColors.blue.withValues(alpha: 0.09),
-                      borderRadius: BorderRadius.circular(20),
+                      color: Lumina.tint,
+                      borderRadius: BorderRadius.circular(999),
                       border: Border.all(
-                        color: CompanionColors.blue.withValues(alpha: 0.25),
+                        color: Lumina.core.withValues(alpha: 0.22),
                       ),
                     ),
                     child: Text(
                       band.label,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w800,
-                        color: CompanionColors.blue,
+                        color: Lumina.navy,
                       ),
                     ),
                   ),
@@ -281,31 +323,22 @@ class _PlayTogether extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 18),
-          Text(
-            activity,
-            style: const TextStyle(
-              fontFamily: 'Sora',
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              height: 1.3,
-              letterSpacing: -0.3,
-              color: CompanionColors.ink,
-            ),
-          ),
+          Text(activity, style: Lumina.display(22)),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: CompanionColors.blue.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(16),
+              color: Lumina.ice,
+              borderRadius: BorderRadius.circular(Lumina.rSm),
+              border: Border.all(color: Lumina.core.withValues(alpha: 0.10)),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
+                const Icon(
                   Icons.auto_awesome_rounded,
                   size: 18,
-                  color: CompanionColors.bronze,
+                  color: Lumina.core,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -313,7 +346,7 @@ class _PlayTogether extends ConsumerWidget {
                     band.tip,
                     style: caregiverBody(
                       size: 14.5,
-                      color: CompanionColors.ink,
+                      color: Lumina.ink,
                     ),
                   ),
                 ),
@@ -345,13 +378,14 @@ class _PlayTogether extends ConsumerWidget {
           ),
           _MorePlayIdeas(person: person, band: band, today: activity),
           const SizedBox(height: 12),
-          FilledButton(
+          SapphireButton(
+            label: 'Check the milestones',
+            expand: true,
             onPressed: () => Navigator.of(context).push(
               GlassPageRoute<void>(
                 builder: (_) => CaregiverMilestoneScreen(person: person),
               ),
             ),
-            child: const Text('Check the milestones'),
           ),
         ],
       ),
@@ -385,7 +419,7 @@ class _MorePlayIdeas extends StatelessWidget {
           'More play ideas',
           style: caregiverBody(size: 15).copyWith(
             fontWeight: FontWeight.w700,
-            color: CompanionColors.blue,
+            color: Lumina.azure,
           ),
         ),
         subtitle: Text(
@@ -393,7 +427,7 @@ class _MorePlayIdeas extends StatelessWidget {
           style: TextStyle(
             fontSize: 12.5,
             fontWeight: FontWeight.w500,
-            color: CompanionColors.muted,
+            color: Lumina.inkMuted,
           ),
         ),
         children: [
@@ -410,7 +444,7 @@ class _MorePlayIdeas extends StatelessWidget {
                       height: 6,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: CompanionColors.blue.withValues(alpha: 0.45),
+                        color: Lumina.azure.withValues(alpha: 0.45),
                       ),
                     ),
                   ),
@@ -506,7 +540,7 @@ class _GrowthRecords extends ConsumerWidget {
   const _GrowthRecords({required this.person});
   final Person person;
   @override
-  Widget build(BuildContext context, WidgetRef ref) => CompanionCard(
+  Widget build(BuildContext context, WidgetRef ref) => LumeSection(
     title: 'Clinic growth measurements',
     eyebrow: person.fullName,
     child: ref
@@ -586,7 +620,7 @@ class _MaternalPreparation extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        CompanionCard(
+        LumeSection(
           title: pregnant ? 'Pregnancy preparation' : 'Postnatal preparation',
           eyebrow: '${person.fullName} • ${caregiverAge(person)}',
           child: Column(
@@ -649,8 +683,8 @@ class _WeightSparkline extends StatelessWidget {
       height: 60,
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.checkBlue.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(12),
+        color: Lumina.ice,
+        borderRadius: BorderRadius.circular(Lumina.rSm),
       ),
       child: CustomPaint(
         size: Size.infinite,
@@ -692,14 +726,14 @@ class _SparklinePainter extends CustomPainter {
     canvas.drawPath(
       path,
       Paint()
-        ..color = AppColors.checkBlue
+        ..color = Lumina.bright
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.5
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round,
     );
     final dotPaint = Paint()
-      ..color = AppColors.checkBlue
+      ..color = Lumina.bright
       ..style = PaintingStyle.fill;
     for (var i = 0; i < weights.length; i++) {
       final x = i * step;

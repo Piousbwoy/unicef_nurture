@@ -509,6 +509,39 @@ CREATE TABLE IF NOT EXISTS referrals (
 ) ENGINE=InnoDB;
 
 -- ----------------------------------------------------------------------------
+-- Follow-up contacts — the answer ledger. One row per referral check-in,
+-- holding the four answers a worker taps (channel, reached, care, condition)
+-- instead of prose glued onto referrals.outcome_notes. This is what makes
+-- "which referrals did we chase, and what did we find?" a query. The client
+-- enqueues every contact to the outbox (visit_dao.dart), so this table MUST
+-- exist and MUST be on the sync whitelist (src/tables.js) or the write is
+-- rejected with a 400 and poisoned into a permanent SendRejected row.
+-- `at` and `condition` are MySQL reserved words and are backtick-quoted here
+-- and by sync.js. Push-only for now (not in src/pull.js PULL_TABLES), matching
+-- barrier_reports and scheduled_contacts; adding it to the pull stream is the
+-- separate reporting/cross-device work.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS follow_up_contacts (
+  id                 VARCHAR(64) NOT NULL,
+  referral_id        VARCHAR(64) NOT NULL,
+  person_id          VARCHAR(64) NULL,
+  household_id       VARCHAR(64) NOT NULL,
+  `at`               VARCHAR(40) NOT NULL,
+  channel            VARCHAR(24) NOT NULL,
+  reached            VARCHAR(24) NOT NULL,
+  care               VARCHAR(24) NOT NULL,
+  `condition`        VARCHAR(24) NOT NULL,
+  barriers           TEXT        NULL,
+  note               TEXT        NULL,
+  linked_referral_id VARCHAR(64) NULL,
+  recorded_by        VARCHAR(64) NOT NULL,
+  sync_state         VARCHAR(24) NOT NULL DEFAULT 'pending',
+  PRIMARY KEY (id),
+  KEY idx_follow_up_referral (referral_id, `at`),
+  KEY idx_follow_up_household (household_id, `at`)
+) ENGINE=InnoDB;
+
+-- ----------------------------------------------------------------------------
 -- Barrier reports — why care did not happen.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS barrier_reports (
@@ -547,6 +580,33 @@ CREATE TABLE IF NOT EXISTS scheduled_contacts (
 ) ENGINE=InnoDB;
 
 -- ----------------------------------------------------------------------------
+-- Care requests — the family's ask for help, written by the caregiver's device.
+--
+-- This is the only caregiver-authored clinical signal that leaves the phone:
+-- there is no home_checks table at all, on purpose. `updated_at` is what the
+-- delta pull compares, because a worker answers a request by changing status on
+-- their own device — unlike referrals, which are append-only.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS care_requests (
+  id              VARCHAR(64)  NOT NULL,
+  household_id    VARCHAR(64)  NOT NULL,
+  person_id       VARCHAR(64)  NOT NULL,
+  level           VARCHAR(24)  NOT NULL,
+  home_check_id   VARCHAR(64)  NOT NULL,
+  created_by      VARCHAR(64)  NOT NULL,
+  created_at      VARCHAR(40)  NOT NULL,
+  updated_at      VARCHAR(40)  NOT NULL,
+  status          VARCHAR(24)  NOT NULL DEFAULT 'open',
+  answered_at     VARCHAR(40)  NULL,
+  sync_state      VARCHAR(24)  NOT NULL DEFAULT 'pending',
+  pull_updated_at VARCHAR(40)  NULL,
+  PRIMARY KEY (id),
+  KEY idx_care_requests_household (household_id, created_at),
+  KEY idx_care_requests_check (home_check_id),
+  KEY idx_care_requests_pull (pull_updated_at)
+) ENGINE=InnoDB;
+
+-- ----------------------------------------------------------------------------
 -- Sync log — a server-side audit trail of EVERY write the sync endpoint makes.
 -- It records *what* changed (table, id, operation, when) but never the payload
 -- itself, so the audit trail carries no PHI. user_id + facility_id + device_id
@@ -575,7 +635,7 @@ CREATE TABLE IF NOT EXISTS sync_log (
 -- Delta-pull change markers for GET /api/pull.
 --
 -- The SERVER owns these markers: device clocks are not trusted. Every INSERT
--- and UPDATE on the five pullable clinical tables stamps pull_updated_at with
+-- and UPDATE on the six pullable clinical tables stamps pull_updated_at with
 -- second-precision UTC — including the INSERT ... ON DUPLICATE KEY UPDATE that
 -- POST /api/sync performs, which is how Nurse B's pull discovers Nurse A's
 -- pushed rows. Fresh installs (this file) get the column and triggers
@@ -606,4 +666,9 @@ CREATE TRIGGER IF NOT EXISTS trg_assessments_pull_upd BEFORE UPDATE ON assessmen
 CREATE TRIGGER IF NOT EXISTS trg_referrals_pull_ins BEFORE INSERT ON referrals
   FOR EACH ROW SET NEW.pull_updated_at = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%s');
 CREATE TRIGGER IF NOT EXISTS trg_referrals_pull_upd BEFORE UPDATE ON referrals
+  FOR EACH ROW SET NEW.pull_updated_at = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%s');
+
+CREATE TRIGGER IF NOT EXISTS trg_care_requests_pull_ins BEFORE INSERT ON care_requests
+  FOR EACH ROW SET NEW.pull_updated_at = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%s');
+CREATE TRIGGER IF NOT EXISTS trg_care_requests_pull_upd BEFORE UPDATE ON care_requests
   FOR EACH ROW SET NEW.pull_updated_at = DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-%dT%H:%i:%s');

@@ -367,60 +367,104 @@ class _FamilyHero extends ConsumerWidget {
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        gradient: CaregiverLuxePalette.horizon,
-        borderRadius: BorderRadius.circular(32),
-        border: Border.all(
-          color: CaregiverLuxePalette.specularStroke,
-          width: 0.5,
-        ),
+        color: CaregiverLuxePalette.pearlSurface,
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: CaregiverLuxePalette.hairLineQuiet),
         boxShadow: CaregiverLuxePalette.featheredShadow,
       ),
       child: Stack(
         children: [
           const Positioned(
-            right: -22,
-            top: -28,
-            child: ExcludeSemantics(
-              child: Icon(
-                Icons.wb_sunny_outlined,
-                size: 170,
-                color: Color(0x0FFFFFFF),
-              ),
-            ),
+            right: -16,
+            top: 6,
+            child: ExcludeSemantics(child: _FamilyOrbitMark()),
           ),
           Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(22, 21, 22, 19),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  DateFormat('EEEE, d MMMM').format(now),
-                  style: AppType.caption.copyWith(color: Colors.white70),
+                Row(
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: const BoxDecoration(
+                        color: CaregiverLuxePalette.azurePrimary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      DateFormat('EEEE  ·  d MMMM').format(now).toUpperCase(),
+                      style: AppType.eyebrow.copyWith(
+                        color: CaregiverLuxePalette.twilightMuted,
+                        letterSpacing: 1.0,
+                        fontSize: 9.5,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 19),
                 Text(
-                  '$part,\n$name',
+                  '$part, $name.',
                   style: AppType.headline.copyWith(
-                    color: Colors.white,
-                    fontSize: 26,
+                    color: CaregiverLuxePalette.twilightMidnight,
+                    fontSize: 24,
+                    height: 1.12,
+                    letterSpacing: -0.7,
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 7),
                 Text(
-                  household?.name ?? 'A little care, every day.',
-                  style: AppType.body.copyWith(color: Colors.white),
+                  household?.name ?? 'Your family, together.',
+                  style: AppType.body.copyWith(
+                    color: CaregiverLuxePalette.twilightNavy,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-                if (household != null && household.community.isNotEmpty)
+                if (household != null && household.community.isNotEmpty) ...[
+                  const SizedBox(height: 3),
                   Text(
                     household.community,
-                    style: AppType.caption.copyWith(color: Colors.white70),
+                    style: AppType.caption.copyWith(
+                      color: CaregiverLuxePalette.twilightMuted,
+                    ),
                   ),
-                const SizedBox(height: 16),
-                Text(
-                  'Local-only notes and home checks are not automatically uploaded.',
-                  style: AppType.caption.copyWith(
-                    color: Colors.white70,
-                    fontSize: 11.5,
+                ],
+                const SizedBox(height: 17),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 11,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: CaregiverLuxePalette.azureIce,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: CaregiverLuxePalette.hairLineQuiet,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.lock_outline_rounded,
+                        size: 14,
+                        color: CaregiverLuxePalette.twilightNavy,
+                      ),
+                      const SizedBox(width: 7),
+                      Flexible(
+                        child: Text(
+                          'Local-only notes and home checks are not automatically uploaded',
+                          style: AppType.caption.copyWith(
+                            color: CaregiverLuxePalette.twilightNavy,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -430,6 +474,59 @@ class _FamilyHero extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Fine-line family orbit, borrowed from celestial navigation. Purely
+/// decorative: it never encodes a health state or asks for an interpretation.
+class _FamilyOrbitMark extends StatelessWidget {
+  const _FamilyOrbitMark();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox(
+    width: 124,
+    height: 120,
+    child: CustomPaint(painter: _FamilyOrbitPainter()),
+  );
+}
+
+class _FamilyOrbitPainter extends CustomPainter {
+  const _FamilyOrbitPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width * 0.55, size.height * 0.48);
+    final orbitPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..color = CaregiverLuxePalette.azurePrimary.withValues(alpha: 0.12);
+    for (final rect in [
+      Rect.fromCenter(center: center, width: 58, height: 36),
+      Rect.fromCenter(center: center, width: 90, height: 68),
+      Rect.fromCenter(center: center, width: 120, height: 98),
+    ]) {
+      canvas.drawOval(rect, orbitPaint);
+    }
+    final stars = [
+      (Offset(center.dx - 40, center.dy - 26), 3.0),
+      (Offset(center.dx + 44, center.dy - 12), 2.1),
+      (Offset(center.dx + 2, center.dy + 34), 2.5),
+      (Offset(center.dx - 8, center.dy - 3), 4.3),
+    ];
+    for (var i = 0; i < stars.length; i++) {
+      final (point, radius) = stars[i];
+      canvas.drawCircle(
+        point,
+        radius,
+        Paint()
+          ..color = CaregiverLuxePalette.azurePrimary.withValues(
+            alpha: i == stars.length - 1 ? 0.28 : 0.16,
+          ),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _FamilyOrbitPainter oldDelegate) => false;
 }
 
 class _FamilyCarousel extends ConsumerStatefulWidget {
@@ -691,58 +788,27 @@ class _QuickActions extends StatelessWidget {
         label: const Text('Check on someone now', textAlign: TextAlign.center),
       ),
       const SizedBox(height: 12),
-      LayoutBuilder(
-        builder: (context, constraints) {
-          final wideText = MediaQuery.textScalerOf(context).scale(14) > 21;
-          return Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              for (final (label, icon, action) in [
-                ('Local foods', Icons.restaurant_outlined, onFood),
-                ('Play & learn', Icons.toys_outlined, onPlay),
-                ('Audio guides', Icons.volume_up_outlined, onListen),
-              ])
-                SizedBox(
-                  width: wideText
-                      ? constraints.maxWidth
-                      : (constraints.maxWidth - 20) / 3,
-                  child: Material(
-                    color: CaregiverLuxePalette.pearlSurface,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(22),
-                      side: const BorderSide(
-                        color: CaregiverLuxePalette.hairLineQuiet,
-                      ),
-                    ),
-                    child: InkWell(
-                      onTap: action,
-                      borderRadius: BorderRadius.circular(22),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 16,
-                        ),
-                        child: Column(
-                          children: [
-                            Icon(icon, color: CompanionColors.blue, size: 25),
-                            const SizedBox(height: 10),
-                            Text(
-                              label,
-                              textAlign: TextAlign.center,
-                              style: AppType.label.copyWith(
-                                color: CompanionColors.ink,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          );
-        },
+      Wrap(
+        spacing: 4,
+        runSpacing: 0,
+        children: [
+          for (final (label, icon, action) in [
+            ('Local foods', Icons.restaurant_outlined, onFood),
+            ('Play & learn', Icons.toys_outlined, onPlay),
+            ('Audio guides', Icons.volume_up_outlined, onListen),
+          ])
+            TextButton.icon(
+              onPressed: action,
+              style: TextButton.styleFrom(
+                minimumSize: const Size(48, 48),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                foregroundColor: CompanionColors.ink,
+                tapTargetSize: MaterialTapTargetSize.padded,
+              ),
+              icon: Icon(icon, size: 19, color: CompanionColors.blue),
+              label: Text(label, style: AppType.label),
+            ),
+        ],
       ),
     ],
   );

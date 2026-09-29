@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:carebridge_ai/core/audio/caregiver_playback.dart';
 import 'package:carebridge_ai/data/repositories/care_repository.dart';
 import 'package:carebridge_ai/domain/entities/caregiver.dart';
+import 'package:carebridge_ai/domain/entities/care_request.dart';
 import 'package:carebridge_ai/domain/entities/core.dart';
 import 'package:carebridge_ai/domain/entities/visit.dart';
 import 'package:carebridge_ai/domain/enums.dart';
@@ -30,6 +31,8 @@ class MemoryRepository extends CareRepository {
   final attempts = <String>[];
   bool fail = false;
   bool failFinalization = false;
+  bool denied = false;
+  GrowthMeasurement? tape;
   Completer<void>? blocked;
   @override
   Future<Person?> person(AppUser user, String id) async => baby;
@@ -75,6 +78,63 @@ class MemoryRepository extends CareRepository {
   Future<void> saveCaregiverSettings(AppUser user, CaregiverSettings value) async {
     if (fail) throw StateError('Storage unavailable');
     settings = value;
+  }
+  @override
+  Future<GrowthMeasurement?> latestGrowth(AppUser user, String personId) async {
+    if (denied) {
+      throw const AccessDenied('view the last measurement', Permission.recordClinicalVitals);
+    }
+    if (fail) throw StateError('Storage unavailable');
+    return tape;
+  }
+
+  // Asking for help. The fake keeps the real gate's one-request-per-check rule,
+  // because "asking twice summons one worker" is exactly what is being tested.
+  final requests = <CareRequest>[];
+  final withdrawals = <String>[];
+  bool failAsk = false;
+  bool stateSent = false;
+
+  @override
+  Future<CareRequest?> raiseCareRequest(
+    AppUser user,
+    CaregiverScope scope,
+    HomeCheck check,
+  ) async {
+    if (failAsk) throw StateError('Storage unavailable');
+    final already = requests.where((r) => r.homeCheckId == check.id);
+    if (already.isNotEmpty) return already.first;
+    final request = CareRequest.fromCheck(
+      check: check,
+      userId: user.id,
+      at: now,
+    );
+    if (request == null) return null;
+    requests.add(request);
+    return request;
+  }
+
+  @override
+  Future<bool> withdrawCareRequest(
+    AppUser user,
+    CaregiverScope scope,
+    String homeCheckId,
+  ) async {
+    withdrawals.add(homeCheckId);
+    final before = requests.length;
+    requests.removeWhere((r) => r.homeCheckId == homeCheckId && r.isOpen);
+    return requests.length < before;
+  }
+
+  @override
+  Future<({CareRequest request, bool sent})?> careRequestState(
+    AppUser user,
+    CaregiverScope scope,
+    String homeCheckId,
+  ) async {
+    final found = requests.where((r) => r.homeCheckId == homeCheckId);
+    if (found.isEmpty) return null;
+    return (request: found.first, sent: stateSent);
   }
 }
 
@@ -380,6 +440,31 @@ void main() {
     expect(controller.report, isNull);
   });
 
+  test('a permission refusal is not reported as a storage failure', () async {
+    repo.denied = true;
+    await controller.load();
+    expect(controller.stage, CaregiverCheckStage.unsupported);
+    expect(controller.blockReason, isNotNull);
+    expect(controller.blockReason!.detail, contains('does not allow'));
+    // The retryable-storage wording would send her round in circles.
+    expect(controller.notice, isNull);
+    expect(controller.draft, isNull);
+  });
+
+  test('the last recorded measurement is read into the check', () async {
+    repo.tape = GrowthMeasurement(
+      id: 'g',
+      personId: 'baby',
+      takenAt: now,
+      muacMm: 110,
+    );
+    await controller.load();
+    expect(controller.growth?.muacMm, 110);
+    // This record is a young infant, outside the tape's age band, so the
+    // reading changes nothing and no note is offered.
+    expect(controller.nutritionNote, isNull);
+  });
+
   test('switching owner cancels queued writes', () async {
     await controller.load();
     current = false;
@@ -448,5 +533,122 @@ void main() {
     expect(const CaregiverSpeech(id: 'new', english: 'Contact a health worker today',
       language: 'Dagbani', clipId: 'caregiver_verdict_caution').matchingClip, isNull);
     expect(const CaregiverSpeech(id: 'dynamic', english: 'Awah needs support', language: 'Hausa').matchingClip, isNull);
+  });
+
+  group('asking for help', () {
+    Future<void> urgentResult() async {
+      await controller.load();
+      controller.answer('feed', CaregiverAnswer.yes);
+      controller.stopForVerdict();
+      await controller.settled;
+    }
+
+    /// Walk the whole battery with one UNSURE (caution) or none (all clear),
+    /// then the two context steps — the same route the existing tests take.
+    Future<void> finishWith(String unsureOn) async {
+      await controller.load();
+      for (final q in controller.questions!.questions) {
+        controller.answer(
+          q.key,
+          q.key == unsureOn ? CaregiverAnswer.unsure : CaregiverAnswer.no,
+        );
+        controller.next();
+      }
+      await controller.settled;
+      controller.setDuration('today');
+      controller.finishContext();
+      await controller.settled;
+    }
+
+    test('an urgent result has asked for nothing yet', () async {
+      await urgentResult();
+      expect(controller.report!.verdict, HomeCheckVerdict.urgent);
+      expect(controller.careRequest, isNull);
+      expect(controller.requestSent, isFalse);
+    });
+
+    test('asking writes one request and holds it', () async {
+      await urgentResult();
+
+      await controller.askForHelp();
+      expect(controller.careRequest?.level, CareRequestLevel.urgent);
+      expect(repo.requests, hasLength(1));
+      expect(controller.requestingHelp, isFalse);
+      expect(controller.requestError, isNull);
+    });
+
+    test('asking twice summons one health worker, not two', () async {
+      await urgentResult();
+
+      await controller.askForHelp();
+      await controller.askForHelp();
+      expect(repo.requests, hasLength(1));
+    });
+
+    test('a caution check may ask, and asks for today', () async {
+      await finishWith('feed');
+      expect(controller.report!.verdict, HomeCheckVerdict.caution);
+      await controller.askForHelp();
+      expect(controller.careRequest?.level, CareRequestLevel.today);
+    });
+
+    test('a failed write says nothing was sent, and leaves the button usable',
+        () async {
+      await urgentResult();
+      repo.failAsk = true;
+
+      await controller.askForHelp();
+      expect(controller.careRequest, isNull);
+      expect(controller.requestingHelp, isFalse);
+      expect(controller.requestError, isNotNull);
+
+      repo.failAsk = false;
+      await controller.askForHelp();
+      expect(controller.careRequest, isNotNull);
+    });
+
+    test('an all-clear result is not offered the ask', () async {
+      await finishWith('no-such-question-key');
+      expect(controller.report!.verdict, HomeCheckVerdict.fine);
+      await controller.askForHelp();
+      expect(controller.careRequest, isNull);
+      expect(repo.requests, isEmpty);
+    });
+
+    test('refresh reads back what was sent while the screen was away',
+        () async {
+      await urgentResult();
+      await controller.askForHelp();
+      expect(controller.requestSent, isFalse);
+
+      repo.stateSent = true;
+      await controller.refreshRequest();
+      expect(controller.requestSent, isTrue);
+    });
+
+    test('withdrawing clears the state only when the repository agrees',
+        () async {
+      await urgentResult();
+      await controller.askForHelp();
+
+      await controller.withdrawHelp();
+      expect(controller.careRequest, isNull);
+      expect(repo.withdrawals, [controller.report!.id]);
+
+      // Nothing to call back — the request already left, or was never made.
+      await controller.withdrawHelp();
+      expect(controller.careRequest, isNull);
+      expect(controller.requestError, isNull);
+    });
+
+    test('an account switch cannot ask on the old family’s behalf', () async {
+      await urgentResult();
+      current = false;
+
+      await controller.askForHelp();
+      expect(controller.careRequest, isNull);
+      expect(repo.requests, isEmpty);
+      current = true;
+    });
   });
 }

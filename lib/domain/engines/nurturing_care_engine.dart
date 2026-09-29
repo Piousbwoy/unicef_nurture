@@ -32,7 +32,6 @@ import 'package:flutter/foundation.dart';
 
 import '../enums.dart';
 import 'immunisation_engine.dart';
-import 'nutrition_engine.dart';
 import 'nutrition/therapeutic_supplements.dart';
 
 /// The five pillars of the UNICEF Nurturing Care Framework, in canonical
@@ -298,8 +297,9 @@ abstract final class NurturingCareEngine {
             counsellingNote:
                 'Give the vaccine today if available, or refer to the sub-'
                 'district immunisation clinic. Explain to the caregiver '
-                'which disease each vaccine prevents — this raises follow-up '
-                'adherence by ~30% in the literature.',
+                'which disease each vaccine prevents — caregivers who '
+                'understand the disease are more likely to return for the '
+                'next dose.',
             citation: _ghsImci2014,
             deliveredAtVisit: true,
           ),
@@ -313,8 +313,8 @@ abstract final class NurturingCareEngine {
           title: 'Vitamin A supplementation (6-59 months)',
           counsellingNote:
               '100,000 IU (6-11 months) or 200,000 IU (12-59 months), every '
-              '6 months. Vitamin A reduces all-cause mortality by ~24% in '
-              'this age group per Mayo-Wilson 2011, BMJ.',
+              '6 months. Vitamin A supplementation lowers all-cause '
+              'mortality in this age group.',
           citation: _ghsImci2014,
           deliveredAtVisit: context.vitaminADue,
         ),
@@ -357,8 +357,8 @@ abstract final class NurturingCareEngine {
           counsellingNote:
               'No water, no porridge, no formula. Breastfeed on demand, 8+ '
               'times in 24 hours. Express and cup-feed if separated. '
-              'Exclusive breastfeeding reduces diarrhoea mortality by ~80% '
-              'in this age group.',
+              'Exclusive breastfeeding markedly lowers the risk of diarrhoea '
+              'and death from it in this age group.',
           citation: _whoResponsiveFeeding2003,
           deliveredAtVisit: context.stillBreastfeeding,
         ),
@@ -416,9 +416,8 @@ abstract final class NurturingCareEngine {
           title: 'Talk with the child during meals and play',
           counsellingNote:
               'Describe what you are doing. Name objects, colours, food. '
-              'Repeat what the child says. This adds roughly 1,000 words '
-              'per day to the child\'s exposure and predicts school '
-              'readiness (Hart & Risley 1995; updated Hart 2017).',
+              'Repeat what the child says. Rich everyday talk builds the '
+              'child\'s language exposure and predicts school readiness.',
           citation: _whoEarlyLearning,
         ),
       );

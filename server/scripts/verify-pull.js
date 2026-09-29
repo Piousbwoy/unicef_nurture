@@ -20,9 +20,10 @@
 //      (requireJwtUser) and the REAL handlePull — no product code is mocked.
 //   4. Asserts the pull contract: JWT-only access, per-nurse scope
 //      ((region, district, community) OR created_by), caregiver household
-//      binding, scrubbing of pull_updated_at / pin_hash / pin_salt, the
-//      cursor-0 self-profile rider, and delta behaviour driven by the
-//      server-side pull_updated_at triggers.
+//      binding, DELIVERY of the pull_updated_at marker (Phase 1: it is now a
+//      client-mergeable revision, no longer a stripped internal field),
+//      scrubbing of pin_hash / pin_salt, the cursor-0 self-profile rider, and
+//      delta behaviour driven by the server-side pull_updated_at triggers.
 //   5. Drops the scratch database. Nothing outside it is touched.
 //
 // Exit codes: 0 = PASS or honest SKIP, 1 = FAIL (a real contract break).
@@ -580,8 +581,8 @@ async function main() {
         !('pin_salt' in pullA.body.data.users)
     );
     check(
-      'no row anywhere in the payload carries pull_updated_at',
-      !!pullA.body && !payloadContainsKey(pullA.body, 'pull_updated_at')
+      'clinical rows now carry the pull_updated_at marker (delivered, not stripped)',
+      !!pullA.body && payloadContainsKey(pullA.body, 'pull_updated_at')
     );
     check(
       'sentinel pin material never crosses the wire',
@@ -641,13 +642,27 @@ async function main() {
       'delta pull with since=server_time-1s delivers zero clinical rows',
       deltaEmpty.status === 200 &&
         deltaEmpty.body &&
-        ['households', 'persons', 'visits', 'assessments', 'referrals'].every(
+        [
+          'households',
+          'persons',
+          'visits',
+          'assessments',
+          'referrals',
+          'care_requests',
+        ].every(
           (t) => Array.isArray(deltaEmpty.body.data[t]) && deltaEmpty.body.data[t].length === 0
         ),
       deltaEmpty.body &&
         JSON.stringify(
           Object.fromEntries(
-            ['households', 'persons', 'visits', 'assessments', 'referrals'].map((t) => [
+            [
+              'households',
+              'persons',
+              'visits',
+              'assessments',
+              'referrals',
+              'care_requests',
+            ].map((t) => [
               t,
               (deltaEmpty.body.data[t] || []).length,
             ])
@@ -680,8 +695,8 @@ async function main() {
       deltaNew.body && { has_more: deltaNew.body.has_more, next_cursor: deltaNew.body.next_cursor }
     );
     check(
-      'delta rows are scrubbed of pull_updated_at too',
-      !!deltaNew.body && !payloadContainsKey(deltaNew.body, 'pull_updated_at')
+      'delta rows also carry the pull_updated_at marker',
+      !!deltaNew.body && payloadContainsKey(deltaNew.body, 'pull_updated_at')
     );
   } catch (err) {
     failed += 1;

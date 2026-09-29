@@ -11,6 +11,7 @@ import '../../../core/i18n/speech_bank.dart';
 import '../../../domain/services/offline_narration.dart';
 import '../../shared/speech_language_sheet.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/lumina.dart';
 import '../../../core/theme/motion.dart';
 import '../../../domain/entities/caregiver.dart';
 import '../../../domain/entities/core.dart';
@@ -22,6 +23,7 @@ import '../family/add_member.dart';
 import '../help/caregiver_voice.dart';
 import '../widgets/companion.dart';
 import '../widgets/premium_button.dart';
+import 'care_request_card.dart';
 import 'check_controller.dart';
 import 'check_widgets.dart';
 import 'nurse_summary.dart';
@@ -253,6 +255,10 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
       // The check opens with its own navy hero card; a gradient bar above it
       // would stack two blue bands.
       heroChrome: false,
+      // Urgency is light removed, not red added: the moment a danger sign is
+      // reported the whole check drops onto midnight and the cards on it
+      // become lit instruments in a dark room.
+      lume: check?.alarmRaised ?? false,
       child: check == null
           ? _picker()
           : switch (check.stage) {
@@ -432,6 +438,14 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
     _check?.removeListener(_changed);
     _check?.dispose();
     setState(() => _check = null);
+  }
+
+  /// Step back to a previous question. Forward is not stepped here: the
+  /// answer deck's Continue is the only control that advances, and it is
+  /// never dead — an unanswered question shows what it will do instead.
+  void _stepBack() {
+    _voice?.stop();
+    _check?.back();
   }
 
   /// The person is outside the check's scope, or their saved answers could
@@ -697,6 +711,10 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
       for (var i = 0; i < questions.length; i++)
         if (draft.answers[questions[i].key] == CaregiverAnswer.yes) i,
     };
+    final unsureTicks = {
+      for (var i = 0; i < questions.length; i++)
+        if (draft.answers[questions[i].key] == CaregiverAnswer.unsure) i,
+    };
     return ListView(
       key: ValueKey('question:$index'),
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 28),
@@ -706,6 +724,7 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
           total: questions.length,
           answered: answeredTicks,
           noticed: noticedTicks,
+          unsure: unsureTicks,
           personName: check.person.fullName,
           question: question.label,
           speech: speech,
@@ -719,12 +738,13 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
             setState(() => _railOpen = false);
             unawaited(_speakQuestion(check, chosen));
           },
-          onPrevious: index == 0
-              ? null
-              : () {
-                  _voice?.stop();
-                  check.back();
-                },
+          onReviewQuestion: (pastIndex) {
+            _voice?.stop();
+            check.reviewQuestion(pastIndex);
+          },
+          canGoBack: index > 0,
+          onBack: _stepBack,
+          alarm: check.alarmRaised,
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
@@ -767,7 +787,9 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
                 style: caregiverBody(
                   size: 12.5,
                   height: 1.5,
-                  color: CompanionColors.muted,
+                  color: LumeField.of(context)
+                      ? Lumina.diveMuted
+                      : CompanionColors.muted,
                 ),
               ),
             ],
@@ -928,6 +950,7 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
       decision: check.decision,
       set: check.questions!,
       answers: check.draft!.answers,
+      growth: check.growth,
     );
     final observations = OfflineNarrator.reportedSigns(
       questions: check.questions!,
@@ -939,6 +962,11 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
         '${check.draft!.onsetNote.trim().isEmpty ? '' : ' Note: ${check.draft!.onsetNote}'}';
     final language =
         ref.watch(currentUserProvider)?.preferredLanguage ?? 'English';
+    final verdictSpeech = CaregiverCheckPolicy.verdictSpeech(
+      check.decision,
+      signsReported: check.signsNoticed.isNotEmpty,
+      uncertain: check.draft!.answers.values.contains(CaregiverAnswer.unsure),
+    );
     final feedingAdvice = CaregiverCheckPolicy.feedingSupport(
       check.person,
       check.clock(),
@@ -1015,40 +1043,48 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
             children: [adviceCard, const SizedBox(height: 12), stepsCard],
           );
 
+    // The verdict, in the same light as the rest of the check: one card
+    // carrying the decision and the three readings she produced — questions
+    // answered, signs seen, and the duration she chose. A reading she never
+    // gave shows a gap, never an invention.
+    final since = CaregiverDuration.byKey(check.draft!.durationKey);
+
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        _VerdictHero(
+        _LumenVerdict(
           personName: check.person.fullName,
           title: title,
           verdictColor: verdictColor,
           verdictIcon: verdictIcon,
-        ),
-        const SizedBox(height: 12),
-        Text(
-          '$answeredCount of $totalCount danger signs answered'
-          '${check.draft!.durationKey == null ? '' : ' — started ${_durationPhrase(check.draft!.durationKey)}'}',
-          style: const TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w600,
-            color: AppColors.inkMuted,
-          ),
+          verdictWord: switch (check.decision) {
+            CaregiverCheckDecision.urgent => 'NOW',
+            CaregiverCheckDecision.contactToday => 'TODAY',
+            CaregiverCheckDecision.routine => 'WELL',
+            _ => '—',
+          },
+          urgent: urgent,
+          answeredCount: answeredCount,
+          totalCount: totalCount,
+          signsCount: yesSigns.length,
+          since: since?.label,
         ),
         const SizedBox(height: 12),
         // The verdict in her own words: this listen is wired to the
         // registered verdict clip in the speech bank, so Twi, Dagbani and
         // Hausa speakers hear the one sentence that matters in their
-        // language — reviewed wording, not machine output.
-        if (_verdictClipId(check.decision) != null)
+        // language — reviewed wording, not machine output. Which clip is
+        // reviewed-and-true depends on what she actually reported, so the
+        // policy picks it; with no honest clip for the case it composes the
+        // line instead and lets the translator carry it.
+        if (verdictSpeech != null)
           CaregiverListen(
             label: 'Hear the verdict in your language',
             speech: CaregiverSpeech(
               id: 'check_verdict:${check.draft!.id}',
-              english: SpeechBank.byId(
-                _verdictClipId(check.decision)!,
-              )!.english,
+              english: verdictSpeech.english,
               language: language,
-              clipId: _verdictClipId(check.decision),
+              clipId: verdictSpeech.clipId,
             ),
           ),
         const SizedBox(height: 16),
@@ -1105,11 +1141,29 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
         ],
         whatToDo,
         const SizedBox(height: 16),
+        if (check.nutritionNote != null) ...[
+          _TapeReadingNoteCard(note: check.nutritionNote!),
+          const SizedBox(height: 16),
+        ],
         if (check.report != null) ...[
           if (urgent) _GettingThereCard(report: check.report!),
           if (urgent) const SizedBox(height: 16),
           _TellSomeoneCard(message: nurseMsg),
           const SizedBox(height: 16),
+          if (CaregiverCheckPolicy.canAskForHelp(check.report!.verdict)) ...[
+            CareRequestCard(
+              urgent: check.report!.verdict == HomeCheckVerdict.urgent,
+              verdictLabel: check.report!.verdict.label,
+              request: check.careRequest,
+              sent: check.requestSent,
+              sending: check.requestingHelp,
+              error: check.requestError,
+              onAsk: check.askForHelp,
+              onWithdraw: check.withdrawHelp,
+              onRefresh: check.refreshRequest,
+            ),
+            const SizedBox(height: 16),
+          ],
           if (!routine)
             _WatchCard(check: check, routine: routine)
           else
@@ -1664,7 +1718,6 @@ class _SelectChip extends StatelessWidget {
     );
   }
 }
-
 IconData _concernIcon(String key) => switch (key) {
   'hot' || 'fever' => Icons.thermostat_rounded,
   'feeding' || 'drinking' => Icons.local_drink_rounded,
@@ -1683,27 +1736,19 @@ IconData _concernIcon(String key) => switch (key) {
   _ => Icons.help_outline_rounded,
 };
 
-String _durationPhrase(String? key) =>
-    CaregiverDuration.byKey(key)?.label.toLowerCase() ?? 'today';
-
-/// The registered verdict clip for a decision, or null when the decision
-/// cannot produce a verdict.
-String? _verdictClipId(CaregiverCheckDecision decision) => switch (decision) {
-  CaregiverCheckDecision.urgent => 'caregiver_verdict_urgent',
-  CaregiverCheckDecision.contactToday => 'caregiver_verdict_caution',
-  CaregiverCheckDecision.routine => 'caregiver_verdict_fine',
-  _ => null,
-};
-
-/// The question stage: a full-bleed navy panel that owns the reading — the
-/// question, the voice control and the word-first language rail — so the
+/// The question stage: a full-bleed sapphire panel that owns the reading —
+/// the question, the voice control and the word-first language rail — so the
 /// answer tiles below never compete with the words for the same white card.
+/// A tide line shows how much of the check has filled in, and each dot on it
+/// is a question she can return to. Back is a plain chevron, forward is the
+/// answer deck's Continue: the two obvious controls, nothing clever.
 class _QuestionHero extends StatelessWidget {
   const _QuestionHero({
     required this.index,
     required this.total,
     required this.answered,
     required this.noticed,
+    required this.unsure,
     required this.personName,
     required this.question,
     required this.speech,
@@ -1714,16 +1759,20 @@ class _QuestionHero extends StatelessWidget {
     required this.onOpenRail,
     required this.onSpeak,
     required this.onLanguage,
-    this.onPrevious,
+    required this.onReviewQuestion,
+    required this.canGoBack,
+    required this.onBack,
+    required this.alarm,
   });
 
   final int index;
   final int total;
 
-  /// Which positions she has answered, and which of those are a YES, so the
-  /// progress bar can show the picture filling in as she goes.
+  /// Which positions she has answered, and which of those said yes or wasn't
+  /// sure, so the tide line can show the picture filling in as she goes.
   final Set<int> answered;
   final Set<int> noticed;
+  final Set<int> unsure;
   final String personName;
   final String question;
   final CaregiverSpeech speech;
@@ -1734,29 +1783,49 @@ class _QuestionHero extends StatelessWidget {
   final VoidCallback onOpenRail;
   final VoidCallback onSpeak;
   final ValueChanged<String> onLanguage;
-  final VoidCallback? onPrevious;
+  final ValueChanged<int> onReviewQuestion;
+
+  /// Back is offered only where there is somewhere to go.
+  final bool canGoBack;
+  final VoidCallback onBack;
+
+  /// A danger sign is up: the panel deepens toward the abyss and the tide
+  /// line turns the alarm's own red.
+  final bool alarm;
 
   @override
   Widget build(BuildContext context) {
     final reduced = MediaQuery.disableAnimationsOf(context);
+    final lume = LumeField.of(context);
+    final responses = [
+      for (var i = 0; i < total; i++)
+        !answered.contains(i)
+            ? 'not answered'
+            : noticed.contains(i)
+            ? 'Yes'
+            : unsure.contains(i)
+            ? 'Not sure'
+            : 'No',
+    ];
     return Container(
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            AppColors.checkNavyDeep,
-            AppColors.checkNavy,
-            AppColors.checkNavyMid,
-          ],
-          stops: [0, 0.58, 1],
+          colors: alarm || lume
+              ? const [Lumina.abyss, Lumina.deep, Color(0xFF0E2A52)]
+              : const [Lumina.deep, Lumina.navy, Color(0xFF1E4785)],
+          stops: const [0, 0.58, 1],
         ),
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+        borderRadius: const BorderRadius.vertical(
+          bottom: Radius.circular(Lumina.rXl),
+        ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.checkNavyDeep.withValues(alpha: 0.32),
+            color: (alarm ? AppColors.triageRed : Lumina.abyss)
+                .withValues(alpha: alarm ? 0.28 : 0.4),
             blurRadius: 28,
-            offset: Offset(0, 12),
+            offset: const Offset(0, 12),
           ),
         ],
       ),
@@ -1766,35 +1835,47 @@ class _QuestionHero extends StatelessWidget {
           Positioned(
             top: -96,
             right: -64,
-            child: _Glow(230, AppColors.checkBlue, 0.5),
+            child: _Glow(
+              230,
+              alarm ? AppColors.triageRed : Lumina.bright,
+              alarm ? 0.3 : 0.42,
+            ),
           ),
           Positioned(
             bottom: -120,
             left: -78,
-            child: _Glow(250, AppColors.checkBlueLight, 0.24),
+            child: _Glow(250, Lumina.azure, lume ? 0.12 : 0.22),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 26),
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 26),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(
                   children: [
-                    if (onPrevious != null) ...[
-                      _GlassButton(
-                        icon: Icons.chevron_left_rounded,
-                        tooltip: 'Previous question',
-                        onTap: onPrevious!,
-                      ),
+                    if (canGoBack) ...[
+                      _BackChevron(onTap: onBack),
                       const SizedBox(width: 10),
                     ],
                     Flexible(
-                      child: _GlassPill(
-                        label: 'QUESTION ${index + 1} OF $total',
+                      child: Text(
+                        '${(index + 1).toString().padLeft(2, '0')} '
+                        '/ ${total.toString().padLeft(2, '0')}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: 'Sora',
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          height: 1.2,
+                          letterSpacing: 1.6,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                          color: Colors.white.withValues(alpha: 0.82),
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Flexible(
+                    const SizedBox(width: 10),
+                    Expanded(
                       child: Align(
                         alignment: Alignment.centerRight,
                         child: _PersonChip(name: personName),
@@ -1802,14 +1883,18 @@ class _QuestionHero extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 18),
-                _ProgressTicks(
-                  index: index,
+                const SizedBox(height: 16),
+                _TideRow(
                   total: total,
+                  index: index,
                   answered: answered,
                   noticed: noticed,
+                  unsure: unsure,
+                  responses: responses,
+                  alarm: alarm,
+                  onReview: onReviewQuestion,
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 AnimatedSwitcher(
                   duration: reduced
                       ? Duration.zero
@@ -1913,6 +1998,126 @@ class _QuestionHero extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The way back, made obvious: a chevron that goes to the previous question.
+/// It appears only when there is one.
+class _BackChevron extends StatelessWidget {
+  const _BackChevron({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: 'Previous question',
+    child: Material(
+      color: Colors.white.withValues(alpha: 0.10),
+      shape: const CircleBorder(side: BorderSide(color: Colors.white24)),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: const SizedBox(
+          width: 34,
+          height: 34,
+          child: Icon(
+            Icons.chevron_left_rounded,
+            color: Colors.white,
+            size: 21,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// The tide line and its dots: how much of the check has filled in, and a
+/// direct way back to any question she has already answered. A dot for the
+/// question she is on is white and lit; a yes stays the colour of the sign
+/// she reported, because that colour is clinical information, not décor.
+class _TideRow extends StatelessWidget {
+  const _TideRow({
+    required this.total,
+    required this.index,
+    required this.answered,
+    required this.noticed,
+    required this.unsure,
+    required this.responses,
+    required this.alarm,
+    required this.onReview,
+  });
+
+  final int total;
+  final int index;
+  final Set<int> answered;
+  final Set<int> noticed;
+  final Set<int> unsure;
+  final List<String> responses;
+  final bool alarm;
+  final ValueChanged<int> onReview;
+
+  Color _dot(int i) {
+    if (i == index) return Colors.white;
+    if (noticed.contains(i)) return AppColors.triageRed;
+    if (unsure.contains(i)) return Lumina.glow;
+    if (answered.contains(i)) return Lumina.azure;
+    return Colors.white.withValues(alpha: 0.22);
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      TideProgress(
+        fraction: total == 0 ? 0 : answered.length / total,
+        color: alarm ? AppColors.triageRed : Lumina.glow,
+      ),
+      const SizedBox(height: 10),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          for (var i = 0; i < total; i++)
+            Tooltip(
+              message: 'Question ${i + 1}: ${responses[i]}',
+              child: Semantics(
+                button: answered.contains(i),
+                label: 'Question ${i + 1}, ${responses[i]}',
+                child: GestureDetector(
+                  onTap: answered.contains(i) && i != index
+                      ? () => onReview(i)
+                      : null,
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 6,
+                    ),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 220),
+                      curve: Lumina.glide,
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _dot(i),
+                        boxShadow: i == index
+                            ? [
+                                BoxShadow(
+                                  color: Lumina.glow.withValues(alpha: 0.8),
+                                  blurRadius: 8,
+                                ),
+                              ]
+                            : const [],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    ],
+  );
 }
 
 /// A soft radial light on the navy — depth without decoration.
@@ -2047,69 +2252,6 @@ class _PersonChip extends StatelessWidget {
             ),
           ),
         ),
-      ],
-    );
-  }
-}
-
-/// One tick per question: answered, current, still to come. A rail of ticks
-/// tells her how much is left faster than a bar does.
-class _ProgressTicks extends StatelessWidget {
-  const _ProgressTicks({
-    required this.index,
-    required this.total,
-    required this.answered,
-    required this.noticed,
-  });
-
-  final int index;
-  final int total;
-
-  /// Question positions she has answered, and the ones answered YES — so the
-  /// bar shows a picture being filled in, not a countdown to a verdict.
-  final Set<int> answered;
-  final Set<int> noticed;
-
-  @override
-  Widget build(BuildContext context) {
-    final reduced = MediaQuery.disableAnimationsOf(context);
-    return Row(
-      children: [
-        for (var tick = 0; tick < total; tick++)
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(right: tick == total - 1 ? 0 : 4),
-              child: AnimatedContainer(
-                duration: reduced
-                    ? Duration.zero
-                    : const Duration(milliseconds: 280),
-                curve: Curves.easeOut,
-                height: tick == index ? 6 : 4,
-                decoration: BoxDecoration(
-                  color: noticed.contains(tick)
-                      ? AppColors.triageRed
-                      : tick == index
-                      ? Colors.white
-                      : answered.contains(tick)
-                      ? Colors.white.withValues(alpha: 0.85)
-                      : Colors.white.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(999),
-                  boxShadow: [
-                    if (tick == index)
-                      BoxShadow(
-                        color: AppColors.checkBlueLight.withValues(alpha: 0.75),
-                        blurRadius: 10,
-                      ),
-                    if (noticed.contains(tick))
-                      BoxShadow(
-                        color: AppColors.triageRed.withValues(alpha: 0.8),
-                        blurRadius: 10,
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
       ],
     );
   }
@@ -2747,80 +2889,234 @@ class _NoticeBanner extends StatelessWidget {
   }
 }
 
-class _VerdictHero extends StatelessWidget {
-  const _VerdictHero({
+/// The verdict card: one luminous surface carrying the decision and the three
+/// readings she produced. It stays pearl in ordinary light and dives to the
+/// abyss gradient when the check is urgent or the field is already dark, so
+/// the card and the page always read as one depth.
+class _LumenVerdict extends StatelessWidget {
+  const _LumenVerdict({
     required this.personName,
     required this.title,
     required this.verdictColor,
     required this.verdictIcon,
+    required this.verdictWord,
+    required this.urgent,
+    required this.answeredCount,
+    required this.totalCount,
+    required this.signsCount,
+    required this.since,
   });
 
   final String personName;
   final String title;
   final Color verdictColor;
   final IconData verdictIcon;
+  final String verdictWord;
+  final bool urgent;
+  final int answeredCount;
+  final int totalCount;
+  final int signsCount;
+
+  /// Her own words for how long this has been going on, or null when the
+  /// question was never reached. A reading with no answer shows a gap,
+  /// never an invented one.
+  final String? since;
 
   @override
   Widget build(BuildContext context) {
-    final isUrgent = verdictColor == AppColors.triageRed;
+    final dive = urgent || LumeField.of(context);
+    final ink = dive ? Colors.white : Lumina.ink;
+    final muted = dive ? Lumina.diveMuted : Lumina.inkMuted;
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(child: MicroLabel('Aura Nurture', color: muted)),
+            MicroLabel(
+              urgent ? 'Act now' : 'Today',
+              color: dive ? Lumina.diveMuted : Lumina.inkFaint,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: urgent
+                    ? const RadialGradient(
+                        colors: [
+                          Color(0xFFFF7065),
+                          AppColors.triageRed,
+                          Color(0xFF8F1D17),
+                        ],
+                        stops: [0.05, 0.55, 1],
+                      )
+                      : Lumina.tide,
+                boxShadow: [
+                  BoxShadow(
+                    color: verdictColor.withValues(alpha: 0.35),
+                    blurRadius: 18,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Icon(verdictIcon, color: Colors.white, size: 26),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    verdictWord,
+                    maxLines: 1,
+                    style: Lumina.display(
+                      21,
+                      color: urgent ? (dive ? AppColors.triageRed : ink) : ink,
+                    ).copyWith(letterSpacing: 1.2),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    personName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Text(title, style: Lumina.display(22, color: ink)),
+        const SizedBox(height: 20),
+        Container(
+          height: 1,
+          color: Colors.white.withValues(alpha: dive ? 0.12 : 0.07),
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 24,
+          runSpacing: 16,
+          children: [
+            _VerdictStat(
+              label: 'Answered',
+              reading: '$answeredCount/$totalCount',
+              fraction: totalCount == 0 ? 0 : answeredCount / totalCount,
+              dive: dive,
+            ),
+            _VerdictStat(
+              label: 'Signs seen',
+              reading: '$signsCount',
+              fraction: totalCount == 0 ? 0 : signsCount / totalCount,
+              tone: signsCount == 0
+                  ? Lumina.azure
+                  : AppColors.triageRed,
+              dive: dive,
+            ),
+            _VerdictStat(
+              label: 'How long',
+              reading: since ?? 'Not asked',
+              readingSize: 12,
+              fraction: switch (since) {
+                null => 0.0,
+                _ when since!.startsWith('Started') => 0.25,
+                _ when since!.startsWith('About') => 0.5,
+                _ when since!.startsWith('A week') => 0.85,
+                _ => 0.6,
+              },
+              dive: dive,
+            ),
+          ],
+        ),
+      ],
+    );
+    if (!dive) {
+      return LumenCard(padding: const EdgeInsets.all(20), child: body);
+    }
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: isUrgent
-            ? AppColors.checkUrgentGradient
-            : AppColors.checkButtonGradient,
+        borderRadius: BorderRadius.circular(Lumina.rLg),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Lumina.abyss, Lumina.deep],
+        ),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.09),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: (isUrgent ? AppColors.triageRed : AppColors.checkBlue)
-                .withValues(alpha: 0.2),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            color: (urgent ? AppColors.triageRed : Lumina.abyss).withValues(
+              alpha: urgent ? 0.3 : 0.5,
+            ),
+            blurRadius: 26,
+            offset: const Offset(0, 12),
           ),
         ],
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(verdictIcon, color: Colors.white, size: 28),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontFamily: 'Sora',
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    height: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  personName,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white.withValues(alpha: 0.7),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      child: body,
     );
   }
+}
+
+/// One recorded reading on the verdict card: what she answered, in numbers
+/// she can check, with a tide line under it.
+class _VerdictStat extends StatelessWidget {
+  const _VerdictStat({
+    required this.label,
+    required this.reading,
+    required this.fraction,
+    this.tone = Lumina.azure,
+    this.readingSize = 17,
+    required this.dive,
+  });
+
+  final String label;
+  final String reading;
+  final double fraction;
+  final Color tone;
+  final double readingSize;
+  final bool dive;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 96,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        MicroLabel(label, color: dive ? Lumina.diveMuted : Lumina.inkFaint),
+        const SizedBox(height: 6),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            reading,
+            style: TextStyle(
+              fontFamily: 'Sora',
+              fontSize: readingSize,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
+              color: dive ? Colors.white : Lumina.ink,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        TideProgress(fraction: fraction, color: tone, height: 3),
+      ],
+    ),
+  );
 }
 
 /// The navy hero for a check that cannot go ahead. Same visual language as
@@ -3668,6 +3964,40 @@ class _RecheckPromiseCard extends ConsumerWidget {
         itemKey: 'recheck',
         occurrenceKey: caregiverDateKey(clock().add(const Duration(days: 1))),
         label: 'I will check again tomorrow',
+      ),
+    );
+  }
+}
+
+/// The verdict moved because of a measurement nobody entered today. Naming the
+/// reason is the difference between a surprising instruction and a followable
+/// one — and it is the only place the tape's number reaches a caregiver.
+class _TapeReadingNoteCard extends StatelessWidget {
+  const _TapeReadingNoteCard({required this.note});
+
+  final String note;
+
+  @override
+  Widget build(BuildContext context) {
+    return CompanionCard(
+      title: 'Why this check is not all-clear',
+      eyebrow: 'FROM THE LAST CLINIC VISIT',
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.straighten_outlined,
+            size: 18,
+            color: AppColors.checkBlue,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              note,
+              style: const TextStyle(fontSize: 13.5, height: 1.45),
+            ),
+          ),
+        ],
       ),
     );
   }

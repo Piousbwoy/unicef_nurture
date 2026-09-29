@@ -80,6 +80,12 @@ class _FamilyRepository extends CareRepository {
     AppUser user,
     CaregiverScope scope,
   ) async => null;
+
+  @override
+  Future<GrowthMeasurement?> latestGrowth(
+    AppUser user,
+    String personId,
+  ) async => null;
 }
 
 class _SilentVoice implements CaregiverVoiceBackend {

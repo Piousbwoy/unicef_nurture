@@ -4,18 +4,16 @@ import 'package:intl/intl.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/theme/fhw_luxe.dart';
+import '../../core/theme/lumen.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
 import '../../domain/engines/vulnerability_engine.dart';
 import '../../domain/enums.dart';
 import '../registration/patient_intake_screen.dart';
-import '../shared/speakable_text.dart';
-import '../visit/roll_call_screen.dart';
-import 'clinic_queue_screen.dart';
 import 'clinic_widgets.dart';
 import 'household_screen.dart';
-import 'luxe_components.dart';
+import 'lumen_hero.dart';
+import 'lumen_register.dart';
 import 'luxe_motion.dart';
 import 'receive_patient_sheet.dart';
 
@@ -126,357 +124,174 @@ class FhwHomeTab extends ConsumerWidget {
 
     final pending = sync.valueOrNull?.pending;
     final failures = sync.valueOrNull?.failing;
-    final engineReady = sync.valueOrNull != null;
     final tickets = queue.valueOrNull ?? const <ClinicQueueTicket>[];
-    var sessionDone = 0;
-    var sessionTotal = 0;
-    var oldestWait = 0;
-    final now = DateTime.now();
-    for (final t in tickets) {
-      sessionDone += t.assessedCount;
-      sessionTotal += t.presentCount;
-      final waited = now.difference(t.visit.startedAt).inMinutes;
-      if (waited > oldestWait) oldestWait = waited;
-    }
     final connection = network.when(
       data: (online) => online ? 'Network available' : 'Working offline',
       error: (_, _) => 'Connection unknown',
       loading: () => 'Checking connection',
     );
+    final dueToday = plan.valueOrNull?.dueContacts.length ?? 0;
+    final overdue = plan.valueOrNull?.overdueContacts.length ?? 0;
+    final peopleWaiting = tickets.fold<int>(0, (sum, t) => sum + t.pending);
 
-    return RefreshIndicator(
-      onRefresh: () async => refresh(),
-      child: ListView(
-        key: const PageStorageKey('fhw-today'),
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-        children: [
-          StaggeredEntrance(
-            children: [
-              ClinicStatusLine(
-                text:
-                    '$connection · ${pending == null ? 'Sync status unavailable' : '$pending changes waiting to send'}'
-                    '${failures != null && failures > 0 ? ' · $failures need retry' : ''}',
-                icon: network.valueOrNull == true
-                    ? Icons.wifi_rounded
-                    : Icons.wifi_off_rounded,
-                onTap: onOpenProfile,
-              ),
-              const SizedBox(height: 20),
-              CatalystCapsule(
-                badge:
-                    '${DateFormat('EEEE, d MMMM').format(DateTime.now()).toUpperCase()}'
-                    ' · ${user.chpsZone ?? user.community}'
-                    ' · ${engineReady ? 'OFFLINE ENGINE READY' : 'READING LOCAL RECORDS'}',
-                heading: SpeakableText(
-                  'Care starts here.',
-                  style: AppType.headline.copyWith(
-                    color: Colors.white,
-                    fontSize: 28,
-                  ),
+    Future<void> receivePatient() async {
+      await showReceivePatientSheet(
+        context,
+        knownHouseholds: households.valueOrNull ?? const [],
+      );
+      if (context.mounted) refresh();
+    }
+
+    return Sanctum(
+      focus: const Alignment(0, -0.7),
+      child: RefreshIndicator(
+        onRefresh: () async => refresh(),
+        child: ListView(
+          key: const PageStorageKey('fhw-today'),
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+          children: [
+            StaggeredEntrance(
+              children: [
+                LumenHero(
+                  dateLabel: DateFormat('EEEE, d MMMM').format(DateTime.now()),
+                  zone: user.chpsZone ?? user.community,
+                  connectionLabel: connection,
+                  pendingSync: pending,
+                  syncFailures: failures,
+                  householdCount: households.valueOrNull?.length ?? 0,
+                  openSessions: tickets.length,
+                  peopleWaiting: peopleWaiting,
+                  dueToday: dueToday,
+                  overdue: overdue,
+                  urgentReferrals: urgent?.length ?? 0,
+                  onReceive: receivePatient,
+                  onResume: onOpenQueue,
+                  onFollowThrough: onOpenReferrals ?? onOpenQueue,
+                  onSync: onOpenProfile ?? onOpenFamilies,
                 ),
-                body: NarrationSection(
-                  narrationKey: 'fhw:home:intro',
-                  text:
-                      'Find a household. Confirm who is here.\nKeep the care of everyone in one session.',
-                  child: SpeakableText(
-                    'Find a household. Confirm who is here.\nKeep the care of everyone in one session.',
-                    style: AppType.body.copyWith(
-                      color: Colors.white,
-                      fontSize: 14,
-                      height: 1.5,
-                    ),
-                  ),
-                ),
-                button: SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    key: const ValueKey('fhw-start-intake'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: AppColors.primaryDeep,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 16,
-                      ),
-                    ),
-                    onPressed: () async {
-                      await showReceivePatientSheet(
-                        context,
-                        knownHouseholds: households.valueOrNull ?? const [],
-                      );
-                      if (context.mounted) refresh();
-                    },
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text(
-                      'Receive a patient',
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-                footer: const SpeakableText(
-                  'Clinical assessment works without internet.',
-                  style: TextStyle(fontSize: 12, color: Colors.white70),
-                ),
-              ),
-              const SizedBox(height: 16),
-              queue.when(
-                data: (tickets) => tickets.isEmpty
-                    ? const SizedBox.shrink()
-                    : Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: _QueueSummary(tickets: tickets, onReturn: refresh),
-                      ),
-                loading: () => const Padding(
-                  padding: EdgeInsets.only(bottom: 16),
-                  child: LinearProgressIndicator(minHeight: 2),
-                ),
-                error: (_, _) => Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: ClinicStatusLine(
+                const SizedBox(height: 12),
+                if (queue.isLoading)
+                  const LinearProgressIndicator(minHeight: 2)
+                else if (queue.hasError)
+                  ClinicStatusLine(
                     text: 'Open sessions could not be checked. Tap to retry.',
                     icon: Icons.refresh_rounded,
                     onTap: () => ref.invalidate(clinicQueueProvider),
                   ),
-                ),
-              ),
-              if (urgent != null && urgent.isNotEmpty) ...[
-                ClinicCard(
-                  accent: AppColors.triageRed,
-                  title:
-                      '${urgent.length} urgent referral${urgent.length == 1 ? '' : 's'} awaiting arrival',
-                  subtitle:
-                      'No arrival has been recorded on this phone. Check what happened next.',
-                  child: OutlinedButton.icon(
-                    onPressed: onOpenReferrals ?? onOpenQueue,
-                    icon: const Icon(Icons.arrow_forward_rounded),
-                    label: const Text('Review urgent referrals'),
-                  ),
-                ),
-                const SizedBox(height: 20),
+                if (tickets.isNotEmpty) ...[
+                  const SizedBox(height: 22),
+                  // The register: the day's open sessions on a carved ledger.
+                  // Honest progress only — assessed of received — never a triage
+                  // guess.
+                  LumenRegister(tickets: tickets, onOpenQueue: onOpenQueue),
+                ],
               ],
-              Text(
-                'Your work at a glance',
-                style: AppType.title.copyWith(fontSize: 18),
-              ),
+            ),
+            if (plan.hasError || referrals.hasError || households.hasError) ...[
               const SizedBox(height: 12),
-              BentoTelemetryDeck(
-                queueCount: tickets.length,
-                queueNames: [for (final t in tickets) t.householdName],
-                oldestWaitMinutes: oldestWait > 0 ? oldestWait : null,
-                dueToday: plan.valueOrNull?.dueContacts.length,
-                overdue: plan.valueOrNull?.overdueContacts.length,
-                sessionDone: sessionTotal > 0 ? sessionDone : null,
-                sessionTotal: sessionTotal > 0 ? sessionTotal : null,
-                pendingSync: pending,
-                failingSync: failures,
-                engineReady: engineReady,
-                referrals: referrals.valueOrNull?.length,
-                households: households.valueOrNull?.length,
-                onQueueTap: onOpenQueue,
-                onDueTap: onOpenQueue,
-                onSyncTap: onOpenProfile ?? onOpenFamilies,
-                onReferralsTap: onOpenReferrals ?? onOpenQueue,
-                onFamiliesTap: onOpenFamilies,
+              ClinicStatusLine(
+                text: 'Some records could not be loaded. Tap to retry.',
+                icon: Icons.refresh_rounded,
+                onTap: refresh,
               ),
             ],
-          ),
-          if (plan.hasError || referrals.hasError || households.hasError) ...[
-            const SizedBox(height: 12),
-            ClinicStatusLine(
-              text: 'Some records could not be loaded. Tap to retry.',
-              icon: Icons.refresh_rounded,
-              onTap: refresh,
-            ),
-          ],
-          const SizedBox(height: 20),
-          const _DailyRegisterTally(),
-          plan.maybeWhen(
-            data: (data) {
-              final priority = data.priorities
-                  .where(
-                    (p) =>
-                        p.band == VulnerabilityBand.critical ||
-                        p.band == VulnerabilityBand.high,
-                  )
-                  .take(3)
-                  .toList();
-              if (priority.isEmpty) return const SizedBox.shrink();
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 20),
-                child: ClinicCard(
-                  title: 'Bring these records forward',
-                  subtitle:
-                      'Priorities from saved records—not a diagnosis of who is unwell now.',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (final item in priority)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            item.household.name,
-                            style: AppType.label,
-                          ),
-                          subtitle: Text(item.reason, style: AppType.caption),
-                          trailing: const Icon(Icons.chevron_right_rounded),
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => HouseholdScreen(
-                                householdId: item.household.id,
+            const SizedBox(height: 28),
+            const _DailyRegisterTally(),
+            plan.maybeWhen(
+              data: (data) {
+                final priority = data.priorities
+                    .where(
+                      (p) =>
+                          p.band == VulnerabilityBand.critical ||
+                          p.band == VulnerabilityBand.high,
+                    )
+                    .take(3)
+                    .toList();
+                if (priority.isEmpty) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: LumenCard(
+                    title: 'Bring these records forward',
+                    subtitle:
+                        'Priorities from saved records—not a diagnosis of who is unwell now.',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final item in priority)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              item.household.name,
+                              style: AppType.label,
+                            ),
+                            subtitle: Text(item.reason, style: AppType.caption),
+                            trailing: const Icon(Icons.chevron_right_rounded),
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => HouseholdScreen(
+                                  householdId: item.household.id,
+                                ),
                               ),
                             ),
                           ),
+                        TextButton(
+                          onPressed: onOpenQueue,
+                          child: const Text('Open care reviews'),
                         ),
-                      TextButton(
-                        onPressed: onOpenQueue,
-                        child: const Text('Open care reviews'),
+                      ],
+                    ),
+                  ),
+                );
+              },
+              orElse: () => const SizedBox.shrink(),
+            ),
+            const _FamilyReports(),
+            const SizedBox(height: 10),
+            // The way into search reuses the hero's magnetic capsule, so the
+            // whole page shares one tactile language: it draws inward on the
+            // press and settles. The label is unchanged.
+            MagneticCapsule(
+              radius: Gap.radius,
+              onTap: onOpenFamilies,
+              child: SizedBox(
+                height: Gap.tapTarget,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.search_rounded,
+                        size: 19,
+                        color: AppColors.primary,
+                      ),
+                      const SizedBox(width: 10),
+                      Flexible(
+                        child: Text(
+                          'Find a patient or household',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppType.label.copyWith(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-              );
-            },
-            orElse: () => const SizedBox.shrink(),
-          ),
-          const _FamilyReports(),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: onOpenFamilies,
-            icon: const Icon(Icons.search_rounded),
-            label: const Text('Find a patient or household'),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'This workspace shows records available on this phone. A quiet list does not rule out urgent care needs.',
-            style: TextStyle(
-              color: AppColors.inkMuted,
-              fontSize: 12,
-              height: 1.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _QueueSummary extends StatelessWidget {
-  const _QueueSummary({required this.tickets, required this.onReturn});
-  final List<ClinicQueueTicket> tickets;
-  final VoidCallback onReturn;
-
-  Future<void> _resume(BuildContext context, ClinicQueueTicket ticket) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => RollCallScreen(householdId: ticket.visit.householdId),
-      ),
-    );
-    onReturn();
-  }
-
-  void _open(BuildContext context) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const ClinicQueueScreen()));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final total = tickets.length;
-    final pendingPeople = tickets.fold<int>(0, (s, t) => s + t.pending);
-    return ClinicCard(
-      accent: FhwLuxePalette.sapphireRoyal,
-      title: '$total patient${total == 1 ? '' : 's'} in the clinic queue',
-      subtitle: pendingPeople > 0
-          ? '$pendingPeople ${pendingPeople == 1 ? 'person' : 'people'} still to be assessed.'
-          : 'Everyone received has a saved assessment.',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final t in tickets.take(3))
-            _QueueRow(ticket: t, onResume: () => _resume(context, t)),
-          const SizedBox(height: 8),
-          FilledButton.icon(
-            onPressed: () => _open(context),
-            icon: const Icon(Icons.format_list_numbered_rounded),
-            label: Text(
-              total > 3 ? 'Open full queue ($total)' : 'Open clinic queue',
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _QueueRow extends StatelessWidget {
-  const _QueueRow({required this.ticket, required this.onResume});
-  final ClinicQueueTicket ticket;
-  final VoidCallback onResume;
-
-  @override
-  Widget build(BuildContext context) {
-    final arrival = DateFormat('HH:mm').format(ticket.visit.startedAt);
-    final pendingLabel = ticket.pending > 0
-        ? '${ticket.pending} to assess'
-        : 'Done';
-    return InkWell(
-      onTap: onResume,
-      borderRadius: BorderRadius.circular(Gap.radiusSm),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 2),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.person_rounded,
-              size: 18,
-              color: AppColors.primaryDark,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    ticket.householdName,
-                    style: AppType.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          pendingLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppType.caption.copyWith(
-                            color: ticket.pending > 0
-                                ? AppColors.inkMuted
-                                : AppColors.triageGreen,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        ' · $arrival',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppType.caption,
-                      ),
-                    ],
-                  ),
-                ],
               ),
             ),
-            const SizedBox(width: 6),
-            const Icon(
-              Icons.chevron_right_rounded,
-              size: 18,
-              color: AppColors.inkMuted,
+            const SizedBox(height: 14),
+            const Text(
+              'This workspace shows records available on this phone. A quiet list does not rule out urgent care needs.',
+              style: TextStyle(
+                color: AppColors.inkMuted,
+                fontSize: 12,
+                height: 1.5,
+              ),
             ),
           ],
         ),
@@ -512,7 +327,7 @@ class _DailyRegisterTally extends ConsumerWidget {
           ? const SizedBox.shrink()
           : Padding(
               padding: const EdgeInsets.only(bottom: 20),
-              child: ClinicCard(
+              child: LumenCard(
                 title: 'Today’s tally',
                 subtitle:
                     'Counted from records you saved on this phone today. Each '
@@ -582,13 +397,29 @@ class _TallyCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 7),
+    padding: const EdgeInsets.symmetric(vertical: 10),
     child: Row(
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(value, style: AppType.title.copyWith(fontSize: 18, color: tone)),
-        const SizedBox(width: 8),
+        // The figure is carved sapphire — structural light, not painted ink —
+        // scaled down inside a fixed well so a wide numerator or the 200% text
+        // floor can never overflow the ledger column.
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 78),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: tone == null
+                ? Monolith(value: value, fontSize: 27, pearled: true)
+                : Monolith(
+                    value: value,
+                    fontSize: 27,
+                    pearled: false,
+                    tone: tone!,
+                  ),
+          ),
+        ),
+        const SizedBox(width: 12),
         Expanded(
           child: Text(
             label,
@@ -619,7 +450,7 @@ class _FamilyReports extends ConsumerWidget {
           ? const SizedBox.shrink()
           : Padding(
               padding: const EdgeInsets.only(bottom: 20),
-              child: ClinicCard(
+              child: LumenCard(
                 title: 'What families reported',
                 subtitle:
                     'Home checks on this shared phone. Reported observations, not clinical examinations.',

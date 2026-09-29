@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/glass.dart';
+import '../../../core/theme/lumina.dart';
 import '../../../domain/entities/core.dart';
 import '../../../domain/entities/caregiver.dart';
 import '../../../domain/enums.dart';
@@ -222,6 +223,7 @@ class CompanionPage extends ConsumerStatefulWidget {
     required this.child,
     this.actions,
     this.heroChrome = true,
+    this.lume = false,
   });
   final String title;
   final Widget child;
@@ -230,6 +232,12 @@ class CompanionPage extends ConsumerStatefulWidget {
   /// The caregiver gradient bar. Screens that already open with their own
   /// navy hero pass false so two blue bands never stack.
   final bool heroChrome;
+
+  /// The lights-out state. Urgency in this app is not red added to a bright
+  /// screen, it is light taken away: the pearl canvas drops to midnight and
+  /// the cards on it become lit instruments in a dark room. Descendants read
+  /// [LumeField] to find out which ground they are standing on.
+  final bool lume;
   @override
   ConsumerState<CompanionPage> createState() => _CompanionPageState();
 }
@@ -241,45 +249,65 @@ class _CompanionPageState extends ConsumerState<CompanionPage> {
     final scope = ref.watch(caregiverScopeProvider);
     _owner ??= scope;
     final hero = widget.heroChrome;
+    final lume = widget.lume;
+    final ground = lume ? Lumina.abyss : AppColors.caregiverCanvas;
+    final ink = lume ? Lumina.diveInk : CompanionColors.ink;
     return CompanionTheme(
-      child: Scaffold(
-        appBar: AppBar(
-          toolbarHeight: 56 + MediaQuery.textScalerOf(context).scale(16),
-          // The bar and the page are one ground: the caregiver body is cool
-          // blue, so a warm ivory bar above it reads as a different app.
-          backgroundColor: hero
-              ? Colors.transparent
-              : AppColors.caregiverCanvas,
-          foregroundColor: hero ? Colors.white : CompanionColors.ink,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          flexibleSpace: hero
-              ? const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: AppColors.caregiverGradient,
-                  ),
-                  child: SizedBox.expand(),
-                )
-              : null,
-          title: Text(
-            widget.title,
-            style: TextStyle(
-              fontFamily: 'Sora',
-              fontWeight: FontWeight.w700,
-              fontSize: 18,
-              color: hero ? Colors.white : CompanionColors.ink,
-            ),
-          ),
-          actions: widget.actions ?? [const CaregiverEmergencyButton()],
-        ),
-        body: scope == null || scope != _owner
-            ? const Center(
-                child: Text('Your account changed. Reopen your family.'),
-              )
-            : DefaultTextStyle.merge(
-                style: caregiverBody(),
-                child: widget.child,
+      child: LumeField(
+        lume: lume,
+        child: TweenAnimationBuilder<Color?>(
+          tween: ColorTween(end: ground),
+          duration: const Duration(milliseconds: 320),
+          curve: Curves.easeOut,
+          builder: (context, color, child) => Scaffold(
+            backgroundColor: color,
+            appBar: AppBar(
+              toolbarHeight: 56 + MediaQuery.textScalerOf(context).scale(16),
+              // The bar and the page are one ground: the caregiver body is cool
+              // blue, so a warm ivory bar above it reads as a different app.
+              backgroundColor: hero && !lume ? Colors.transparent : color,
+              foregroundColor: hero || lume
+                  ? (lume ? Lumina.diveInk : Colors.white)
+                  : CompanionColors.ink,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              flexibleSpace: hero && !lume
+                  ? const DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: AppColors.caregiverGradient,
+                      ),
+                      child: SizedBox.expand(),
+                    )
+                  : null,
+              title: Text(
+                widget.title,
+                style: TextStyle(
+                  fontFamily: 'Sora',
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                  color: lume
+                      ? Lumina.diveInk
+                      : hero
+                      ? Colors.white
+                      : CompanionColors.ink,
+                ),
               ),
+              actions: widget.actions ?? [const CaregiverEmergencyButton()],
+            ),
+            body: child,
+          ),
+          child: scope == null || scope != _owner
+              ? Center(
+                  child: Text(
+                    'Your account changed. Reopen your family.',
+                    style: caregiverBody(color: lume ? ink : null),
+                  ),
+                )
+              : DefaultTextStyle.merge(
+                  style: caregiverBody(color: lume ? ink : null),
+                  child: widget.child,
+                ),
+        ),
       ),
     );
   }

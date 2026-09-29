@@ -1,3 +1,4 @@
+import 'package:carebridge_ai/core/i18n/speech_bank.dart';
 import 'package:carebridge_ai/data/reference/local_foods.dart';
 import 'package:carebridge_ai/domain/entities/caregiver.dart';
 import 'package:carebridge_ai/domain/entities/core.dart';
@@ -175,6 +176,188 @@ void main() {
         },
       );
     }
+    group('a stored arm-tape reading is part of the decision', () {
+      GrowthMeasurement tape(int mm, {bool oedema = false}) =>
+          GrowthMeasurement(
+            id: 'g',
+            personId: 'baby',
+            takenAt: now,
+            muacMm: mm,
+            hasBilateralOedema: oedema,
+          );
+      Person underFive() =>
+          child(dob: DateTime(2025, 8, 1), type: ClientType.childUnderFive);
+      Map<String, CaregiverAnswer> allNo(CaregiverQuestionSet set) => {
+        for (final q in set.questions) q.key: CaregiverAnswer.no,
+      };
+
+      test('severe wasting escalates an all-clear check to urgent', () {
+        final set = policy.questionsFor(underFive())!;
+        final answers = allNo(set);
+        expect(policy.decide(set, answers), CaregiverCheckDecision.routine);
+        expect(
+          policy.decide(set, answers, growth: tape(110)),
+          CaregiverCheckDecision.urgent,
+        );
+        // Oedema means severe regardless of what the tape says.
+        expect(
+          policy.decide(set, answers, growth: tape(130, oedema: true)),
+          CaregiverCheckDecision.urgent,
+        );
+      });
+
+      test('moderate wasting escalates an all-clear check to contact today', () {
+        final set = policy.questionsFor(underFive())!;
+        expect(
+          policy.decide(set, allNo(set), growth: tape(118)),
+          CaregiverCheckDecision.contactToday,
+        );
+      });
+
+      test('a healthy tape reading never downgrades a reported danger sign', () {
+        final set = policy.questionsFor(underFive())!;
+        expect(
+          policy.decide(set, {set.questions.first.key: CaregiverAnswer.yes},
+              growth: tape(140)),
+          CaregiverCheckDecision.urgent,
+        );
+        final unsure = allNo(set)
+          ..[set.questions.first.key] = CaregiverAnswer.unsure;
+        expect(
+          policy.decide(set, unsure, growth: tape(118)),
+          CaregiverCheckDecision.urgent,
+        );
+      });
+
+      test('a tape reading never completes an unfinished check', () {
+        final set = policy.questionsFor(underFive())!;
+        expect(
+          policy.decide(set, {}, growth: tape(110)),
+          CaregiverCheckDecision.incomplete,
+        );
+      });
+
+      test('the escalation is named, and names no diagnosis', () {
+        final set = policy.questionsFor(underFive())!;
+        final severe = policy.nutritionNote(set, tape(110));
+        final moderate = policy.nutritionNote(set, tape(118));
+        expect(severe, isNotNull);
+        expect(moderate, isNotNull);
+        expect(policy.nutritionNote(set, tape(140)), isNull);
+        expect(policy.nutritionNote(set, null), isNull);
+        for (final note in [severe!, moderate!]) {
+          expect(note.toLowerCase(), isNot(contains('diagnos')));
+          expect(note.toLowerCase(), isNot(contains('sent')));
+          expect(note.toLowerCase(), isNot(contains('referral')));
+        }
+      });
+
+      test('a tape reading is not evidence about a young infant', () {
+        // MUAC is read from 6 months. A measurement mis-filed on a 0-59 day
+        // record must not drive that record's verdict.
+        final infant = child(dob: DateTime(2026, 8, 5));
+        final set = policy.questionsFor(infant)!;
+        final answers = allNo(set);
+        expect(
+          policy.decide(set, answers, growth: tape(110)),
+          CaregiverCheckDecision.routine,
+        );
+        expect(policy.nutritionNote(set, tape(110)), isNull);
+      });
+
+      test('advice never credits a family with signs they did not report', () {
+        final set = policy.questionsFor(underFive())!;
+        String advice(
+          Map<String, CaregiverAnswer> answers,
+          CaregiverCheckDecision decision,
+        ) => CaregiverCheckPolicy.contextualAdvice(
+          person: underFive(),
+          decision: decision,
+          set: set,
+          answers: answers,
+          growth: tape(110),
+        );
+
+        // The tape raised this verdict; her answers did not. Saying she
+        // noticed danger signs would invent something she never reported.
+        final byTape = advice(allNo(set), CaregiverCheckDecision.urgent);
+        expect(byTape, isNot(contains('You noticed danger signs')));
+        expect(byTape.toLowerCase(), contains('measurement'));
+        // The safety guidance that does not depend on the cause stays.
+        expect(byTape, contains('Do not give any medicine'));
+
+        // A sign she did report still reads as hers.
+        final bySign = advice(
+          {set.questions.first.key: CaregiverAnswer.yes},
+          CaregiverCheckDecision.urgent,
+        );
+        expect(bySign, contains('You noticed danger signs'));
+
+        // Same rule one rung down the ladder.
+        final cautionByTape = advice(
+          allNo(set),
+          CaregiverCheckDecision.contactToday,
+        );
+        expect(cautionByTape, isNot(contains('what you noticed')));
+        expect(cautionByTape.toLowerCase(), contains('measurement'));
+      });
+
+      test('the spoken verdict claims a danger sign only when one was heard', ()
+          {
+        // "Danger signs are present" and "some answers are not clear" are
+        // reviewed bank wording. Both are true of what she reported and false
+        // of a verdict the clinic tape raised alone, so the clip has to be
+        // chosen from her answers — and where no reviewed clip is true, the
+        // line is composed instead so it falls back to the machine voice the
+        // rest of her prose already uses.
+        expect(
+          CaregiverCheckPolicy.verdictSpeech(
+            CaregiverCheckDecision.urgent,
+            signsReported: true,
+            uncertain: false,
+          )!.clipId,
+          'caregiver_verdict_urgent',
+        );
+        final raisedByTape = CaregiverCheckPolicy.verdictSpeech(
+          CaregiverCheckDecision.urgent,
+          signsReported: false,
+          uncertain: false,
+        )!;
+        expect(
+          SpeechBank.byId(raisedByTape.clipId!)!.english.toLowerCase(),
+          isNot(contains('danger signs')),
+        );
+        expect(raisedByTape.english.toLowerCase(), contains('facility'));
+
+        final cautionByTape = CaregiverCheckPolicy.verdictSpeech(
+          CaregiverCheckDecision.contactToday,
+          signsReported: false,
+          uncertain: false,
+        )!;
+        expect(cautionByTape.clipId, isNull);
+        expect(
+          cautionByTape.english.toLowerCase(),
+          isNot(contains('not clear')),
+        );
+        expect(
+          CaregiverCheckPolicy.verdictSpeech(
+            CaregiverCheckDecision.contactToday,
+            signsReported: false,
+            uncertain: true,
+          )!.clipId,
+          'caregiver_verdict_caution',
+        );
+        expect(
+          CaregiverCheckPolicy.verdictSpeech(
+            CaregiverCheckDecision.routine,
+            signsReported: false,
+            uncertain: false,
+          )!.clipId,
+          'caregiver_verdict_fine',
+        );
+      });
+    });
+
     test('every registered person can be checked — no record is refused', () {
       for (final person in [
         child(unknown: true),
@@ -416,6 +599,89 @@ void main() {
         expect(day.attention.every((f) => !f.canComplete), isTrue);
         expect(day.routine.first.source, CaregiverFocusSource.clinic);
         expect(day.focus.length, lessThanOrEqualTo(3));
+      },
+    );
+    test(
+      'a recorded arrival closes the danger-sign reminder, not the danger sign',
+      () {
+        final check = home();
+        Iterable<CaregiverFocus> reminders({
+          List<CaregiverActivity> acts = const [],
+        }) => todayPlanner
+            .build(
+              scope: scope,
+              members: [child()],
+              checks: [check],
+              activity: acts,
+            )
+            .attention
+            .where((f) => f.source == CaregiverFocusSource.homeCheck);
+        CaregiverActivity arrival({
+          String id = 'arr',
+          String personId = 'baby',
+          DateTime? at,
+        }) {
+          final when = at ?? now.add(const Duration(hours: 2));
+          return CaregiverActivity(
+            id: id,
+            scope: scope,
+            personId: personId,
+            kind: CaregiverActivityKind.arrival,
+            sourceId: check.id,
+            itemKey: 'arrival',
+            occurrenceKey: check.id,
+            occurredAt: when,
+            updatedAt: when,
+            note: 'Caregiver reported arrival at a facility.',
+          );
+        }
+
+        expect(reminders(), hasLength(1));
+        expect(reminders().single.itemKey, 'concerning-check');
+        // The family got there. The reminder has done its job.
+        expect(reminders(acts: [arrival()]), isEmpty);
+        // An arrival recorded before the check cannot close it.
+        expect(
+          reminders(
+            acts: [arrival(at: now.subtract(const Duration(days: 3)))],
+          ),
+          hasLength(1),
+        );
+        // Nor can somebody else's arrival.
+        expect(
+          reminders(acts: [arrival(id: 'other', personId: 'sibling')]),
+          hasLength(1),
+        );
+        // A referral on the same child still stands on its own.
+        final withReferral = todayPlanner.build(
+          scope: scope,
+          members: [child()],
+          checks: [check],
+          activity: [arrival()],
+          referrals: [
+            Referral(
+              id: 'r',
+              referenceCode: 'TEST',
+              personId: 'baby',
+              assessmentId: 'a',
+              facilityName: 'CHPS',
+              reason: 'Urgent review',
+              urgency: ReferralUrgency.immediate,
+              issuedBy: 'nurse',
+              issuedAt: now,
+            ),
+          ],
+        );
+        expect(
+          withReferral.attention
+              .where((f) => f.source == CaregiverFocusSource.clinic),
+          hasLength(1),
+        );
+        expect(
+          withReferral.attention
+              .where((f) => f.source == CaregiverFocusSource.homeCheck),
+          isEmpty,
+        );
       },
     );
     test(

@@ -28,6 +28,7 @@ void main() {
           Permission.viewOwnFamilyOnly,
           Permission.runCaregiverTriage,
           Permission.recordBarrier,
+          Permission.requestCare,
           Permission.manageOwnFamily,
         },
       );

@@ -45,8 +45,7 @@ import '../../domain/enums.dart';
 /// and is not started as a timer — callers use [SyncService.runOnce] or
 /// [SyncService.drain] synchronously and then discard.
 Future<SyncService> buildEphemeralSyncService() async {
-  final transport = await HttpSyncTransport.fromPreferences();
-  return SyncService(transport: transport ?? const LoopbackTransport());
+  return SyncService(transport: await resolveSyncTransport());
 }
 
 /// The states the app's shell switches on.

@@ -183,23 +183,16 @@ void main() {
   ) async {
     await _pump(tester, pendingSync: 3);
 
-    expect(find.text('Care starts here.'), findsOneWidget);
+    // The hero opens on the first moment: receive the person in front of you.
+    expect(find.text('Begin with the person here.'), findsOneWidget);
     expect(find.text('Receive a patient'), findsOneWidget);
     expect(
-      find.text('Network available · 3 changes waiting to send'),
-      findsOneWidget,
-    );
-    expect(
-      find.text('Clinical assessment works without internet.'),
+      find.text('Network available · 3 saved on this phone'),
       findsOneWidget,
     );
 
-    for (final label in [
-      'Queue clear',
-      'Due today',
-      'Open referrals',
-      'Households',
-    ]) {
+    // The three labelled wells give the full control without any gesture.
+    for (final label in ['Receive', 'Care', 'Close loop']) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
     // An empty schedule is stated as a local-record fact, never as reassurance.
@@ -212,7 +205,7 @@ void main() {
   testWidgets('working offline is named, not hidden', (tester) async {
     await _pump(tester, online: false);
     expect(
-      find.text('Working offline · 0 changes waiting to send'),
+      find.text('Working offline · No items waiting to send'),
       findsOneWidget,
     );
     expect(find.text('Receive a patient'), findsOneWidget);
@@ -233,11 +226,35 @@ void main() {
       ],
     );
 
-    expect(find.text('1 patient in the clinic queue'), findsOneWidget);
-    expect(find.text('1 person still to be assessed.'), findsOneWidget);
-    expect(find.text('1 to assess'), findsOneWidget);
+    // The register row reports honest progress — assessed of received —
+    // and never invents a clinical verdict the ticket does not carry.
+    expect(find.text('1 person still to assess'), findsOneWidget);
+    final row = find.descendant(
+      of: find.byKey(const ValueKey('lumen-register')),
+      matching: find.text('1 of 2 assessed · 1 to assess'),
+    );
+    expect(row, findsOneWidget);
     expect(find.text('Open clinic queue'), findsOneWidget);
     expect(find.text('Achana household'), findsWidgets);
+  });
+
+  testWidgets('a session with everyone assessed reads as complete', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      queue: [
+        ClinicQueueTicket(
+          visit: _openVisit(),
+          householdName: 'Achana household',
+          presentCount: 2,
+          assessedCount: 2,
+        ),
+      ],
+    );
+
+    expect(find.text('Every household is assessed'), findsOneWidget);
+    expect(find.text('All 2 assessed'), findsOneWidget);
   });
 
   testWidgets('urgent referrals are chased without blaming the family', (
@@ -245,14 +262,58 @@ void main() {
   ) async {
     await _pump(tester, referrals: [_urgent()]);
 
-    expect(find.text('1 urgent referral awaiting arrival'), findsOneWidget);
+    // The chase lives on the third moment; the labelled well makes it
+    // reachable with a single tap.
+    await tester.tap(find.text('Close loop'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 urgent referral to trace.'), findsOneWidget);
+    expect(find.text('Open follow-up'), findsOneWidget);
+    // It says what to do next, never that the family failed to attend.
+    expect(find.textContaining('No arrival has been recorded'), findsNothing);
+  });
+
+  testWidgets('choosing the care well re-lights the focal to the queue', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      queue: [
+        ClinicQueueTicket(
+          visit: _openVisit(),
+          householdName: 'Achana household',
+          presentCount: 2,
+          assessedCount: 1,
+        ),
+      ],
+    );
+
+    // The labelled wells are the whole control — no drag is required, so the
+    // instrument stays operable with motion off or without a fine gesture.
+    await tester.tap(find.byKey(const ValueKey('lumen-well-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('1 person still waiting.'), findsOneWidget);
+    expect(find.text('Resume care'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('reduced motion renders the identical sanctuary without tweens', (
+    tester,
+  ) async {
+    // _pump disables animations; if any hero tween ignored the gate this
+    // would hang instead of settling.
+    await _pump(tester, pendingSync: 2);
+    expect(find.text('Begin with the person here.'), findsOneWidget);
     expect(
-      find.text(
-        'No arrival has been recorded on this phone. Check what happened next.',
-      ),
+      find.text('Network available · 2 saved on this phone'),
       findsOneWidget,
     );
-    expect(find.text('Review urgent referrals'), findsOneWidget);
+
+    await tester.tap(find.text('Close loop'));
+    await tester.pumpAndSettle();
+    expect(find.text('03  ·  CLOSE THE LOOP'), findsOneWidget);
+    expect(find.text('Keep planned care moving.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('priorities are labelled as records, not a diagnosis', (

@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../data/repositories/care_repository.dart';
 import '../../../domain/entities/caregiver.dart';
+import '../../../domain/entities/care_request.dart';
 import '../../../domain/entities/core.dart';
 import '../../../domain/entities/visit.dart';
 import '../../../domain/services/caregiver_check_policy.dart';
@@ -45,6 +46,28 @@ class CaregiverCheckController extends ChangeNotifier {
   CaregiverQuestionSet? questions;
   CaregiverDraft? draft;
   HomeCheck? report;
+
+  /// The family's request for help, once they have made one. Null until then —
+  /// and it stays null for an all-clear check, which is the honest state.
+  CareRequest? careRequest;
+
+  /// Whether the request has reached the server. Read from the outbox, never
+  /// inferred from how long ago the tap happened.
+  bool requestSent = false;
+
+  /// True between the tap and the write landing, so the control can say
+  /// "Sending" instead of looking dead.
+  bool requestingHelp = false;
+
+  /// Why the last ask failed, in the family's terms. Set only when nothing was
+  /// written; the card must not show it beside a request that did land.
+  String? requestError;
+
+  /// The last measurement a health worker recorded for this person on this
+  /// device. A caregiver cannot enter one; the check only reads what is
+  /// already here, so a red arm-tape reading cannot be contradicted by an
+  /// all-clear answer set.
+  GrowthMeasurement? growth;
   CaregiverCheckStage stage = CaregiverCheckStage.loading;
 
   /// Set with [stage] when a person falls outside the check's scope — the
@@ -57,7 +80,10 @@ class CaregiverCheckController extends ChangeNotifier {
   bool _disposed = false;
   bool get _live => !_disposed && isCurrent();
   CaregiverCheckDecision get decision =>
-      policy.decide(questions, draft?.answers ?? {});
+      policy.decide(questions, draft?.answers ?? {}, growth: growth);
+
+  /// Why a stored measurement moved the verdict, or null when it did not.
+  String? get nutritionNote => policy.nutritionNote(questions, growth);
 
   /// The danger signs she has already said YES to, in the order the battery
   /// asks them, in the short form an alarm can speak. The alarm names them so
@@ -109,6 +135,8 @@ class CaregiverCheckController extends ChangeNotifier {
         );
       }
       person = fresh;
+      growth = await repository.latestGrowth(user, person.id);
+      if (!_live) return;
       questions = policy.questionsFor(person);
       if (questions == null) {
         blockReason = policy.blockReasonFor(person);
@@ -142,6 +170,17 @@ class CaregiverCheckController extends ChangeNotifier {
         return;
       }
       _newSession();
+    } on AccessDenied catch (error) {
+      // A permission refusal is not a broken phone. Saying "saved answers could
+      // not be read" would send a family to retry storage forever for something
+      // that will never succeed, so it reads as the block it is.
+      if (!_live) return;
+      blockReason = (
+        headline: 'This check is not open on this account',
+        detail: error.message,
+      );
+      stage = CaregiverCheckStage.unsupported;
+      _notify();
     } catch (_) {
       if (!_live) return;
       stage = CaregiverCheckStage.loadFailed;
@@ -172,6 +211,9 @@ class CaregiverCheckController extends ChangeNotifier {
       updatedAt: now,
     );
     report = null;
+    careRequest = null;
+    requestSent = false;
+    requestError = null;
     saveState = CaregiverSaveState.unsaved;
     stage = CaregiverCheckStage.questions;
     _notify();
@@ -220,6 +262,9 @@ class CaregiverCheckController extends ChangeNotifier {
       givenCare: previous.givenCare,
     );
     report = null;
+    careRequest = null;
+    requestSent = false;
+    requestError = null;
     saveState = CaregiverSaveState.unsaved;
     stage = CaregiverCheckStage.questions;
     _persist();
@@ -372,6 +417,95 @@ class CaregiverCheckController extends ChangeNotifier {
     _notify();
   }
 
+  /// Ask a health worker to come. Writes the request only — the check and its
+  /// answers stay on this device (`recordHomeCheck` in the repository).
+  ///
+  /// Ordered on the same [_tail] as every other write, so an ask that races a
+  /// save cannot land between the save and its notification, and it is guarded
+  /// by `_live` because an account switch must not publish a request into the
+  /// next family's session.
+  Future<void> askForHelp() {
+    final check = report;
+    if (check == null || !_live) return Future.value();
+    if (!CaregiverCheckPolicy.canAskForHelp(check.verdict)) {
+      requestError = 'This check did not find a reason to ask for help.';
+      _notify();
+      return Future.value();
+    }
+    requestingHelp = true;
+    requestError = null;
+    _notify();
+    _tail = _tail.then((_) async {
+      if (!isCurrent()) return;
+      try {
+        careRequest = await repository.raiseCareRequest(user, scope, check);
+        if (careRequest != null) {
+          final state = await repository.careRequestState(
+            user,
+            scope,
+            check.id,
+          );
+          requestSent = state?.sent ?? false;
+        }
+      } catch (_) {
+        // Nothing was written, so the screen says nothing was written. The
+        // alternative — a silent failure — leaves a family believing help is
+        // coming when the row does not exist.
+        requestError =
+            'Your phone could not write the request. Nothing was sent.';
+      }
+      requestingHelp = false;
+      _notify();
+    });
+    return _tail;
+  }
+
+  /// Call back a request that has not left the phone. The repository refuses once
+  /// the server holds the row, and returns false once a worker has answered —
+  /// both of which the card has to reflect rather than promise.
+  Future<void> withdrawHelp() {
+    final check = report;
+    if (check == null || !_live) return Future.value();
+    _tail = _tail.then((_) async {
+      if (!isCurrent()) return;
+      final removed = await repository.withdrawCareRequest(
+        user,
+        scope,
+        check.id,
+      );
+      if (removed) {
+        careRequest = null;
+        requestSent = false;
+      } else if (careRequest != null) {
+        // It exists and it will not go away: say which of the two reasons the
+        // family is being told, instead of a button that does nothing.
+        requestError = requestSent
+            ? 'Your request has already reached the health worker. It cannot '
+                  'be called back.'
+            : 'Your health worker has already answered. That reply stays.';
+      }
+      _notify();
+    });
+    return _tail;
+  }
+
+  /// Re-read what the phone has actually done with the request. This is the only
+  /// honest way for the state to change while the family is looking at it: sync
+  /// runs elsewhere, and a pull can bring an answer in between two taps.
+  Future<void> refreshRequest() {
+    final check = report;
+    if (check == null || !_live) return Future.value();
+    _tail = _tail.then((_) async {
+      if (!isCurrent()) return;
+      final state = await repository.careRequestState(user, scope, check.id);
+      careRequest = state?.request;
+      requestSent = state?.sent ?? false;
+      requestError = null;
+      _notify();
+    });
+    return _tail;
+  }
+
   void onset(String note) {
     if (!_live ||
         (stage != CaregiverCheckStage.questions &&
@@ -424,6 +558,24 @@ class CaregiverCheckController extends ChangeNotifier {
       case CaregiverCheckStage.loadFailed:
         return;
     }
+    _notify();
+  }
+
+  /// Revisit an earlier answer directly from the care path. This can only
+  /// move backward to a question that already has an answer; future questions
+  /// remain sequential and the verdict is still derived by [policy].
+  void reviewQuestion(int index) {
+    if (!_live || stage != CaregiverCheckStage.questions || !_currentCohort()) {
+      return;
+    }
+    final current = draft!.questionIndex;
+    if (index < 0 || index >= current || index >= questions!.questions.length) {
+      return;
+    }
+    final key = questions!.questions[index].key;
+    if (draft!.answers[key] == null) return;
+    _change(index: index);
+    _persist();
     _notify();
   }
 

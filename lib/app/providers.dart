@@ -21,6 +21,7 @@ import '../core/audio/caregiver_playback.dart' show OfflineSpeechLanguage;
 import '../core/audio/speakable_service.dart';
 import '../core/ml/neural_translation_service.dart';
 import '../core/ml/piper_tts_service.dart';
+import '../core/ml/voice_pack_install.dart';
 import '../data/local/app_database.dart';
 import '../data/local/outbox_dao.dart';
 import '../data/local/preferences_store.dart';
@@ -68,6 +69,118 @@ final neuralTranslationProvider = FutureProvider<void>((ref) async {
 final piperTtsProvider = FutureProvider<void>((ref) async {
   await PiperTtsService.instance.initialize();
 });
+
+/// FHW warm-up borrows the existing services; it does not own their lifetime.
+final fhwLanguageServicesProvider =
+    Provider<({NeuralTranslationService neural, PiperTtsService piper})>((ref) {
+      return (
+        neural: NeuralTranslationService.instance,
+        piper: PiperTtsService.instance,
+      );
+    });
+
+/// Read-only: native runtime is bundled; web requires the verified cached shell
+/// so starting its worker does not intentionally fetch uncached runtime assets.
+final fhwWarmupRuntimeReadyProvider = Provider<Future<bool> Function()>((ref) {
+  return VoicePackInstaller().shellReady;
+});
+
+/// Active only while the FHW shell listens. This is a side effect, not a
+/// readiness signal: only the services' loaded-model checks establish readiness.
+final fhwLanguageWarmupProvider = Provider.autoDispose<void>((ref) {
+  final queue = ref.watch(_languageWarmupQueueProvider);
+  ref.listen(
+    currentUserProvider.select(_fhwWarmupLanguage),
+    (_, language) => queue.request(language),
+    fireImmediately: true,
+  );
+  ref.onCancel(queue.cancel);
+  ref.onResume(
+    () => queue.request(_fhwWarmupLanguage(ref.read(currentUserProvider))),
+  );
+  ref.onDispose(queue.cancel);
+});
+
+String? _fhwWarmupLanguage(AppUser? user) =>
+    user?.role == UserRole.frontlineHealthWorker
+    ? OfflineSpeechLanguage.resolve(account: user!.preferredLanguage)
+    : null;
+
+/// Active only while the caregiver shell listens. The family's language is
+/// the same preference narration uses, so playback never waits on a cold
+/// model. Shares the queue below: one device never loads two packs at once.
+final caregiverLanguageWarmupProvider = Provider.autoDispose<void>((ref) {
+  final queue = ref.watch(_languageWarmupQueueProvider);
+  ref.listen(
+    currentUserProvider.select(_caregiverWarmupLanguage),
+    (_, language) => queue.request(language),
+    fireImmediately: true,
+  );
+  ref.onCancel(queue.cancel);
+  ref.onResume(
+    () =>
+        queue.request(_caregiverWarmupLanguage(ref.read(currentUserProvider))),
+  );
+  ref.onDispose(queue.cancel);
+});
+
+String? _caregiverWarmupLanguage(AppUser? user) =>
+    user?.role == UserRole.caregiver
+    ? OfflineSpeechLanguage.resolve(account: user!.preferredLanguage)
+    : null;
+
+// Retained within this container across shell exits/reentries: the
+// service API cannot abort an in-flight load. Never dispose the borrowed
+// models. Shared by both shells so warm-ups serialize globally.
+final _languageWarmupQueueProvider = Provider<_LanguageWarmupQueue>((ref) {
+  final services = ref.watch(fhwLanguageServicesProvider);
+  final queue = _LanguageWarmupQueue(
+    services.neural,
+    services.piper,
+    ref.watch(fhwWarmupRuntimeReadyProvider),
+  );
+  ref.onDispose(queue.cancel);
+  return queue;
+});
+
+class _LanguageWarmupQueue {
+  _LanguageWarmupQueue(this.neural, this.piper, this.runtimeReady);
+  final NeuralTranslationService neural;
+  final PiperTtsService piper;
+  final Future<bool> Function() runtimeReady;
+  Future<void> _tail = Future.value();
+  int _generation = 0;
+
+  void cancel() => ++_generation;
+
+  void request(String? language) {
+    final generation = ++_generation;
+    if (language != 'Hausa' && language != 'Twi') return;
+    _tail = _tail.then((_) async {
+      if (generation != _generation) return;
+      try {
+        if (!await runtimeReady()) return;
+      } catch (_) {
+        // An unverifiable runtime must not trigger background asset fetching.
+        return;
+      }
+      if (generation != _generation) return;
+      try {
+        // Per-language initialization reuses loaded/in-flight models. It only
+        // reads bundled/installed packs; no installation or speech is requested.
+        await neural.initializeLanguage(language!);
+      } catch (_) {
+        // Even a platform availability check can throw. Keep the shell usable.
+      }
+      if (generation != _generation) return;
+      try {
+        await piper.initializeLanguage(language!);
+      } catch (_) {
+        // Missing or unavailable models must not escape this background task.
+      }
+    });
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Universal "speak in my language" narration.
@@ -155,11 +268,11 @@ final insightRepositoryProvider = Provider<InsightRepository>(
 );
 
 final syncServiceProvider = FutureProvider<SyncService>((ref) async {
-  // Try to create a real HTTP transport from configured preferences.
-  // If no sync URL has been set, fall back to LoopbackTransport so the
-  // outbox lifecycle still works for demonstration and testing.
-  final transport = await HttpSyncTransport.fromPreferences();
-  final service = SyncService(transport: transport);
+  // Real HTTP transport when a sync URL is configured. With none set, a field
+  // build resolves to NotConfiguredTransport (records stay honestly pending)
+  // rather than LoopbackTransport, which would falsely mark them synced; only
+  // DEMO_MODE builds get the loopback demonstration lifecycle.
+  final service = SyncService(transport: await resolveSyncTransport());
   // The hybrid engine's other half: every accepted push batch and every
   // reconnect is also a moment new data may be waiting to come DOWN.
   // Plain assignments, not a cascade — an `=> expr` closure body would

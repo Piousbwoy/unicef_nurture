@@ -697,6 +697,7 @@ class Referral {
     this.arrivalConfirmedBy,
     this.outcomeNotes,
     this.escalatedAt,
+    this.linkFromReferralId,
     this.syncState = SyncState.pending,
   });
 
@@ -721,10 +722,18 @@ class Referral {
   /// Set when the app auto-escalated an unconfirmed urgent referral.
   final DateTime? escalatedAt;
 
+  /// The referral this one answers. Non-null only when a follow-up found the
+  /// patient worse or unchanged and this referral was raised in its place — the
+  /// evidence that keeps a re-referral from looking like a lost new case.
+  final String? linkFromReferralId;
+
   final SyncState syncState;
 
   /// Hours since issue, used by the escalation rule.
   int get hoursOpen => DateTime.now().difference(issuedAt).inHours;
+
+  /// True when this referral exists because an earlier one failed the patient.
+  bool get isChained => linkFromReferralId != null;
 
   /// An immediate or same-day referral with no confirmation after 48 hours is
   /// a probable missed case, and the trigger for tracing plus barrier capture.
@@ -751,6 +760,7 @@ class Referral {
     'arrival_confirmed_by': arrivalConfirmedBy,
     'outcome_notes': outcomeNotes,
     'escalated_at': escalatedAt?.toIso8601String(),
+    'link_from_referral_id': linkFromReferralId,
     'sync_state': syncState.name,
   };
 
@@ -777,6 +787,7 @@ class Referral {
     arrivalConfirmedBy: m['arrival_confirmed_by'] as String?,
     outcomeNotes: m['outcome_notes'] as String?,
     escalatedAt: DateTime.tryParse((m['escalated_at'] as String?) ?? ''),
+    linkFromReferralId: m['link_from_referral_id'] as String?,
     syncState: SyncState.values.firstWhere(
       (s) => s.name == m['sync_state'],
       orElse: () => SyncState.pending,
@@ -805,7 +816,112 @@ class Referral {
     arrivalConfirmedBy: arrivalConfirmedBy ?? this.arrivalConfirmedBy,
     outcomeNotes: outcomeNotes ?? this.outcomeNotes,
     escalatedAt: escalatedAt ?? this.escalatedAt,
+    linkFromReferralId: linkFromReferralId,
     syncState: syncState ?? this.syncState,
+  );
+}
+
+/// One answered follow-up: what the worker found when they went looking.
+///
+/// This is the referral system's memory. Before it existed, an answer was free
+/// text concatenated onto `outcome_notes`, so nothing could ask "which referrals
+/// did we chase and what did we find?" — the single question a district nurse
+/// is asked. Every field here is a tap, not a sentence, and every field keeps
+/// "unknown" as a legal value: a guess written as data is how a child gets
+/// counted as cared for while still being sick at home.
+class FollowUpContact {
+  const FollowUpContact({
+    required this.id,
+    required this.referralId,
+    required this.householdId,
+    required this.at,
+    required this.channel,
+    required this.reached,
+    required this.care,
+    required this.condition,
+    required this.recordedBy,
+    this.personId,
+    this.barriers = const {},
+    this.note,
+    this.linkedReferralId,
+    this.syncState = SyncState.pending,
+  });
+
+  final String id;
+
+  /// The referral this contact answers. Always set: an unscheduled visit that
+  /// happens to find a referred child well is still recorded against the
+  /// referral, which is what lets the desk show a real trace history.
+  final String referralId;
+  final String? personId;
+  final String householdId;
+  final DateTime at;
+  final FollowUpChannel channel;
+  final FollowUpReach reached;
+  final FollowUpCare care;
+  final FollowUpCondition condition;
+  final Set<CareBarrier> barriers;
+
+  /// One line, in the worker's words. Not the record — the answers are.
+  final String? note;
+
+  /// Set when this contact raised a fresh referral because the patient was
+  /// worse or unchanged.
+  final String? linkedReferralId;
+  final String recordedBy;
+  final SyncState syncState;
+
+  /// A contact only closes a referral if it produced an answer. "Went round,
+  /// nobody was home" is an attempt, not an outcome.
+  bool get isAnswered => reached != FollowUpReach.unknown;
+
+  Map<String, Object?> toMap() => {
+    'id': id,
+    'referral_id': referralId,
+    'person_id': personId,
+    'household_id': householdId,
+    'at': at.toIso8601String(),
+    'channel': channel.name,
+    'reached': reached.name,
+    'care': care.name,
+    'condition': condition.name,
+    'barriers': barriers.map((b) => b.name).join(','),
+    'note': note,
+    'linked_referral_id': linkedReferralId,
+    'recorded_by': recordedBy,
+    'sync_state': syncState.name,
+  };
+
+  factory FollowUpContact.fromMap(Map<String, Object?> m) => FollowUpContact(
+    id: m['id'] as String,
+    referralId: m['referral_id'] as String,
+    personId: m['person_id'] as String?,
+    householdId: m['household_id'] as String,
+    at: DateTime.parse(m['at'] as String),
+    channel:
+        enumByNameOrNull(FollowUpChannel.values, m['channel']) ??
+        FollowUpChannel.unknown,
+    reached:
+        enumByNameOrNull(FollowUpReach.values, m['reached']) ??
+        FollowUpReach.unknown,
+    care:
+        enumByNameOrNull(FollowUpCare.values, m['care']) ?? FollowUpCare.unknown,
+    condition:
+        enumByNameOrNull(FollowUpCondition.values, m['condition']) ??
+        FollowUpCondition.notSeen,
+    barriers: ((m['barriers'] as String?) ?? '')
+        .split(',')
+        .where((s) => s.isNotEmpty)
+        .map((s) => enumByNameOrNull(CareBarrier.values, s))
+        .whereType<CareBarrier>()
+        .toSet(),
+    note: m['note'] as String?,
+    linkedReferralId: m['linked_referral_id'] as String?,
+    recordedBy: m['recorded_by'] as String,
+    syncState: SyncState.values.firstWhere(
+      (s) => s.name == m['sync_state'],
+      orElse: () => SyncState.pending,
+    ),
   );
 }
 
@@ -891,6 +1007,7 @@ class ScheduledContact {
     required this.createdBy,
     this.completedAt,
     this.assessmentId,
+    this.referralId,
     this.priority = TriageLevel.routine,
     this.syncState = SyncState.pending,
   });
@@ -903,6 +1020,11 @@ class ScheduledContact {
   final String createdBy;
   final DateTime? completedAt;
   final String? assessmentId;
+
+  /// Set when this contact exists to chase a specific referral. Without it the
+  /// desk and the day plan were two unrelated clocks: the referral invented a
+  /// due date at render time while the schedule knew nothing about it.
+  final String? referralId;
   final TriageLevel priority;
   final SyncState syncState;
 
@@ -926,6 +1048,7 @@ class ScheduledContact {
     'created_by': createdBy,
     'completed_at': completedAt?.toIso8601String(),
     'assessment_id': assessmentId,
+    'referral_id': referralId,
     'priority': priority.name,
     'sync_state': syncState.name,
   };
@@ -939,6 +1062,7 @@ class ScheduledContact {
     createdBy: m['created_by'] as String,
     completedAt: DateTime.tryParse((m['completed_at'] as String?) ?? ''),
     assessmentId: m['assessment_id'] as String?,
+    referralId: m['referral_id'] as String?,
     priority: TriageLevel.values.firstWhere(
       (t) => t.name == m['priority'],
       orElse: () => TriageLevel.routine,

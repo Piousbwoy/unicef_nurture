@@ -164,13 +164,11 @@ async function handleCaseloadRestore(req, res) {
       }
     }
 
-    // pull_updated_at is a server-internal watermark marker (see pull.js);
-    // a `SELECT *` delivers it on every row, but no client schema has a
-    // column for it. Strip it exactly as pull.js does, so the caseload a
-    // replacement device receives is writeable as-is.
-    for (const list of [households, persons, visits, assessments, referrals]) {
-      for (const r of list) delete r.pull_updated_at;
-    }
+    // Phase 1 (sync correctness): pull_updated_at is DELIVERED, not stripped,
+    // matching pull.js. The client recovery path intersects every row with the
+    // local table's columns (PRAGMA table_info) before writing, so the marker
+    // lands where the schema stores it (households, persons, referrals) and is
+    // harmlessly dropped for tables that have no such column.
 
     return res.status(200).json({
       ok: true,

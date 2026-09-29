@@ -1,11 +1,15 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:carebridge_ai/core/audio/audio_guide.dart';
 import 'package:carebridge_ai/core/audio/caregiver_playback.dart';
 import 'package:carebridge_ai/core/audio/voice_service.dart';
 import 'package:carebridge_ai/core/i18n/speech_bank.dart';
+import 'package:carebridge_ai/core/ml/piper_contract.dart';
+import 'package:carebridge_ai/core/audio/speech_content_policy.dart';
+import 'package:carebridge_ai/core/ml/piper_tts_runner.dart';
+import 'package:carebridge_ai/core/ml/piper_tts_service.dart';
+import 'package:carebridge_ai/core/ml/translation_service.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -14,9 +18,17 @@ const _ids = ['nurse_intro', 'q_newborn.feed', 'nurse_close'];
 String _english(List<String> ids) =>
     ids.map((id) => SpeechBank.byId(id)!.english).join(' ');
 CaregiverSpeech _speech(String language, {List<String> ids = _ids}) =>
-    CaregiverSpeech(id: 'guidance', english: _english(ids), language: language, clipIds: ids);
-Map<String, dynamic> _offline(String locale) =>
-    {'name': '$locale-local', 'locale': locale, 'network_required': false};
+    CaregiverSpeech(
+      id: 'guidance',
+      english: _english(ids),
+      language: language,
+      clipIds: ids,
+    );
+Map<String, dynamic> _offline(String locale) => {
+  'name': '$locale-local',
+  'locale': locale,
+  'network_required': false,
+};
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -24,14 +36,18 @@ void main() {
   group('exact transcript coverage', () {
     test('preserves const single-clip API and exact equality', () {
       const speech = CaregiverSpeech(
-        id: 'q', english: 'Not breastfeeding or feeding well',
-        language: 'Dagbani', clipId: 'q_newborn.feed',
+        id: 'q',
+        english: 'Not breastfeeding or feeding well',
+        language: 'Dagbani',
+        clipId: 'q_newborn.feed',
       );
       expect(speech.matchingClip, SpeechBank.qNewbornFeed);
       expect(speech.matchingClips, [SpeechBank.qNewbornFeed]);
       const spaced = CaregiverSpeech(
-        id: 'q', english: 'Not breastfeeding  or feeding well',
-        language: 'Dagbani', clipId: 'q_newborn.feed',
+        id: 'q',
+        english: 'Not breastfeeding  or feeding well',
+        language: 'Dagbani',
+        clipId: 'q_newborn.feed',
       );
       expect(spaced.matchingClip, isNull);
       expect(spaced.matchingClips, [SpeechBank.qNewbornFeed]);
@@ -39,11 +55,16 @@ void main() {
 
     test('sequences cover every word; only whitespace can differ', () {
       final speech = CaregiverSpeech(
-        id: 'sequence', english: '  ${_english(_ids).replaceAll(' ', '\n ')}  ',
-        language: 'dag', clipIds: _ids,
+        id: 'sequence',
+        english: '  ${_english(_ids).replaceAll(' ', '\n ')}  ',
+        language: 'dag',
+        clipIds: _ids,
       );
       expect(speech.matchingClips!.map((c) => c.id), _ids);
-      expect(speech.localizedText, SpeechBank.scriptFor(language: 'Dagbani', ids: _ids));
+      expect(
+        speech.localizedText,
+        SpeechBank.scriptFor(language: 'Dagbani', ids: _ids),
+      );
       expect(speech.hasTranslation, isTrue);
       for (final changed in [
         '${_english(_ids)} Give medicine.',
@@ -52,7 +73,10 @@ void main() {
         'Ama: ${_english(_ids)}',
       ]) {
         final altered = CaregiverSpeech(
-          id: 'sequence', english: changed, language: 'Twi', clipIds: _ids,
+          id: 'sequence',
+          english: changed,
+          language: 'Twi',
+          clipIds: _ids,
         );
         expect(altered.matchingClips, isNull);
         expect(altered.hasTranslation, isFalse);
@@ -61,16 +85,29 @@ void main() {
 
     test('rejects absent, empty, missing, reordered and partial ids', () {
       for (final ids in <List<String>?>[
-        null, [], ['not-in-bank'], ['nurse_intro'], _ids.reversed.toList(),
+        null,
+        [],
+        ['not-in-bank'],
+        ['nurse_intro'],
+        _ids.reversed.toList(),
         ['nurse_intro', 'missing', 'nurse_close'],
       ]) {
-        expect(CaregiverSpeech(
-          id: 'nurse_intro', english: _english(_ids), language: 'Hausa', clipIds: ids,
-        ).matchingClips, isNull);
+        expect(
+          CaregiverSpeech(
+            id: 'nurse_intro',
+            english: _english(_ids),
+            language: 'Hausa',
+            clipIds: ids,
+          ).matchingClips,
+          isNull,
+        );
       }
       const overridden = CaregiverSpeech(
-        id: 'q', english: 'Not breastfeeding or feeding well',
-        language: 'Twi', clipId: 'q_newborn.feed', clipIds: [],
+        id: 'q',
+        english: 'Not breastfeeding or feeding well',
+        language: 'Twi',
+        clipId: 'q_newborn.feed',
+        clipIds: [],
       );
       expect(overridden.matchingClip, isNotNull);
       expect(overridden.matchingClips, isNull);
@@ -79,8 +116,11 @@ void main() {
 
     test('withLanguage retains all metadata and English remains exact', () {
       const original = CaregiverSpeech(
-        id: 'q', english: 'Not breastfeeding or feeding well',
-        language: 'Dagbani', clipId: 'q_newborn.feed', clipIds: ['q_newborn.feed'],
+        id: 'q',
+        english: 'Not breastfeeding or feeding well',
+        language: 'Dagbani',
+        clipId: 'q_newborn.feed',
+        clipIds: ['q_newborn.feed'],
       );
       for (final language in OfflineSpeechLanguage.names) {
         final changed = original.withLanguage(language);
@@ -88,181 +128,288 @@ void main() {
         expect(changed.english, original.english);
         expect(changed.clipId, original.clipId);
         expect(changed.clipIds, same(original.clipIds));
-        expect(changed.localizedText, language == 'English'
-            ? original.english : SpeechBank.qNewbornFeed.textFor(language));
+        expect(
+          changed.localizedText,
+          language == 'English'
+              ? original.english
+              : SpeechBank.qNewbornFeed.textFor(language),
+        );
       }
       expect(original.withLanguage('en-GB').localizedText, original.english);
       expect(original.withLanguage('French').hasTranslation, isFalse);
-      expect(const CaregiverSpeech(id: 'free', english: 'Exact  English.', language: 'en')
-          .localizedText, 'Exact  English.');
+      expect(
+        const CaregiverSpeech(
+          id: 'free',
+          english: 'Exact  English.',
+          language: 'en',
+        ).localizedText,
+        'Exact  English.',
+      );
     });
   });
 
   group('offline language identity', () {
     test('canonical names and aliases never bridge languages', () {
-      expect(OfflineSpeechLanguage.names, ['English', 'Twi', 'Dagbani', 'Hausa']);
+      expect(OfflineSpeechLanguage.names, [
+        'English',
+        'Twi',
+        'Dagbani',
+        'Hausa',
+      ]);
       for (final entry in {
-        'EN': 'English', 'en-NG': 'English', 'English': 'English',
-        'tw': 'Twi', 'TWI': 'Twi', 'dag': 'Dagbani', 'Dagbani': 'Dagbani',
-        'ha': 'Hausa', 'HAUSA': 'Hausa', 'Gurene': 'Gurene',
-        'english-like': 'english-like', 'dagger': 'dagger',
+        'EN': 'English',
+        'en-NG': 'English',
+        'English': 'English',
+        'tw': 'Twi',
+        'TWI': 'Twi',
+        'dag': 'Dagbani',
+        'Dagbani': 'Dagbani',
+        'ha': 'Hausa',
+        'HAUSA': 'Hausa',
+        'Gurene': 'Gurene',
+        'english-like': 'english-like',
+        'dagger': 'dagger',
       }.entries) {
         expect(OfflineSpeechLanguage.canonical(entry.key), entry.value);
       }
-      expect(OfflineSpeechLanguage.deviceVoice('Dagbani', [
-        _offline('ha-NG'), _offline('en-GH'), _offline('dagger-GH'),
-      ]), isNull);
-      expect(OfflineSpeechLanguage.deviceVoice('Dagbani', [_offline('dag-GH')]),
-          {'name': 'dag-GH-local', 'locale': 'dag-GH'});
-      expect(OfflineSpeechLanguage.deviceVoice('Twi', [_offline('ak-GH')]), isNotNull);
-      expect(OfflineSpeechLanguage.deviceVoice('Unknown', [_offline('en-US')]), isNull);
+      expect(
+        OfflineSpeechLanguage.deviceVoice('Dagbani', [
+          _offline('ha-NG'),
+          _offline('en-GH'),
+          _offline('dagger-GH'),
+        ]),
+        isNull,
+      );
+      expect(
+        OfflineSpeechLanguage.deviceVoice('Dagbani', [_offline('dag-GH')]),
+        {'name': 'dag-GH-local', 'locale': 'dag-GH'},
+      );
+      expect(
+        OfflineSpeechLanguage.deviceVoice('Twi', [_offline('ak-GH')]),
+        isNotNull,
+      );
+      expect(
+        OfflineSpeechLanguage.deviceVoice('Unknown', [_offline('en-US')]),
+        isNull,
+      );
     });
 
-    test('requires explicit offline evidence and rejects conflicting flags', () {
-      for (final flags in <Map<String, dynamic>>[
-        {}, {'network_required': true}, {'network_required': 'true'},
-        {'localService': false}, {'localService': 'false'},
-        {'network_required': 'unknown'}, {'network_required': null},
-        {'network_required': false, 'localService': false},
-        {'network_required': true, 'localService': true},
-      ]) {
-        expect(OfflineSpeechLanguage.deviceVoice('English', [
-          {'name': 'voice', 'locale': 'en-US', ...flags},
-        ]), isNull, reason: '$flags');
-      }
-      for (final flags in <Map<String, dynamic>>[
-        {'network_required': false}, {'network_required': 'false'},
-        {'network_required': ' FALSE '}, {'localService': true},
-        {'localService': 'true'},
-      ]) {
-        expect(OfflineSpeechLanguage.deviceVoice('English', [
-          {'name': 'voice', 'locale': 'en-US', ...flags},
-        ]), {'name': 'voice', 'locale': 'en-US'});
-      }
-      expect(OfflineSpeechLanguage.deviceVoice('English', [
-        null, 'en-US', {'locale': 'en-US', 'network_required': false},
-        {'name': '', 'locale': 'en-US', 'network_required': false},
-      ]), isNull);
-    });
+    test(
+      'requires explicit offline evidence and rejects conflicting flags',
+      () {
+        for (final flags in <Map<String, dynamic>>[
+          {},
+          {'network_required': true},
+          {'network_required': 'true'},
+          {'localService': false},
+          {'localService': 'false'},
+          {'network_required': 'unknown'},
+          {'network_required': null},
+          {'network_required': false, 'localService': false},
+          {'network_required': true, 'localService': true},
+        ]) {
+          expect(
+            OfflineSpeechLanguage.deviceVoice('English', [
+              {'name': 'voice', 'locale': 'en-US', ...flags},
+            ]),
+            isNull,
+            reason: '$flags',
+          );
+        }
+        for (final flags in <Map<String, dynamic>>[
+          {'network_required': false},
+          {'network_required': 'false'},
+          {'network_required': ' FALSE '},
+          {'localService': true},
+          {'localService': 'true'},
+        ]) {
+          expect(
+            OfflineSpeechLanguage.deviceVoice('English', [
+              {'name': 'voice', 'locale': 'en-US', ...flags},
+            ]),
+            {'name': 'voice', 'locale': 'en-US'},
+          );
+        }
+        expect(
+          OfflineSpeechLanguage.deviceVoice('English', [
+            null,
+            'en-US',
+            {'locale': 'en-US', 'network_required': false},
+            {'name': '', 'locale': 'en-US', 'network_required': false},
+          ]),
+          isNull,
+        );
+      },
+    );
   });
 
   group('device playback', () {
-    test('untranslated guidance tries English device TTS before giving up', () async {
-      final harness = _Harness();
-      addTearDown(harness.voice.dispose);
-      final events = <CaregiverPlayback>[];
-      await harness.voice.play(const CaregiverSpeech(
-        id: 'level_urgent', english: 'Amina needs a new assessment today.',
-        language: 'Dagbani', clipId: 'level_urgent',
-      ), events.add);
-      // English TTS fallback creates the TTS instance but no voices are
-      // available, so it still falls back to readable text.
-      expect(harness.ttsCreated, 1);
-      expect(events.last.phase, CaregiverPlaybackPhase.fallback);
-      expect(events.last.language, 'English');
-      expect(events.last.transcript, 'Amina needs a new assessment today.');
-      expect(events.last.reasonCode, 'translation_fallback_english');
-    });
-
-    for (final language in ['Dagbani', 'Hausa', 'Twi']) {
-      test('$language sequence waits for every completion with full transcript', () async {
-        final players = List.generate(_ids.length, (_) => _FakePlayer());
-        final harness = _Harness(players: players);
+    test(
+      'untranslated guidance tries English device TTS before giving up',
+      () async {
+        final harness = _Harness();
         addTearDown(harness.voice.dispose);
         final events = <CaregiverPlayback>[];
-        var finished = false;
-        final playback = harness.voice.play(_speech(language), events.add)
-            .then((_) => finished = true);
-        for (var i = 0; i < players.length; i++) {
-          await players[i].resumed.future;
-          expect(harness.assets.loaded.length, _ids.length);
-          expect(harness.playersCreated, i + 1);
-          expect(finished, isFalse);
-          expect(events.any((e) => e.phase == CaregiverPlaybackPhase.completed), isFalse);
-          expect((players[i].source as AssetSource).path,
-              'audio/${SpeechBank.folderFor(language)}/${_ids[i]}.wav');
-          players[i].completeClip();
-        }
-        await playback;
-        expect(events.last.phase, CaregiverPlaybackPhase.completed);
-        expect(events.every((e) => e.language == language), isTrue);
-        expect(events.every((e) => e.transcript == SpeechBank.scriptFor(
-          language: language, ids: _ids,
-        )), isTrue);
-        expect(events.last.source, contains('draft translation'));
-        expect(harness.ttsCreated, 0);
-      });
+        await harness.voice.play(
+          const CaregiverSpeech(
+            id: 'level_urgent',
+            english: 'Amina needs a new assessment today.',
+            language: 'Dagbani',
+            clipId: 'level_urgent',
+          ),
+          events.add,
+        );
+        // English TTS fallback creates the TTS instance but no voices are
+        // available, so it still falls back to readable text.
+        expect(harness.ttsCreated, 1);
+        expect(events.last.phase, CaregiverPlaybackPhase.fallback);
+        expect(events.last.language, 'English');
+        expect(events.last.transcript, 'Amina needs a new assessment today.');
+        expect(events.last.reasonCode, 'translation_fallback_english');
+      },
+    );
+
+    for (final language in ['Dagbani', 'Hausa', 'Twi']) {
+      test(
+        '$language sequence waits for every completion with full transcript',
+        () async {
+          final players = List.generate(_ids.length, (_) => _FakePlayer());
+          final harness = _Harness(players: players);
+          addTearDown(harness.voice.dispose);
+          final events = <CaregiverPlayback>[];
+          var finished = false;
+          final playback = harness.voice
+              .play(_speech(language), events.add)
+              .then((_) => finished = true);
+          for (var i = 0; i < players.length; i++) {
+            await players[i].resumed.future;
+            expect(harness.assets.loaded.length, _ids.length);
+            expect(harness.playersCreated, i + 1);
+            expect(finished, isFalse);
+            expect(
+              events.any((e) => e.phase == CaregiverPlaybackPhase.completed),
+              isFalse,
+            );
+            expect(
+              (players[i].source as AssetSource).path,
+              'audio/${SpeechBank.folderFor(language)}/${_ids[i]}.wav',
+            );
+            players[i].completeClip();
+          }
+          await playback;
+          expect(events.last.phase, CaregiverPlaybackPhase.completed);
+          expect(events.every((e) => e.language == language), isTrue);
+          expect(
+            events.every(
+              (e) =>
+                  e.transcript ==
+                  SpeechBank.scriptFor(language: language, ids: _ids),
+            ),
+            isTrue,
+          );
+          expect(events.last.source, contains('draft translation'));
+          expect(harness.ttsCreated, 0);
+        },
+      );
     }
 
     test('completion emitted synchronously by start is not lost', () async {
       final harness = _Harness(players: [_FakePlayer()..autoComplete = true]);
       addTearDown(harness.voice.dispose);
       final events = <CaregiverPlayback>[];
-      await harness.voice.play(_speech('Twi', ids: ['nurse_close']), events.add);
+      await harness.voice.play(
+        _speech('Twi', ids: ['nurse_close']),
+        events.add,
+      );
       expect(events.last.phase, CaregiverPlaybackPhase.completed);
     });
 
-    test('missing second asset prevents even the first clip from starting', () async {
-      final harness = _Harness();
-      harness.assets.missing.add('assets/audio/dagbani_mms/q_newborn.feed.wav');
-      addTearDown(harness.voice.dispose);
-      final events = <CaregiverPlayback>[];
-      await harness.voice.play(_speech('Dagbani'), events.add);
-      expect(harness.playersCreated, 0);
-      expect(events.last.phase, CaregiverPlaybackPhase.fallback);
-      expect(events.last.language, 'Dagbani');
-      expect(events.last.transcript, _speech('Dagbani').localizedText);
-    });
+    test(
+      'missing second asset prevents even the first clip from starting',
+      () async {
+        final harness = _Harness();
+        harness.assets.missing.add(
+          'assets/audio/dagbani_mms/q_newborn.feed.wav',
+        );
+        addTearDown(harness.voice.dispose);
+        final events = <CaregiverPlayback>[];
+        await harness.voice.play(_speech('Dagbani'), events.add);
+        expect(harness.playersCreated, 0);
+        expect(events.last.phase, CaregiverPlaybackPhase.fallback);
+        expect(events.last.language, 'Dagbani');
+        expect(events.last.transcript, _speech('Dagbani').localizedText);
+      },
+    );
 
-    test('Dagbani with translation but no voice falls back to readable text', () async {
-      final harness = _Harness()..assets.failAll = true;
-      harness.tts.voices = [_offline('ha-NG'), _offline('en-GB')];
-      addTearDown(harness.voice.dispose);
-      final events = <CaregiverPlayback>[];
-      await harness.voice.play(_speech('Dagbani'), events.add);
-      // Translation succeeds (SpeechBank provides Dagbani text) but no
-      // Dagbani device voice exists. Hausa/English voices are not used for
-      // Dagbani text — the readable text is shown instead.
-      expect(harness.tts.utterances, isEmpty);
-      expect(events.last.language, 'Dagbani');
-      expect(events.last.source, contains('draft translation'));
-      expect(events.last.phase, CaregiverPlaybackPhase.fallback);
-    });
-
-    test('voice enumeration exceptions give a readable localized fallback', () async {
-      final harness = _Harness()..assets.failAll = true;
-      harness.tts.enumerationError = true;
-      addTearDown(harness.voice.dispose);
-      final events = <CaregiverPlayback>[];
-      await harness.voice.play(_speech('Hausa'), events.add);
-      expect(events.last.phase, CaregiverPlaybackPhase.fallback);
-      expect(events.last.language, 'Hausa');
-      expect(events.last.transcript, _speech('Hausa').localizedText);
-      expect(harness.tts.utterances, isEmpty);
-    });
-
-    for (final pair in {'English': 'en-GH', 'Twi': 'tw-GH', 'Dagbani': 'dag-GH', 'Hausa': 'ha-NG'}.entries) {
-      test('${pair.key} TTS uses only its localized text and selected offline voice', () async {
+    test(
+      'Dagbani with translation but no Dagbani voice speaks English with notice',
+      () async {
         final harness = _Harness()..assets.failAll = true;
-        harness.tts.voices = [
-          {'name': 'online', 'locale': pair.value, 'network_required': true},
-          _offline(pair.value),
-        ];
+        harness.tts.voices = [_offline('ha-NG'), _offline('en-GB')];
         harness.tts.autoComplete = true;
         addTearDown(harness.voice.dispose);
         final events = <CaregiverPlayback>[];
-        await harness.voice.play(_speech(pair.key), events.add);
-        expect(harness.tts.locales, [pair.value]);
-        expect(harness.tts.selectedVoices, [{'name': '${pair.value}-local', 'locale': pair.value}]);
-        expect(harness.tts.commands.take(2), ['setLanguage', 'setVoice']);
-        expect(harness.tts.utterances.single.text, _speech(pair.key).localizedText);
-        if (pair.key != 'English') {
-          expect(harness.tts.utterances.single.text, isNot(_english(_ids)));
-        }
+        await harness.voice.play(_speech('Dagbani'), events.add);
+        // No Dagbani voice exists on this device, so the ladder voices the
+        // English source instead of giving up — audio always plays.
+        expect(harness.tts.utterances.map((u) => u.text), [_english(_ids)]);
         expect(events.last.phase, CaregiverPlaybackPhase.completed);
-        expect(events.last.language, pair.key);
-        expect(events.last.source, contains('offline device speech'));
-      });
+        expect(events.last.language, 'English');
+        expect(events.last.reasonCode, 'translation_fallback_english');
+        expect(events.last.source, contains('speaking English instead'));
+      },
+    );
+
+    test(
+      'voice enumeration exceptions give a readable localized fallback',
+      () async {
+        final harness = _Harness()..assets.failAll = true;
+        harness.tts.enumerationError = true;
+        addTearDown(harness.voice.dispose);
+        final events = <CaregiverPlayback>[];
+        await harness.voice.play(_speech('Hausa'), events.add);
+        expect(events.last.phase, CaregiverPlaybackPhase.fallback);
+        expect(events.last.language, 'Hausa');
+        expect(events.last.transcript, _speech('Hausa').localizedText);
+        expect(harness.tts.utterances, isEmpty);
+      },
+    );
+
+    for (final pair in {
+      'English': 'en-GH',
+      'Twi': 'tw-GH',
+      'Dagbani': 'dag-GH',
+      'Hausa': 'ha-NG',
+    }.entries) {
+      test(
+        '${pair.key} TTS uses only its localized text and selected offline voice',
+        () async {
+          final harness = _Harness()..assets.failAll = true;
+          harness.tts.voices = [
+            {'name': 'online', 'locale': pair.value, 'network_required': true},
+            _offline(pair.value),
+          ];
+          harness.tts.autoComplete = true;
+          addTearDown(harness.voice.dispose);
+          final events = <CaregiverPlayback>[];
+          await harness.voice.play(_speech(pair.key), events.add);
+          expect(harness.tts.locales, [pair.value]);
+          expect(harness.tts.selectedVoices, [
+            {'name': '${pair.value}-local', 'locale': pair.value},
+          ]);
+          expect(harness.tts.commands.take(2), ['setLanguage', 'setVoice']);
+          expect(
+            harness.tts.utterances.single.text,
+            _speech(pair.key).localizedText,
+          );
+          if (pair.key != 'English') {
+            expect(harness.tts.utterances.single.text, isNot(_english(_ids)));
+          }
+          expect(events.last.phase, CaregiverPlaybackPhase.completed);
+          expect(events.last.language, pair.key);
+          expect(events.last.source, contains('offline device speech'));
+        },
+      );
     }
 
     test('failed voice configuration does not start speech', () async {
@@ -278,7 +425,9 @@ void main() {
 
     for (final failure in ['error', 'cancel', 'timeout']) {
       test('TTS $failure is never reported as completion', () async {
-        final harness = _Harness(playbackTimeout: const Duration(milliseconds: 30));
+        final harness = _Harness(
+          playbackTimeout: const Duration(milliseconds: 30),
+        );
         harness.assets.failAll = true;
         harness.tts.voices = [_offline('ha-NG')];
         addTearDown(harness.voice.dispose);
@@ -290,38 +439,63 @@ void main() {
         if (failure == 'cancel') utterance.cancel();
         await playback;
         expect(events.last.phase, CaregiverPlaybackPhase.fallback);
-        expect(events.any((e) => e.phase == CaregiverPlaybackPhase.completed), isFalse);
+        expect(
+          events.any((e) => e.phase == CaregiverPlaybackPhase.completed),
+          isFalse,
+        );
         expect(harness.tts.stops, greaterThan(0));
       });
     }
 
     test('a failing second clip never reports partial success', () async {
-      final harness = _Harness(players: [
-        _FakePlayer()..autoComplete = true,
-        _FakePlayer()..resumeError = true,
-      ]);
+      final harness = _Harness(
+        players: [
+          _FakePlayer()..autoComplete = true,
+          _FakePlayer()..resumeError = true,
+        ],
+      );
       addTearDown(harness.voice.dispose);
       final events = <CaregiverPlayback>[];
-      await harness.voice.play(_speech('Dagbani', ids: _ids.take(2).toList()), events.add);
+      await harness.voice.play(
+        _speech('Dagbani', ids: _ids.take(2).toList()),
+        events.add,
+      );
       expect(harness.playersCreated, 2);
       expect(events.last.phase, CaregiverPlaybackPhase.fallback);
-      expect(events.any((e) => e.phase == CaregiverPlaybackPhase.completed), isFalse);
+      expect(
+        events.any((e) => e.phase == CaregiverPlaybackPhase.completed),
+        isFalse,
+      );
     });
 
-    test('audio stream errors and timeouts cannot complete a sequence', () async {
-      for (final streamError in [true, false]) {
-        final player = _FakePlayer();
-        final harness = _Harness(players: [player], playbackTimeout: const Duration(milliseconds: 30));
-        final events = <CaregiverPlayback>[];
-        final playback = harness.voice.play(_speech('Twi', ids: ['nurse_intro']), events.add);
-        await player.resumed.future;
-        if (streamError) player.completions.addError(StateError('player failure'));
-        await playback;
-        expect(events.last.phase, CaregiverPlaybackPhase.fallback);
-        expect(events.any((e) => e.phase == CaregiverPlaybackPhase.completed), isFalse);
-        await harness.voice.dispose();
-      }
-    });
+    test(
+      'audio stream errors and timeouts cannot complete a sequence',
+      () async {
+        for (final streamError in [true, false]) {
+          final player = _FakePlayer();
+          final harness = _Harness(
+            players: [player],
+            playbackTimeout: const Duration(milliseconds: 30),
+          );
+          final events = <CaregiverPlayback>[];
+          final playback = harness.voice.play(
+            _speech('Twi', ids: ['nurse_intro']),
+            events.add,
+          );
+          await player.resumed.future;
+          if (streamError) {
+            player.completions.addError(StateError('player failure'));
+          }
+          await playback;
+          expect(events.last.phase, CaregiverPlaybackPhase.fallback);
+          expect(
+            events.any((e) => e.phase == CaregiverPlaybackPhase.completed),
+            isFalse,
+          );
+          await harness.voice.dispose();
+        }
+      },
+    );
 
     test('stopped asset and player loads cannot revive playback', () async {
       for (final blockAsset in [true, false]) {
@@ -330,7 +504,9 @@ void main() {
         if (blockAsset) harness.assets.gate = Completer<void>();
         final events = <CaregiverPlayback>[];
         final playback = harness.voice.play(_speech('Dagbani'), events.add);
-        await (blockAsset ? harness.assets.requested.future : player.preparing.future);
+        await (blockAsset
+            ? harness.assets.requested.future
+            : player.preparing.future);
         await harness.voice.stop();
         await playback;
         if (blockAsset) harness.assets.gate!.complete();
@@ -343,64 +519,322 @@ void main() {
       }
     });
 
-    test('new owner stops old speech and old callbacks cannot complete new speech', () async {
-      // Share the TTS object just as the real plugin's single method channel is shared.
-      final tts = _FakeTts()..voices = [_offline('en-GH')];
-      final old = _Harness(tts: tts);
-      final next = _Harness(tts: tts);
-      addTearDown(old.voice.dispose);
-      addTearDown(next.voice.dispose);
-      final oldEvents = <CaregiverPlayback>[];
-      final nextEvents = <CaregiverPlayback>[];
-      final oldPlayback = old.voice.play(const CaregiverSpeech(
-        id: 'old', english: 'Old owner guidance.', language: 'English',
-      ), oldEvents.add);
-      await tts.spoken.future;
-      final stale = tts.utterances.single;
-      tts.spoken = Completer<void>();
-      final nextPlayback = next.voice.play(const CaregiverSpeech(
-        id: 'next', english: 'New owner guidance.', language: 'English',
-      ), nextEvents.add);
-      await tts.spoken.future;
-      await oldPlayback;
-      expect(oldEvents.last.phase, CaregiverPlaybackPhase.stopped);
-      final oldCount = oldEvents.length;
-      final stopCount = tts.stops;
-      await old.voice.stop();
-      expect(tts.stops, stopCount, reason: 'An old owner must not stop new audio');
-      stale.start();
-      stale.complete();
-      stale.error('late old error');
-      await Future<void>.delayed(Duration.zero);
-      expect(oldEvents.length, oldCount);
-      expect(nextEvents.last.phase, CaregiverPlaybackPhase.playing);
-      expect(nextEvents.every((e) => e.transcript == 'New owner guidance.'), isTrue);
-      tts.utterances.last.complete();
-      await nextPlayback;
-      expect(nextEvents.last.phase, CaregiverPlaybackPhase.completed);
+    test(
+      'new owner stops old speech and old callbacks cannot complete new speech',
+      () async {
+        // Share the TTS object just as the real plugin's single method channel is shared.
+        final tts = _FakeTts()..voices = [_offline('en-GH')];
+        final old = _Harness(tts: tts);
+        final next = _Harness(tts: tts);
+        addTearDown(old.voice.dispose);
+        addTearDown(next.voice.dispose);
+        final oldEvents = <CaregiverPlayback>[];
+        final nextEvents = <CaregiverPlayback>[];
+        final oldPlayback = old.voice.play(
+          const CaregiverSpeech(
+            id: 'old',
+            english: 'Old owner guidance.',
+            language: 'English',
+          ),
+          oldEvents.add,
+        );
+        await tts.spoken.future;
+        final stale = tts.utterances.single;
+        tts.spoken = Completer<void>();
+        final nextPlayback = next.voice.play(
+          const CaregiverSpeech(
+            id: 'next',
+            english: 'New owner guidance.',
+            language: 'English',
+          ),
+          nextEvents.add,
+        );
+        await tts.spoken.future;
+        await oldPlayback;
+        expect(oldEvents.last.phase, CaregiverPlaybackPhase.stopped);
+        final oldCount = oldEvents.length;
+        final stopCount = tts.stops;
+        await old.voice.stop();
+        expect(
+          tts.stops,
+          stopCount,
+          reason: 'An old owner must not stop new audio',
+        );
+        stale.start();
+        stale.complete();
+        stale.error('late old error');
+        await Future<void>.delayed(Duration.zero);
+        expect(oldEvents.length, oldCount);
+        expect(nextEvents.last.phase, CaregiverPlaybackPhase.playing);
+        expect(
+          nextEvents.every((e) => e.transcript == 'New owner guidance.'),
+          isTrue,
+        );
+        tts.utterances.last.complete();
+        await nextPlayback;
+        expect(nextEvents.last.phase, CaregiverPlaybackPhase.completed);
+      },
+    );
+
+    test(
+      'dispose cancels speech and suppresses subsequent callbacks',
+      () async {
+        final harness = _Harness();
+        harness.tts.voices = [_offline('en-US')];
+        final events = <CaregiverPlayback>[];
+        final playback = harness.voice.play(
+          const CaregiverSpeech(
+            id: 'dispose',
+            english: 'Read this.',
+            language: 'English',
+          ),
+          events.add,
+        );
+        await harness.tts.spoken.future;
+        await harness.voice.dispose();
+        await playback;
+        final count = events.length;
+        harness.tts.utterances.single.complete();
+        await harness.voice.play(_speech('English'), events.add);
+        expect(events.length, count);
+        expect(events.last.phase, CaregiverPlaybackPhase.stopped);
+      },
+    );
+  });
+
+  group('speech recovery', () {
+    test('proven local voice wins over voices with missing metadata', () async {
+      final harness = _Harness();
+      harness.tts.voices = [
+        {'name': 'unknown', 'locale': 'en-GH'},
+        _offline('en-GB'),
+      ];
+      harness.tts.autoComplete = true;
+      addTearDown(harness.voice.dispose);
+      final events = <CaregiverPlayback>[];
+      await harness.voice.play(_speech('English'), events.add);
+      expect(events.last.phase, CaregiverPlaybackPhase.completed);
+      expect(harness.tts.selectedVoices, [
+        {'name': 'en-GB-local', 'locale': 'en-GB'},
+      ]);
+      expect(events.last.source, contains('offline device speech'));
     });
 
-    test('dispose cancels speech and suppresses subsequent callbacks', () async {
+    test(
+      'explicitly network voices are never used for patient speech',
+      () async {
+        final harness = _Harness();
+        harness.tts.voices = [
+          {'name': 'cloud', 'locale': 'en-GH', 'network_required': true},
+          {'name': 'cloud2', 'locale': 'en-US', 'localService': false},
+        ];
+        harness.tts.autoComplete = true;
+        addTearDown(harness.voice.dispose);
+        final events = <CaregiverPlayback>[];
+        await harness.voice.play(_speech('English'), events.add);
+        expect(events.last.phase, CaregiverPlaybackPhase.fallback);
+        expect(harness.tts.utterances, isEmpty);
+      },
+    );
+
+    test(
+      'clinical English is voiced without machine translating the dose',
+      () async {
+        final harness = _Harness();
+        harness.tts.voices = [_offline('en-GH')];
+        harness.tts.autoComplete = true;
+        addTearDown(harness.voice.dispose);
+        final events = <CaregiverPlayback>[];
+        await harness.voice.play(
+          const CaregiverSpeech(
+            id: 'dose',
+            english: 'Recorded dose: 5 mg.',
+            language: 'Twi',
+            policy: SpeechContentPolicy.clinical,
+          ),
+          events.add,
+        );
+        expect(events.last.phase, CaregiverPlaybackPhase.completed);
+        expect(events.last.language, 'English');
+        expect(events.last.requestedLanguage, 'Twi');
+        expect(events.last.reasonCode, 'clinical_english_required');
+        expect(events.last.source, contains('English for safety'));
+        expect(harness.tts.utterances.map((u) => u.text), [
+          'Recorded dose: 5 mg.',
+        ]);
+      },
+    );
+
+    test('personalized guidance does not use an unverified voice', () async {
       final harness = _Harness();
-      harness.tts.voices = [_offline('en-US')];
+      harness.tts.voices = [
+        {'name': 'unknown', 'locale': 'en-GH'},
+      ];
+      harness.tts.autoComplete = true;
+      addTearDown(harness.voice.dispose);
       final events = <CaregiverPlayback>[];
-      final playback = harness.voice.play(const CaregiverSpeech(
-        id: 'dispose', english: 'Read this.', language: 'English',
-      ), events.add);
-      await harness.tts.spoken.future;
-      await harness.voice.dispose();
+      await harness.voice.play(
+        const CaregiverSpeech(
+          id: 'patient',
+          english: 'Welcome, Amina Yakubu.',
+          language: 'English',
+        ),
+        events.add,
+      );
+      expect(events.last.phase, CaregiverPlaybackPhase.fallback);
+      expect(harness.tts.utterances, isEmpty);
+    });
+
+    test(
+      'failed translation still voices the unchanged source with notice',
+      () async {
+        final harness = _Harness();
+        harness.tts.voices = [_offline('en-GH')];
+        harness.tts.autoComplete = true;
+        addTearDown(harness.voice.dispose);
+        final events = <CaregiverPlayback>[];
+        await harness.voice.play(
+          const CaregiverSpeech(
+            id: 'changed',
+            english: 'Changed guidance.',
+            language: 'Twi',
+            clipId: 'nurse_intro',
+          ),
+          events.add,
+        );
+        expect(harness.tts.utterances.map((u) => u.text), [
+          'Changed guidance.',
+        ]);
+        expect(events.last.phase, CaregiverPlaybackPhase.completed);
+        expect(events.last.requestedLanguage, 'Twi');
+        expect(events.last.language, 'English');
+        expect(events.last.reasonCode, 'translation_fallback_english');
+        expect(events.last.source, contains('speaking English instead'));
+      },
+    );
+
+    test('stopped recovery enumeration cannot start English speech', () async {
+      final harness = _Harness()..assets.failAll = true;
+      harness.tts.voices = [_offline('en-GH')];
+      harness.tts.enumerationGate = Completer<void>();
+      addTearDown(harness.voice.dispose);
+      final events = <CaregiverPlayback>[];
+      final playback = harness.voice.play(_speech('Dagbani'), events.add);
+      await harness.tts.enumerating.future;
+      await harness.voice.stop();
+      harness.tts.enumerationGate!.complete();
       await playback;
-      final count = events.length;
-      harness.tts.utterances.single.complete();
-      await harness.voice.play(_speech('English'), events.add);
-      expect(events.length, count);
       expect(events.last.phase, CaregiverPlaybackPhase.stopped);
+      expect(harness.tts.utterances, isEmpty);
+    });
+
+    test('clinical text does not use an unverified device voice', () async {
+      final harness = _Harness();
+      harness.tts.voices = [
+        {'name': 'unknown', 'locale': 'en-GH'},
+      ];
+      harness.tts.autoComplete = true;
+      addTearDown(harness.voice.dispose);
+      final events = <CaregiverPlayback>[];
+      await harness.voice.play(
+        const CaregiverSpeech(
+          id: 'dose',
+          english: 'Recorded dose: 5 mg.',
+          language: 'English',
+          policy: SpeechContentPolicy.clinical,
+        ),
+        events.add,
+      );
+      expect(events.last.phase, CaregiverPlaybackPhase.fallback);
+      expect(harness.tts.utterances, isEmpty);
+    });
+
+    test('unverified device voice speaks with honest provenance', () async {
+      final harness = _Harness()..assets.failAll = true;
+      harness.tts.voices = [
+        {'name': 'Samantha', 'locale': 'en-GH'},
+      ];
+      harness.tts.autoComplete = true;
+      addTearDown(harness.voice.dispose);
+      final events = <CaregiverPlayback>[];
+      await harness.voice.play(_speech('English'), events.add);
+      expect(harness.tts.utterances.map((u) => u.text), [_english(_ids)]);
+      expect(events.last.phase, CaregiverPlaybackPhase.completed);
+      expect(events.last.source, contains('unverified offline'));
+    });
+
+    test('readable text only when the device has no voice at all', () async {
+      final harness = _Harness()..assets.failAll = true;
+      harness.tts.voices = [_offline('ha-NG')];
+      addTearDown(harness.voice.dispose);
+      final events = <CaregiverPlayback>[];
+      await harness.voice.play(_speech('English'), events.add);
+      expect(harness.tts.utterances, isEmpty);
+      expect(events.last.phase, CaregiverPlaybackPhase.fallback);
+      expect(events.last.reasonCode, 'offline_voice_missing');
+    });
+
+    test('Hausa dynamic text is crafted by translation then Piper', () async {
+      final piper = _FakePiperRunner();
+      final translation = TranslationService.debugCreate(
+        backend: _StaticBackend(
+          const TranslationResult(
+            text: 'Lafiya kalma.',
+            source: TranslationSource.neuralModel,
+            language: 'Hausa',
+            coverage: 1,
+          ),
+        ),
+      );
+      final harness = _Harness(
+        piper: PiperTtsService.debugCreate(runner: piper),
+        translation: translation,
+      )..assets.failAll = true;
+      harness.tts.voices = [_offline('en-GH')];
+      addTearDown(harness.voice.dispose);
+      final events = <CaregiverPlayback>[];
+      await harness.voice.play(
+        const CaregiverSpeech(
+          id: 'dynamic',
+          english: 'Wellness words.',
+          language: 'Hausa',
+        ),
+        events.add,
+      );
+      // The selected language is synthesized by the on-device NLP pipeline,
+      // never routed to an English device voice.
+      expect(piper.spoken, ['Lafiya kalma.']);
+      expect(harness.tts.utterances, isEmpty);
+      expect(events.last.phase, CaregiverPlaybackPhase.completed);
+      expect(events.last.language, 'Hausa');
+      expect(events.last.source, contains('Piper offline voice'));
+    });
+
+    test('selected-language unverified voice beats English fallback', () async {
+      final harness = _Harness()..assets.failAll = true;
+      harness.tts.voices = [
+        {'name': 'ha generic', 'locale': 'ha-NG'},
+        _offline('en-GB'),
+      ];
+      harness.tts.autoComplete = true;
+      addTearDown(harness.voice.dispose);
+      final events = <CaregiverPlayback>[];
+      await harness.voice.play(_speech('Hausa'), events.add);
+      // Hausa text with no proven-offline Hausa voice still speaks Hausa via
+      // the unverified Hausa voice — English is the fallback, not the default.
+      expect(harness.tts.utterances.map((u) => u.text), [
+        _speech('Hausa').localizedText,
+      ]);
+      expect(events.last.phase, CaregiverPlaybackPhase.completed);
+      expect(events.last.language, 'Hausa');
+      expect(events.last.source, contains('unverified offline'));
     });
   });
 
   group('VoiceService strict adapter with plugin failures', () {
     const channel = MethodChannel('flutter_tts');
-    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     late List<MethodCall> calls;
     late List<String> assetLoads;
 
@@ -425,70 +859,150 @@ void main() {
       messenger.setMockMessageHandler('flutter/assets', null);
     });
 
+    test(
+      'completed unverified device speech is not reported as read-aloud',
+      () async {
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'getVoices') {
+            return [
+              {'name': 'Installed', 'locale': 'en-GH'},
+            ];
+          }
+          if (call.method == 'speak') {
+            for (final event in ['speak.onStart', 'speak.onComplete']) {
+              await messenger.handlePlatformMessage(
+                channel.name,
+                channel.codec.encodeMethodCall(MethodCall(event)),
+                (_) {},
+              );
+            }
+          }
+          return 1;
+        });
+        final outcome = await VoiceService.speak(
+          VoiceRequest(
+            id: 'nurse_intro',
+            preferredLanguage: 'English',
+            preferredScript: 'What I noticed:',
+          ),
+        );
+        expect(outcome.source, VoiceSource.systemTts);
+        expect(outcome.spokenScript, 'What I noticed:');
+        expect(outcome.actualLanguage, 'English');
+        expect(outcome.detail, contains('unverified offline'));
+      },
+    );
+
     test('arbitrary text cannot borrow a named bank clip', () async {
       final events = <CaregiverPlayback>[];
-      final outcome = await VoiceService.speak(const VoiceRequest(
-        id: 'level_urgent', preferredLanguage: 'Dagbani',
-        preferredScript: 'A different clinical recommendation.',
-        bridgeScript: 'Do not speak this bridge.',
-      ), onPlayback: events.add);
+      final outcome = await VoiceService.speak(
+        const VoiceRequest(
+          id: 'level_urgent',
+          preferredLanguage: 'Dagbani',
+          preferredScript: 'A different clinical recommendation.',
+          bridgeScript: 'Do not speak this bridge.',
+        ),
+        onPlayback: events.add,
+      );
       expect(outcome.source, VoiceSource.readAloud);
       expect(outcome.spokenScript, 'A different clinical recommendation.');
       expect(outcome.actualLanguage, 'English');
       expect(events.last.phase, CaregiverPlaybackPhase.fallback);
       expect(assetLoads, isEmpty);
-      expect(calls.where((c) => c.method != 'stop'), isEmpty);
-    });
-
-    test('id candidate accepts only exact English or selected translation', () async {
-      for (final text in [SpeechBank.levelUrgent.english, SpeechBank.levelUrgent.dagbani]) {
-        final outcome = await VoiceService.speak(VoiceRequest(
-          id: 'level_urgent', preferredLanguage: 'Dagbani', preferredScript: text,
-        ));
-        expect(outcome.source, VoiceSource.readAloud);
-        expect(outcome.spokenScript, SpeechBank.levelUrgent.dagbani);
-        expect(outcome.actualLanguage, 'Dagbani');
-      }
-      expect(assetLoads, everyElement('assets/audio/dagbani_mms/level_urgent.wav'));
-      expect(assetLoads, hasLength(2));
+      // The audible-always ladder may probe device voices (the mock declines),
+      // but no utterance may ever start and no bank asset may load. 'stop'
+      // only arrives in tearDown, so filter it out.
       expect(calls.any((c) => c.method == 'speak'), isFalse);
+      expect(calls.map((c) => c.method).where((m) => m != 'stop').toList(), [
+        'getVoices',
+      ]);
     });
 
-    test('explicit sequence cannot substitute partial or changed guidance', () async {
-      final translated = SpeechBank.scriptFor(language: 'Twi', ids: _ids)!;
-      for (final text in [_english(_ids), translated]) {
-        final outcome = await VoiceService.speak(VoiceRequest(
-          id: 'sequence', preferredLanguage: 'Twi', preferredScript: text, bankClips: _ids,
-        ));
-        expect(outcome.spokenScript, translated);
-        expect(outcome.actualLanguage, 'Twi');
+    test(
+      'id candidate accepts only exact English or selected translation',
+      () async {
+        for (final text in [
+          SpeechBank.levelUrgent.english,
+          SpeechBank.levelUrgent.dagbani,
+        ]) {
+          final outcome = await VoiceService.speak(
+            VoiceRequest(
+              id: 'level_urgent',
+              preferredLanguage: 'Dagbani',
+              preferredScript: text,
+            ),
+          );
+          expect(outcome.source, VoiceSource.readAloud);
+          expect(outcome.spokenScript, SpeechBank.levelUrgent.dagbani);
+          expect(outcome.actualLanguage, 'Dagbani');
+        }
+        expect(
+          assetLoads,
+          everyElement('assets/audio/dagbani_mms/level_urgent.wav'),
+        );
+        expect(assetLoads, hasLength(2));
+        expect(calls.any((c) => c.method == 'speak'), isFalse);
+      },
+    );
+
+    test(
+      'explicit sequence cannot substitute partial or changed guidance',
+      () async {
+        final translated = SpeechBank.scriptFor(language: 'Twi', ids: _ids)!;
+        for (final text in [_english(_ids), translated]) {
+          final outcome = await VoiceService.speak(
+            VoiceRequest(
+              id: 'sequence',
+              preferredLanguage: 'Twi',
+              preferredScript: text,
+              bankClips: _ids,
+            ),
+          );
+          expect(outcome.spokenScript, translated);
+          expect(outcome.actualLanguage, 'Twi');
+          expect(outcome.source, VoiceSource.readAloud);
+        }
+        final before = assetLoads.length;
+        final outcome = await VoiceService.speak(
+          VoiceRequest(
+            id: 'sequence',
+            preferredLanguage: 'Twi',
+            preferredScript: '${_english(_ids)} Give extra medicine.',
+            bankClips: _ids,
+          ),
+        );
+        expect(outcome.actualLanguage, 'English');
+        expect(assetLoads.length, before);
+      },
+    );
+
+    test(
+      'speakText English cannot be spoken using a non-English voice',
+      () async {
+        final outcome = await VoiceService.speakText(
+          id: 'open',
+          text: 'A new personalized recommendation.',
+          language: 'Hausa',
+        );
         expect(outcome.source, VoiceSource.readAloud);
-      }
-      final before = assetLoads.length;
-      final outcome = await VoiceService.speak(VoiceRequest(
-        id: 'sequence', preferredLanguage: 'Twi',
-        preferredScript: '${_english(_ids)} Give extra medicine.', bankClips: _ids,
-      ));
-      expect(outcome.actualLanguage, 'English');
-      expect(assetLoads.length, before);
-    });
+        expect(outcome.actualLanguage, 'English');
+        expect(calls.any((c) => c.method == 'speak'), isFalse);
+      },
+    );
 
-    test('speakText English cannot be spoken using a non-English voice', () async {
-      final outcome = await VoiceService.speakText(
-        id: 'open', text: 'A new personalized recommendation.', language: 'Hausa',
-      );
-      expect(outcome.source, VoiceSource.readAloud);
-      expect(outcome.actualLanguage, 'English');
-      expect(calls.any((c) => c.method == 'speak'), isFalse);
-    });
-
-    test('diagnostics catches plugin errors once and reports installed locales', () async {
-      expect(await VoiceService.availableTtsLanguages(), isEmpty);
-      expect(calls.where((c) => c.method == 'getLanguages'), hasLength(1));
-      messenger.setMockMethodCallHandler(channel, (call) async =>
-          call.method == 'getLanguages' ? ['en-GH', 'ha-NG', 'en-GH'] : 1);
-      expect(await VoiceService.availableTtsLanguages(), ['en-GH', 'ha-NG']);
-    });
+    test(
+      'diagnostics catches plugin errors once and reports installed locales',
+      () async {
+        expect(await VoiceService.availableTtsLanguages(), isEmpty);
+        expect(calls.where((c) => c.method == 'getLanguages'), hasLength(1));
+        messenger.setMockMethodCallHandler(
+          channel,
+          (call) async =>
+              call.method == 'getLanguages' ? ['en-GH', 'ha-NG', 'en-GH'] : 1,
+        );
+        expect(await VoiceService.availableTtsLanguages(), ['en-GH', 'ha-NG']);
+      },
+    );
 
     test('no studio recording is claimed without a verified manifest', () {
       for (final topic in AudioTopic.values) {
@@ -502,17 +1016,32 @@ void main() {
 }
 
 class _Harness {
-  _Harness({List<_FakePlayer>? players, _FakeTts? tts, Duration? playbackTimeout})
-      : players = players ?? [], tts = tts ?? _FakeTts() {
+  _Harness({
+    List<_FakePlayer>? players,
+    _FakeTts? tts,
+    Duration? playbackTimeout,
+    PiperTtsService? piper,
+    TranslationService? translation,
+  }) : players = players ?? [],
+       tts = tts ?? _FakeTts() {
     voice = DeviceCaregiverVoice(
       assets: assets,
       playerFactory: () {
         final index = playersCreated++;
         return this.players[index];
       },
-      ttsFactory: () { ttsCreated++; return this.tts; },
+      ttsFactory: () {
+        ttsCreated++;
+        return this.tts;
+      },
       operationTimeout: const Duration(seconds: 2),
       playbackTimeout: playbackTimeout ?? const Duration(seconds: 2),
+      piper:
+          piper ??
+          PiperTtsService.debugCreate(
+            runner: _FakePiperRunner(available: false),
+          ),
+      translation: translation,
     );
   }
   final List<_FakePlayer> players;
@@ -521,6 +1050,73 @@ class _Harness {
   late final DeviceCaregiverVoice voice;
   int playersCreated = 0;
   int ttsCreated = 0;
+}
+
+class _FakePiperRunner implements PiperTtsRunner {
+  _FakePiperRunner({this.available = true});
+  final spoken = <String>[];
+  final initialized = <String>[];
+  String? active;
+  bool stopped = false;
+
+  @override
+  final bool available;
+
+  @override
+  bool get isSpeaking => false;
+
+  @override
+  Future<void> init({
+    required String language,
+    required String modelAssetPath,
+    required int speakerId,
+  }) async {
+    initialized.add(language);
+  }
+
+  @override
+  Future<void> speak(
+    String text, {
+    bool waitForCompletion = true,
+    void Function()? onStarted,
+    SpeechProsody prosody = SpeechProsody.standard,
+  }) async {
+    spoken.add(text);
+    onStarted?.call();
+  }
+
+  @override
+  Future<void> speakNonBlocking(
+    String text, {
+    SpeechProsody prosody = SpeechProsody.standard,
+  }) async {
+    spoken.add(text);
+  }
+
+  @override
+  Future<void> stop() async {
+    stopped = true;
+  }
+
+  @override
+  void setActiveLanguage(String language) {
+    active = language;
+  }
+
+  @override
+  bool hasModel(String language) => initialized.contains(language);
+
+  @override
+  Future<void> dispose(String language) async {}
+}
+
+class _StaticBackend implements TranslationBackend {
+  const _StaticBackend(this.result);
+  final TranslationResult result;
+
+  @override
+  TranslationResult? translate(String english, String language) =>
+      language == result.language ? result : null;
 }
 
 class _FakeAssets extends CachingAssetBundle {
@@ -562,6 +1158,7 @@ class _FakePlayer implements AudioPlayer {
     preparing.complete();
     await sourceGate?.future;
   }
+
   @override
   Future<void> resume() async {
     resumes++;
@@ -570,11 +1167,13 @@ class _FakePlayer implements AudioPlayer {
     states.add(PlayerState.playing);
     if (autoComplete) completeClip();
   }
+
   void completeClip() => completions.add(null);
   @override
   Future<void> stop() async {
     if (!disposed) states.add(PlayerState.stopped);
   }
+
   @override
   Future<void> dispose() async {
     if (disposed) return;
@@ -582,6 +1181,7 @@ class _FakePlayer implements AudioPlayer {
     await completions.close();
     await states.close();
   }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -603,6 +1203,8 @@ class _Utterance {
 class _FakeTts implements FlutterTts {
   List<dynamic> voices = [];
   bool enumerationError = false;
+  final enumerating = Completer<void>();
+  Completer<void>? enumerationGate;
   bool autoComplete = false;
   dynamic voiceResult = 1;
   final locales = <String>[];
@@ -618,21 +1220,26 @@ class _FakeTts implements FlutterTts {
 
   @override
   Future<dynamic> get getVoices async {
+    if (!enumerating.isCompleted) enumerating.complete();
+    await enumerationGate?.future;
     if (enumerationError) throw PlatformException(code: 'enumeration');
     return voices;
   }
+
   @override
   Future<dynamic> setLanguage(String language) async {
     commands.add('setLanguage');
     locales.add(language);
     return 1;
   }
+
   @override
   Future<dynamic> setVoice(Map<String, String> voice) async {
     commands.add('setVoice');
     selectedVoices.add(voice);
     return voiceResult;
   }
+
   @override
   Future<dynamic> setSpeechRate(double rate) async => 1;
   @override
@@ -640,6 +1247,7 @@ class _FakeTts implements FlutterTts {
     expect(awaitCompletion, isTrue);
     return 1;
   }
+
   @override
   Future<dynamic> speak(String text, {bool focus = false}) {
     final utterance = _Utterance(text, _start, _completion, _error, _cancel);
@@ -649,8 +1257,13 @@ class _FakeTts implements FlutterTts {
     if (autoComplete) utterance.complete();
     return utterance.result.future;
   }
+
   @override
-  Future<dynamic> stop() async { stops++; return 1; }
+  Future<dynamic> stop() async {
+    stops++;
+    return 1;
+  }
+
   @override
   void setStartHandler(void Function() callback) => _start = callback;
   @override

@@ -3206,10 +3206,10 @@ class FamilyCarePlanCard extends StatelessWidget {
             const SizedBox(height: Gap.xs),
             Text(
               plan.classifications.join(' \u00b7 '),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: AppColors.inkMuted,
+                color: p.inkMuted,
                 height: 1.4,
               ),
             ),
@@ -3224,10 +3224,10 @@ class FamilyCarePlanCard extends StatelessWidget {
               Expanded(
                 child: SpeakableText(
                   message,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.ink,
+                    color: p.ink,
                     height: 1.45,
                   ),
                 ),
@@ -3257,23 +3257,23 @@ class FamilyCarePlanCard extends StatelessWidget {
             Container(
               width: double.infinity,
               decoration: BoxDecoration(
-                color: AppColors.triageRedBg,
+                color: p.triageRedBg,
                 borderRadius: BorderRadius.circular(Gap.radiusSm),
               ),
               child: AccentEdge(
-                accent: AppColors.triageRed,
+                accent: p.triageRed,
                 borderRadius: BorderRadius.circular(Gap.radiusSm),
                 child: Padding(
                   padding: const EdgeInsets.all(Gap.md),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SpeakableText(
+                      SpeakableText(
                         'GO TO THE CLINIC IF YOU SEE:',
                         style: TextStyle(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w900,
-                          color: AppColors.triageRed,
+                          color: p.triageRed,
                           letterSpacing: 0.4,
                         ),
                       ),
@@ -3283,10 +3283,10 @@ class FamilyCarePlanCard extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(vertical: 1),
                           child: SpeakableText(
                             '\u2022 $d',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.ink,
+                              color: p.ink,
                               height: 1.4,
                             ),
                           ),
@@ -3323,10 +3323,10 @@ class FamilyCarePlanCard extends StatelessWidget {
               savedAt == null
                   ? 'The health worker asked to see $personName again in ${plan.followUpInDays} day${plan.followUpInDays == 1 ? '' : 's'}.'
                   : 'Requested review date: ${savedAt!.add(Duration(days: plan.followUpInDays!)).toLocal().toString().split(' ').first}. Check the next clinic step for any explicitly scheduled contact.',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: AppColors.inkMuted,
+                color: p.inkMuted,
                 height: 1.4,
               ),
             ),
@@ -3352,10 +3352,11 @@ class _NutritionSummaryPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? AppColors.triageRed : AppColors.primaryDeep;
+    final p = ClinicalPaletteScope.of(context);
+    final color = danger ? p.triageRed : p.primaryDark;
     final bgColor = danger
-        ? AppColors.triageRed.withValues(alpha: 0.08)
-        : AppColors.primaryLight;
+        ? p.triageRed.withValues(alpha: 0.08)
+        : p.primaryLight;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(

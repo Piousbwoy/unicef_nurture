@@ -117,11 +117,33 @@ Future<Map<String, dynamic>> _visitRow(String id, String householdId) async {
   return Map<String, dynamic>.of(rows.single);
 }
 
+Future<Map<String, dynamic>> _referralRow(String id, String personId) async {
+  await ReferralDao.upsert(
+    Referral(
+      id: id,
+      referenceCode: 'CB-REV-$id',
+      personId: personId,
+      assessmentId: 'a-$id',
+      facilityName: 'Bawku Municipal Hospital',
+      reason: 'Referred for assessment',
+      urgency: ReferralUrgency.sameDay,
+      issuedBy: 'u-origin',
+      issuedAt: DateTime(2026, 8, 20),
+    ),
+  );
+  final db = await AppDatabase.instance.database;
+  final rows = await db
+      .query(Tables.referrals, where: 'id = ?', whereArgs: [id], limit: 1);
+  return Map<String, dynamic>.of(rows.single);
+}
+
 /// Re-dresses a local row as a server row: new identity, plus the
-/// server-owned watermark marker a `SELECT *` delivers with every row. The
-/// pull path strips it; the client must intersect anything else away —
-/// writing unknown columns verbatim is how cloud recovery died on
-/// "no column named pull_updated_at".
+/// server-owned revision marker a `SELECT *` delivers with every row (since
+/// Phase 1 the real pull path delivers it, not strips it). The client stores
+/// it on tables that carry a local `pull_updated_at` column (households,
+/// persons, referrals) and intersects it away elsewhere — writing unknown
+/// columns verbatim is how cloud recovery died on "no column named
+/// pull_updated_at".
 Map<String, dynamic> _asServerRow(
   Map<String, dynamic> row, {
   Map<String, dynamic> overrides = const {},
@@ -218,10 +240,10 @@ void main() {
           .single;
       expect(pulledHh['name'], 'The Pulled family');
       expect(
-        pulledHh.containsKey('pull_updated_at'),
-        isFalse,
-        reason: 'server-owned bookkeeping columns are intersected away, not '
-            'written into a local schema that has no such column',
+        pulledHh['pull_updated_at'],
+        _serverTime,
+        reason: 'households carry a local pull_updated_at column since v10, so '
+            'the server-owned revision marker is now stored for merging',
       );
       final pulledPerson = (await db.query(
         Tables.persons,
@@ -661,6 +683,76 @@ void main() {
         after['linked_household_id'],
         'hh-mine',
         reason: 'a locally fresh binding must survive a profile refresh',
+      );
+    });
+  });
+
+  testWidgets(
+      'Phase 1: the delivered pull_updated_at marker is stored where the '
+      'schema has the column and dropped where it does not', (tester) async {
+    setUpDb(tester);
+    await tester.runAsync(() async {
+      await configureServer();
+
+      final hh = await _householdRow('hh-lcl');
+      final person = await _personRow('p-lcl', 'hh-lcl');
+      final referral = await _referralRow('ref-lcl', 'p-lcl');
+      final visit = await _visitRow('v-lcl', 'hh-lcl');
+
+      PlatformHttpClient.override = (method, uri, headers, body) async {
+        return HttpReply(
+          200,
+          jsonEncode(_page(data: {
+            'households': [
+              _asServerRow(hh, overrides: {'id': 'hh-rev'}),
+            ],
+            'persons': [
+              _asServerRow(person,
+                  overrides: {'id': 'p-rev', 'household_id': 'hh-rev'}),
+            ],
+            'referrals': [
+              // reference_code is UNIQUE locally, so the pulled row must carry
+              // its own or it collides with the origin referral this device
+              // already wrote and the insert-if-absent silently drops it.
+              _asServerRow(referral, overrides: {
+                'id': 'ref-rev',
+                'person_id': 'p-rev',
+                'reference_code': 'CB-REV-ref-rev',
+              }),
+            ],
+            'visits': [
+              _asServerRow(visit,
+                  overrides: {'id': 'v-rev', 'household_id': 'hh-rev'}),
+            ],
+          })),
+        );
+      };
+
+      final report =
+          await PullService(minGap: Duration.zero).pull(userId: 'u-pull');
+      expect(report.isSuccess, isTrue, reason: report.toString());
+
+      final db = await AppDatabase.instance.database;
+      Future<Map<String, dynamic>> one(String table, String id) async =>
+          (await db.query(table, where: 'id = ?', whereArgs: [id], limit: 1))
+              .single;
+
+      expect(await one(Tables.households, 'hh-rev')
+          .then((r) => r['pull_updated_at']), _serverTime);
+      expect(await one(Tables.persons, 'p-rev')
+          .then((r) => r['pull_updated_at']), _serverTime);
+      expect(
+        (await one(Tables.referrals, 'ref-rev'))['pull_updated_at'],
+        _serverTime,
+        reason: 'referrals gained the marker column in v10 so a future merge '
+            'can propagate facility-side status down; a fresh pulled referral '
+            'now persists the server revision',
+      );
+      expect(
+        (await one(Tables.visits, 'v-rev')).containsKey('pull_updated_at'),
+        isFalse,
+        reason: 'visits has no such local column, so the marker is intersected '
+            'away there rather than failing the insert',
       );
     });
   });

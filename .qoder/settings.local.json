@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"C:\\\\Users\\\\Alhaji_stunner\\\\Videos\\\\unicef\" 2>/dev/null || dir \"C:\\\\Users\\\\Alhaji_stunner\\\\Videos\\\\unicef\" 2>/dev/null)",
+      "Bash(ls \"C:\\\\Users\\\\Alhaji_stunner\\\\Videos\\\\unicef\\\\assets\\\\audio\\\\dagbani_mms/\" 2>/dev/null | head -20 && echo \"---\" && ls \"C:\\\\Users\\\\Alhaji_stunner\\\\Videos\\\\unicef\\\\assets\\\\audio\\\\hausa_mms/\" 2>/dev/null | head -20 && echo \"---\" && ls \"C:\\\\Users\\\\Alhaji_stunner\\\\Videos\\\\unicef\\\\assets\\\\audio\\\\twi_mms/\" 2>/dev/null | head -20)",
+      "Bash(cd \"C:\\\\Users\\\\Alhaji_stunner\\\\Videos\\\\unicef\" && flutter test test/offline_playback_test.dart 2>&1 | tail -40)",
+      "Bash(cd \"C:\\\\Users\\\\Alhaji_stunner\\\\Videos\\\\unicef\" && flutter test test/offline_playback_test.dart 2>&1 | tail -30)",
+      "Bash(cd \"C:\\\\Users\\\\Alhaji_stunner\\\\Videos\\\\unicef\" && flutter test test/offline_playback_test.dart 2>&1 | tail -25)",
+      "Bash(cd \"C:\\\\Users\\\\Alhaji_stunner\\\\Videos\\\\unicef\" && flutter test test/offline_playback_test.dart 2>&1 | tail -20)",
+      "Bash(cd \"C:\\\\Users\\\\Alhaji_stunner\\\\Videos\\\\unicef\" && flutter test test/offline_playback_test.dart 2>&1 | tail -15)"
+    ]
+  }
+}

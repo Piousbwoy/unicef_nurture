@@ -72,6 +72,25 @@ class LoopbackTransport implements SyncTransport {
   }
 }
 
+/// There is no server to send to. Distinct from an unreachable server: this is
+/// the honest "nothing has been configured" state.
+///
+/// It exists so a field build with no sync URL does NOT drain its outbox
+/// through [LoopbackTransport], which accepts everything and would mark every
+/// record synced — silently dropping it from the pending queue so it never
+/// re-sends when a server is finally configured, while the UI claims the
+/// district has it. [SyncService] short-circuits on this transport and leaves
+/// records pending. Reachable only for demonstration under `DEMO_MODE`, where
+/// [LoopbackTransport] is chosen deliberately instead.
+class NotConfiguredTransport implements SyncTransport {
+  const NotConfiguredTransport();
+
+  @override
+  Future<SendOutcome> send(OutboxEntry entry) async => const SendUnavailable(
+    'No district server is configured on this device.',
+  );
+}
+
 class SyncRunReport {
   const SyncRunReport({
     required this.attempted,
@@ -194,6 +213,11 @@ class SyncService {
     return results.any((r) => r != ConnectivityResult.none);
   }
 
+  /// Whether there is anywhere real for records to go. False in a field build
+  /// with no sync URL configured — the banner and the "Sync now" report use
+  /// this so they never claim delivery to a server that does not exist.
+  bool get serverConfigured => transport is! NotConfiguredTransport;
+
   /// Sends one batch.
   ///
   /// Re-entrancy guarded: the timer and the connectivity listener can fire
@@ -215,6 +239,19 @@ class SyncService {
     var attempted = 0;
 
     try {
+      // No server configured: connectivity is irrelevant and nothing may be
+      // marked synced. Leave the outbox untouched — these records are still
+      // waiting, honestly, and will send the moment a server is set up.
+      if (transport is NotConfiguredTransport) {
+        await publishStatus();
+        return const SyncRunReport(
+          attempted: 0,
+          accepted: 0,
+          rejected: 0,
+          deferred: 0,
+        );
+      }
+
       if (!await isOnline) {
         await publishStatus();
         return const SyncRunReport(
