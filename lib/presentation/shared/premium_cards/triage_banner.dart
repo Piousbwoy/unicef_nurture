@@ -36,31 +36,28 @@ class TriageBanner extends StatelessWidget {
   final List<String> preReferralActions;
   final Duration animationDuration;
 
-  // Color schemes for each triage level
+  // The clinical band, resolved through the single IMCI source. A gradient and
+  // shadow pair used to live here holding a foreign red/amber/green that nothing
+  // read — an invitation to repaint the verdict in someone else's palette. They
+  // are gone; the hue stays where [AppColors] keeps it.
   TriageColors get _colors {
     switch (level) {
       case TriageLevel.urgent:
         return TriageColors(
           primary: PremiumDesignTokens.urgent,
           light: PremiumDesignTokens.urgentLight,
-          gradient: const [Color(0xFFDC2626), Color(0xFFB91C1C)],
-          shadow: const Color(0xFFDC2626).withValues(alpha: 0.4),
           icon: Icons.emergency,
         );
       case TriageLevel.watch:
         return TriageColors(
           primary: PremiumDesignTokens.watch,
           light: PremiumDesignTokens.watchLight,
-          gradient: const [Color(0xFFD97706), Color(0xFFB45309)],
-          shadow: const Color(0xFFD97706).withValues(alpha: 0.3),
           icon: Icons.visibility,
         );
       case TriageLevel.routine:
         return TriageColors(
           primary: PremiumDesignTokens.routine,
           light: PremiumDesignTokens.routineLight,
-          gradient: const [Color(0xFF059669), Color(0xFF047857)],
-          shadow: const Color(0xFF059669).withValues(alpha: 0.25),
           icon: Icons.check_circle,
         );
     }
@@ -281,14 +278,10 @@ class TriageColors {
   const TriageColors({
     required this.primary,
     required this.light,
-    required this.gradient,
-    required this.shadow,
     required this.icon,
   });
 
   final Color primary;
   final Color light;
-  final List<Color> gradient;
-  final Color shadow;
   final IconData icon;
 }

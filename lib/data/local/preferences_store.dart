@@ -16,6 +16,19 @@ library;
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// The sync server used when no explicit URL has been configured on the
+/// device. Overridable at build time with `--dart-define=SYNC_API_URL=...`.
+///
+/// The define exists because a phone cannot reach a laptop's `localhost`. The
+/// browser demo and a physical Android device need different addresses, and
+/// there is no longer an in-app screen for entering one, so the address has to
+/// be settable at build time:
+/// `flutter build apk --dart-define=SYNC_API_URL=http://192.168.1.20:3000`.
+const String kDefaultSyncApiUrl = String.fromEnvironment(
+  'SYNC_API_URL',
+  defaultValue: 'http://localhost:3000',
+);
+
 abstract final class PreferencesStore {
   static const _kOnboardingSeen = 'onboarding_seen';
   static const _kPrivacyConsentSeen = 'privacy_consent_seen';
@@ -109,10 +122,10 @@ abstract final class PreferencesStore {
     return prefs.getString(_kSyncApiUrl);
   }
 
-  /// The effective sync URL, defaulting to `http://localhost:3000` for local
-  /// development when no explicit URL is configured.
+  /// The effective sync URL: an explicit per-device setting wins, otherwise the
+  /// build-time [kDefaultSyncApiUrl].
   static Future<String> effectiveSyncApiUrl() async {
-    return await syncApiUrl() ?? 'http://localhost:3000';
+    return await syncApiUrl() ?? kDefaultSyncApiUrl;
   }
 
   static Future<void> setSyncApiUrl(String url) async {

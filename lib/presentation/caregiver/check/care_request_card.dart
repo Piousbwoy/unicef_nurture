@@ -15,6 +15,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/lumina.dart';
 import '../../../domain/entities/care_request.dart';
 import '../../../domain/enums.dart';
 import '../widgets/companion.dart';
@@ -88,7 +89,7 @@ class CareRequestCard extends StatelessWidget {
               'The check said: $verdictLabel',
               style: caregiverBody(
                 size: 15,
-                color: urgent ? AppColors.triageRed : CompanionColors.ink,
+                color: urgent ? AppColors.triageRed : null,
               ).copyWith(fontWeight: FontWeight.w700),
             ),
           ],
@@ -106,7 +107,10 @@ class CareRequestCard extends StatelessWidget {
                 child: SizedBox(
                   width: 22,
                   height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Lumina.core,
+                  ),
                 ),
               ),
             )

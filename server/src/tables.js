@@ -47,6 +47,11 @@ const TABLES = {
     pk: ['user_id'],
     columns: [
       'user_id', 'server_salt', 'verifier', 'device_id',
+      // The stretching cost the verifier was derived at, advertised back by
+      // /api/auth/challenge so a handset on another platform can reproduce it
+      // instead of assuming its own compile-time default. Non-secret, and not
+      // usable to reverse anything: the verifier is one-way regardless.
+      'pin_iterations', 'cloud_iterations',
       'created_at', 'updated_at',
     ],
   },

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/fhw_luxe.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/enums.dart';
 import '../shared/ui.dart';
@@ -77,11 +78,11 @@ class _AssessTabState extends ConsumerState<AssessTab> {
     // Households already received with someone still to assess — the living
     // queue, surfaced right where the nurse is about to search, so a paused
     // consult is one tap away instead of something to remember.
-    final waiting = (
-          ref.watch(clinicQueueProvider).valueOrNull ?? const <ClinicQueueTicket>[]
-      )
-      .where((t) => t.pending > 0)
-      .toList();
+    final waiting =
+        (ref.watch(clinicQueueProvider).valueOrNull ??
+                const <ClinicQueueTicket>[])
+            .where((t) => t.pending > 0)
+            .toList();
     final query = _search.text.trim().toLowerCase();
     final list = households.valueOrNull ?? const <Household>[];
     final filtered = list.where((household) {
@@ -117,7 +118,7 @@ class _AssessTabState extends ConsumerState<AssessTab> {
                     'Find their record before adding a new one. People stay linked to their household.',
                     style: AppType.body.copyWith(
                       fontSize: 13,
-                      color: AppColors.inkMuted,
+                      color: FhwLuxePalette.textSecondary,
                     ),
                   ),
                   const SizedBox(height: 18),
@@ -127,28 +128,30 @@ class _AssessTabState extends ConsumerState<AssessTab> {
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.checkNavy,
+                      color: FhwLuxePalette.textPrimary,
                     ),
-                    cursorColor: AppColors.checkBlue,
+                    cursorColor: FhwLuxePalette.sapphireRoyal,
                     decoration: InputDecoration(
                       filled: true,
-                      fillColor: Colors.white,
+                      // A pearl field cut into the bright paper, so the desk's
+                      // one search box reads as a hole rather than a sticker.
+                      fillColor: FhwLuxePalette.pearlSurface,
                       labelText: 'Find patient or household',
                       labelStyle: const TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.inkMuted,
+                        color: FhwLuxePalette.textSecondary,
                       ),
                       floatingLabelStyle: const TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w800,
-                        color: AppColors.checkBlue,
+                        color: FhwLuxePalette.sapphireRoyal,
                       ),
                       hintText: 'Name, phone, community or landmark',
                       hintStyle: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: AppColors.inkFaint,
+                        color: FhwLuxePalette.textFaint,
                       ),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
@@ -156,7 +159,7 @@ class _AssessTabState extends ConsumerState<AssessTab> {
                       ),
                       prefixIcon: const Icon(
                         Icons.search_rounded,
-                        color: AppColors.checkBlue,
+                        color: FhwLuxePalette.sapphireRoyal,
                       ),
                       suffixIcon: query.isEmpty
                           ? null
@@ -166,19 +169,19 @@ class _AssessTabState extends ConsumerState<AssessTab> {
                               icon: const Icon(
                                 Icons.cancel_rounded,
                                 size: 20,
-                                color: AppColors.inkFaint,
+                                color: FhwLuxePalette.textFaint,
                               ),
                             ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide(
-                          color: AppColors.checkNavy.withValues(alpha: 0.16),
+                        borderSide: const BorderSide(
+                          color: FhwLuxePalette.hairLine,
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
                         borderSide: const BorderSide(
-                          color: AppColors.checkBlue,
+                          color: FhwLuxePalette.sapphireRoyal,
                           width: 1.6,
                         ),
                       ),
@@ -189,16 +192,13 @@ class _AssessTabState extends ConsumerState<AssessTab> {
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(
+                          SectionSpine(
                             'Waiting now',
-                            style: AppType.label.copyWith(
-                              fontSize: 12,
-                              color: AppColors.brassDeep,
-                            ),
+                            detail:
+                                '${waiting.length} ${waiting.length == 1 ? 'household' : 'households'}',
                           ),
-                          const SizedBox(height: 6),
                           Wrap(
                             spacing: 8,
                             runSpacing: 8,
@@ -222,21 +222,11 @@ class _AssessTabState extends ConsumerState<AssessTab> {
                         ],
                       ),
                     ),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      for (final group in _PatientGroup.values)
-                        ChoiceChip(
-                          selected: _group == group,
-                          label: Text(switch (group) {
-                            _PatientGroup.all => 'All',
-                            _PatientGroup.maternal => 'Maternal care',
-                            _PatientGroup.children => 'Child care',
-                          }),
-                          onSelected: (_) => setState(() => _group = group),
-                        ),
-                    ],
+                  DeskFilterBar(
+                    options: const ['All', 'Maternal care', 'Child care'],
+                    selectedIndex: _group.index,
+                    onSelected: (index) =>
+                        setState(() => _group = _PatientGroup.values[index]),
                   ),
                   const SizedBox(height: 12),
                   FilledButton.icon(
@@ -268,7 +258,7 @@ class _AssessTabState extends ConsumerState<AssessTab> {
                     Text(
                       '${filtered.length} household${filtered.length == 1 ? '' : 's'} · records on this phone',
                       style: AppType.caption.copyWith(
-                        color: AppColors.inkMuted,
+                        color: FhwLuxePalette.textSecondary,
                       ),
                     ),
                   const SizedBox(height: 14),
@@ -418,8 +408,10 @@ class _AssessTabState extends ConsumerState<AssessTab> {
   }
 }
 
-/// A brass-edged pill for one household already waiting in the clinic queue.
-/// Brass is chrome — it marks a pending consult, never a clinical status.
+/// An ice-edged pill for one household already waiting in the clinic queue.
+/// Sapphire ice is the desk's own chrome — it marks a pending consult, never a
+/// clinical status, and it keeps the desk to one blue instead of borrowing the
+/// warm app's brass.
 class _WaitingChip extends StatelessWidget {
   const _WaitingChip({required this.name, required this.onTap});
 
@@ -429,7 +421,7 @@ class _WaitingChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.brassLight,
+      color: FhwLuxePalette.sapphireIce,
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         onTap: onTap,
@@ -438,12 +430,18 @@ class _WaitingChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: AppColors.brass.withValues(alpha: 0.6)),
+            border: Border.all(
+              color: FhwLuxePalette.sapphireRoyal.withValues(alpha: 0.28),
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.schedule_rounded, size: 15, color: AppColors.brassDeep),
+              const Icon(
+                Icons.schedule_rounded,
+                size: 15,
+                color: FhwLuxePalette.sapphireDeep,
+              ),
               const SizedBox(width: 6),
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 180),
@@ -453,7 +451,7 @@ class _WaitingChip extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: AppType.label.copyWith(
                     fontSize: 13,
-                    color: AppColors.brassDeep,
+                    color: FhwLuxePalette.sapphireDeep,
                   ),
                 ),
               ),

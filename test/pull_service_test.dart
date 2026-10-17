@@ -44,25 +44,24 @@ Map<String, dynamic> _page({
   Map<String, dynamic> data = const {},
   bool hasMore = false,
   int? nextCursor,
-}) =>
-    {
-      'ok': true,
-      'server_time': _serverTime,
-      'scoped_to': {'user_id': 'u-pull', 'role': 'fhw'},
-      'data': data,
-      'has_more': hasMore,
-      'next_cursor': ?nextCursor,
-    };
+}) => {
+  'ok': true,
+  'server_time': _serverTime,
+  'scoped_to': {'user_id': 'u-pull', 'role': 'fhw'},
+  'data': data,
+  'has_more': hasMore,
+  'next_cursor': ?nextCursor,
+};
 
 AppUser _self() => AppUser(
-      id: 'u-self',
-      fullName: 'Fatima Yakubu',
-      phone: '0244000000',
-      role: UserRole.frontlineHealthWorker,
-      region: 'Northern Region',
-      district: 'Savelugu Municipal',
-      community: 'Diare',
-    );
+  id: 'u-self',
+  fullName: 'Fatima Yakubu',
+  phone: '0244000000',
+  role: UserRole.frontlineHealthWorker,
+  region: 'Northern Region',
+  district: 'Savelugu Municipal',
+  community: 'Diare',
+);
 
 /// Writes a real household via the real DAO, then reads the row back — the
 /// fake server offers exactly this shape, so a schema drift fails loudly here
@@ -80,8 +79,12 @@ Future<Map<String, dynamic>> _householdRow(String id) async {
     ),
   );
   final db = await AppDatabase.instance.database;
-  final rows = await db
-      .query(Tables.households, where: 'id = ?', whereArgs: [id], limit: 1);
+  final rows = await db.query(
+    Tables.households,
+    where: 'id = ?',
+    whereArgs: [id],
+    limit: 1,
+  );
   return Map<String, dynamic>.of(rows.single);
 }
 
@@ -96,8 +99,12 @@ Future<Map<String, dynamic>> _personRow(String id, String householdId) async {
     ),
   );
   final db = await AppDatabase.instance.database;
-  final rows = await db
-      .query(Tables.persons, where: 'id = ?', whereArgs: [id], limit: 1);
+  final rows = await db.query(
+    Tables.persons,
+    where: 'id = ?',
+    whereArgs: [id],
+    limit: 1,
+  );
   return Map<String, dynamic>.of(rows.single);
 }
 
@@ -112,12 +119,20 @@ Future<Map<String, dynamic>> _visitRow(String id, String householdId) async {
     ),
   );
   final db = await AppDatabase.instance.database;
-  final rows =
-      await db.query(Tables.visits, where: 'id = ?', whereArgs: [id], limit: 1);
+  final rows = await db.query(
+    Tables.visits,
+    where: 'id = ?',
+    whereArgs: [id],
+    limit: 1,
+  );
   return Map<String, dynamic>.of(rows.single);
 }
 
-Future<Map<String, dynamic>> _referralRow(String id, String personId) async {
+Future<Map<String, dynamic>> _referralRow(
+  String id,
+  String personId, {
+  ReferralStatus status = ReferralStatus.issued,
+}) async {
   await ReferralDao.upsert(
     Referral(
       id: id,
@@ -129,11 +144,16 @@ Future<Map<String, dynamic>> _referralRow(String id, String personId) async {
       urgency: ReferralUrgency.sameDay,
       issuedBy: 'u-origin',
       issuedAt: DateTime(2026, 8, 20),
+      status: status,
     ),
   );
   final db = await AppDatabase.instance.database;
-  final rows = await db
-      .query(Tables.referrals, where: 'id = ?', whereArgs: [id], limit: 1);
+  final rows = await db.query(
+    Tables.referrals,
+    where: 'id = ?',
+    whereArgs: [id],
+    limit: 1,
+  );
   return Map<String, dynamic>.of(rows.single);
 }
 
@@ -184,381 +204,450 @@ void main() {
   }
 
   testWidgets(
-      'a first pull merges a household and its member, and nothing looks '
-      'locally dirty', (tester) async {
-    setUpDb(tester);
-    await tester.runAsync(() async {
-      await configureServer();
+    'a first pull merges a household and its member, and nothing looks '
+    'locally dirty',
+    (tester) async {
+      setUpDb(tester);
+      await tester.runAsync(() async {
+        await configureServer();
 
-      final hh = await _householdRow('hh-t1');
-      final person = await _personRow('p-t1', 'hh-t1');
-      final pullUris = <Uri>[];
-      final authHeaders = <String?>[];
-      PlatformHttpClient.override = (method, uri, headers, body) async {
-        pullUris.add(uri);
-        authHeaders.add(headers['Authorization']);
-        return HttpReply(
-          200,
-          jsonEncode(_page(data: {
-            'households': [
-              _asServerRow(hh, overrides: {
-                'id': 'hh-server-1',
-                'name': 'The Pulled family',
-                'created_by': 'u-nurse-b',
-              }),
-            ],
-            'persons': [
-              _asServerRow(person, overrides: {
-                'id': 'p-server-1',
-                'household_id': 'hh-server-1',
-              }),
-            ],
-          })),
-        );
-      };
-
-      final report =
-          await PullService(minGap: Duration.zero).pull(userId: 'u-pull');
-
-      expect(report.isSuccess, isTrue, reason: report.toString());
-      expect(report.rowsApplied, 2);
-      expect(report.pages, 1);
-      expect(pullUris, hasLength(1));
-      expect(pullUris.single.path, '/api/pull');
-      expect(
-        authHeaders.single,
-        'Bearer pull-test-token',
-        reason: 'a pull without credentials is refused server-side',
-      );
-
-      final db = await AppDatabase.instance.database;
-      final pulledHh = (await db.query(
-        Tables.households,
-        where: 'id = ?',
-        whereArgs: ['hh-server-1'],
-      ))
-          .single;
-      expect(pulledHh['name'], 'The Pulled family');
-      expect(
-        pulledHh['pull_updated_at'],
-        _serverTime,
-        reason: 'households carry a local pull_updated_at column since v10, so '
-            'the server-owned revision marker is now stored for merging',
-      );
-      final pulledPerson = (await db.query(
-        Tables.persons,
-        where: 'id = ?',
-        whereArgs: ['p-server-1'],
-      ))
-          .single;
-      expect(pulledPerson['household_id'], 'hh-server-1');
-      expect(
-        await db.query(
-          Tables.outbox,
-          where: 'entity_id = ?',
-          whereArgs: ['hh-server-1'],
-        ),
-        isEmpty,
-        reason: 'pulled rows never enter the outbox, or the app would echo '
-            'them straight back to the server',
-      );
-
-      // The watermark and its bookkeeping are scoped to the pulling user.
-      expect(
-        await SyncStateDao.read(
-            SyncStateKeys.scoped(SyncStateKeys.pullWatermark, 'u-pull')),
-        _serverTime,
-      );
-      expect(
-        await SyncStateDao.read(
-            SyncStateKeys.scoped(SyncStateKeys.pullWatermark, 'u-other')),
-        isNull,
-        reason: 'nurse A\u2019s watermark says nothing about nurse B\u2019s scope',
-      );
-      expect(
-        await SyncStateDao.read(
-            SyncStateKeys.scoped(SyncStateKeys.lastPullRows, 'u-pull')),
-        '2',
-      );
-    });
-  });
-
-  testWidgets(
-      're-pulls send the watermark minus one second and merge idempotently',
-      (tester) async {
-    setUpDb(tester);
-    await tester.runAsync(() async {
-      await configureServer();
-
-      final hh = await _householdRow('hh-t2');
-      final person = await _personRow('p-t2', 'hh-t2');
-      final visit = await _visitRow('v-t2', 'hh-t2');
-      final hhNewer = _shift(hh['updated_at'] as String,
-          const Duration(seconds: 5));
-      final personOlder = _shift(person['updated_at'] as String,
-          const Duration(seconds: -5));
-
-      final sinceSeen = <String?>[];
-      final service = PullService(minGap: Duration.zero);
-
-      // Pull 1: the household and person arrive for the first time.
-      PlatformHttpClient.override = (method, uri, headers, body) async {
-        if (uri.path == '/api/pull') sinceSeen.add(uri.queryParameters['since']);
-        return HttpReply(
-          200,
-          jsonEncode(_page(data: {
-            'households': [_asServerRow(hh, overrides: {'id': 'hh-2'})],
-            'persons': [
-              _asServerRow(person, overrides: {
-                'id': 'p-2',
-                'household_id': 'hh-2',
-              }),
-            ],
-          })),
-        );
-      };
-      final r1 = await service.pull(userId: 'u-pull');
-      expect(r1.isSuccess, isTrue, reason: r1.toString());
-      expect(
-        sinceSeen.single,
-        isNull,
-        reason: 'a first pull has no watermark to send',
-      );
-
-      // Pull 2: a newer household applies, an older person must not, and a
-      // visit the device has never seen arrives.
-      PlatformHttpClient.override = (method, uri, headers, body) async {
-        if (uri.path == '/api/pull') sinceSeen.add(uri.queryParameters['since']);
-        return HttpReply(
-          200,
-          jsonEncode(_page(data: {
-            'households': [
-              _asServerRow(hh, overrides: {
-                'id': 'hh-2',
-                'name': 'The Updated family',
-                'updated_at': hhNewer,
-              }),
-            ],
-            'persons': [
-              _asServerRow(person, overrides: {
-                'id': 'p-2',
-                'household_id': 'hh-2',
-                'updated_at': personOlder,
-              }),
-            ],
-            'visits': [
-              _asServerRow(
-                visit,
-                overrides: {'id': 'v-2', 'household_id': 'hh-2'},
+        final hh = await _householdRow('hh-t1');
+        final person = await _personRow('p-t1', 'hh-t1');
+        final pullUris = <Uri>[];
+        final authHeaders = <String?>[];
+        PlatformHttpClient.override = (method, uri, headers, body) async {
+          pullUris.add(uri);
+          authHeaders.add(headers['Authorization']);
+          return HttpReply(
+            200,
+            jsonEncode(
+              _page(
+                data: {
+                  'households': [
+                    _asServerRow(
+                      hh,
+                      overrides: {
+                        'id': 'hh-server-1',
+                        'name': 'The Pulled family',
+                        'created_by': 'u-nurse-b',
+                      },
+                    ),
+                  ],
+                  'persons': [
+                    _asServerRow(
+                      person,
+                      overrides: {
+                        'id': 'p-server-1',
+                        'household_id': 'hh-server-1',
+                      },
+                    ),
+                  ],
+                },
               ),
-            ],
-          })),
+            ),
+          );
+        };
+
+        final report = await PullService(
+          minGap: Duration.zero,
+        ).pull(userId: 'u-pull');
+
+        expect(report.isSuccess, isTrue, reason: report.toString());
+        expect(report.rowsApplied, 2);
+        expect(report.pages, 1);
+        expect(pullUris, hasLength(1));
+        expect(pullUris.single.path, '/api/pull');
+        expect(
+          authHeaders.single,
+          'Bearer pull-test-token',
+          reason: 'a pull without credentials is refused server-side',
         );
-      };
-      final r2 = await service.pull(userId: 'u-pull');
-      expect(r2.isSuccess, isTrue, reason: r2.toString());
-      expect(r2.rowsApplied, 2, reason: r2.toString());
-      expect(r2.rowsSkipped, 1, reason: r2.toString());
 
-      final expectedSince =
-          _shift(_serverTime, const Duration(seconds: -1));
-      expect(
-        sinceSeen.last,
-        expectedSince,
-        reason: 'the overlap re-reads the watermark second on purpose',
-      );
-
-      final db = await AppDatabase.instance.database;
-      expect(
-        (await db.query(
+        final db = await AppDatabase.instance.database;
+        final pulledHh = (await db.query(
           Tables.households,
           where: 'id = ?',
-          whereArgs: ['hh-2'],
-        ))
-            .single['name'],
-        'The Updated family',
-      );
-      final untouched = (await db.query(
-        Tables.persons,
-        where: 'id = ?',
-        whereArgs: ['p-2'],
-      ))
-          .single;
-      expect(
-        untouched['updated_at'],
-        person['updated_at'],
-        reason: 'an older row must never overwrite the local future',
-      );
-      expect(
-        await db.query(Tables.visits, where: 'id = ?', whereArgs: ['v-2']),
-        hasLength(1),
-        reason: 'a visit carrying server-only bookkeeping columns still merges',
-      );
-
-      // Pull 3: the server re-offers exactly what we already have — the
-      // overlap window in miniature. Nothing may change.
-      PlatformHttpClient.override = (method, uri, headers, body) async {
-        if (uri.path == '/api/pull') sinceSeen.add(uri.queryParameters['since']);
-        return HttpReply(
-          200,
-          jsonEncode(_page(data: {
-            'households': [
-              _asServerRow(hh, overrides: {
-                'id': 'hh-2',
-                'name': 'The Updated family',
-                'updated_at': hhNewer,
-              }),
-            ],
-            'persons': [
-              _asServerRow(person, overrides: {
-                'id': 'p-2',
-                'household_id': 'hh-2',
-                'updated_at': personOlder,
-              }),
-            ],
-            'visits': [
-              _asServerRow(
-                visit,
-                overrides: {'id': 'v-2', 'household_id': 'hh-2'},
-              ),
-            ],
-          })),
+          whereArgs: ['hh-server-1'],
+        )).single;
+        expect(pulledHh['name'], 'The Pulled family');
+        expect(
+          pulledHh['pull_updated_at'],
+          _serverTime,
+          reason:
+              'households carry a local pull_updated_at column since v10, so '
+              'the server-owned revision marker is now stored for merging',
         );
-      };
-      final r3 = await service.pull(userId: 'u-pull');
-      expect(r3.isSuccess, isTrue, reason: r3.toString());
-      expect(r3.rowsApplied, 0, reason: r3.toString());
-      expect(r3.rowsSkipped, 3, reason: r3.toString());
-      expect(
-        await db.query(Tables.visits, where: 'id = ?', whereArgs: ['v-2']),
-        hasLength(1),
-        reason: 're-delivered clinical history is absorbed, never duplicated',
-      );
-    });
-  });
+        final pulledPerson = (await db.query(
+          Tables.persons,
+          where: 'id = ?',
+          whereArgs: ['p-server-1'],
+        )).single;
+        expect(pulledPerson['household_id'], 'hh-server-1');
+        expect(
+          await db.query(
+            Tables.outbox,
+            where: 'entity_id = ?',
+            whereArgs: ['hh-server-1'],
+          ),
+          isEmpty,
+          reason:
+              'pulled rows never enter the outbox, or the app would echo '
+              'them straight back to the server',
+        );
+
+        // The watermark and its bookkeeping are scoped to the pulling user.
+        expect(
+          await SyncStateDao.read(
+            SyncStateKeys.scoped(SyncStateKeys.pullWatermark, 'u-pull'),
+          ),
+          _serverTime,
+        );
+        expect(
+          await SyncStateDao.read(
+            SyncStateKeys.scoped(SyncStateKeys.pullWatermark, 'u-other'),
+          ),
+          isNull,
+          reason:
+              'nurse A\u2019s watermark says nothing about nurse B\u2019s scope',
+        );
+        expect(
+          await SyncStateDao.read(
+            SyncStateKeys.scoped(SyncStateKeys.lastPullRows, 'u-pull'),
+          ),
+          '2',
+        );
+      });
+    },
+  );
 
   testWidgets(
-      'a pull that dies mid-pages leaves the watermark standing and heals '
-      'on retry', (tester) async {
-    setUpDb(tester);
-    await tester.runAsync(() async {
-      await configureServer();
+    're-pulls send the watermark minus one second and merge idempotently',
+    (tester) async {
+      setUpDb(tester);
+      await tester.runAsync(() async {
+        await configureServer();
 
-      final hh = await _householdRow('hh-t3');
-      final hhNewer =
-          _shift(hh['updated_at'] as String, const Duration(seconds: 5));
-      final sinceSeen = <String?>[];
-      final replies = <HttpReply>[
-        // Page 1 of the doomed session: merges fine.
-        HttpReply(
-          200,
-          jsonEncode(_page(
-            hasMore: true,
-            nextCursor: 1,
-            data: {
-              'households': [_asServerRow(hh, overrides: {'id': 'hh-3'})],
-            },
-          )),
-        ),
-        // Page 2: the district server falls over.
-        HttpReply(
-          500,
-          jsonEncode({'error': 'the district server fell over'}),
-        ),
-        // The retry: the same window, now with a fresher household.
-        HttpReply(
-          200,
-          jsonEncode(_page(data: {
-            'households': [
-              _asServerRow(hh, overrides: {
-                'id': 'hh-3',
-                'name': 'The Healed family',
-                'updated_at': hhNewer,
-              }),
-            ],
-          })),
-        ),
-      ];
-      PlatformHttpClient.override = (method, uri, headers, body) async {
-        if (uri.path == '/api/pull') sinceSeen.add(uri.queryParameters['since']);
-        return replies.removeAt(0);
-      };
-
-      final service = PullService(minGap: Duration.zero);
-      final failed = await service.pull(userId: 'u-pull');
-      expect(failed.status, PullStatus.unavailable);
-      expect(failed.pages, 1, reason: 'page one merged, page two never did');
-      expect(
-        await SyncStateDao.read(
-            SyncStateKeys.scoped(SyncStateKeys.pullWatermark, 'u-pull')),
-        isNull,
-        reason: 'no watermark until the whole session completes',
-      );
-      expect(
-        await SyncStateDao.read(
-            SyncStateKeys.scoped(SyncStateKeys.lastPullAt, 'u-pull')),
-        isNull,
-      );
-
-      final retried = await service.pull(userId: 'u-pull', force: true);
-      expect(retried.isSuccess, isTrue, reason: retried.toString());
-      expect(
-        sinceSeen,
-        everyElement(isNull),
-        reason: 'both attempts re-read the same window from the beginning',
-      );
-
-      final db = await AppDatabase.instance.database;
-      final healed = (await db.query(
-        Tables.households,
-        where: 'id = ?',
-        whereArgs: ['hh-3'],
-      ))
-          .single;
-      expect(healed['name'], 'The Healed family');
-      expect(
-        await SyncStateDao.read(
-            SyncStateKeys.scoped(SyncStateKeys.pullWatermark, 'u-pull')),
-        _serverTime,
-        reason: 'the watermark moves only after a completed session',
-      );
-    });
-  });
-
-  testWidgets('a rejected credential is reported honestly and touches nothing',
-      (tester) async {
-    setUpDb(tester);
-    await tester.runAsync(() async {
-      await configureServer();
-
-      final pullUris = <Uri>[];
-      PlatformHttpClient.override = (method, uri, headers, body) async {
-        pullUris.add(uri);
-        return HttpReply(
-          401,
-          jsonEncode({'error': 'expired token'}),
+        final hh = await _householdRow('hh-t2');
+        final person = await _personRow('p-t2', 'hh-t2');
+        final visit = await _visitRow('v-t2', 'hh-t2');
+        final hhNewer = _shift(
+          hh['updated_at'] as String,
+          const Duration(seconds: 5),
         );
-      };
+        final personOlder = _shift(
+          person['updated_at'] as String,
+          const Duration(seconds: -5),
+        );
 
-      final report =
-          await PullService(minGap: Duration.zero).pull(userId: 'u-pull');
+        final sinceSeen = <String?>[];
+        final service = PullService(minGap: Duration.zero);
 
-      expect(report.status, PullStatus.unauthorized);
-      expect(
-        pullUris,
-        hasLength(1),
-        reason: 'no refresh token exists on a test device, so no second try',
-      );
-      expect(
-        await SyncStateDao.read(
-            SyncStateKeys.scoped(SyncStateKeys.pullWatermark, 'u-pull')),
-        isNull,
-      );
-    });
-  });
+        // Pull 1: the household and person arrive for the first time.
+        PlatformHttpClient.override = (method, uri, headers, body) async {
+          if (uri.path == '/api/pull')
+            sinceSeen.add(uri.queryParameters['since']);
+          return HttpReply(
+            200,
+            jsonEncode(
+              _page(
+                data: {
+                  'households': [
+                    _asServerRow(hh, overrides: {'id': 'hh-2'}),
+                  ],
+                  'persons': [
+                    _asServerRow(
+                      person,
+                      overrides: {'id': 'p-2', 'household_id': 'hh-2'},
+                    ),
+                  ],
+                },
+              ),
+            ),
+          );
+        };
+        final r1 = await service.pull(userId: 'u-pull');
+        expect(r1.isSuccess, isTrue, reason: r1.toString());
+        expect(
+          sinceSeen.single,
+          isNull,
+          reason: 'a first pull has no watermark to send',
+        );
 
-  testWidgets('with no server configured the pull is a honest no-op',
-      (tester) async {
+        // Pull 2: a newer household applies, an older person must not, and a
+        // visit the device has never seen arrives.
+        PlatformHttpClient.override = (method, uri, headers, body) async {
+          if (uri.path == '/api/pull')
+            sinceSeen.add(uri.queryParameters['since']);
+          return HttpReply(
+            200,
+            jsonEncode(
+              _page(
+                data: {
+                  'households': [
+                    _asServerRow(
+                      hh,
+                      overrides: {
+                        'id': 'hh-2',
+                        'name': 'The Updated family',
+                        'updated_at': hhNewer,
+                      },
+                    ),
+                  ],
+                  'persons': [
+                    _asServerRow(
+                      person,
+                      overrides: {
+                        'id': 'p-2',
+                        'household_id': 'hh-2',
+                        'updated_at': personOlder,
+                      },
+                    ),
+                  ],
+                  'visits': [
+                    _asServerRow(
+                      visit,
+                      overrides: {'id': 'v-2', 'household_id': 'hh-2'},
+                    ),
+                  ],
+                },
+              ),
+            ),
+          );
+        };
+        final r2 = await service.pull(userId: 'u-pull');
+        expect(r2.isSuccess, isTrue, reason: r2.toString());
+        expect(r2.rowsApplied, 2, reason: r2.toString());
+        expect(r2.rowsSkipped, 1, reason: r2.toString());
+
+        final expectedSince = _shift(_serverTime, const Duration(seconds: -1));
+        expect(
+          sinceSeen.last,
+          expectedSince,
+          reason: 'the overlap re-reads the watermark second on purpose',
+        );
+
+        final db = await AppDatabase.instance.database;
+        expect(
+          (await db.query(
+            Tables.households,
+            where: 'id = ?',
+            whereArgs: ['hh-2'],
+          )).single['name'],
+          'The Updated family',
+        );
+        final untouched = (await db.query(
+          Tables.persons,
+          where: 'id = ?',
+          whereArgs: ['p-2'],
+        )).single;
+        expect(
+          untouched['updated_at'],
+          person['updated_at'],
+          reason: 'an older row must never overwrite the local future',
+        );
+        expect(
+          await db.query(Tables.visits, where: 'id = ?', whereArgs: ['v-2']),
+          hasLength(1),
+          reason:
+              'a visit carrying server-only bookkeeping columns still merges',
+        );
+
+        // Pull 3: the server re-offers exactly what we already have — the
+        // overlap window in miniature. Nothing may change.
+        PlatformHttpClient.override = (method, uri, headers, body) async {
+          if (uri.path == '/api/pull')
+            sinceSeen.add(uri.queryParameters['since']);
+          return HttpReply(
+            200,
+            jsonEncode(
+              _page(
+                data: {
+                  'households': [
+                    _asServerRow(
+                      hh,
+                      overrides: {
+                        'id': 'hh-2',
+                        'name': 'The Updated family',
+                        'updated_at': hhNewer,
+                      },
+                    ),
+                  ],
+                  'persons': [
+                    _asServerRow(
+                      person,
+                      overrides: {
+                        'id': 'p-2',
+                        'household_id': 'hh-2',
+                        'updated_at': personOlder,
+                      },
+                    ),
+                  ],
+                  'visits': [
+                    _asServerRow(
+                      visit,
+                      overrides: {'id': 'v-2', 'household_id': 'hh-2'},
+                    ),
+                  ],
+                },
+              ),
+            ),
+          );
+        };
+        final r3 = await service.pull(userId: 'u-pull');
+        expect(r3.isSuccess, isTrue, reason: r3.toString());
+        expect(r3.rowsApplied, 0, reason: r3.toString());
+        expect(r3.rowsSkipped, 3, reason: r3.toString());
+        expect(
+          await db.query(Tables.visits, where: 'id = ?', whereArgs: ['v-2']),
+          hasLength(1),
+          reason: 're-delivered clinical history is absorbed, never duplicated',
+        );
+      });
+    },
+  );
+
+  testWidgets(
+    'a pull that dies mid-pages leaves the watermark standing and heals '
+    'on retry',
+    (tester) async {
+      setUpDb(tester);
+      await tester.runAsync(() async {
+        await configureServer();
+
+        final hh = await _householdRow('hh-t3');
+        final hhNewer = _shift(
+          hh['updated_at'] as String,
+          const Duration(seconds: 5),
+        );
+        final sinceSeen = <String?>[];
+        final replies = <HttpReply>[
+          // Page 1 of the doomed session: merges fine.
+          HttpReply(
+            200,
+            jsonEncode(
+              _page(
+                hasMore: true,
+                nextCursor: 1,
+                data: {
+                  'households': [
+                    _asServerRow(hh, overrides: {'id': 'hh-3'}),
+                  ],
+                },
+              ),
+            ),
+          ),
+          // Page 2: the district server falls over.
+          HttpReply(
+            500,
+            jsonEncode({'error': 'the district server fell over'}),
+          ),
+          // The retry: the same window, now with a fresher household.
+          HttpReply(
+            200,
+            jsonEncode(
+              _page(
+                data: {
+                  'households': [
+                    _asServerRow(
+                      hh,
+                      overrides: {
+                        'id': 'hh-3',
+                        'name': 'The Healed family',
+                        'updated_at': hhNewer,
+                      },
+                    ),
+                  ],
+                },
+              ),
+            ),
+          ),
+        ];
+        PlatformHttpClient.override = (method, uri, headers, body) async {
+          if (uri.path == '/api/pull')
+            sinceSeen.add(uri.queryParameters['since']);
+          return replies.removeAt(0);
+        };
+
+        final service = PullService(minGap: Duration.zero);
+        final failed = await service.pull(userId: 'u-pull');
+        expect(failed.status, PullStatus.unavailable);
+        expect(failed.pages, 1, reason: 'page one merged, page two never did');
+        expect(
+          await SyncStateDao.read(
+            SyncStateKeys.scoped(SyncStateKeys.pullWatermark, 'u-pull'),
+          ),
+          isNull,
+          reason: 'no watermark until the whole session completes',
+        );
+        expect(
+          await SyncStateDao.read(
+            SyncStateKeys.scoped(SyncStateKeys.lastPullAt, 'u-pull'),
+          ),
+          isNull,
+        );
+
+        final retried = await service.pull(userId: 'u-pull', force: true);
+        expect(retried.isSuccess, isTrue, reason: retried.toString());
+        expect(
+          sinceSeen,
+          everyElement(isNull),
+          reason: 'both attempts re-read the same window from the beginning',
+        );
+
+        final db = await AppDatabase.instance.database;
+        final healed = (await db.query(
+          Tables.households,
+          where: 'id = ?',
+          whereArgs: ['hh-3'],
+        )).single;
+        expect(healed['name'], 'The Healed family');
+        expect(
+          await SyncStateDao.read(
+            SyncStateKeys.scoped(SyncStateKeys.pullWatermark, 'u-pull'),
+          ),
+          _serverTime,
+          reason: 'the watermark moves only after a completed session',
+        );
+      });
+    },
+  );
+
+  testWidgets(
+    'a rejected credential is reported honestly and touches nothing',
+    (tester) async {
+      setUpDb(tester);
+      await tester.runAsync(() async {
+        await configureServer();
+
+        final pullUris = <Uri>[];
+        PlatformHttpClient.override = (method, uri, headers, body) async {
+          pullUris.add(uri);
+          return HttpReply(401, jsonEncode({'error': 'expired token'}));
+        };
+
+        final report = await PullService(
+          minGap: Duration.zero,
+        ).pull(userId: 'u-pull');
+
+        expect(report.status, PullStatus.unauthorized);
+        expect(
+          pullUris,
+          hasLength(1),
+          reason: 'no refresh token exists on a test device, so no second try',
+        );
+        expect(
+          await SyncStateDao.read(
+            SyncStateKeys.scoped(SyncStateKeys.pullWatermark, 'u-pull'),
+          ),
+          isNull,
+        );
+      });
+    },
+  );
+
+  testWidgets('with no server configured the pull is a honest no-op', (
+    tester,
+  ) async {
     setUpDb(tester);
     await tester.runAsync(() async {
       SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -572,8 +661,9 @@ void main() {
         return const HttpReply(401, '{"error": "unauthorized"}');
       };
 
-      final report =
-          await PullService(minGap: Duration.zero).pull(userId: 'u-pull');
+      final report = await PullService(
+        minGap: Duration.zero,
+      ).pull(userId: 'u-pull');
 
       // With default localhost server but no auth token, we get unauthorized
       expect(report.status, PullStatus.unauthorized);
@@ -582,8 +672,9 @@ void main() {
     });
   });
 
-  testWidgets('the debounce collapses eager triggers into one fetch',
-      (tester) async {
+  testWidgets('the debounce collapses eager triggers into one fetch', (
+    tester,
+  ) async {
     setUpDb(tester);
     await tester.runAsync(() async {
       await configureServer();
@@ -594,9 +685,15 @@ void main() {
         fetches++;
         return HttpReply(
           200,
-          jsonEncode(_page(data: {
-            'households': [_asServerRow(hh, overrides: {'id': 'hh-6'})],
-          })),
+          jsonEncode(
+            _page(
+              data: {
+                'households': [
+                  _asServerRow(hh, overrides: {'id': 'hh-6'}),
+                ],
+              },
+            ),
+          ),
         );
       };
 
@@ -605,8 +702,11 @@ void main() {
       final service = PullService();
       final r1 = await service.pull(userId: 'u-pull');
       final r2 = await service.pull(userId: 'u-pull');
-      expect(identical(r1, r2), isTrue,
-          reason: 'the debounce returns the very same report');
+      expect(
+        identical(r1, r2),
+        isTrue,
+        reason: 'the debounce returns the very same report',
+      );
       expect(fetches, 1);
 
       final r3 = await service.pull(userId: 'u-pull', force: true);
@@ -616,79 +716,83 @@ void main() {
   });
 
   testWidgets(
-      'the self-user row refreshes the profile but never device credentials '
-      'or a fresh household binding', (tester) async {
-    setUpDb(tester);
-    await tester.runAsync(() async {
-      await configureServer();
-      await UserDao.register(
-        user: _self(),
-        pin: '2468',
-        linkedHouseholdId: 'hh-mine',
-      );
-
-      final db = await AppDatabase.instance.database;
-      final before = (await db.query(
-        Tables.users,
-        where: 'id = ?',
-        whereArgs: ['u-self'],
-        limit: 1,
-      ))
-          .single;
-
-      PlatformHttpClient.override = (method, uri, headers, body) async {
-        return HttpReply(
-          200,
-          jsonEncode(_page(data: {
-            // The server's scrub contract: no pin_hash, no pin_salt, and no
-            // linked_household_id — that column never leaves the device.
-            'users': {
-              'id': 'u-self',
-              'full_name': 'Fatima Yakubu (server)',
-              'phone': '0244000000',
-              'role': 'fhw',
-              'region': 'Northern Region',
-              'district': 'Savelugu Municipal',
-              'community': 'Diare',
-              'chps_zone': 'Zone A',
-              'facility_name': 'Diare CHPS',
-              'staff_id': 'STF-1',
-              'preferred_language': 'English',
-              'created_at': before['created_at'],
-            },
-          })),
+    'the self-user row refreshes the profile but never device credentials '
+    'or a fresh household binding',
+    (tester) async {
+      setUpDb(tester);
+      await tester.runAsync(() async {
+        await configureServer();
+        await UserDao.register(
+          user: _self(),
+          pin: '2468',
+          linkedHouseholdId: 'hh-mine',
         );
-      };
 
-      final report =
-          await PullService(minGap: Duration.zero).pull(userId: 'u-self');
-      expect(report.isSuccess, isTrue, reason: report.toString());
-      expect(report.rowsApplied, 1);
+        final db = await AppDatabase.instance.database;
+        final before = (await db.query(
+          Tables.users,
+          where: 'id = ?',
+          whereArgs: ['u-self'],
+          limit: 1,
+        )).single;
 
-      final after = (await db.query(
-        Tables.users,
-        where: 'id = ?',
-        whereArgs: ['u-self'],
-        limit: 1,
-      ))
-          .single;
-      expect(after['full_name'], 'Fatima Yakubu (server)');
-      expect(
-        after['pin_hash'],
-        before['pin_hash'],
-        reason: 'server rows never touch device credentials',
-      );
-      expect(after['pin_salt'], before['pin_salt']);
-      expect(
-        after['linked_household_id'],
-        'hh-mine',
-        reason: 'a locally fresh binding must survive a profile refresh',
-      );
-    });
-  });
+        PlatformHttpClient.override = (method, uri, headers, body) async {
+          return HttpReply(
+            200,
+            jsonEncode(
+              _page(
+                data: {
+                  // The server's scrub contract: no pin_hash, no pin_salt, and no
+                  // linked_household_id — that column never leaves the device.
+                  'users': {
+                    'id': 'u-self',
+                    'full_name': 'Fatima Yakubu (server)',
+                    'phone': '0244000000',
+                    'role': 'fhw',
+                    'region': 'Northern Region',
+                    'district': 'Savelugu Municipal',
+                    'community': 'Diare',
+                    'chps_zone': 'Zone A',
+                    'facility_name': 'Diare CHPS',
+                    'staff_id': 'STF-1',
+                    'preferred_language': 'English',
+                    'created_at': before['created_at'],
+                  },
+                },
+              ),
+            ),
+          );
+        };
 
-  testWidgets(
-      'Phase 1: the delivered pull_updated_at marker is stored where the '
+        final report = await PullService(
+          minGap: Duration.zero,
+        ).pull(userId: 'u-self');
+        expect(report.isSuccess, isTrue, reason: report.toString());
+        expect(report.rowsApplied, 1);
+
+        final after = (await db.query(
+          Tables.users,
+          where: 'id = ?',
+          whereArgs: ['u-self'],
+          limit: 1,
+        )).single;
+        expect(after['full_name'], 'Fatima Yakubu (server)');
+        expect(
+          after['pin_hash'],
+          before['pin_hash'],
+          reason: 'server rows never touch device credentials',
+        );
+        expect(after['pin_salt'], before['pin_salt']);
+        expect(
+          after['linked_household_id'],
+          'hh-mine',
+          reason: 'a locally fresh binding must survive a profile refresh',
+        );
+      });
+    },
+  );
+
+  testWidgets('Phase 1: the delivered pull_updated_at marker is stored where the '
       'schema has the column and dropped where it does not', (tester) async {
     setUpDb(tester);
     await tester.runAsync(() async {
@@ -702,58 +806,268 @@ void main() {
       PlatformHttpClient.override = (method, uri, headers, body) async {
         return HttpReply(
           200,
-          jsonEncode(_page(data: {
-            'households': [
-              _asServerRow(hh, overrides: {'id': 'hh-rev'}),
-            ],
-            'persons': [
-              _asServerRow(person,
-                  overrides: {'id': 'p-rev', 'household_id': 'hh-rev'}),
-            ],
-            'referrals': [
-              // reference_code is UNIQUE locally, so the pulled row must carry
-              // its own or it collides with the origin referral this device
-              // already wrote and the insert-if-absent silently drops it.
-              _asServerRow(referral, overrides: {
-                'id': 'ref-rev',
-                'person_id': 'p-rev',
-                'reference_code': 'CB-REV-ref-rev',
-              }),
-            ],
-            'visits': [
-              _asServerRow(visit,
-                  overrides: {'id': 'v-rev', 'household_id': 'hh-rev'}),
-            ],
-          })),
+          jsonEncode(
+            _page(
+              data: {
+                'households': [
+                  _asServerRow(hh, overrides: {'id': 'hh-rev'}),
+                ],
+                'persons': [
+                  _asServerRow(
+                    person,
+                    overrides: {'id': 'p-rev', 'household_id': 'hh-rev'},
+                  ),
+                ],
+                'referrals': [
+                  // reference_code is UNIQUE locally, so the pulled row must carry
+                  // its own or it collides with the origin referral this device
+                  // already wrote and the insert-if-absent silently drops it.
+                  _asServerRow(
+                    referral,
+                    overrides: {
+                      'id': 'ref-rev',
+                      'person_id': 'p-rev',
+                      'reference_code': 'CB-REV-ref-rev',
+                    },
+                  ),
+                ],
+                'visits': [
+                  _asServerRow(
+                    visit,
+                    overrides: {'id': 'v-rev', 'household_id': 'hh-rev'},
+                  ),
+                ],
+              },
+            ),
+          ),
         );
       };
 
-      final report =
-          await PullService(minGap: Duration.zero).pull(userId: 'u-pull');
+      final report = await PullService(
+        minGap: Duration.zero,
+      ).pull(userId: 'u-pull');
       expect(report.isSuccess, isTrue, reason: report.toString());
 
       final db = await AppDatabase.instance.database;
       Future<Map<String, dynamic>> one(String table, String id) async =>
-          (await db.query(table, where: 'id = ?', whereArgs: [id], limit: 1))
-              .single;
+          (await db.query(
+            table,
+            where: 'id = ?',
+            whereArgs: [id],
+            limit: 1,
+          )).single;
 
-      expect(await one(Tables.households, 'hh-rev')
-          .then((r) => r['pull_updated_at']), _serverTime);
-      expect(await one(Tables.persons, 'p-rev')
-          .then((r) => r['pull_updated_at']), _serverTime);
+      expect(
+        await one(
+          Tables.households,
+          'hh-rev',
+        ).then((r) => r['pull_updated_at']),
+        _serverTime,
+      );
+      expect(
+        await one(Tables.persons, 'p-rev').then((r) => r['pull_updated_at']),
+        _serverTime,
+      );
       expect(
         (await one(Tables.referrals, 'ref-rev'))['pull_updated_at'],
         _serverTime,
-        reason: 'referrals gained the marker column in v10 so a future merge '
+        reason:
+            'referrals gained the marker column in v10 so a future merge '
             'can propagate facility-side status down; a fresh pulled referral '
             'now persists the server revision',
       );
       expect(
         (await one(Tables.visits, 'v-rev')).containsKey('pull_updated_at'),
         isFalse,
-        reason: 'visits has no such local column, so the marker is intersected '
+        reason:
+            'visits has no such local column, so the marker is intersected '
             'away there rather than failing the insert',
       );
+    });
+  });
+
+  // A referral is NOT append-only: its status is revised in place on the same
+  // row id. These three pin the merge that replaced insert-if-absent for this
+  // table, because the whole facility-confirmation feature depends on a status
+  // set on one handset reaching the nurse who issued the referral.
+  group('referral status down-propagation', () {
+    /// Closes this device's own outbox entry for a row, which is what a
+    /// successful push does. Only then is the server authoritative about the
+    /// row's current state.
+    Future<void> markPushed(String table, String id) async {
+      final db = await AppDatabase.instance.database;
+      await db.update(
+        Tables.outbox,
+        {'synced_at': DateTime(2026, 8, 28, 8).toIso8601String()},
+        where: 'entity_table = ? AND entity_id = ?',
+        whereArgs: [table, id],
+      );
+    }
+
+    testWidgets('a status confirmed elsewhere reaches the device that holds '
+        'the referral', (tester) async {
+      setUpDb(tester);
+      await tester.runAsync(() async {
+        await configureServer();
+
+        // The local schema keeps foreign keys ON, so the referral needs its
+        // person and household to exist here — the same shape a real device has.
+        await _householdRow('hh-fac');
+        await _personRow('p-fac', 'hh-fac');
+        final referral = await _referralRow('r-fac', 'p-fac');
+        await markPushed(Tables.referrals, 'r-fac');
+
+        PlatformHttpClient.override = (method, uri, headers, body) async =>
+            HttpReply(
+              200,
+              jsonEncode(
+                _page(
+                  data: {
+                    'referrals': [
+                      _asServerRow(
+                        referral,
+                        overrides: {
+                          'status': ReferralStatus.arrived.name,
+                          'arrival_confirmed_by': 'facility-desk',
+                        },
+                      ),
+                    ],
+                  },
+                ),
+              ),
+            );
+
+        final report = await PullService(
+          minGap: Duration.zero,
+        ).pull(userId: 'u-pull');
+        expect(report.isSuccess, isTrue, reason: report.toString());
+
+        final db = await AppDatabase.instance.database;
+        final row = (await db.query(
+          Tables.referrals,
+          where: 'id = ?',
+          whereArgs: ['r-fac'],
+          limit: 1,
+        )).single;
+        expect(
+          row['status'],
+          ReferralStatus.arrived.name,
+          reason:
+              'the nurse who issued the referral must learn the child '
+              'arrived; insert-if-absent used to skip this row forever',
+        );
+        expect(row['arrival_confirmed_by'], 'facility-desk');
+        expect(
+          row['sync_state'],
+          'synced',
+          reason: 'a pulled row must not look locally dirty or it echoes back',
+        );
+      });
+    });
+
+    testWidgets('a local referral that has not been pushed yet is never '
+        'overwritten', (tester) async {
+      setUpDb(tester);
+      await tester.runAsync(() async {
+        await configureServer();
+
+        // The local schema keeps foreign keys ON, so the referral needs its
+        // person and household to exist here — the same shape a real device has.
+        await _householdRow('hh-fac');
+        await _personRow('p-fac', 'hh-fac');
+        final referral = await _referralRow('r-local', 'p-fac');
+        // Deliberately NOT markPushed: this phone wrote the row and the server
+        // has not heard it yet, so the local decision wins.
+
+        PlatformHttpClient.override = (method, uri, headers, body) async =>
+            HttpReply(
+              200,
+              jsonEncode(
+                _page(
+                  data: {
+                    'referrals': [
+                      _asServerRow(
+                        referral,
+                        overrides: {'status': ReferralStatus.arrived.name},
+                      ),
+                    ],
+                  },
+                ),
+              ),
+            );
+
+        final report = await PullService(
+          minGap: Duration.zero,
+        ).pull(userId: 'u-pull');
+        expect(report.isSuccess, isTrue, reason: report.toString());
+
+        final db = await AppDatabase.instance.database;
+        final row = (await db.query(
+          Tables.referrals,
+          where: 'id = ?',
+          whereArgs: ['r-local'],
+          limit: 1,
+        )).single;
+        expect(
+          row['status'],
+          ReferralStatus.issued.name,
+          reason: 'a pull must not silently discard an unpushed field decision',
+        );
+      });
+    });
+
+    testWidgets('a settled referral is never reopened by an older server '
+        'state', (tester) async {
+      setUpDb(tester);
+      await tester.runAsync(() async {
+        await configureServer();
+
+        await _householdRow('hh-fac');
+        await _personRow('p-fac', 'hh-fac');
+        final referral = await _referralRow(
+          'r-settled',
+          'p-fac',
+          status: ReferralStatus.treated,
+        );
+        await markPushed(Tables.referrals, 'r-settled');
+
+        PlatformHttpClient.override = (method, uri, headers, body) async =>
+            HttpReply(
+              200,
+              jsonEncode(
+                _page(
+                  data: {
+                    'referrals': [
+                      _asServerRow(
+                        referral,
+                        overrides: {'status': ReferralStatus.arrived.name},
+                      ),
+                    ],
+                  },
+                ),
+              ),
+            );
+
+        final report = await PullService(
+          minGap: Duration.zero,
+        ).pull(userId: 'u-pull');
+        expect(report.isSuccess, isTrue, reason: report.toString());
+
+        final db = await AppDatabase.instance.database;
+        final row = (await db.query(
+          Tables.referrals,
+          where: 'id = ?',
+          whereArgs: ['r-settled'],
+          limit: 1,
+        )).single;
+        expect(
+          row['status'],
+          ReferralStatus.treated.name,
+          reason:
+              'a later answer about the patient is evidence, not a licence '
+              'to reopen closed paperwork',
+        );
+      });
     });
   });
 }

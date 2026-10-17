@@ -87,7 +87,7 @@ class _Desk extends ConsumerWidget {
     final board = ref.watch(followUpDeskProvider);
 
     return ColoredBox(
-      color: AppColors.surface,
+      color: FhwLuxePalette.porcelainCanvas,
       child: RefreshIndicator(
         onRefresh: _refresh,
         child: board.when(
@@ -132,8 +132,7 @@ class _DeskBody extends ConsumerWidget {
           const _EmptyDesk(),
         ] else ...[
           _AwaitingSection(board: board),
-          if (desk.needsAction.isNotEmpty)
-            _NeedsActionSection(board: board),
+          if (desk.needsAction.isNotEmpty) _NeedsActionSection(board: board),
           if (desk.settled.isNotEmpty) _ClosedSection(board: board),
         ],
         const SizedBox(height: Gap.md),
@@ -153,25 +152,175 @@ class _DeskHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final desk = board.desk;
-    return LuxeHeroHeader(
-      eyebrow: 'Follow-up desk',
-      title: desk.awaitingCount == 0 && desk.actionCount == 0
-          ? 'Nothing waits on you'
-          : 'Who is still waiting?',
-      body:
-          'Answered from what you saw. Arrival is not treatment, and no '
-          'facility record reaches this phone.',
-      icon: Icons.explore_outlined,
-      stats: [
-        LuxeStatPill(value: '${desk.awaitingCount}', label: 'no answer'),
-        LuxeStatPill(value: '${desk.actionCount}', label: 'answered, not cared for'),
-        LuxeStatPill(
-          value: '${board.routeHouseholds.length}',
-          label: 'households on today’s route',
-        ),
-      ],
+    final nothingWaits = desk.awaitingCount == 0 && desk.actionCount == 0;
+    // The desk's cover, built from the same royal lacquer as the Today
+    // panels: one hue with a lit corner, a single hairline of catch-light on
+    // its top edge, and white type. Deliberately not the glowing gradient
+    // hero it replaces — no light blooms, no sheen. The counts are set as
+    // seats you can check the list against, not decoration.
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: FhwLuxePalette.sapphireLacquer,
+        borderRadius: BorderRadius.circular(Gap.radius),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x2E061028),
+            blurRadius: 18,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            left: Gap.radius,
+            right: Gap.radius,
+            top: 0,
+            child: IgnorePointer(
+              child: SizedBox(
+                height: 1,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: FhwLuxePalette.lacquerEdge,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(Gap.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'FOLLOW-UP DESK',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.eyebrow.copyWith(
+                          color: Colors.white.withValues(alpha: 0.66),
+                          letterSpacing: 1.6,
+                          fontSize: 10.5,
+                        ),
+                      ),
+                    ),
+                    const _HeroMark(icon: Icons.explore_outlined),
+                  ],
+                ),
+                const SizedBox(height: Gap.sm),
+                Text(
+                  nothingWaits
+                      ? 'Nothing waits on you'
+                      : 'Who is still waiting?',
+                  style: AppType.headline.copyWith(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.4,
+                    height: 1.18,
+                  ),
+                ),
+                const SizedBox(height: Gap.sm),
+                Text(
+                  'Answered from what you saw. Arrival is not treatment, and no '
+                  'facility record reaches this phone.',
+                  style: AppType.caption.copyWith(
+                    color: FhwLuxePalette.lacquerInk,
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: Gap.lg),
+                Wrap(
+                  spacing: Gap.sm,
+                  runSpacing: Gap.sm,
+                  children: [
+                    _StatSeat(
+                      value: '${desk.awaitingCount}',
+                      label: 'no answer',
+                    ),
+                    _StatSeat(
+                      value: '${desk.actionCount}',
+                      label: 'answered, not cared for',
+                    ),
+                    _StatSeat(
+                      value: '${board.routeHouseholds.length}',
+                      label: 'households on today’s route',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
+}
+
+/// The icon seat at the head of the cover — a white ring on the lacquer, the
+/// same substance as the ledger mark, so the two surfaces read as one desk.
+class _HeroMark extends StatelessWidget {
+  const _HeroMark({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 38,
+    height: 38,
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.1),
+      shape: BoxShape.circle,
+      border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
+    ),
+    child: Icon(icon, size: 18, color: Colors.white),
+  );
+}
+
+/// One honest count on the cover, seated in the lacquer. The figure holds
+/// tabular numerals so the three seats align and can be checked against the
+/// columns below.
+class _StatSeat extends StatelessWidget {
+  const _StatSeat({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.sm),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(Gap.radiusSm),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: AppType.title.copyWith(
+            color: Colors.white,
+            fontSize: 18,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+        Text(
+          label,
+          style: AppType.caption.copyWith(
+            color: FhwLuxePalette.lacquerInk,
+            fontSize: 11,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 /// Verified staff action, kept well away from the family-report path.
@@ -207,7 +356,7 @@ class _EmptyDesk extends StatelessWidget {
       'This is not the same as every patient being cared for. Referrals '
       'issued on another device, and anything not recorded here, is not '
       'counted.',
-      style: TextStyle(color: AppColors.ink, height: 1.45),
+      style: TextStyle(color: FhwLuxePalette.textPrimary, height: 1.45),
     ),
   );
 }
@@ -256,7 +405,10 @@ class _Section extends StatelessWidget {
                 child: Container(
                   width: 9,
                   height: 9,
-                  decoration: BoxDecoration(color: tone, shape: BoxShape.circle),
+                  decoration: BoxDecoration(
+                    color: tone,
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ),
             Expanded(
@@ -271,7 +423,7 @@ class _Section extends StatelessWidget {
       Text(
         detail,
         style: AppType.caption.copyWith(
-          color: AppColors.inkMuted,
+          color: FhwLuxePalette.textSecondary,
           height: 1.4,
         ),
       ),
@@ -292,13 +444,13 @@ class _LaneLabel extends StatelessWidget {
     padding: const EdgeInsets.only(top: Gap.sm, bottom: Gap.sm),
     child: Row(
       children: [
-        Icon(icon, size: 14, color: AppColors.inkMuted),
+        Icon(icon, size: 14, color: FhwLuxePalette.textSecondary),
         const SizedBox(width: Gap.sm),
         Expanded(
           child: Text(
             text,
             style: AppType.eyebrow.copyWith(
-              color: AppColors.inkMuted,
+              color: FhwLuxePalette.textSecondary,
               fontSize: 10.5,
             ),
           ),
@@ -395,7 +547,9 @@ class _ClosedSection extends StatelessWidget {
           const SizedBox(height: Gap.xs),
           Text(
             'Care confirmed, or handed to a new referral. Tied threads.',
-            style: AppType.caption.copyWith(color: AppColors.inkMuted),
+            style: AppType.caption.copyWith(
+              color: FhwLuxePalette.textSecondary,
+            ),
           ),
           const SizedBox(height: Gap.sm),
           ExpansionTile(
@@ -409,7 +563,9 @@ class _ClosedSection extends StatelessWidget {
             minTileHeight: Gap.tapTarget,
             shape: const Border(),
             title: Text(
-              cases.length == 1 ? 'Show 1 closed case' : 'Show ${cases.length} closed cases',
+              cases.length == 1
+                  ? 'Show 1 closed case'
+                  : 'Show ${cases.length} closed cases',
             ),
             children: [
               for (final item in cases)
@@ -454,22 +610,25 @@ class _CaseCard extends ConsumerWidget {
     if (user == null || householdId == null) return;
     final due = _tomorrowMorning();
     try {
-      await ref.read(careRepositoryProvider).planChaseVisit(
-        user,
-        ScheduledContact(
-          id: const Uuid().v4(),
-          personId: item.referral.personId,
-          householdId: householdId,
-          dueDate: due,
-          purpose: 'Chase referral ${item.referral.referenceCode}',
-          createdBy: user.id,
-          referralId: item.referral.id,
-          priority: item.referral.urgency == ReferralUrgency.immediate ||
-                  item.referral.urgency == ReferralUrgency.sameDay
-              ? TriageLevel.urgent
-              : TriageLevel.routine,
-        ),
-      );
+      await ref
+          .read(careRepositoryProvider)
+          .planChaseVisit(
+            user,
+            ScheduledContact(
+              id: const Uuid().v4(),
+              personId: item.referral.personId,
+              householdId: householdId,
+              dueDate: due,
+              purpose: 'Chase referral ${item.referral.referenceCode}',
+              createdBy: user.id,
+              referralId: item.referral.id,
+              priority:
+                  item.referral.urgency == ReferralUrgency.immediate ||
+                      item.referral.urgency == ReferralUrgency.sameDay
+                  ? TriageLevel.urgent
+                  : TriageLevel.routine,
+            ),
+          );
       if (!context.mounted) return;
       refreshFollowUpDesk(ref);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -483,9 +642,9 @@ class _CaseCard extends ConsumerWidget {
       );
     } on AccessDenied catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -506,9 +665,10 @@ class _CaseCard extends ConsumerWidget {
   String get _actionLabel => switch (item.nextStep) {
     FollowUpNextStep.answerNow => 'Answer it at this visit',
     FollowUpNextStep.reviewAnswer => 'Record what changed',
-    FollowUpNextStep.bringOnRoute => chaseDue == null
-        ? 'Put this household on a route'
-        : 'Answer it now — visit already booked',
+    FollowUpNextStep.bringOnRoute =>
+      chaseDue == null
+          ? 'Put this household on a route'
+          : 'Answer it now — visit already booked',
     FollowUpNextStep.none => 'Closed',
   };
 
@@ -559,7 +719,7 @@ class _CaseCard extends ConsumerWidget {
                         Text(
                           item.referral.facilityName,
                           style: AppType.caption.copyWith(
-                            color: AppColors.inkMuted,
+                            color: FhwLuxePalette.textSecondary,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -717,7 +877,10 @@ class _Blockers extends StatelessWidget {
       children: [
         for (final barrier in blockers.take(3))
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: Gap.sm, vertical: 3),
+            padding: const EdgeInsets.symmetric(
+              horizontal: Gap.sm,
+              vertical: 3,
+            ),
             decoration: BoxDecoration(
               color: FhwLuxePalette.pearlSurface,
               borderRadius: BorderRadius.circular(Gap.radiusSm),
@@ -736,7 +899,9 @@ class _Blockers extends StatelessWidget {
             padding: const EdgeInsets.only(left: Gap.xs),
             child: Text(
               '+${blockers.length - 3} more',
-              style: AppType.caption.copyWith(color: AppColors.inkMuted),
+              style: AppType.caption.copyWith(
+                color: FhwLuxePalette.textSecondary,
+              ),
             ),
           ),
       ],
@@ -802,7 +967,7 @@ class _Action extends StatelessWidget {
                       style: AppType.caption.copyWith(
                         color: dark
                             ? Colors.white.withValues(alpha: 0.82)
-                            : AppColors.inkMuted,
+                            : FhwLuxePalette.textSecondary,
                         fontSize: 11.5,
                         height: 1.35,
                       ),
@@ -880,7 +1045,9 @@ class _Secondary extends ConsumerWidget {
             padding: const EdgeInsets.only(top: Gap.xs),
             child: Text(
               'No family phone number on record.',
-              style: AppType.caption.copyWith(color: AppColors.inkMuted),
+              style: AppType.caption.copyWith(
+                color: FhwLuxePalette.textSecondary,
+              ),
             ),
           ),
         _Disclosure(
@@ -1005,7 +1172,9 @@ class _DisclosureState extends State<_Disclosure> {
                 Expanded(
                   child: Text(
                     widget.label,
-                    style: AppType.label.copyWith(color: AppColors.inkMuted),
+                    style: AppType.label.copyWith(
+                      color: FhwLuxePalette.textSecondary,
+                    ),
                   ),
                 ),
                 AnimatedRotation(
@@ -1014,7 +1183,7 @@ class _DisclosureState extends State<_Disclosure> {
                   child: Icon(
                     Icons.expand_more_rounded,
                     size: 21,
-                    color: AppColors.inkMuted,
+                    color: FhwLuxePalette.textSecondary,
                   ),
                 ),
               ],
@@ -1177,9 +1346,7 @@ class _Spine extends StatelessWidget {
         children: [
           SizedBox(
             height: 76,
-            child: Center(
-              child: TraceLine(reading: reading, height: 72),
-            ),
+            child: Center(child: TraceLine(reading: reading, height: 72)),
           ),
           Padding(
             padding: const EdgeInsets.only(bottom: Gap.sm),

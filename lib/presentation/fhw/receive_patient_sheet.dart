@@ -13,6 +13,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/fhw_luxe.dart';
 import '../../domain/entities/core.dart';
 import '../assessment/emergency_tunnel.dart';
 import '../registration/patient_intake_screen.dart';
@@ -63,11 +64,7 @@ class _ReceivePatientSheetState extends State<ReceivePatientSheet> {
   void _openEmergency() => _go(const EmergencyTunnelScreen());
 
   void _openRecords() {
-    _go(
-      PatientIntakeScreen(
-        knownHouseholds: widget.knownHouseholds,
-      ),
-    );
+    _go(PatientIntakeScreen(knownHouseholds: widget.knownHouseholds));
   }
 
   @override
@@ -85,7 +82,7 @@ class _ReceivePatientSheetState extends State<ReceivePatientSheet> {
         children: [
           Text(
             'First, look — don\'t log',
-            style: AppType.title.copyWith(color: AppColors.ink),
+            style: AppType.title.copyWith(color: FhwLuxePalette.textPrimary),
           ),
           const SizedBox(height: 6),
           Text(
@@ -138,7 +135,7 @@ class _ReceivePatientSheetState extends State<ReceivePatientSheet> {
             'The emergency quick check needs no registration and works '
             'without internet.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: AppColors.inkMuted),
+            style: TextStyle(fontSize: 12, color: FhwLuxePalette.textSecondary),
           ),
         ],
       ),
@@ -168,10 +165,14 @@ class _SignRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
       decoration: BoxDecoration(
-        color: flagged ? AppColors.triageRedBg : AppColors.canvas,
+        // The desk's cool palette, never the warm global tokens: this sheet sits
+        // on the FHW canvas, and cream chrome beside sapphire reads as two
+        // products. Triage red stays, because red belongs to clinical verdicts
+        // and nothing else.
+        color: flagged ? AppColors.triageRedBg : FhwLuxePalette.cardSurface,
         borderRadius: BorderRadius.circular(Gap.radiusSm),
         border: Border.all(
-          color: flagged ? AppColors.triageRed : AppColors.line,
+          color: flagged ? AppColors.triageRed : FhwLuxePalette.hairLine,
           width: flagged ? 1.5 : Gap.hairline,
         ),
       ),
@@ -230,16 +231,16 @@ class _PillToggle extends StatelessWidget {
         alignment: Alignment.center,
         padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: selected ? selectedColor : AppColors.surface,
+          color: selected ? selectedColor : FhwLuxePalette.pearlSurface,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
-            color: selected ? selectedColor : AppColors.lineStrong,
+            color: selected ? selectedColor : FhwLuxePalette.hairLine,
           ),
         ),
         child: Text(
           label,
           style: AppType.label.copyWith(
-            color: selected ? Colors.white : AppColors.inkMuted,
+            color: selected ? Colors.white : FhwLuxePalette.textSecondary,
           ),
         ),
       ),

@@ -186,10 +186,12 @@ class CaregiverFoodPlanner {
 
   void _sort(List<LocalFood> foods, bool lowCost, int month) =>
       foods.sort((a, b) {
-        if (lowCost && a.cost.rank != b.cost.rank)
+        if (lowCost && a.cost.rank != b.cost.rank) {
           return a.cost.rank.compareTo(b.cost.rank);
-        if (a.availableIn(month) != b.availableIn(month))
+        }
+        if (a.availableIn(month) != b.availableIn(month)) {
           return a.availableIn(month) ? -1 : 1;
+        }
         return a.name.compareTo(b.name);
       });
 

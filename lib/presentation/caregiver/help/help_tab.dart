@@ -173,10 +173,14 @@ class _HelpHero extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.support_agent_rounded,
-                    color: Colors.white,
-                    size: 40,
+                  LumeFrost(
+                    padding: EdgeInsets.all(10),
+                    sigma: 16,
+                    child: Icon(
+                      Icons.support_agent_rounded,
+                      color: Colors.white,
+                      size: 40,
+                    ),
                   ),
                   SizedBox(width: 14),
                   Expanded(
@@ -232,6 +236,7 @@ class _EmergencyCardState extends State<_EmergencyCard> {
 
   @override
   Widget build(BuildContext context) => LumenCard(
+    hero: true,
     padding: const EdgeInsets.all(20),
     radius: Lumina.rMd,
     child: Column(
@@ -244,11 +249,11 @@ class _EmergencyCardState extends State<_EmergencyCard> {
               height: 40,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppColors.triageRed.withValues(alpha: 0.10),
+                color: const Color(0xFFFFB4B4).withValues(alpha: 0.16),
               ),
               child: const Icon(
                 Icons.emergency_outlined,
-                color: AppColors.triageRed,
+                color: Color(0xFFFFB4B4),
                 size: 22,
               ),
             ),
@@ -256,7 +261,7 @@ class _EmergencyCardState extends State<_EmergencyCard> {
             Expanded(
               child: Text(
                 'If it is an emergency',
-                style: Lumina.display(20, color: AppColors.triageRed),
+                style: Lumina.display(20, color: const Color(0xFFFFB4B4)),
               ),
             ),
           ],
@@ -309,7 +314,7 @@ class _EmergencyCardState extends State<_EmergencyCard> {
                 Icon(
                   Icons.info_outline_rounded,
                   size: 18,
-                  color: Lumina.inkMuted,
+                  color: Lumina.diveMuted,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -318,27 +323,28 @@ class _EmergencyCardState extends State<_EmergencyCard> {
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
-                      color: Lumina.azure,
+                      color: Lumina.diveInk,
                     ),
                   ),
                 ),
                 Icon(
                   Icons.expand_more_rounded,
                   size: 20,
-                  color: Lumina.inkMuted,
+                  color: Lumina.diveMuted,
                 ),
               ],
             ),
           ),
         ),
         if (_know)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 6),
+          const LumeWell(
+            padding: EdgeInsets.all(14),
             child: Text(
               'Calling needs a supported phone and cellular coverage. If '
               'calling fails, ask someone nearby to help you reach a '
               'facility. This app does not dispatch help or arrange '
               'transport.',
+              style: TextStyle(fontSize: 13.5, height: 1.45),
             ),
           ),
       ],
@@ -372,120 +378,112 @@ class _ContactTile extends StatelessWidget {
       child: Semantics(
         button: true,
         label: '$label: ${contact?.name ?? 'no contact saved'}',
-        child: Material(
-          color: Lumina.mist,
-          borderRadius: BorderRadius.circular(18),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(18),
-            onTap: onOpen,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: LumenCard(
+          onTap: onOpen,
+          radius: 18,
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Lumina.tint,
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Lumina.tint,
+                    ),
+                    child: Icon(_icon, size: 20, color: Lumina.core),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          style: AppType.eyebrow.copyWith(
+                            fontSize: 10.5,
+                            letterSpacing: 0.9,
+                            color: Lumina.inkMuted,
+                          ),
                         ),
-                        child: Icon(
-                          _icon,
-                          size: 20,
-                          color: Lumina.azure,
+                        const SizedBox(height: 3),
+                        Text(
+                          contact?.name ?? 'No contact saved.',
+                          style: TextStyle(
+                            fontWeight: contact == null
+                                ? FontWeight.w500
+                                : FontWeight.w700,
+                            fontSize: 15,
+                            height: 1.35,
+                            color: contact == null
+                                ? Lumina.inkMuted
+                                : Lumina.ink,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
+                        if (contact != null) ...[
+                          Text(
+                            contact!.number,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              height: 1.35,
+                            ),
+                          ),
+                          if (contact!.landmark.isNotEmpty)
                             Text(
-                              label,
-                              style: AppType.eyebrow.copyWith(
-                                fontSize: 10.5,
-                                letterSpacing: 0.9,
+                              'Landmark: ${contact!.landmark}',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                height: 1.35,
                                 color: Lumina.inkMuted,
                               ),
                             ),
-                            const SizedBox(height: 3),
-                            Text(
-                              contact?.name ?? 'No contact saved.',
-                              style: TextStyle(
-                                fontWeight: contact == null
-                                    ? FontWeight.w500
-                                    : FontWeight.w700,
-                                fontSize: 15,
-                                height: 1.35,
-                                color: contact == null
-                                    ? Lumina.inkMuted
-                                    : Lumina.ink,
-                              ),
-                            ),
-                            if (contact != null) ...[
-                              Text(
-                                contact!.number,
-                                style: TextStyle(
-                                  fontSize: 13.5,
-                                  height: 1.35,
-                                  color: Lumina.inkMuted,
-                                ),
-                              ),
-                              if (contact!.landmark.isNotEmpty)
-                                Text(
-                                  'Landmark: ${contact!.landmark}',
-                                  style: TextStyle(
-                                    fontSize: 12.5,
-                                    height: 1.35,
-                                    color: Lumina.inkMuted,
-                                  ),
-                                ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        color: Lumina.inkMuted,
-                      ),
-                    ],
-                  ),
-                  if (contact != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: OutlinedButton(
-                        onPressed: () =>
-                            caregiverDial(context, contact!.number),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(48, 48),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        // The phone action stays with the number it dials.
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.call_outlined, size: 18),
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                'Call ${contact!.name}',
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                        ],
+                      ],
                     ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: Lumina.inkFaint,
+                  ),
                 ],
               ),
-            ),
+              if (contact != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: OutlinedButton(
+                    onPressed: () => caregiverDial(context, contact!.number),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Lumina.core,
+                      side: BorderSide(
+                        color: Lumina.core.withValues(alpha: 0.45),
+                      ),
+                      minimumSize: const Size(48, 48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    // The phone action stays with the number it dials.
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.call_outlined, size: 18),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            'Call ${contact!.name}',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
@@ -547,7 +545,6 @@ class _HubTile extends StatelessWidget {
       onTap: entry.onTap,
       radius: Lumina.rMd,
       padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
-      shadow: Lumina.liftQuiet,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -561,10 +558,7 @@ class _HubTile extends StatelessWidget {
             child: Icon(entry.icon, size: 20, color: Colors.white),
           ),
           const SizedBox(height: 12),
-          Text(
-            entry.title,
-            style: Lumina.display(15, weight: 700),
-          ),
+          Text(entry.title, style: Lumina.display(15, weight: 700)),
           const SizedBox(height: 4),
           Text(entry.hint, style: Lumina.body(size: 12.5)),
         ],

@@ -143,18 +143,18 @@ class TraceLine extends StatelessWidget {
   String get semanticsLabel {
     if (reading.isEmpty) {
       return switch (reading.tail) {
-        TraceTail.fraying => 'Referral issued. No visit recorded yet, and it is overdue.',
+        TraceTail.fraying =>
+          'Referral issued. No visit recorded yet, and it is overdue.',
         TraceTail.cut => 'Referral closed without care.',
         _ => 'Referral issued. No visit recorded yet.',
       };
     }
-    final answers = reading.beads
-        .where((b) => b != TraceBead.attempt)
-        .length;
+    final answers = reading.beads.where((b) => b != TraceBead.attempt).length;
     final attempts = reading.beads.length - answers;
     final parts = <String>[
       '$answers ${answers == 1 ? 'answer' : 'answers'}',
-      if (attempts > 0) '$attempts unanswered ${attempts == 1 ? 'visit' : 'visits'}',
+      if (attempts > 0)
+        '$attempts unanswered ${attempts == 1 ? 'visit' : 'visits'}',
     ];
     final last = reading.beads.last;
     return 'Chase history: ${parts.join(', ')}. Last visit: '
@@ -214,15 +214,23 @@ class _ThreadPainter extends CustomPainter {
 
     for (var i = 0; i < reading.beads.length; i++) {
       if (i > 0) {
-        _run(canvas, x, stops[i - 1] + _radius(reading.beads[i - 1]),
-            stops[i] - _radius(reading.beads[i]), reading.beads[i]);
+        _run(
+          canvas,
+          x,
+          stops[i - 1] + _radius(reading.beads[i - 1]),
+          stops[i] - _radius(reading.beads[i]),
+          reading.beads[i],
+        );
       }
       _bead(canvas, x, stops[i], reading.beads[i]);
     }
 
-    final last = stops.isEmpty ? top : stops.last + _radius(
-      reading.beads.isEmpty ? TraceBead.attempt : reading.beads.last,
-    );
+    final last = stops.isEmpty
+        ? top
+        : stops.last +
+              _radius(
+                reading.beads.isEmpty ? TraceBead.attempt : reading.beads.last,
+              );
     _tail(canvas, x, last.clamp(top, size.height - 6), size.height);
   }
 
@@ -269,7 +277,13 @@ class _ThreadPainter extends CustomPainter {
     );
   }
 
-  void _fray(Canvas canvas, double x, double from, double to, {bool worn = false}) {
+  void _fray(
+    Canvas canvas,
+    double x,
+    double from,
+    double to, {
+    bool worn = false,
+  }) {
     const stride = 5.0;
     final paint = Paint()
       ..color = worn ? _worn : _whole
@@ -289,11 +303,7 @@ class _ThreadPainter extends CustomPainter {
   void _bead(Canvas canvas, double x, double y, TraceBead bead) {
     switch (bead) {
       case TraceBead.attempt:
-        canvas.drawCircle(
-          Offset(x, y),
-          3.5,
-          Paint()..color = _hollow,
-        );
+        canvas.drawCircle(Offset(x, y), 3.5, Paint()..color = _hollow);
         canvas.drawCircle(
           Offset(x, y),
           3.5,
@@ -307,9 +317,10 @@ class _ThreadPainter extends CustomPainter {
         canvas.drawCircle(
           Offset(x, y),
           2.2,
-          Paint()..color = onDark
-              ? FhwLuxePalette.sapphireDeep
-              : FhwLuxePalette.pureWhite,
+          Paint()
+            ..color = onDark
+                ? FhwLuxePalette.sapphireDeep
+                : FhwLuxePalette.pureWhite,
         );
       case TraceBead.untreated:
         // The bead that must not be confused with a settled one: a ring with a
@@ -318,9 +329,10 @@ class _ThreadPainter extends CustomPainter {
         canvas.drawCircle(
           Offset(x, y),
           3.0,
-          Paint()..color = onDark
-              ? FhwLuxePalette.sapphireDeep
-              : FhwLuxePalette.pureWhite,
+          Paint()
+            ..color = onDark
+                ? FhwLuxePalette.sapphireDeep
+                : FhwLuxePalette.pureWhite,
         );
         _tick(canvas, x, y, _whole);
       case TraceBead.treated:
@@ -336,9 +348,10 @@ class _ThreadPainter extends CustomPainter {
         canvas.drawCircle(
           Offset(x, y),
           3.2,
-          Paint()..color = onDark
-              ? FhwLuxePalette.sapphireDeep
-              : FhwLuxePalette.pureWhite,
+          Paint()
+            ..color = onDark
+                ? FhwLuxePalette.sapphireDeep
+                : FhwLuxePalette.pureWhite,
         );
       case TraceBead.declined:
         canvas.drawCircle(

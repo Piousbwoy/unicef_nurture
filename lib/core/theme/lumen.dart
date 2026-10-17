@@ -164,6 +164,21 @@ abstract final class Chiaroscuro {
     BoxShadow(color: Color(0x121B56DB), blurRadius: 60, offset: Offset(0, 30)),
   ];
 
+  /// Soft neumorphic extrusion for the premium-fintech register: a white
+  /// highlight raking from the top-left and a cool navy shade pooling at the
+  /// bottom-right, so a porcelain card reads as pressed from the same material
+  /// as the canvas rather than laid on top of it. A tight contact hair keeps the
+  /// rim crisp. Pure BoxShadow — no blur filter — so it stays cheap on a low-end
+  /// handset and legible in bright field sunlight.
+  static const List<BoxShadow> neumorphic = [
+    // Cool shade pooling bottom-right — the mass of the extrusion.
+    BoxShadow(color: Color(0x220B2A6B), blurRadius: 26, offset: Offset(9, 11)),
+    // White highlight raking top-left — the lit edge that sells the emboss.
+    BoxShadow(color: Color(0xD9FFFFFF), blurRadius: 18, offset: Offset(-8, -8)),
+    // A hair of contact so the rim stays crisp rather than mushy.
+    BoxShadow(color: Color(0x0A0B2A6B), blurRadius: 2, offset: Offset(0, 1)),
+  ];
+
   /// Emissive halo around a lit sapphire surface.
   static List<BoxShadow> bloom(Color colour, {double alpha = 0.5}) => [
     BoxShadow(
@@ -697,7 +712,8 @@ class MagneticCapsule extends StatefulWidget {
   final VoidCallback onTap;
   final double radius;
 
-  /// Selected capsules sit on a liquid sapphire pool; unselected on alabaster.
+  /// Selected capsules sit on the lit liquid sapphire pool; unselected on
+  /// the darker, glassier deep pool — one blue family, two depths.
   final bool selected;
   final bool enableBloom;
 
@@ -778,11 +794,11 @@ class _MagneticCapsuleState extends State<MagneticCapsule>
               borderRadius: r,
               gradient: widget.selected
                   ? Lumen.sapphireLiquid
-                  : Lumen.alabasterRaised,
+                  : Lumen.sapphireDeepPool,
               border: Border.all(
                 color: widget.selected
                     ? Colors.white.withValues(alpha: 0.4)
-                    : FhwLuxePalette.glassBorderLight,
+                    : Colors.white.withValues(alpha: 0.32),
                 width: 1.1,
               ),
               boxShadow: widget.selected

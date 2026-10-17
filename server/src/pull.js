@@ -25,10 +25,21 @@
 //
 //   * caregiver: rows of the household bound to the JWT user
 //     (linked_household_id). No binding → an honest, empty page.
-//   * frontlineHealthWorker / supervisor: households in the JWT's
-//     (region, district, community) tuple OR created_by === JWT sub;
-//     persons/visits/care_requests of those households; assessments/referrals of
-//     those persons; plus the caller's own users row (profile refresh).
+//   * frontlineHealthWorker / supervisor: every household in the JWT's REGION
+//     (plus anything created_by === JWT sub). Not the exact
+//     (region, district, community) tuple — that predicate made a nurse's pull
+//     return only her own community while the app's register on her phone is
+//     region-wide, so a family registered by a colleague two districts over,
+//     or in the same district under a different community spelling, simply
+//     never arrived. The child would still walk in and be a stranger.
+//
+//   The region arm is matched by mutual prefix for the same reason the local
+//   caseload query is: record sources disagree on 'Northern' vs 'Northern
+//   Region' (cloud recovery writes the short form, the setup wizard the long
+//   one), and an exact equality silently hides every colleague household from an
+//   account created through recovery. A prefix never crosses into a
+//   differently-named region: neither 'Northern Region' nor 'North East Region'
+//   is a prefix of the other.
 //
 // The client's querystring is never trusted for scope — same rule as
 // recovery.js. pull_updated_at is now DELIVERED, not stripped: the client
@@ -104,9 +115,16 @@ function householdScope(scope) {
   if (scope.caregiverHouseholdId) {
     return { sql: 'id = ?', params: [scope.caregiverHouseholdId] };
   }
+  // A worker with no region on her account still gets her own rows — an honest
+  // narrow page beats an unbounded one.
+  if (!scope.region) {
+    return { sql: '(created_by = ?)', params: [scope.userId] };
+  }
   return {
-    sql: '(region = ? AND district = ? AND community = ?) OR created_by = ?',
-    params: [scope.region, scope.district, scope.community, scope.userId],
+    sql:
+      '(created_by = ? OR (region IS NOT NULL AND '
+      + '(region LIKE ? OR ? LIKE CONCAT(region, \'%\'))))',
+    params: [scope.userId, `${scope.region}%`, scope.region],
   };
 }
 

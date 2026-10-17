@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/fhw_luxe.dart';
 import '../../data/local/visit_dao.dart';
 import '../../domain/entities/visit.dart';
 import '../shared/ui.dart';
@@ -183,9 +184,9 @@ class _CommunitySupportScreenState
                   Container(
                     padding: const EdgeInsets.all(Gap.md),
                     decoration: BoxDecoration(
-                      color: AppColors.canvas,
+                      color: FhwLuxePalette.pearlSurface,
                       borderRadius: BorderRadius.circular(Gap.radiusSm),
-                      border: Border.all(color: AppColors.line),
+                      border: Border.all(color: FhwLuxePalette.hairLine),
                     ),
                     child: Text(
                       _message,
@@ -250,9 +251,7 @@ class _CommunitySupportScreenState
   /// the web preview — the message is copied instead, so it is never lost.
   Future<void> _openSms() async {
     final phone = _phone.text.trim().replaceAll(RegExp(r'[^0-9+]'), '');
-    final uri = Uri.parse(
-      'sms:$phone?body=${Uri.encodeComponent(_message)}',
-    );
+    final uri = Uri.parse('sms:$phone?body=${Uri.encodeComponent(_message)}');
     try {
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri);

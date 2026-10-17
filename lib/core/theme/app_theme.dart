@@ -86,6 +86,48 @@ abstract final class AppColors {
   static const Color triageGreen = Color(0xFF2E7D4F);
   static const Color triageGreenBg = Color(0xFFE9F6EE);
 
+  /// The same three trained hues pushed to a deeper stop. A verdict band
+  /// sometimes has to fill a plate rather than badge a row, and a flat fill of
+  /// a single hue reads printed while the same hue with a lit corner and a
+  /// shadow corner reads dyed. Depth is added by darkening *the trained hue*
+  /// — never by reaching for a red or a green from somewhere else, which is
+  /// how a clinical colour system silently becomes two colour systems.
+  static const Color triageRedDeep = Color(0xFFA62424);
+  static const Color triageAmberDeep = Color(0xFFB4760A);
+  static const Color triageGreenDeep = Color(0xFF215C39);
+
+  /// The ink that stays legible on each plate. White clears AA on the red and
+  /// the green and cannot clear it on a yellow: the amber plate inverts to a
+  /// near-black brown, which is exactly why the paper IMCI chart booklet prints
+  /// its amber rows in black ink. Nothing here is a new clinical hue.
+  static const Color verdictInkOnRed = Color(0xFFFFFFFF);
+  static const Color verdictInkOnAmber = Color(0xFF2B1B02);
+  static const Color verdictInkOnGreen = Color(0xFFFFFFFF);
+
+  /// Lit corner to shadow corner, so the plate reads as material. Type sits
+  /// toward the lit end; the deep stop is the far corner, not a text bed.
+  static const LinearGradient redPlate = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [triageRed, triageRedDeep],
+  );
+  static const LinearGradient amberPlate = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [triageAmber, triageAmberDeep],
+  );
+  static const LinearGradient greenPlate = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [triageGreen, triageGreenDeep],
+  );
+
+  /// The emergency tunnel's ground: the triage red taken almost to black. It is
+  /// a *place* — the red room a caregiver is walked through when a danger sign
+  /// is answered — so it may be far darker than a verdict badge, but it is
+  /// still the one red, not a second alarm colour.
+  static const Color emergencyGround = Color(0xFF2B0708);
+
   // ── Semantic ───────────────────────────────────────────────────────
   static const Color offline = Color(0xFF6B4FA8);
   static const Color offlineBg = Color(0xFFF1EDF8);
@@ -100,8 +142,9 @@ abstract final class AppColors {
   static const Color glassFill = Color(0xC7FFFFFF);
 
   // ── Caregiver blue layer ───────────────────────────────────────────
-  /// A very pale blue wash replacing the warm cream for caregiver surfaces.
-  static const Color caregiverCanvas = Color(0xFFF0F5FF);
+  /// The caregiver page ground is plain white — the owner asked for it on
+  /// 2026-10-13; the deep blue belongs on the cards, not behind them.
+  static const Color caregiverCanvas = Color(0xFFFFFFFF);
 
   /// White with a blue tint for caregiver raised cards.
   static const Color caregiverSurface = Color(0xFFF6F9FE);
@@ -186,7 +229,7 @@ abstract final class AppColors {
 }
 
 abstract final class CaregiverLuxePalette {
-  static const celestialCanvas = Color(0xFFF6F9FD);
+  static const celestialCanvas = Color(0xFFFFFFFF);
   static const pearlSurface = Color(0xFFFFFFFF);
   static const pearlGlassTint = Color(0xEDFFFFFF);
   static const pearlSurfaceSunken = Color(0xFFEEF4FA);
@@ -380,9 +423,8 @@ class ClinicalPaletteScope extends InheritedWidget {
   final ClinicalPalette palette;
 
   static ClinicalPalette of(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<
-      ClinicalPaletteScope
-    >();
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<ClinicalPaletteScope>();
     if (scope != null) return scope.palette;
     final dark = Theme.of(context).brightness == Brightness.dark;
     return dark ? ClinicalPalette.night : ClinicalPalette.day;

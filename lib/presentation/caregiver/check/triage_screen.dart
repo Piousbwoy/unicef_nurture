@@ -255,10 +255,6 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
       // The check opens with its own navy hero card; a gradient bar above it
       // would stack two blue bands.
       heroChrome: false,
-      // Urgency is light removed, not red added: the moment a danger sign is
-      // reported the whole check drops onto midnight and the cards on it
-      // become lit instruments in a dark room.
-      lume: check?.alarmRaised ?? false,
       child: check == null
           ? _picker()
           : switch (check.stage) {
@@ -385,6 +381,7 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
     padding: const EdgeInsets.all(20),
     children: [
       CompanionCard(
+        hero: true,
         title: 'A check for ${check.person.fullName} is unfinished',
         eyebrow: 'DRAFT',
         child: Column(
@@ -787,9 +784,7 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
                 style: caregiverBody(
                   size: 12.5,
                   height: 1.5,
-                  color: LumeField.of(context)
-                      ? Lumina.diveMuted
-                      : CompanionColors.muted,
+                  color: CompanionColors.muted,
                 ),
               ),
             ],
@@ -1718,6 +1713,7 @@ class _SelectChip extends StatelessWidget {
     );
   }
 }
+
 IconData _concernIcon(String key) => switch (key) {
   'hot' || 'fever' => Icons.thermostat_rounded,
   'feeding' || 'drinking' => Icons.local_drink_rounded,
@@ -1789,14 +1785,13 @@ class _QuestionHero extends StatelessWidget {
   final bool canGoBack;
   final VoidCallback onBack;
 
-  /// A danger sign is up: the panel deepens toward the abyss and the tide
-  /// line turns the alarm's own red.
+  /// A danger sign is up: the tide line carries one red mark so she can see
+  /// which answer it was. The page itself does not change.
   final bool alarm;
 
   @override
   Widget build(BuildContext context) {
     final reduced = MediaQuery.disableAnimationsOf(context);
-    final lume = LumeField.of(context);
     final responses = [
       for (var i = 0; i < total; i++)
         !answered.contains(i)
@@ -1809,21 +1804,18 @@ class _QuestionHero extends StatelessWidget {
     ];
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: alarm || lume
-              ? const [Lumina.abyss, Lumina.deep, Color(0xFF0E2A52)]
-              : const [Lumina.deep, Lumina.navy, Color(0xFF1E4785)],
-          stops: const [0, 0.58, 1],
+          colors: [Lumina.deep, Lumina.navy, Color(0xFF1E4785)],
+          stops: [0, 0.58, 1],
         ),
         borderRadius: const BorderRadius.vertical(
           bottom: Radius.circular(Lumina.rXl),
         ),
         boxShadow: [
           BoxShadow(
-            color: (alarm ? AppColors.triageRed : Lumina.abyss)
-                .withValues(alpha: alarm ? 0.28 : 0.4),
+            color: Lumina.abyss.withValues(alpha: 0.4),
             blurRadius: 28,
             offset: const Offset(0, 12),
           ),
@@ -1835,16 +1827,12 @@ class _QuestionHero extends StatelessWidget {
           Positioned(
             top: -96,
             right: -64,
-            child: _Glow(
-              230,
-              alarm ? AppColors.triageRed : Lumina.bright,
-              alarm ? 0.3 : 0.42,
-            ),
+            child: _Glow(230, Lumina.bright, 0.42),
           ),
           Positioned(
             bottom: -120,
             left: -78,
-            child: _Glow(250, Lumina.azure, lume ? 0.12 : 0.22),
+            child: _Glow(250, Lumina.azure, 0.22),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 26),
@@ -2925,18 +2913,18 @@ class _LumenVerdict extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dive = urgent || LumeField.of(context);
-    final ink = dive ? Colors.white : Lumina.ink;
-    final muted = dive ? Lumina.diveMuted : Lumina.inkMuted;
+    // The verdict card always sits on a dark ground now — the abyss when
+    // the alarm is raised, hero blue otherwise — so its ink is the dive
+    // white either way.
+    final ink = Colors.white;
+    final muted = Lumina.diveMuted;
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           children: [
             Expanded(child: MicroLabel('Aura Nurture', color: muted)),
-            MicroLabel(
-              urgent ? 'Act now' : 'Today',
-              color: dive ? Lumina.diveMuted : Lumina.inkFaint,
-            ),
+            MicroLabel(urgent ? 'Act now' : 'Today', color: muted),
           ],
         ),
         const SizedBox(height: 16),
@@ -2956,7 +2944,7 @@ class _LumenVerdict extends StatelessWidget {
                         ],
                         stops: [0.05, 0.55, 1],
                       )
-                      : Lumina.tide,
+                    : Lumina.tide,
                 boxShadow: [
                   BoxShadow(
                     color: verdictColor.withValues(alpha: 0.35),
@@ -2977,7 +2965,7 @@ class _LumenVerdict extends StatelessWidget {
                     maxLines: 1,
                     style: Lumina.display(
                       21,
-                      color: urgent ? (dive ? AppColors.triageRed : ink) : ink,
+                      color: urgent ? AppColors.triageRed : ink,
                     ).copyWith(letterSpacing: 1.2),
                   ),
                   const SizedBox(height: 3),
@@ -3019,8 +3007,8 @@ class _LumenVerdict extends StatelessWidget {
               reading: '$signsCount',
               fraction: totalCount == 0 ? 0 : signsCount / totalCount,
               tone: signsCount == 0
-                  ? Lumina.azure
-                  : AppColors.triageRed,
+                  ? (dive ? Lumina.azure : Lumina.glow)
+                  : (dive ? AppColors.triageRed : const Color(0xFFFFB4B4)),
               dive: dive,
             ),
             _VerdictStat(
@@ -3041,7 +3029,11 @@ class _LumenVerdict extends StatelessWidget {
       ],
     );
     if (!dive) {
-      return LumenCard(padding: const EdgeInsets.all(20), child: body);
+      return LumenCard(
+        hero: true,
+        padding: const EdgeInsets.all(20),
+        child: body,
+      );
     }
     return Container(
       padding: const EdgeInsets.all(20),
@@ -3096,7 +3088,7 @@ class _VerdictStat extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        MicroLabel(label, color: dive ? Lumina.diveMuted : Lumina.inkFaint),
+        MicroLabel(label, color: Lumina.diveMuted),
         const SizedBox(height: 6),
         FittedBox(
           fit: BoxFit.scaleDown,
@@ -3108,7 +3100,7 @@ class _VerdictStat extends StatelessWidget {
               fontSize: readingSize,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.3,
-              color: dive ? Colors.white : Lumina.ink,
+              color: Colors.white,
             ),
           ),
         ),
@@ -3226,7 +3218,7 @@ class _RecordRow extends StatelessWidget {
             style: caregiverBody(
               size: 14.5,
               height: 1.35,
-              color: missing ? AppColors.triageAmber : CompanionColors.ink,
+              color: missing ? AppColors.triageAmber : null,
             ),
           ),
         ),
@@ -3249,7 +3241,7 @@ class _CoverRow extends StatelessWidget {
         const Icon(
           Icons.check_circle_outline_rounded,
           size: 18,
-          color: AppColors.checkBlue,
+          color: Lumina.core,
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -3275,20 +3267,8 @@ class _AdviceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return LumenCard(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.checkSilver, width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.checkNavyDeep.withValues(alpha: 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -3296,7 +3276,7 @@ class _AdviceCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: AppColors.checkBlueTint,
+                color: Lumina.tint,
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
@@ -3304,7 +3284,7 @@ class _AdviceCard extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w800,
-                  color: AppColors.checkBlue,
+                  color: Lumina.core,
                 ),
               ),
             ),
@@ -3315,7 +3295,6 @@ class _AdviceCard extends StatelessWidget {
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: AppColors.ink,
               height: 1.5,
             ),
           ),
@@ -3324,7 +3303,7 @@ class _AdviceCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppColors.checkBlue.withValues(alpha: 0.06),
+                color: Lumina.mist,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -3336,7 +3315,7 @@ class _AdviceCard extends StatelessWidget {
                       fontSize: 10.5,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0.8,
-                      color: AppColors.checkNavy,
+                      color: CompanionColors.muted,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -3358,7 +3337,6 @@ class _AdviceCard extends StatelessWidget {
                               style: const TextStyle(
                                 fontSize: 13.5,
                                 fontWeight: FontWeight.w600,
-                                color: AppColors.ink,
                                 height: 1.3,
                               ),
                             ),
@@ -3417,6 +3395,9 @@ class _ActionStepsCard extends ConsumerWidget {
               )
               .length;
     final items = steps.entries.toList();
+    // The verdict above already wears the hero blue; this working card rests
+    // on pearl, so the clinical tone stays saturated.
+    final tone = verdictColor;
 
     return CompanionCard(
       title: routine
@@ -3430,7 +3411,7 @@ class _ActionStepsCard extends ConsumerWidget {
             _StepMeter(
               done: done,
               total: items.length,
-              tone: verdictColor,
+              tone: tone,
               routine: routine,
             ),
             const SizedBox(height: 14),
@@ -3471,7 +3452,7 @@ class _ActionStepsCard extends ConsumerWidget {
                 label: items[i].value,
                 step: i + 1,
                 totalSteps: items.length,
-                tone: verdictColor,
+                tone: tone,
               ),
         ],
       ),
@@ -3516,9 +3497,7 @@ class _StepMeter extends StatelessWidget {
                   fontSize: 13,
                   fontWeight: allDone ? FontWeight.w800 : FontWeight.w700,
                   height: 1.3,
-                  color: allDone
-                      ? AppColors.checkNavy
-                      : AppColors.caregiverFaded,
+                  color: allDone ? tone : CompanionColors.muted,
                 ),
               ),
             ),
@@ -3530,7 +3509,7 @@ class _StepMeter extends StatelessWidget {
           borderRadius: BorderRadius.circular(5),
           child: Container(
             height: 7,
-            color: AppColors.checkSilver,
+            color: Lumina.tint,
             alignment: Alignment.centerLeft,
             child: TweenAnimationBuilder<double>(
               tween: Tween<double>(begin: 0, end: fraction),
@@ -3603,17 +3582,13 @@ class _GettingThereCard extends ConsumerWidget {
               walking >= 60
                   ? 'The facility is about ${walking ~/ 60} hour${walking >= 120 ? 's' : ''}\u2019 walk away \u2014 arrange a ride and phone ahead now.'
                   : 'The facility is about $walking minutes\u2019 walk away.',
-              style: const TextStyle(
-                fontSize: 13.5,
-                color: AppColors.inkMuted,
-                height: 1.4,
-              ),
+              style: const TextStyle(fontSize: 13.5, height: 1.4),
             ),
           ],
           const SizedBox(height: 12),
           const Text(
             'Tick as you gather. The nurse will ask for these.',
-            style: TextStyle(fontSize: 12.5, color: AppColors.inkMuted),
+            style: TextStyle(fontSize: 12.5, color: CompanionColors.muted),
           ),
           const SizedBox(height: 8),
           for (final (key, label) in prepItems)
@@ -3740,7 +3715,7 @@ class _TellSomeoneCard extends ConsumerWidget {
               'if the verdict says go, go.',
               style: TextStyle(
                 fontSize: 12.5,
-                color: AppColors.inkMuted,
+                color: CompanionColors.muted,
                 height: 1.4,
               ),
             ),
@@ -3751,7 +3726,7 @@ class _TellSomeoneCard extends ConsumerWidget {
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.checkBlueTint,
+                    color: Lumina.mist,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
@@ -3762,7 +3737,7 @@ class _TellSomeoneCard extends ConsumerWidget {
                         style: const TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w800,
-                          color: AppColors.checkNavy,
+                          color: Lumina.ink,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -3822,8 +3797,8 @@ class _SendButton extends StatelessWidget {
       child: OutlinedButton.icon(
         onPressed: onTap,
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.checkNavy,
-          side: const BorderSide(color: AppColors.checkNavy, width: 1.2),
+          foregroundColor: Lumina.core,
+          side: BorderSide(color: Lumina.core.withValues(alpha: 0.4)),
           minimumSize: const Size(0, 40),
           padding: const EdgeInsets.symmetric(horizontal: 12),
         ),
@@ -3907,7 +3882,7 @@ class _WatchCard extends ConsumerWidget {
                       const Icon(
                         Icons.visibility_outlined,
                         size: 16,
-                        color: AppColors.checkBlue,
+                        color: Lumina.core,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -3917,7 +3892,6 @@ class _WatchCard extends ConsumerWidget {
                             fontSize: 13.5,
                             fontWeight: FontWeight.w600,
                             height: 1.4,
-                            color: AppColors.checkNavy,
                           ),
                         ),
                       ),
@@ -3985,11 +3959,7 @@ class _TapeReadingNoteCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.straighten_outlined,
-            size: 18,
-            color: AppColors.checkBlue,
-          ),
+          const Icon(Icons.straighten_outlined, size: 18, color: Lumina.core),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -4025,7 +3995,7 @@ class _NurseMessageCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.checkBlueTint,
+              color: Lumina.mist,
               borderRadius: BorderRadius.circular(Gap.radius),
             ),
             child: Text(
@@ -4034,7 +4004,7 @@ class _NurseMessageCard extends StatelessWidget {
                 fontSize: 14.5,
                 fontWeight: FontWeight.w500,
                 height: 1.5,
-                color: AppColors.ink,
+                color: Lumina.ink,
               ),
             ),
           ),
@@ -4046,7 +4016,7 @@ class _NurseMessageCard extends StatelessWidget {
           const SizedBox(height: 8),
           const Text(
             'This short audio covers urgency and reported signs only. Show the written name, notes and full guidance to the health worker.',
-            style: TextStyle(fontSize: 12, color: AppColors.inkMuted),
+            style: TextStyle(fontSize: 12, color: CompanionColors.muted),
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
@@ -4091,17 +4061,23 @@ class _ObservationsCard extends StatelessWidget {
         children: [
           Text(
             'Original check: ${caregiverWhen(startedAt)}',
-            style: const TextStyle(fontSize: 13, color: AppColors.inkMuted),
+            style: const TextStyle(fontSize: 13, color: CompanionColors.muted),
           ),
           if (duration != null)
             Text(
               'Started: ${duration.label}',
-              style: const TextStyle(fontSize: 13, color: AppColors.inkMuted),
+              style: const TextStyle(
+                fontSize: 13,
+                color: CompanionColors.muted,
+              ),
             ),
           if (given.isNotEmpty)
             Text(
               'Already given: ${given.join(', ')}',
-              style: const TextStyle(fontSize: 13, color: AppColors.inkMuted),
+              style: const TextStyle(
+                fontSize: 13,
+                color: CompanionColors.muted,
+              ),
             ),
           const SizedBox(height: 12),
           for (final q in questions)

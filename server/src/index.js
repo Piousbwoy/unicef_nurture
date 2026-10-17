@@ -12,7 +12,13 @@ const { requireAuth, requireJwtUser } = require('./auth');
 const { handleSync } = require('./sync');
 const { handleProfileLookup, handleCaseloadRestore } = require('./recovery');
 const { handlePull } = require('./pull');
-const { handleChallenge, handleLogin, handleRefresh, handleLogout } = require('./auth_login');
+const {
+  handleChallenge,
+  handleLogin,
+  handleRefresh,
+  handleLogout,
+  handleProvisionRegistration,
+} = require('./auth_login');
 
 const app = express();
 
@@ -80,6 +86,14 @@ app.post('/api/auth/challenge', handleChallenge);
 app.post('/api/auth/login', handleLogin);
 app.post('/api/auth/refresh', handleRefresh);
 app.post('/api/auth/logout', requireAuth, handleLogout);
+
+// -------- Credential bootstrap for a brand-new device (unauth, CREATE-ONLY) -----
+// /api/sync needs a JWT, a JWT needs a challenge, and a challenge needs the
+// user_verifiers row that only the first sync could deliver. Without this route a
+// device that registers offline can never push itself online. Create-only by
+// construction — it refuses to overwrite an existing credential or to displace a
+// phone already registered to another account. See auth_login.js.
+app.post('/api/auth/register', handleProvisionRegistration);
 
 // -------- Authenticated write endpoints --------
 // Legacy devices still get through via the global token (if configured); new

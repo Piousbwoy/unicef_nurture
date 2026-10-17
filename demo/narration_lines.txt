@@ -1,0 +1,13 @@
+Every year, mothers and children in the last mile die in the gap between a symptom and a health worker. CareBridge AI closes that gap, even with no network.
+On a family's phone, Aura Nurture asks nothing of a mother except what she already knows. No forms, no medical words.
+One tap per child. The app keeps a private record for the family, born on this device.
+When something feels wrong, she starts a danger sign check. It is not a diagnosis. It is the same first questions a nurse would ask.
+Every question is read aloud, in her own language, translated and spoken entirely on the phone. No data plan needed.
+She answers yes to a danger sign. The app raises an alarm she can act on, and never ends the check. She stays in control.
+The result tells her exactly what to do now, even on the way to the facility.
+And she can ask her health worker for help, from the village, with no signal. The request holds the name and the urgency. Nothing else.
+The moment any phone in the family reaches signal, the request travels through an offline outbox that never loses what a mother has already said.
+At the CHPS compound, the community health worker sees the family on her phone. A queue that cannot silently drop.
+Her record shows exactly what is known and what is missing, with confidence stated honestly.
+The family sits at the top of her priorities, with one tap to assess or visit.
+Recognition, decision, request, handoff. CareBridge AI. A chain that survives the last mile.

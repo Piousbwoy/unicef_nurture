@@ -33,34 +33,33 @@ import 'package:shared_preferences/shared_preferences.dart';
 const _phone = '0244000123';
 
 AppUser _user({required String id, required String fullName}) => AppUser(
-      id: id,
-      fullName: fullName,
-      phone: _phone,
-      role: UserRole.caregiver,
-      region: 'Northern Region',
-      district: 'Savelugu Municipal',
-      community: 'Diare',
-    );
+  id: id,
+  fullName: fullName,
+  phone: _phone,
+  role: UserRole.caregiver,
+  region: 'Northern Region',
+  district: 'Savelugu Municipal',
+  community: 'Diare',
+);
 
 /// The scrubbed profile `server/src/auth_login.js` and `recovery.js` return:
 /// never pin_hash, never pin_salt — and linked_household_id only where the
 /// recovery lookup explicitly restores it.
-Map<String, dynamic> _serverUser({String? linkedHouseholdId}) =>
-    {
-      'id': 'u-remote-1',
-      'full_name': 'Aisha Ibrahim',
-      'phone': _phone,
-      'role': 'caregiver',
-      'region': 'Northern Region',
-      'district': 'Savelugu Municipal',
-      'community': 'Diare',
-      'chps_zone': 'Zone B',
-      'facility_name': null,
-      'staff_id': null,
-      'preferred_language': 'English',
-      'created_at': '2026-01-05T08:00:00.000Z',
-      'linked_household_id': ?linkedHouseholdId,
-    };
+Map<String, dynamic> _serverUser({String? linkedHouseholdId}) => {
+  'id': 'u-remote-1',
+  'full_name': 'Aisha Ibrahim',
+  'phone': _phone,
+  'role': 'caregiver',
+  'region': 'Northern Region',
+  'district': 'Savelugu Municipal',
+  'community': 'Diare',
+  'chps_zone': 'Zone B',
+  'facility_name': null,
+  'staff_id': null,
+  'preferred_language': 'English',
+  'created_at': '2026-01-05T08:00:00.000Z',
+  'linked_household_id': ?linkedHouseholdId,
+};
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -129,6 +128,109 @@ void main() {
     });
   });
 
+  testWidgets('a registered account survives closing and reopening the '
+      'database', (tester) async {
+    setUpDb(tester);
+    await tester.runAsync(() async {
+      await resetPrefs();
+
+      await UserDao.register(
+        user: _user(id: 'u-persist', fullName: 'Aisha Ibrahim'),
+        pin: '2468',
+      );
+
+      // The survival contract, and the one the browser build cannot currently
+      // guarantee: a committed registration must still be there after the
+      // database handle is closed and reopened, which is what an app restart
+      // does. On web SQLite sits behind an IndexedDB VFS whose own docs make no
+      // durability guarantee and whose writes the app never flushes, so an
+      // account can vanish on restart and the user is told to register again.
+      // This pins the contract at the app layer, where a widening of that gap
+      // is visible.
+      await AppDatabase.instance.close();
+
+      final reopened = await AppDatabase.instance.database;
+      expect(reopened.isOpen, isTrue);
+
+      expect(
+        await UserDao.anyRegistered(),
+        isTrue,
+        reason:
+            'the account vanished across a reopen — a restart would drop '
+            'this user into first-run setup and invite a duplicate '
+            'registration for a phone that is already registered',
+      );
+
+      final signIn = await UserDao.signIn(phone: _phone, pin: '2468');
+      expect(signIn.isSuccess, isTrue, reason: signIn.detail);
+      expect(signIn.user!.id, 'u-persist');
+    });
+  });
+
+  testWidgets('registration stores the cloud verifier a blank device can '
+      'actually reproduce', (tester) async {
+    setUpDb(tester);
+    await tester.runAsync(() async {
+      await resetPrefs();
+
+      await UserDao.register(
+        user: _user(id: 'u-verifier', fullName: 'Aisha Ibrahim'),
+        pin: '2468',
+      );
+
+      final db = await AppDatabase.instance.database;
+      final rows = await db.query(
+        Tables.outbox,
+        where: 'entity_table = ?',
+        whereArgs: [Tables.userVerifiers],
+      );
+      expect(
+        rows,
+        hasLength(1),
+        reason: 'registration must enqueue exactly one cloud verifier',
+      );
+
+      final payload =
+          jsonDecode(rows.first['payload_json'] as String)
+              as Map<String, dynamic>;
+      final serverSalt = payload['server_salt'] as String;
+      final stored = payload['verifier'] as String;
+
+      // What a blank replacement device posts at recovery login: derived only
+      // from the PIN, the phone and the public server salt, because such a
+      // device holds no on-device pin_hash to feed the legacy form. If
+      // registration stores anything else, the server's constant-time compare
+      // can never succeed and cloud recovery silently fails for every
+      // normally-registered account — which is how a browser demo loses a
+      // database and then cannot sign back in.
+      final fromBlankDevice = Credentials.computeCloudVerifierFromPin(
+        pin: '2468',
+        phone: _phone,
+        serverSalt: serverSalt,
+      );
+      expect(stored, fromBlankDevice);
+
+      final userRow = (await db.query(
+        Tables.users,
+        where: 'phone = ?',
+        whereArgs: [_phone],
+      )).single;
+      final legacy = Credentials.computeCloudVerifier(
+        localPinHash: userRow['pin_hash'] as String,
+        phone: _phone,
+        serverSalt: serverSalt,
+      );
+      expect(
+        stored,
+        isNot(legacy),
+        reason:
+            'the stored verifier must be the PIN-derived value login '
+            'posts, not the legacy pin_hash form a blank device cannot '
+            'reproduce',
+      );
+    });
+  });
+
   testWidgets('with no server configured, sign-in of an unknown phone is '
       'honest and fabricates nothing', (tester) async {
     setUpDb(tester);
@@ -151,7 +253,8 @@ void main() {
       expect(
         result.detail,
         contains('phone not found'),
-        reason: 'the user must be told the real reason, not shown a fake '
+        reason:
+            'the user must be told the real reason, not shown a fake '
             'identity',
       );
 
@@ -217,8 +320,7 @@ void main() {
           where: 'id = ?',
           whereArgs: ['hh-template'],
           limit: 1,
-        ))
-            .single,
+        )).single,
       );
       final hhRow = Map<String, dynamic>.of(hhTemplate)
         ..['id'] = 'hh-bound'
@@ -246,9 +348,7 @@ void main() {
           case '/api/restore/lookup':
             return HttpReply(
               200,
-              jsonEncode(
-                {'user': _serverUser(linkedHouseholdId: 'hh-bound')},
-              ),
+              jsonEncode({'user': _serverUser(linkedHouseholdId: 'hh-bound')}),
             );
           case '/api/restore/caseload':
             return HttpReply(
@@ -280,12 +380,12 @@ void main() {
         where: 'id = ?',
         whereArgs: ['u-remote-1'],
         limit: 1,
-      ))
-          .single;
+      )).single;
       expect(
         row['linked_household_id'],
         'hh-bound',
-        reason: 'without the binding a recovered caregiver has no family at '
+        reason:
+            'without the binding a recovered caregiver has no family at '
             'all and the app looks dead',
       );
       expect(row['pin_hash'], isNotNull);

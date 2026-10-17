@@ -100,8 +100,9 @@ class _HouseholdSummaryScreenState
     final histories = await Future.wait([
       for (final p in roll) repository.assessmentHistory(user, p.personId),
     ]);
-    if (mounted)
+    if (mounted) {
       setState(() => _adopt(roll, histories.expand((h) => h).toList()));
+    }
   }
 
   Future<void> _load() async {
@@ -166,12 +167,13 @@ class _HouseholdSummaryScreenState
       ref.invalidate(openReferralsProvider);
       Navigator.of(context).pop(true);
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(
           () => _error = e is AccessDenied
               ? e.message
               : 'Could not close the session. It remains open. Your note is still here; retry when ready.',
         );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }

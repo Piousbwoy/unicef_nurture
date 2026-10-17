@@ -46,6 +46,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   bool _rememberMe = false;
   bool _busy = false;
   String? _error;
+  String? _prefilledPhone;
 
   @override
   void initState() {
@@ -135,9 +136,36 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     context.go(Routes.forgotPin);
   }
 
+  /// Pre-fills the phone a device lost, so recovery is one field shorter.
+  /// Guarded and deferred to after the frame: this is called from [build], so
+  /// it must not set state synchronously.
+  void _prefillFromLostSession(SessionNeedsSetup session) {
+    final phone = session.lastPhone;
+    if (phone == null || phone.isEmpty) return;
+    if (_prefilledPhone == phone) return;
+    _prefilledPhone = phone;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_phone.text.trim().isNotEmpty) return;
+      setState(() {
+        _phone.text = phone;
+        _rememberMe = true;
+      });
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final pendingRole = ref.watch(pendingRoleProvider);
+    final session = ref.watch(sessionProvider);
+    // A device that still remembers an account but no longer holds one has
+    // lost its local records. Say so plainly — the alternative is a user
+    // concluding their credentials stopped working and registering a duplicate
+    // account for a phone that is already registered.
+    final lostRecords = session is SessionNeedsSetup && session.localRecordsLost
+        ? session
+        : null;
+    if (lostRecords != null) _prefillFromLostSession(lostRecords);
     return Scaffold(
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
@@ -165,11 +193,13 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  AppMotion.reveal(
-                    _Brand(role: pendingRole),
-                    distance: 14,
-                  ),
+                  AppMotion.reveal(_Brand(role: pendingRole), distance: 14),
                   const SizedBox(height: Gap.xxl),
+
+                  if (lostRecords != null) ...[
+                    _LostRecordsNotice(phone: lostRecords.lastPhone),
+                    const SizedBox(height: Gap.lg),
+                  ],
 
                   const FieldLabel('Phone number'),
                   TextField(
@@ -380,4 +410,65 @@ class _Brand extends StatelessWidget {
       ),
     ],
   );
+}
+
+/// The honest explanation for a device that remembers an account it no longer
+/// holds.
+///
+/// Without it an empty local database reads as "your PIN stopped working", and
+/// the natural response — registering again — creates a duplicate account for a
+/// phone that is already registered somewhere. This states what happened, why
+/// the PIN cannot be checked locally, and the one path that can restore the
+/// account. It deliberately does not claim a server is reachable: the sync URL
+/// defaults to a localhost address even when nothing is listening there, so
+/// asserting reachability from here would be a guess.
+class _LostRecordsNotice extends StatelessWidget {
+  const _LostRecordsNotice({this.phone});
+
+  final String? phone;
+
+  @override
+  Widget build(BuildContext context) {
+    final who = phone == null || phone!.isEmpty
+        ? 'This device'
+        : 'The account for ${phone!}';
+    return Container(
+      padding: const EdgeInsets.all(Gap.md),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(Gap.radiusSm),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.history_rounded, size: 18, color: AppColors.primary),
+          const SizedBox(width: Gap.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Local records were not restored',
+                  style: AppType.label.copyWith(color: AppColors.ink),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$who was signed in here, but this device\'s on-device '
+                  'database is now empty, so its PIN cannot be checked '
+                  'locally. Sign in to recover the account from the sync '
+                  'server. If no server is reachable, register again — these '
+                  'records were only ever stored on this device.',
+                  style: AppType.caption.copyWith(
+                    color: AppColors.inkMuted,
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

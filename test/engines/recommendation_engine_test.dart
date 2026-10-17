@@ -46,12 +46,16 @@ ClinicalFinding _finding(
   String label,
   TriageLevel severity, {
   double weight = 1,
+  bool dangerSign = false,
+  bool ai = false,
 }) => ClinicalFinding(
   label: label,
   detail: '$label detail.',
   severity: severity,
   protocolSource: 'Test protocol',
   weight: weight,
+  isDangerSign: dangerSign,
+  aiGenerated: ai,
 );
 
 RecommendedAction _action(
@@ -305,6 +309,55 @@ void main() {
       expect(plan.overallTriage, TriageLevel.urgent);
       expect(plan.guardrailEscalated, isTrue);
       expect(plan.dangerSigns, contains('Convulsions'));
+    });
+
+    test('an experimental model label cannot force urgent triage', () {
+      // The never-miss list matches on label text, which is right for protocol
+      // findings — an engine only asserts a sign it actually observed. It must
+      // never fire on an on-device model's output: the research contract bars
+      // the model from any triage authority, so a label that merely contained
+      // the word "sepsis" would have handed it that authority silently, and no
+      // screen would say so.
+      final plan = RecommendationEngine.synthesize(
+        results: [
+          _result(
+            triage: TriageLevel.routine,
+            findings: [
+              _finding(
+                'Neonatal sepsis risk (experimental)',
+                TriageLevel.routine,
+                ai: true,
+              ),
+            ],
+          ),
+        ],
+      );
+
+      expect(plan.overallTriage, TriageLevel.routine);
+      expect(plan.guardrailEscalated, isFalse);
+      expect(
+        plan.dangerSigns,
+        isNot(contains('Neonatal sepsis risk (experimental)')),
+      );
+    });
+
+    test('a properly tagged danger sign still escalates, keyword or not', () {
+      // The hardening above must not weaken the guard-rail. A finding its engine
+      // tagged as a danger sign escalates on the structural flag alone.
+      final plan = RecommendationEngine.synthesize(
+        results: [
+          _result(
+            triage: TriageLevel.routine,
+            findings: [
+              _finding('Neonatal sepsis', TriageLevel.watch, dangerSign: true),
+            ],
+          ),
+        ],
+      );
+
+      expect(plan.overallTriage, TriageLevel.urgent);
+      expect(plan.guardrailEscalated, isTrue);
+      expect(plan.dangerSigns, contains('Neonatal sepsis'));
     });
 
     test('an urgent verdict always carries a referral action', () {

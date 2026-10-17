@@ -16,6 +16,7 @@ import '../../app/providers.dart';
 import '../../core/ml/offline_inference_service.dart';
 import '../../core/ml/recalibration_store.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/fhw_luxe.dart';
 import '../../core/theme/glass.dart';
 import '../../data/local/preferences_store.dart';
 import '../../domain/entities/core.dart';
@@ -262,7 +263,8 @@ class _SyncHealthCardState extends ConsumerState<_SyncHealthCard> {
             : 'You are offline. Saved records will send automatically when '
                   'signal returns.';
       } else {
-        result = 'Sent ${report.accepted} of ${report.attempted}. '
+        result =
+            'Sent ${report.accepted} of ${report.attempted}. '
             '${report.deferred > 0 ? '${report.deferred} deferred — the app keeps trying.' : 'All clear.'}';
       }
       setState(() => _result = result);
@@ -337,9 +339,15 @@ class _SyncStat extends StatelessWidget {
     final c = colour ?? AppColors.ink;
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.sm),
+        padding: const EdgeInsets.symmetric(
+          horizontal: Gap.md,
+          vertical: Gap.sm,
+        ),
         decoration: BoxDecoration(
-          color: AppColors.canvas,
+          // A cool recessed seat. The warm global canvas reads as cream beside
+          // the desk's white and sapphire, which is what makes a screen look
+          // assembled from two different kits.
+          color: FhwLuxePalette.pearlSurface,
           borderRadius: BorderRadius.circular(Gap.radiusSm),
         ),
         child: Column(

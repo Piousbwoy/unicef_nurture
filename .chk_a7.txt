@@ -1,0 +1,21 @@
+Analyzing pull_service_test.dart...                             
+
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - test\pull_service_test.dart:348:13 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - test\pull_service_test.dart:380:13 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - test\pull_service_test.dart:459:13 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - test\pull_service_test.dart:567:13 - curly_braces_in_flow_control_structures
+
+4 issues found. (ran in 5.3s)
+00:00 +0: loading C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart
+00:00 +0: a first pull merges a household and its member, and nothing looks locally dirty
+00:01 +1: re-pulls send the watermark minus one second and merge idempotently
+00:01 +2: a pull that dies mid-pages leaves the watermark standing and heals on retry
+00:02 +3: a rejected credential is reported honestly and touches nothing
+00:02 +4: with no server configured the pull is a honest no-op
+00:02 +5: the debounce collapses eager triggers into one fetch
+00:02 +6: the self-user row refreshes the profile but never device credentials or a fresh household binding
+00:03 +7: Phase 1: the delivered pull_updated_at marker is stored where the schema has the column and dropped where it does not
+00:03 +8: referral status down-propagation a status confirmed elsewhere reaches the device that holds the referral
+00:03 +9: referral status down-propagation a local referral that has not been pushed yet is never overwritten
+00:03 +10: referral status down-propagation a settled referral is never reopened by an older server state
+00:04 +11: All tests passed!

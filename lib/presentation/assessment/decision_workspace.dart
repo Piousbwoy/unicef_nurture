@@ -55,32 +55,12 @@ class ClinicalDecisionHeader extends StatelessWidget {
   /// on the verdict page) and the triage colour stays on the icon and text.
   final bool flat;
 
-  Gradient get _gradient => switch (level) {
-    TriageLevel.urgent => const LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [Color(0xFFDC2626), Color(0xFF991B1B), Color(0xFF7F1D1D)],
-      stops: [0.0, 0.55, 1.0],
-    ),
-    TriageLevel.priority => const LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [Color(0xFFF59E0B), Color(0xFFD97706), Color(0xFFB45309)],
-      stops: [0.0, 0.55, 1.0],
-    ),
-    TriageLevel.watch => const LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [Color(0xFFFBBF24), Color(0xFFF59E0B), Color(0xFFD97706)],
-      stops: [0.0, 0.55, 1.0],
-    ),
-    TriageLevel.routine => const LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [Color(0xFF10B981), Color(0xFF059669), Color(0xFF047857)],
-      stops: [0.0, 0.55, 1.0],
-    ),
-  };
+  Gradient get _gradient => triagePlate(level).plate;
+
+  /// The ink this plate is written in. Resolved once and passed down, so every
+  /// line on the hero — chip, eyebrow, classification, rationale, ring — is the
+  /// same ink and the amber band can be read at all.
+  Color get _plateInk => triagePlate(level).ink;
 
   String get _confidenceLabel => switch (missingCount) {
     0 => 'Full data confidence',
@@ -143,22 +123,19 @@ class ClinicalDecisionHeader extends StatelessWidget {
     );
   }
 
-  Color get _shadowColor => switch (level) {
-    TriageLevel.urgent => const Color(0xFFDC2626).withValues(alpha: 0.25),
-    TriageLevel.priority => const Color(0xFFF59E0B).withValues(alpha: 0.25),
-    TriageLevel.watch => const Color(0xFFFBBF24).withValues(alpha: 0.2),
-    TriageLevel.routine => const Color(0xFF10B981).withValues(alpha: 0.25),
-  };
+  Color get _shadowColor => triageColours(
+    level,
+  ).fg.withValues(alpha: level == TriageLevel.watch ? 0.20 : 0.25);
 
   Widget _flatContent(BuildContext context) {
     final p = ClinicalPaletteScope.of(context);
     final tc = triageColours(level);
     // Trained foreground hue never shifts; only the light pastel wash is
     // swapped for a hue-tinted dark wash when the surface is night.
-    final chipFg = flat ? tc.fg : Colors.white;
+    final chipFg = flat ? tc.fg : _plateInk;
     final chipBg = flat
         ? (p.isDark ? tc.fg.withValues(alpha: 0.16) : tc.bg)
-        : Colors.white.withValues(alpha: 0.18);
+        : _plateInk.withValues(alpha: 0.16);
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -208,7 +185,10 @@ class ClinicalDecisionHeader extends StatelessWidget {
               ),
               if (audio != null) ...[
                 const Spacer(),
-                if (flat) audio! else _TintedAudio(audio: audio!),
+                if (flat)
+                  audio!
+                else
+                  _TintedAudio(audio: audio!, ink: _plateInk),
               ],
             ],
           ),
@@ -219,9 +199,7 @@ class ClinicalDecisionHeader extends StatelessWidget {
               letterSpacing: 1.2,
               fontWeight: FontWeight.w700,
               fontSize: 11,
-              color: flat
-                  ? p.inkMuted
-                  : Colors.white.withValues(alpha: 0.6),
+              color: flat ? p.inkMuted : _plateInk.withValues(alpha: 0.75),
             ),
           ),
           const SizedBox(height: 8),
@@ -231,7 +209,7 @@ class ClinicalDecisionHeader extends StatelessWidget {
               fontSize: 22,
               fontWeight: FontWeight.w800,
               height: 1.25,
-              color: flat ? p.ink : Colors.white,
+              color: flat ? p.ink : _plateInk,
             ),
           ),
           const SizedBox(height: 10),
@@ -240,9 +218,7 @@ class ClinicalDecisionHeader extends StatelessWidget {
             style: TextStyle(
               fontSize: 14.5,
               height: 1.5,
-              color: flat
-                  ? p.inkMuted
-                  : Colors.white.withValues(alpha: 0.8),
+              color: flat ? p.inkMuted : _plateInk.withValues(alpha: 0.88),
             ),
           ),
           const SizedBox(height: 20),
@@ -251,7 +227,7 @@ class ClinicalDecisionHeader extends StatelessWidget {
             decoration: BoxDecoration(
               color: flat
                   ? p.surfaceTint.withValues(alpha: p.isDark ? 0.5 : 0.3)
-                  : Colors.white.withValues(alpha: 0.12),
+                  : _plateInk.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Row(
@@ -262,10 +238,10 @@ class ClinicalDecisionHeader extends StatelessWidget {
                   child: CustomPaint(
                     painter: _ConfidenceRing(
                       fraction: _confidenceFraction,
-                      ringColor: flat ? tc.fg : Colors.white,
+                      ringColor: flat ? tc.fg : _plateInk,
                       trackColor: flat
                           ? p.line
-                          : Colors.white.withValues(alpha: 0.15),
+                          : _plateInk.withValues(alpha: 0.22),
                     ),
                   ),
                 ),
@@ -276,7 +252,7 @@ class ClinicalDecisionHeader extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: flat ? p.ink : Colors.white,
+                      color: flat ? p.ink : _plateInk,
                     ),
                   ),
                 ),
@@ -294,13 +270,12 @@ class ClinicalDecisionHeader extends StatelessWidget {
 }
 
 class _TintedAudio extends StatelessWidget {
-  const _TintedAudio({required this.audio});
+  const _TintedAudio({required this.audio, required this.ink});
   final Widget audio;
+  final Color ink;
   @override
   Widget build(BuildContext context) => Theme(
-    data: Theme.of(
-      context,
-    ).copyWith(iconTheme: const IconThemeData(color: Colors.white)),
+    data: Theme.of(context).copyWith(iconTheme: IconThemeData(color: ink)),
     child: audio,
   );
 }
@@ -365,147 +340,147 @@ class ResearchAnalysisPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = ClinicalPaletteScope.of(context);
     return Padding(
-    // Neutral glass: research output carries no tone colour, ever.
-    padding: const EdgeInsets.symmetric(vertical: 16),
-    child: GlassSurface(
-      blur: false,
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: p.primaryLight,
-                  borderRadius: BorderRadius.circular(10),
+      // Neutral glass: research output carries no tone colour, ever.
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: GlassSurface(
+        blur: false,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: p.primaryLight,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.science_outlined,
+                    size: 18,
+                    color: p.primaryDark,
+                  ),
                 ),
-                child: Icon(
-                  Icons.science_outlined,
-                  size: 18,
-                  color: p.primaryDark,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'RESEARCH ANALYSIS',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.2,
-                        color: p.inkMuted,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Experimental model evidence',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: p.ink,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: p.surfaceTint.withValues(alpha: p.isDark ? 0.5 : 0.3),
-              borderRadius: BorderRadius.circular(Gap.radiusSm),
-            ),
-            child: Text(
-              'Clinical guidance uses observed findings and protocol rules. '
-              'Experimental models do not change treatment or referral.',
-              style: TextStyle(
-                fontSize: 12.5,
-                height: 1.5,
-                color: p.inkMuted,
-              ),
-            ),
-          ),
-          FutureBuilder<Map<String, OfflineRiskPrediction>>(
-            future: predictions,
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return _AnalysisError(
-                  message:
-                      'Analysis unavailable. Clinical guidance remains available offline.',
-                );
-              }
-              if (!snapshot.hasData) {
-                return const _AnalysisSkeleton();
-              }
-              final values = snapshot.data!.values.toList();
-              if (values.isEmpty) {
-                return _AnalysisError(
-                  message: 'No research model supports this assessment type.',
-                  icon: Icons.info_outline_rounded,
-                );
-              }
-              return FutureBuilder<List<OfflineModelStatus>>(
-                future: statuses,
-                builder: (context, statusSnapshot) {
-                  final byName = {
-                    for (final s
-                        in statusSnapshot.data ?? <OfflineModelStatus>[])
-                      s.name: s,
-                  };
-                  return Column(
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (statusSnapshot.hasError)
-                        _AnalysisError(
-                          message:
-                              'Evidence metadata unavailable. No experimental output is shown.',
-                        )
-                      else if (statusSnapshot.connectionState !=
-                          ConnectionState.done)
-                        const _AnalysisSkeleton(),
-                      // Always show the model cards, even when statuses are loading or failed
-                      for (final prediction in values)
-                        _ModelEvidenceCard(
-                          model: AnalysisViewModel(prediction),
-                          status: byName[prediction.modelName],
-                          expandedAvailable: showEvidence,
+                      Text(
+                        'RESEARCH ANALYSIS',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.2,
+                          color: p.inkMuted,
                         ),
-                      if (values.any(
-                        (p) =>
-                            p.featuresMissing.isNotEmpty ||
-                            p.invalidFeatures.isNotEmpty,
-                      ))
-                        Padding(
-                          padding: const EdgeInsets.only(top: Gap.md),
-                          child: OutlinedButton.icon(
-                            onPressed: onEdit,
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(48, 44),
-                              side: BorderSide(color: p.primary),
-                              foregroundColor: p.primaryDark,
-                            ),
-                            icon: const Icon(Icons.edit_outlined, size: 16),
-                            label: const Text('Review assessment inputs'),
-                          ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Experimental model evidence',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: p.ink,
                         ),
+                      ),
                     ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: p.surfaceTint.withValues(alpha: p.isDark ? 0.5 : 0.3),
+                borderRadius: BorderRadius.circular(Gap.radiusSm),
+              ),
+              child: Text(
+                'Clinical guidance uses observed findings and protocol rules. '
+                'Experimental models do not change treatment or referral.',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.5,
+                  color: p.inkMuted,
+                ),
+              ),
+            ),
+            FutureBuilder<Map<String, OfflineRiskPrediction>>(
+              future: predictions,
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return _AnalysisError(
+                    message:
+                        'Analysis unavailable. Clinical guidance remains available offline.',
                   );
-                },
-              );
-            },
-          ),
-        ],
+                }
+                if (!snapshot.hasData) {
+                  return const _AnalysisSkeleton();
+                }
+                final values = snapshot.data!.values.toList();
+                if (values.isEmpty) {
+                  return _AnalysisError(
+                    message: 'No research model supports this assessment type.',
+                    icon: Icons.info_outline_rounded,
+                  );
+                }
+                return FutureBuilder<List<OfflineModelStatus>>(
+                  future: statuses,
+                  builder: (context, statusSnapshot) {
+                    final byName = {
+                      for (final s
+                          in statusSnapshot.data ?? <OfflineModelStatus>[])
+                        s.name: s,
+                    };
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (statusSnapshot.hasError)
+                          _AnalysisError(
+                            message:
+                                'Evidence metadata unavailable. No experimental output is shown.',
+                          )
+                        else if (statusSnapshot.connectionState !=
+                            ConnectionState.done)
+                          const _AnalysisSkeleton(),
+                        // Always show the model cards, even when statuses are loading or failed
+                        for (final prediction in values)
+                          _ModelEvidenceCard(
+                            model: AnalysisViewModel(prediction),
+                            status: byName[prediction.modelName],
+                            expandedAvailable: showEvidence,
+                          ),
+                        if (values.any(
+                          (p) =>
+                              p.featuresMissing.isNotEmpty ||
+                              p.invalidFeatures.isNotEmpty,
+                        ))
+                          Padding(
+                            padding: const EdgeInsets.only(top: Gap.md),
+                            child: OutlinedButton.icon(
+                              onPressed: onEdit,
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(48, 44),
+                                side: BorderSide(color: p.primary),
+                                foregroundColor: p.primaryDark,
+                              ),
+                              icon: const Icon(Icons.edit_outlined, size: 16),
+                              label: const Text('Review assessment inputs'),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
+          ],
+        ),
       ),
-    ),
     );
   }
 }
@@ -546,24 +521,20 @@ class _AnalysisError extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = ClinicalPaletteScope.of(context);
     return Padding(
-    padding: const EdgeInsets.only(top: Gap.md),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 18, color: p.inkMuted),
-        const SizedBox(width: Gap.sm),
-        Expanded(
-          child: Text(
-            message,
-            style: TextStyle(
-              fontSize: 12.5,
-              color: p.inkMuted,
-              height: 1.5,
+      padding: const EdgeInsets.only(top: Gap.md),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: p.inkMuted),
+          const SizedBox(width: Gap.sm),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(fontSize: 12.5, color: p.inkMuted, height: 1.5),
             ),
           ),
-        ),
-      ],
-    ),
+        ],
+      ),
     );
   }
 }
@@ -655,9 +626,7 @@ class _ModelEvidenceCardState extends State<_ModelEvidenceCard>
                         height: 8,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: usable
-                              ? pal.triageGreen
-                              : pal.inkFaint,
+                          color: usable ? pal.triageGreen : pal.inkFaint,
                         ),
                       ),
                       const SizedBox(width: Gap.sm),
@@ -826,11 +795,7 @@ class _EvidenceDetail extends StatelessWidget {
           const SizedBox(height: Gap.sm),
           Text(
             'Repository datasets have been explored previously. Retrospective results do not establish clinical readiness in Northern Ghana.',
-            style: TextStyle(
-              fontSize: 11.5,
-              height: 1.5,
-              color: pal.inkMuted,
-            ),
+            style: TextStyle(fontSize: 11.5, height: 1.5, color: pal.inkMuted),
           ),
         ],
       ),
@@ -849,29 +814,25 @@ class _DetailRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = ClinicalPaletteScope.of(context);
     return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Text.rich(
-      TextSpan(
-        children: [
-          TextSpan(
-            text: '$label  ',
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
-              color: p.inkMuted,
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: '$label  ',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: p.inkMuted,
+              ),
             ),
-          ),
-          TextSpan(
-            text: value,
-            style: TextStyle(
-              fontSize: 11.5,
-              color: p.ink,
-              height: 1.4,
+            TextSpan(
+              text: value,
+              style: TextStyle(fontSize: 11.5, color: p.ink, height: 1.4),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
     );
   }
 }

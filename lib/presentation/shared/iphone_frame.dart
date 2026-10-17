@@ -250,7 +250,8 @@ class _IPhoneFrameState extends State<IPhoneFrame> {
   double? _customScale; // null means Fit to Screen
   bool _hideControls = false;
   bool _freezeTime = false; // Toggles between live time and keynote 9:41
-  bool _aiPitchMode = false; // Toggles the interactive AI Pitch Copilot presentation deck
+  bool _aiPitchMode =
+      false; // Toggles the interactive AI Pitch Copilot presentation deck
 
   @override
   Widget build(BuildContext context) {
@@ -306,8 +307,12 @@ class _IPhoneFrameState extends State<IPhoneFrame> {
           }
 
           // ── Device Frame Dimension Calculation ────────────────────
-          final logicalW = _isLandscape ? _selectedDevice.height : _selectedDevice.width;
-          final logicalH = _isLandscape ? _selectedDevice.width : _selectedDevice.height;
+          final logicalW = _isLandscape
+              ? _selectedDevice.height
+              : _selectedDevice.width;
+          final logicalH = _isLandscape
+              ? _selectedDevice.width
+              : _selectedDevice.height;
 
           const rim = 4.0;
           const bezel = 10.0;
@@ -353,7 +358,10 @@ class _IPhoneFrameState extends State<IPhoneFrame> {
 
               // ── Soft floor reflection grounding the handset ────────
               Positioned(
-                bottom: math.max(10.0, (constraints.maxHeight - displayH) / 2 - 40),
+                bottom: math.max(
+                  10.0,
+                  (constraints.maxHeight - displayH) / 2 - 40,
+                ),
                 left: 0,
                 right: 0,
                 child: Center(
@@ -511,23 +519,35 @@ class _IPhoneFrameState extends State<IPhoneFrame> {
 
                 // 2. Zoom Controls
                 IconButton(
-                  onPressed: _customScale == null && _selectedDevice == DeviceModel.edgeToEdge
+                  onPressed:
+                      _customScale == null &&
+                          _selectedDevice == DeviceModel.edgeToEdge
                       ? null
                       : () {
                           final cur = _customScale ?? math.min(1.15, fitScale);
-                          setState(() => _customScale = math.max(0.4, cur - 0.1));
+                          setState(
+                            () => _customScale = math.max(0.4, cur - 0.1),
+                          );
                         },
-                  icon: const Icon(Icons.remove, size: 18, color: Colors.white70),
+                  icon: const Icon(
+                    Icons.remove,
+                    size: 18,
+                    color: Colors.white70,
+                  ),
                   tooltip: 'Zoom Out',
                   visualDensity: VisualDensity.compact,
                 ),
                 _buildZoomMenu(fitScale),
                 IconButton(
-                  onPressed: _customScale == null && _selectedDevice == DeviceModel.edgeToEdge
+                  onPressed:
+                      _customScale == null &&
+                          _selectedDevice == DeviceModel.edgeToEdge
                       ? null
                       : () {
                           final cur = _customScale ?? math.min(1.15, fitScale);
-                          setState(() => _customScale = math.min(2.0, cur + 0.1));
+                          setState(
+                            () => _customScale = math.min(2.0, cur + 0.1),
+                          );
                         },
                   icon: const Icon(Icons.add, size: 18, color: Colors.white70),
                   tooltip: 'Zoom In',
@@ -548,7 +568,8 @@ class _IPhoneFrameState extends State<IPhoneFrame> {
                         ? Colors.white24
                         : AppColors.primaryGlow,
                   ),
-                  tooltip: 'Rotate Orientation (${_isLandscape ? "Landscape" : "Portrait"})',
+                  tooltip:
+                      'Rotate Orientation (${_isLandscape ? "Landscape" : "Portrait"})',
                 ),
                 _divider(),
 
@@ -570,7 +591,9 @@ class _IPhoneFrameState extends State<IPhoneFrame> {
                     color: _freezeTime ? Colors.amberAccent : Colors.white70,
                     size: 20,
                   ),
-                  tooltip: _freezeTime ? 'Demo Time (9:41) • Tap for Live Clock' : 'Live Local Clock • Tap for 9:41 Demo',
+                  tooltip: _freezeTime
+                      ? 'Demo Time (9:41) • Tap for Live Clock'
+                      : 'Live Local Clock • Tap for 9:41 Demo',
                 ),
                 _divider(),
 
@@ -628,7 +651,11 @@ class _IPhoneFrameState extends State<IPhoneFrame> {
                 // 8. Hide Controls Button
                 IconButton(
                   onPressed: () => setState(() => _hideControls = true),
-                  icon: const Icon(Icons.visibility_off_outlined, size: 18, color: Colors.white60),
+                  icon: const Icon(
+                    Icons.visibility_off_outlined,
+                    size: 18,
+                    color: Colors.white60,
+                  ),
                   tooltip: 'Hide Controls (Showcase Mode)',
                   visualDensity: VisualDensity.compact,
                 ),
@@ -641,38 +668,27 @@ class _IPhoneFrameState extends State<IPhoneFrame> {
   }
 
   Widget _buildDeviceDropdown() {
-    return PopupMenuButton<DeviceModel>(
-      initialValue: _selectedDevice,
+    return _OverlayMenu<DeviceModel>(
       tooltip: 'Select Device Emulator',
-      offset: const Offset(0, -310),
-      color: const Color(0xFF1E2432),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
-      ),
       onSelected: (model) => setState(() {
         _selectedDevice = model;
         if (model == DeviceModel.edgeToEdge) _customScale = null;
       }),
-      itemBuilder: (context) => DeviceModel.values.map((d) {
-        return PopupMenuItem<DeviceModel>(
-          value: d,
-          child: Row(
-            children: [
-              Icon(d.icon, color: _selectedDevice == d ? AppColors.primaryGlow : Colors.white70, size: 20),
-              const SizedBox(width: 12),
-              Text(
-                d.name,
-                style: GoogleFonts.inter(
-                  color: _selectedDevice == d ? Colors.white : Colors.white70,
-                  fontWeight: _selectedDevice == d ? FontWeight.w600 : FontWeight.w400,
-                  fontSize: 14,
-                ),
-              ),
-            ],
+      items: [
+        for (final d in DeviceModel.values)
+          _OverlayMenuItem<DeviceModel>(
+            value: d,
+            selected: _selectedDevice == d,
+            label: d.name,
+            leading: Icon(
+              d.icon,
+              color: _selectedDevice == d
+                  ? AppColors.primaryGlow
+                  : Colors.white70,
+              size: 20,
+            ),
           ),
-        );
-      }).toList(),
+      ],
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         child: Row(
@@ -681,7 +697,11 @@ class _IPhoneFrameState extends State<IPhoneFrame> {
             const SizedBox(width: 8),
             Text(
               _selectedDevice.name,
-              style: GoogleFonts.inter(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+              style: GoogleFonts.inter(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(width: 4),
             const Icon(Icons.arrow_drop_up, color: Colors.white70, size: 18),
@@ -701,22 +721,40 @@ class _IPhoneFrameState extends State<IPhoneFrame> {
       label = '${(_customScale! * 100).round()}%';
     }
 
-    return PopupMenuButton<double?>(
+    return _OverlayMenu<double?>(
       tooltip: 'Select Screen Zoom Level',
-      offset: const Offset(0, -200),
-      color: const Color(0xFF1E2432),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
-      ),
       onSelected: (val) => setState(() => _customScale = val),
-      itemBuilder: (context) => [
-        const PopupMenuItem(value: null, child: Text('Fit to Screen', style: TextStyle(color: Colors.white))),
-        const PopupMenuItem(value: 0.5, child: Text('50% • Compact', style: TextStyle(color: Colors.white))),
-        const PopupMenuItem(value: 0.75, child: Text('75% • Comfortable', style: TextStyle(color: Colors.white))),
-        const PopupMenuItem(value: 1.0, child: Text('100% • True 1:1 Size', style: TextStyle(color: Colors.white))),
-        const PopupMenuItem(value: 1.25, child: Text('125% • Large', style: TextStyle(color: Colors.white))),
-        const PopupMenuItem(value: 1.5, child: Text('150% • Presentation', style: TextStyle(color: Colors.white))),
+      items: <_OverlayMenuItem<double?>>[
+        _OverlayMenuItem(
+          value: null,
+          label: 'Fit to Screen',
+          selected: _customScale == null,
+        ),
+        _OverlayMenuItem(
+          value: 0.5,
+          label: '50% • Compact',
+          selected: _customScale == 0.5,
+        ),
+        _OverlayMenuItem(
+          value: 0.75,
+          label: '75% • Comfortable',
+          selected: _customScale == 0.75,
+        ),
+        _OverlayMenuItem(
+          value: 1.0,
+          label: '100% • True 1:1 Size',
+          selected: _customScale == 1.0,
+        ),
+        _OverlayMenuItem(
+          value: 1.25,
+          label: '125% • Large',
+          selected: _customScale == 1.25,
+        ),
+        _OverlayMenuItem(
+          value: 1.5,
+          label: '150% • Presentation',
+          selected: _customScale == 1.5,
+        ),
       ],
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -726,50 +764,37 @@ class _IPhoneFrameState extends State<IPhoneFrame> {
         ),
         child: Text(
           label,
-          style: GoogleFonts.inter(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+          style: GoogleFonts.inter(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );
   }
 
   Widget _buildFinishSelector() {
-    return PopupMenuButton<ChassisFinish>(
-      initialValue: _selectedFinish,
+    return _OverlayMenu<ChassisFinish>(
       tooltip: 'Chassis Finish (${_selectedFinish.name})',
-      offset: const Offset(0, -220),
-      color: const Color(0xFF1E2432),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
-      ),
       onSelected: (f) => setState(() => _selectedFinish = f),
-      itemBuilder: (context) => ChassisFinish.values.map((f) {
-        return PopupMenuItem<ChassisFinish>(
-          value: f,
-          child: Row(
-            children: [
-              Container(
-                width: 18,
-                height: 18,
-                decoration: BoxDecoration(
-                  color: f.swatchColor,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white38, width: 1.5),
-                ),
+      items: [
+        for (final f in ChassisFinish.values)
+          _OverlayMenuItem<ChassisFinish>(
+            value: f,
+            selected: _selectedFinish == f,
+            label: f.name,
+            leading: Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: f.swatchColor,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white38, width: 1.5),
               ),
-              const SizedBox(width: 12),
-              Text(
-                f.name,
-                style: GoogleFonts.inter(
-                  color: _selectedFinish == f ? Colors.white : Colors.white70,
-                  fontWeight: _selectedFinish == f ? FontWeight.w600 : FontWeight.w400,
-                  fontSize: 14,
-                ),
-              ),
-            ],
+            ),
           ),
-        );
-      }).toList(),
+      ],
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6),
         child: Row(
@@ -781,11 +806,17 @@ class _IPhoneFrameState extends State<IPhoneFrame> {
                 color: _selectedFinish.swatchColor,
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white60, width: 2),
-                boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4)],
+                boxShadow: const [
+                  BoxShadow(color: Colors.black38, blurRadius: 4),
+                ],
               ),
             ),
             const SizedBox(width: 4),
-            const Icon(Icons.color_lens_outlined, color: Colors.white70, size: 16),
+            const Icon(
+              Icons.color_lens_outlined,
+              color: Colors.white70,
+              size: 16,
+            ),
           ],
         ),
       ),
@@ -793,52 +824,43 @@ class _IPhoneFrameState extends State<IPhoneFrame> {
   }
 
   Widget _buildBackdropSelector() {
-    return PopupMenuButton<StudioBackdrop>(
-      initialValue: _selectedBackdrop,
+    return _OverlayMenu<StudioBackdrop>(
       tooltip: 'Studio Atmosphere (${_selectedBackdrop.name})',
-      offset: const Offset(0, -220),
-      color: const Color(0xFF1E2432),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
-      ),
       onSelected: (b) => setState(() => _selectedBackdrop = b),
-      itemBuilder: (context) => StudioBackdrop.values.map((b) {
-        return PopupMenuItem<StudioBackdrop>(
-          value: b,
-          child: Row(
-            children: [
-              Container(
-                width: 18,
-                height: 18,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: b.colors),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white38, width: 1.5),
-                ),
+      items: [
+        for (final b in StudioBackdrop.values)
+          _OverlayMenuItem<StudioBackdrop>(
+            value: b,
+            selected: _selectedBackdrop == b,
+            label: b.name,
+            leading: Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: b.colors),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white38, width: 1.5),
               ),
-              const SizedBox(width: 12),
-              Text(
-                b.name,
-                style: GoogleFonts.inter(
-                  color: _selectedBackdrop == b ? Colors.white : Colors.white70,
-                  fontWeight: _selectedBackdrop == b ? FontWeight.w600 : FontWeight.w400,
-                  fontSize: 14,
-                ),
-              ),
-            ],
+            ),
           ),
-        );
-      }).toList(),
+      ],
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6),
         child: Row(
           children: [
-            const Icon(Icons.auto_awesome, color: AppColors.primaryGlow, size: 18),
+            const Icon(
+              Icons.auto_awesome,
+              color: AppColors.primaryGlow,
+              size: 18,
+            ),
             const SizedBox(width: 4),
             Text(
               'Studio',
-              style: GoogleFonts.inter(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500),
+              style: GoogleFonts.inter(
+                color: Colors.white70,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),
@@ -852,6 +874,202 @@ class _IPhoneFrameState extends State<IPhoneFrame> {
       height: 24,
       margin: const EdgeInsets.symmetric(horizontal: 6),
       color: Colors.white.withValues(alpha: 0.12),
+    );
+  }
+}
+
+/// One row inside a [_OverlayMenu]. Carries the value handed back on tap,
+/// the label, an optional leading swatch/icon, and whether it is the current
+/// selection.
+class _OverlayMenuItem<T> {
+  const _OverlayMenuItem({
+    required this.value,
+    required this.label,
+    this.leading,
+    this.selected = false,
+  });
+  final T value;
+  final String label;
+  final Widget? leading;
+  final bool selected;
+}
+
+/// A control-dock popup that behaves like [PopupMenuButton] but opens through
+/// [Overlay.of] instead of a [Navigator]. The dock lives in the frame chrome,
+/// which is mounted by `MaterialApp.builder` *above* the app's own Navigator —
+/// so it has no Navigator ancestor, and `showMenu` (which calls Navigator.of)
+/// throws on the web. Inserting the menu into the chrome Overlay keeps it
+/// Navigator-free, and crucially does not put a Navigator above the running
+/// app child, which would make the app's `useRootNavigator: true` dialogs
+/// resolve to the browser-sized chrome instead of the phone chassis.
+class _OverlayMenu<T> extends StatefulWidget {
+  const _OverlayMenu({
+    required this.tooltip,
+    required this.items,
+    required this.onSelected,
+    required this.child,
+  });
+  final String tooltip;
+  final List<_OverlayMenuItem<T>> items;
+  final ValueChanged<T> onSelected;
+  final Widget child;
+
+  @override
+  State<_OverlayMenu<T>> createState() => _OverlayMenuState<T>();
+}
+
+class _OverlayMenuState<T> extends State<_OverlayMenu<T>> {
+  final GlobalKey _anchorKey = GlobalKey();
+  OverlayEntry? _entry;
+
+  void _open() {
+    if (_entry != null) return;
+    final anchorContext = _anchorKey.currentContext;
+    final render = anchorContext?.findRenderObject() as RenderBox?;
+    if (render == null) return;
+    final anchor = render.localToGlobal(Offset.zero) & render.size;
+    final screen = MediaQuery.of(context).size;
+    late final OverlayEntry entry;
+    void close() {
+      entry.remove();
+      if (_entry == entry) _entry = null;
+    }
+
+    entry = OverlayEntry(
+      builder: (_) => _DockMenuOverlay<T>(
+        anchor: anchor,
+        screen: screen,
+        items: widget.items,
+        onSelected: (value) {
+          close();
+          widget.onSelected(value);
+        },
+        onDismiss: close,
+      ),
+    );
+    _entry = entry;
+    Overlay.of(context).insert(entry);
+  }
+
+  @override
+  void dispose() {
+    _entry?.remove();
+    _entry = null;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: widget.tooltip,
+    child: InkWell(
+      key: _anchorKey,
+      onTap: _open,
+      borderRadius: BorderRadius.circular(12),
+      child: widget.child,
+    ),
+  );
+}
+
+class _DockMenuOverlay<T> extends StatelessWidget {
+  const _DockMenuOverlay({
+    required this.anchor,
+    required this.screen,
+    required this.items,
+    required this.onSelected,
+    required this.onDismiss,
+  });
+  final Rect anchor;
+  final Size screen;
+  final List<_OverlayMenuItem<T>> items;
+  final ValueChanged<T> onSelected;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    const menuWidth = 250.0;
+    // Open upward from the dock. Clamp horizontally so the panel never runs
+    // off the window edge, and cap its height to the room above the anchor so
+    // a long list scrolls rather than overflowing off the top.
+    final maxLeft = math.max(12.0, screen.width - menuWidth - 12.0);
+    final left = anchor.left.clamp(12.0, maxLeft);
+    final maxHeight = (anchor.top - 24.0).clamp(140.0, screen.height - 40.0);
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onDismiss,
+            child: const ColoredBox(color: Color(0x01000000)),
+          ),
+        ),
+        Positioned(
+          left: left,
+          bottom: math.max(12.0, screen.height - anchor.top + 12.0),
+          child: GestureDetector(
+            // Swallow taps inside the panel so they never hit the dismiss layer.
+            onTap: () {},
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: menuWidth),
+              child: Material(
+                color: const Color(0xFF1E2432),
+                borderRadius: BorderRadius.circular(16),
+                clipBehavior: Clip.antiAlias,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.15),
+                    ),
+                  ),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: maxHeight),
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (final item in items)
+                            InkWell(
+                              onTap: () => onSelected(item.value),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 11,
+                                ),
+                                child: Row(
+                                  children: [
+                                    ?item.leading,
+                                    if (item.leading != null)
+                                      const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        item.label,
+                                        style: GoogleFonts.inter(
+                                          color: item.selected
+                                              ? Colors.white
+                                              : Colors.white70,
+                                          fontWeight: item.selected
+                                              ? FontWeight.w600
+                                              : FontWeight.w400,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -892,7 +1110,9 @@ class _DeviceChassis extends StatelessWidget {
       safePadding = isLandscape
           ? const EdgeInsets.only(left: 48, right: 48, bottom: 20)
           : const EdgeInsets.only(top: 44, bottom: 26);
-    } else if (device == DeviceModel.iPhone16Pro || device == DeviceModel.iPhone16ProMax || device == DeviceModel.iPhone16) {
+    } else if (device == DeviceModel.iPhone16Pro ||
+        device == DeviceModel.iPhone16ProMax ||
+        device == DeviceModel.iPhone16) {
       safePadding = isLandscape
           ? const EdgeInsets.only(left: 54, right: 54, bottom: 22)
           : const EdgeInsets.only(top: 54, bottom: 34);
@@ -915,24 +1135,89 @@ class _DeviceChassis extends StatelessWidget {
           // ── Hardware physical buttons ──────────────────────────────────
           if (device.isAndroid) ...[
             if (!isLandscape) ...[
-              _sideButton(right: -3, top: 180, width: 6, height: 64), // Volume rocker
-              _sideButton(right: -3, top: 262, width: 6, height: 42), // Power button
+              _sideButton(
+                right: -3,
+                top: 180,
+                width: 6,
+                height: 64,
+              ), // Volume rocker
+              _sideButton(
+                right: -3,
+                top: 262,
+                width: 6,
+                height: 42,
+              ), // Power button
             ] else ...[
-              _sideButton(top: -3, right: 180, width: 64, height: 6), // Volume rocker rotated
-              _sideButton(top: -3, right: 262, width: 42, height: 6), // Power button rotated
+              _sideButton(
+                top: -3,
+                right: 180,
+                width: 64,
+                height: 6,
+              ), // Volume rocker rotated
+              _sideButton(
+                top: -3,
+                right: 262,
+                width: 42,
+                height: 6,
+              ), // Power button rotated
             ],
           ] else ...[
             if (!isLandscape) ...[
-              _sideButton(left: -3, top: 136, width: 6, height: 30), // Action button
-              _sideButton(left: -3, top: 190, width: 6, height: 56), // Volume up
-              _sideButton(left: -3, top: 258, width: 6, height: 56), // Volume down
-              _sideButton(right: -3, top: 214, width: 6, height: 92), // Power button
-              _sideButton(right: -3, bottom: 140, width: 6, height: 54), // Camera Control (2025/2026)
+              _sideButton(
+                left: -3,
+                top: 136,
+                width: 6,
+                height: 30,
+              ), // Action button
+              _sideButton(
+                left: -3,
+                top: 190,
+                width: 6,
+                height: 56,
+              ), // Volume up
+              _sideButton(
+                left: -3,
+                top: 258,
+                width: 6,
+                height: 56,
+              ), // Volume down
+              _sideButton(
+                right: -3,
+                top: 214,
+                width: 6,
+                height: 92,
+              ), // Power button
+              _sideButton(
+                right: -3,
+                bottom: 140,
+                width: 6,
+                height: 54,
+              ), // Camera Control (2025/2026)
             ] else ...[
-              _sideButton(top: -3, right: 136, width: 30, height: 6), // Action button rotated
-              _sideButton(top: -3, right: 190, width: 56, height: 6), // Vol up rotated
-              _sideButton(top: -3, right: 258, width: 56, height: 6), // Vol down rotated
-              _sideButton(bottom: -3, right: 214, width: 92, height: 6), // Power button rotated
+              _sideButton(
+                top: -3,
+                right: 136,
+                width: 30,
+                height: 6,
+              ), // Action button rotated
+              _sideButton(
+                top: -3,
+                right: 190,
+                width: 56,
+                height: 6,
+              ), // Vol up rotated
+              _sideButton(
+                top: -3,
+                right: 258,
+                width: 56,
+                height: 6,
+              ), // Vol down rotated
+              _sideButton(
+                bottom: -3,
+                right: 214,
+                width: 92,
+                height: 6,
+              ), // Power button rotated
             ],
           ],
 
@@ -947,8 +1232,16 @@ class _DeviceChassis extends StatelessWidget {
                   width: 1,
                 ),
                 boxShadow: const [
-                  BoxShadow(color: Color(0x40000000), blurRadius: 64, offset: Offset(0, 26)),
-                  BoxShadow(color: Color(0x26000000), blurRadius: 18, offset: Offset(0, 6)),
+                  BoxShadow(
+                    color: Color(0x40000000),
+                    blurRadius: 64,
+                    offset: Offset(0, 26),
+                  ),
+                  BoxShadow(
+                    color: Color(0x26000000),
+                    blurRadius: 18,
+                    offset: Offset(0, 6),
+                  ),
                 ],
               ),
             ),
@@ -988,17 +1281,40 @@ class _DeviceChassis extends StatelessWidget {
                   child: Stack(
                     children: [
                       Positioned.fill(child: child),
-                      if (device.hasStatusBar && !isLandscape && !device.isAndroid)
-                        _StatusBar(deviceWidth: screenW, freezeTime: freezeTime),
-                      if (device.hasStatusBar && isLandscape && !device.isAndroid)
-                        _LandscapeStatusBar(deviceWidth: screenW, freezeTime: freezeTime),
+                      if (device.hasStatusBar &&
+                          !isLandscape &&
+                          !device.isAndroid)
+                        _StatusBar(
+                          deviceWidth: screenW,
+                          freezeTime: freezeTime,
+                        ),
+                      if (device.hasStatusBar &&
+                          isLandscape &&
+                          !device.isAndroid)
+                        _LandscapeStatusBar(
+                          deviceWidth: screenW,
+                          freezeTime: freezeTime,
+                        ),
                       if (device.hasStatusBar && device.isAndroid)
-                        _AndroidStatusBar(deviceWidth: screenW, freezeTime: freezeTime, isLandscape: isLandscape),
+                        _AndroidStatusBar(
+                          deviceWidth: screenW,
+                          freezeTime: freezeTime,
+                          isLandscape: isLandscape,
+                        ),
                       if (device.hasDynamicIsland)
-                        _DynamicIsland(isLandscape: isLandscape, screenW: screenW),
+                        _DynamicIsland(
+                          isLandscape: isLandscape,
+                          screenW: screenW,
+                        ),
                       if (device.isAndroid)
-                        _AndroidHolePunch(isLandscape: isLandscape, screenW: screenW, isGalaxy: device == DeviceModel.galaxyS24Ultra),
-                      if (!device.isAndroid && device != DeviceModel.edgeToEdge && device != DeviceModel.iPadPro)
+                        _AndroidHolePunch(
+                          isLandscape: isLandscape,
+                          screenW: screenW,
+                          isGalaxy: device == DeviceModel.galaxyS24Ultra,
+                        ),
+                      if (!device.isAndroid &&
+                          device != DeviceModel.edgeToEdge &&
+                          device != DeviceModel.iPadPro)
                         _HomeIndicator(isLandscape: isLandscape),
                       if (device.isAndroid)
                         _AndroidNavIndicator(isLandscape: isLandscape),
@@ -1119,7 +1435,10 @@ class _DynamicIslandState extends State<_DynamicIsland> {
                         decoration: BoxDecoration(
                           color: const Color(0xFF141720),
                           shape: BoxShape.circle,
-                          border: Border.all(color: const Color(0xFF262A38), width: 1),
+                          border: Border.all(
+                            color: const Color(0xFF262A38),
+                            width: 1,
+                          ),
                         ),
                         child: Center(
                           child: Container(
@@ -1260,7 +1579,10 @@ class _StatusBarState extends State<_StatusBar> {
 
 /// Landscape status bar layout with minimal side intrusion.
 class _LandscapeStatusBar extends StatelessWidget {
-  const _LandscapeStatusBar({required this.deviceWidth, required this.freezeTime});
+  const _LandscapeStatusBar({
+    required this.deviceWidth,
+    required this.freezeTime,
+  });
   final double deviceWidth;
   final bool freezeTime;
 
@@ -1268,7 +1590,9 @@ class _LandscapeStatusBar extends StatelessWidget {
   Widget build(BuildContext context) {
     const ink = AppColors.ink;
     final now = DateTime.now();
-    final timeStr = freezeTime ? '9:41' : '${now.hour}:${now.minute.toString().padLeft(2, "0")}';
+    final timeStr = freezeTime
+        ? '9:41'
+        : '${now.hour}:${now.minute.toString().padLeft(2, "0")}';
 
     return Positioned(
       top: 6,
@@ -1498,7 +1822,11 @@ class _AndroidBattery extends StatelessWidget {
 }
 
 class _AndroidHolePunch extends StatelessWidget {
-  const _AndroidHolePunch({required this.isLandscape, required this.screenW, required this.isGalaxy});
+  const _AndroidHolePunch({
+    required this.isLandscape,
+    required this.screenW,
+    required this.isGalaxy,
+  });
   final bool isLandscape;
   final double screenW;
   final bool isGalaxy;

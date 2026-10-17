@@ -88,14 +88,20 @@ async function main() {
       [userId, FULL_NAME, PHONE, ROLE, REGION, DISTRICT, COMMUNITY, now]
     );
 
+    // The iteration cost is stored alongside the verifier so /api/auth/challenge
+    // can advertise it back. Without it a handset on another platform assumes its
+    // own compile-time cost, derives a different verifier from the correct PIN,
+    // and is rejected. This row is stretched at whatever cost this script was run
+    // with, so the stored numbers must describe exactly that.
     await conn.execute(
       `INSERT INTO user_verifiers
-         (user_id, server_salt, verifier, device_id, created_at, updated_at)
-       VALUES (?, ?, ?, 'seed-auth', ?, ?)
+         (user_id, server_salt, verifier, device_id, pin_iterations, cloud_iterations, created_at, updated_at)
+       VALUES (?, ?, ?, 'seed-auth', ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          server_salt = VALUES(server_salt), verifier = VALUES(verifier),
+         pin_iterations = VALUES(pin_iterations), cloud_iterations = VALUES(cloud_iterations),
          updated_at = VALUES(updated_at)`,
-      [userId, serverSalt, verifier, now, now]
+      [userId, serverSalt, verifier, PIN_ITERS, CLOUD_ITERS, now, now]
     );
 
     console.log('Seeded credential into MariaDB:');

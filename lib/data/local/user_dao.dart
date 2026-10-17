@@ -93,18 +93,28 @@ abstract final class Credentials {
   ///     plus the domain-separated structure means you cannot repurpose
   ///     offline PIN rainbow tables).
   ///   - On a blank replacement device during recovery, the client fetches
-  ///     the server_salt first (public, non-secret), recomputes this verifier
-  ///     from PIN+phone+server_salt, and the server compares constant-time.
+  ///     the server_salt first (public, non-secret) and derives a verifier
+  ///     from PIN+phone+server_salt, which the server compares constant-time.
+  ///
+  /// LEGACY DERIVATION — do not use for new credentials. A blank device holds
+  /// no on-device pin_hash, so recovery login can only ever post
+  /// [computeCloudVerifierFromPin]. This pin_hash-based form is kept solely
+  /// because the server still recognises it while migrating an account that
+  /// carries a legacy users.pin_hash. Storing it for a new registration makes
+  /// the two derivations unequal, so the account can never be recovered.
   static String computeCloudVerifier({
     required String localPinHash,
     required String phone,
     required String serverSalt,
   }) {
-    final keyMaterial =
-        utf8.encode('$cloudVerifierDomainSeparator|$serverSalt|$phone');
+    final keyMaterial = utf8.encode(
+      '$cloudVerifierDomainSeparator|$serverSalt|$phone',
+    );
     var block = Uint8List.fromList(utf8.encode(localPinHash));
     for (var i = 0; i < cloudVerifierIterations; i++) {
-      block = Uint8List.fromList(Hmac(sha256, keyMaterial).convert(block).bytes);
+      block = Uint8List.fromList(
+        Hmac(sha256, keyMaterial).convert(block).bytes,
+      );
     }
     return base64.encode(block);
   }
@@ -118,22 +128,37 @@ abstract final class Credentials {
   /// CloudVerifier(no local hash) = HMAC-SHA256-ITERATED(
   ///     key   = "carebridge_cloud_auth_v1" || server_salt || phone,
   ///     input = STRETCHED(pin, server_salt, device_iterations))
+  /// [pinIterations] / [cloudIterations] override the platform default, and
+  /// must be supplied when the credential was created on a different platform.
+  /// The default is a compile-time choice (web 500, native debug 1000, native
+  /// release 20000/120000); deriving at the wrong cost yields a different
+  /// verifier, which the server reports as a bare "Invalid credentials" to a
+  /// worker who typed the right PIN. /api/auth/challenge advertises the cost a
+  /// credential was actually stored at, and recovery passes it through here.
   static String computeCloudVerifierFromPin({
     required String pin,
     required String phone,
     required String serverSalt,
+    int? pinIterations,
+    int? cloudIterations,
   }) {
+    final firstPassRounds = pinIterations ?? _pinIterations;
+    final cloudRounds = cloudIterations ?? cloudVerifierIterations;
     final firstPassKey = utf8.encode('first_pass|$serverSalt|$phone');
     var firstPass = Uint8List.fromList(utf8.encode(pin));
-    for (var i = 0; i < _pinIterations; i++) {
-      firstPass =
-          Uint8List.fromList(Hmac(sha256, firstPassKey).convert(firstPass).bytes);
+    for (var i = 0; i < firstPassRounds; i++) {
+      firstPass = Uint8List.fromList(
+        Hmac(sha256, firstPassKey).convert(firstPass).bytes,
+      );
     }
-    final keyMaterial =
-        utf8.encode('$cloudVerifierDomainSeparator|$serverSalt|$phone');
+    final keyMaterial = utf8.encode(
+      '$cloudVerifierDomainSeparator|$serverSalt|$phone',
+    );
     var block = firstPass;
-    for (var i = 0; i < cloudVerifierIterations; i++) {
-      block = Uint8List.fromList(Hmac(sha256, keyMaterial).convert(block).bytes);
+    for (var i = 0; i < cloudRounds; i++) {
+      block = Uint8List.fromList(
+        Hmac(sha256, keyMaterial).convert(block).bytes,
+      );
     }
     return base64.encode(block);
   }
@@ -182,24 +207,24 @@ abstract final class Credentials {
 /// than "invalid credentials".
 enum AuthFailure {
   unknownPhone(
-      'No account exists for this phone on this device. Tap Create Account '
-      'below to register — or, if you had an account on another phone, set up '
-      'the sync server in Me → Sync settings and try again.'),
+    'No account exists for this phone on this device. Tap Create Account '
+    'below to register — or, if you had an account on another phone, set up '
+    'the sync server in Me → Sync settings and try again.',
+  ),
   wrongPin('That PIN is not correct.'),
   noPinSet('This account has no PIN yet. Set one to continue.'),
   lockedOut('Too many wrong attempts. Wait a moment and try again.'),
   serverUnreachable(
-      'Could not reach the sync server to look up this phone number. Check '
-      'the network — or the address in Me → Sync settings — and try again.');
+    'Could not reach the sync server to look up this phone number. Check '
+    'the network — or the address in Me → Sync settings — and try again.',
+  );
 
   const AuthFailure(this.message);
   final String message;
 }
 
 class AuthResult {
-  const AuthResult.success(this.user)
-      : failure = null,
-        detail = null;
+  const AuthResult.success(this.user) : failure = null, detail = null;
   const AuthResult.failure(this.failure, {this.detail}) : user = null;
 
   final AppUser? user;
@@ -228,9 +253,18 @@ abstract final class UserDao {
   }) async {
     final localSalt = Credentials.newSalt();
     final localPinHash = Credentials.hashPin(pin, localSalt);
-    final serverSalt = Credentials.newSalt(24); // distinct from the on-device localSalt
-    final cloudVerifier = Credentials.computeCloudVerifier(
-      localPinHash: localPinHash,
+    final serverSalt = Credentials.newSalt(
+      24,
+    ); // distinct from the on-device localSalt
+    // Derived from the PIN, exactly the way a blank replacement device derives
+    // it at recovery login: ServerAuthClient.signIn can only post
+    // computeCloudVerifierFromPin, because a device with no local records has
+    // no pin_hash to feed the legacy form. Storing the pin_hash-based
+    // derivation here made the two unequal, so a synced registration could
+    // never satisfy the server's challenge/response and cloud recovery failed
+    // for every normally-registered account.
+    final cloudVerifier = Credentials.computeCloudVerifierFromPin(
+      pin: pin,
       phone: user.phone,
       serverSalt: serverSalt,
     );
@@ -294,6 +328,11 @@ abstract final class UserDao {
           'user_id': user.id,
           'server_salt': serverSalt,
           'verifier': cloudVerifier,
+          // The cost this build stretched at. Without it, a handset on another
+          // platform derives a different verifier from the same PIN and is told
+          // its own credentials are wrong.
+          'pin_iterations': _pinIterations,
+          'cloud_iterations': Credentials.cloudVerifierIterations,
           'device_id': deviceId,
           'created_at': now,
           'updated_at': now,
@@ -313,6 +352,23 @@ abstract final class UserDao {
         'occurred_at': DateTime.now().toIso8601String(),
       });
     });
+
+    // Bootstrap the cloud credential now if a server is reachable. The outbox row
+    // written above carries the identical payload, so an offline compound still
+    // registers and still catches up later — but without this attempt a device
+    // that registered off-grid could never deliver the credential that unlocks
+    // its own first sync, and a colleague signing in on a replacement handset
+    // would be told the account does not exist.
+    await ServerAuthClient.provisionRegistration(
+      userId: user.id,
+      phone: user.phone,
+      serverSalt: serverSalt,
+      verifier: cloudVerifier,
+      profile: user.toMap(),
+      deviceId: deviceId,
+      pinIterations: _pinIterations,
+      cloudIterations: Credentials.cloudVerifierIterations,
+    );
 
     return user;
   }
@@ -338,8 +394,10 @@ abstract final class UserDao {
     final newLocalSalt = Credentials.newSalt();
     final newLocalHash = Credentials.hashPin(newPin, newLocalSalt);
     final newServerSalt = Credentials.newSalt(24);
-    final newCloudVerifier = Credentials.computeCloudVerifier(
-      localPinHash: newLocalHash,
+    // PIN-derived, matching what a blank device posts at recovery login — see
+    // the note in [register].
+    final newCloudVerifier = Credentials.computeCloudVerifierFromPin(
+      pin: newPin,
       phone: user.phone,
       serverSalt: newServerSalt,
     );
@@ -361,6 +419,8 @@ abstract final class UserDao {
           'user_id': user.id,
           'server_salt': newServerSalt,
           'verifier': newCloudVerifier,
+          'pin_iterations': _pinIterations,
+          'cloud_iterations': Credentials.cloudVerifierIterations,
           'device_id': deviceId,
           'created_at': now,
           'updated_at': now,
@@ -402,8 +462,11 @@ abstract final class UserDao {
     final newLocalSalt = Credentials.newSalt();
     final newLocalHash = Credentials.hashPin(newPin, newLocalSalt);
     final newServerSalt = Credentials.newSalt(24);
-    final newCloudVerifier = Credentials.computeCloudVerifier(
-      localPinHash: newLocalHash,
+    // PIN-derived, matching what a blank device posts at recovery login — see
+    // the note in [register]. A rotated PIN that cannot be recovered from is a
+    // rotated PIN that locks the worker out of their own caseload.
+    final newCloudVerifier = Credentials.computeCloudVerifierFromPin(
+      pin: newPin,
       phone: user.phone,
       serverSalt: newServerSalt,
     );
@@ -425,6 +488,8 @@ abstract final class UserDao {
           'user_id': userId,
           'server_salt': newServerSalt,
           'verifier': newCloudVerifier,
+          'pin_iterations': _pinIterations,
+          'cloud_iterations': Credentials.cloudVerifierIterations,
           'device_id': deviceId,
           'created_at': now,
           'updated_at': now,
@@ -480,7 +545,10 @@ abstract final class UserDao {
       // Hybrid Architecture Fallback:
       // If the account does not exist in local SQLite (e.g. fresh app install on a replacement device),
       // reach out to the Main MariaDB Server via CloudRecoveryService to authenticate and pull records down!
-      final recovery = await CloudRecoveryService.restoreAccount(phone: phone, pin: pin);
+      final recovery = await CloudRecoveryService.restoreAccount(
+        phone: phone,
+        pin: pin,
+      );
       if (recovery.isSuccess) {
         await AuditDao.record(
           actorId: recovery.user!.id,
@@ -507,7 +575,8 @@ abstract final class UserDao {
         await AuditDao.record(
           action: 'sign_in',
           outcome: 'denied',
-          detail: 'Server unreachable during recovery: ${recovery.message ?? 'no detail'}',
+          detail:
+              'Server unreachable during recovery: ${recovery.message ?? 'no detail'}',
         );
         return AuthResult.failure(
           AuthFailure.serverUnreachable,
@@ -520,7 +589,10 @@ abstract final class UserDao {
         outcome: 'denied',
         detail: 'Unknown phone number locally and on server',
       );
-      return AuthResult.failure(AuthFailure.unknownPhone, detail: recovery.message);
+      return AuthResult.failure(
+        AuthFailure.unknownPhone,
+        detail: recovery.message,
+      );
     }
 
     final row = rows.first;
@@ -578,10 +650,7 @@ abstract final class UserDao {
   /// True if at least one account exists on this device.
   static Future<bool> anyRegistered() async {
     final db = await AppDatabase.instance.database;
-    final rows = await db.query(
-      Tables.users,
-      columns: ['COUNT(*) AS c'],
-    );
+    final rows = await db.query(Tables.users, columns: ['COUNT(*) AS c']);
     final count = (rows.firstOrNull?['c'] as num?)?.toInt() ?? 0;
     return count > 0;
   }
@@ -605,7 +674,10 @@ abstract final class UserDao {
   /// Binds (or unbinds) a caregiver account to a household ID. Passing
   /// null clears the binding (usually only done during cloud recovery when
   /// the server provides a fresh, authoritative household binding).
-  static Future<void> setLinkedHousehold(String userId, String? householdId) async {
+  static Future<void> setLinkedHousehold(
+    String userId,
+    String? householdId,
+  ) async {
     final db = await AppDatabase.instance.database;
     await db.update(
       Tables.users,
@@ -619,7 +691,9 @@ abstract final class UserDao {
       outcome: 'allowed',
       entityId: householdId,
       entityTable: Tables.households,
-      detail: householdId == null ? 'Unbound user from household' : 'Bound user to household',
+      detail: householdId == null
+          ? 'Unbound user from household'
+          : 'Bound user to household',
     );
   }
 
@@ -687,7 +761,6 @@ abstract final class UserDao {
       detail: 'Set language to "$language".',
     );
   }
-
 }
 
 /// One audit entry. Written for permission denials, clinical overrides, sign-ins

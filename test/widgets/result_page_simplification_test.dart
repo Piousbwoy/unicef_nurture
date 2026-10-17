@@ -247,7 +247,9 @@ void main() {
     );
   });
 
-  testWidgets('secondary detail is folded behind one control', (tester) async {
+  testWidgets('the evidence behind the verdict is shown, not folded away', (
+    tester,
+  ) async {
     await _pump(
       tester,
       _draft(findings: const [_fastBreathing]),
@@ -255,17 +257,24 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Collapsed by default, so the strip and the deck do not compete with the
-    // decision for the worker's attention.
-    expect(find.byType(VitalsStrip), findsNothing);
-    expect(_section('What we found'), findsNothing);
+    // Open by default. This app's claim is an explainable protocol decision, so
+    // the vitals as taken and the finding cards — each with its measured value,
+    // its cut-off and its protocol citation — have to be on screen without a
+    // tap. A verdict whose reasoning is collapsed behind a control presents as
+    // an unsupported assertion, which is what reads as a toy to a clinician
+    // auditing the logic. The fold sits below the decision and the actions, so
+    // showing it costs the worker nothing they must act on.
+    expect(find.byType(VitalsStrip), findsOneWidget);
+    expect(_section('What we found'), findsOneWidget);
     expect(find.text('Full clinical detail'), findsOneWidget);
 
+    // The control stays, so a worker who wants the lean page can fold the
+    // working material away.
     await tester.tap(find.text('Full clinical detail'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(VitalsStrip), findsOneWidget);
-    expect(_section('What we found'), findsOneWidget);
+    expect(find.byType(VitalsStrip), findsNothing);
+    expect(_section('What we found'), findsNothing);
   });
 
   testWidgets('the decision is stated once, not four times', (tester) async {

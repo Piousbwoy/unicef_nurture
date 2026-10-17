@@ -947,10 +947,11 @@ void main() {
     // finding of its own, and must still keep the doses out.
     await _pump(tester, _epiDraft(), age: 270);
 
-    // The deck is the working material behind the verdict — it lives inside
-    // the clinical-detail fold, so open it before asserting on the deck.
-    await tester.tap(find.text('Full clinical detail'));
-    await tester.pumpAndSettle();
+    // The deck is the working material behind the verdict. It now lives in the
+    // clinical-detail fold, which opens by default — so this goes through the
+    // idempotent helper rather than a raw tap, which would close the fold and
+    // silently assert on an empty page.
+    await _openDetail(tester);
 
     // No measured value is restated as a chip row above the findings deck.
     expect(find.text('THE NUMBERS BEHIND THE VERDICT'), findsNothing);
@@ -1019,9 +1020,11 @@ void main() {
 
       // Every finding this visit produced is a dose. The section that would
       // otherwise answer with a green all-clear card under a priority verdict
-      // is skipped outright — inside the fold too, so open it first.
-      await tester.tap(find.text('Full clinical detail'));
-      await tester.pumpAndSettle();
+      // is skipped outright. Asserted with the fold genuinely open, via the
+      // idempotent helper — otherwise these three expectations would pass
+      // vacuously against a closed fold instead of proving the section is
+      // really skipped.
+      await _openDetail(tester);
       expect(find.text('WHAT WE FOUND'), findsNothing);
       expect(find.text('No concerning findings'), findsNothing);
       expect(find.text('IMMUNISATION'), findsOneWidget);

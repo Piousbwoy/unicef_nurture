@@ -61,8 +61,25 @@ class SessionLoading extends SessionState {
 }
 
 /// Nobody has ever registered on this device. First-run setup, not sign-in.
+///
+/// [localRecordsLost] separates a genuinely fresh device from one that has
+/// forgotten itself. The browser build stores SQLite in IndexedDB through an
+/// asynchronous VFS whose own contract makes no durability guarantee, so a
+/// restart can discard writes that were never flushed. Preferences survive
+/// that loss even when the database does not, so a remembered phone with no
+/// account row means the records were lost — not that the credentials were
+/// never valid. Saying which of the two happened is the difference between an
+/// honest recovery prompt and a user being told to register a duplicate
+/// account for a phone that already exists.
 class SessionNeedsSetup extends SessionState {
-  const SessionNeedsSetup();
+  const SessionNeedsSetup({this.localRecordsLost = false, this.lastPhone});
+
+  /// True when this device previously held a session but its local database
+  /// now has no account at all.
+  final bool localRecordsLost;
+
+  /// The phone this device last signed in with, when one is remembered.
+  final String? lastPhone;
 }
 
 class SessionSignedOut extends SessionState {
@@ -99,7 +116,8 @@ class SessionController {
   static const _kLastPhoneKey = 'carebridge.session.last_phone';
   // Fallback keys for shared preferences when secure storage fails
   static const _kFallbackUserIdKey = 'carebridge.session.user_id_fallback';
-  static const _kFallbackLastPhoneKey = 'carebridge.session.last_phone_fallback';
+  static const _kFallbackLastPhoneKey =
+      'carebridge.session.last_phone_fallback';
 
   static const int maxAttempts = 5;
   static const Duration lockDuration = Duration(seconds: 30);
@@ -118,11 +136,23 @@ class SessionController {
     return left.isNegative ? null : left;
   }
 
-  int get attemptsRemaining => (maxAttempts - _failedAttempts).clamp(0, maxAttempts);
+  int get attemptsRemaining =>
+      (maxAttempts - _failedAttempts).clamp(0, maxAttempts);
 
   /// Decides the opening screen.
   Future<SessionState> restore() async {
-    if (!await UserDao.anyRegistered()) return const SessionNeedsSetup();
+    if (!await UserDao.anyRegistered()) {
+      // No account on this device. Distinguish a fresh install from one whose
+      // local records did not survive a restart, so the UI can offer recovery
+      // instead of implying the credentials were never valid.
+      final rememberedPhone = await _readLastPhoneAnywhere();
+      final rememberedUser =
+          rememberedPhone ?? await _readFallback(_kFallbackUserIdKey);
+      return SessionNeedsSetup(
+        localRecordsLost: rememberedUser != null,
+        lastPhone: rememberedPhone,
+      );
+    }
 
     final lastPhone = await _readLastPhone();
     final userId = await _read(_kUserIdKey);
@@ -203,17 +233,36 @@ class SessionController {
     // Best-effort server authentication — the local DB is the source of truth, so a
     // failing network doesn't gate sign-in; we just try to issue a warning in the sync
     // log if we couldn't grab a JWT for the sync-log attribution downstream.
-    await ServerAuthClient.signIn(phone: user.phone, pin: pin).then((r) {
-      if (!r.isOk) {
-        AuditDao.record(
-          action: 'server sign in',
-          outcome: 'denied',
-          actorId: user.id,
-          actorRole: user.role.name,
-          detail: r.error,
-        );
-      }
-    }).catchError((_) {/* ignore */});
+    await ServerAuthClient.signIn(phone: user.phone, pin: pin)
+        .then((r) async {
+          if (!r.isOk) {
+            AuditDao.record(
+              action: 'server sign in',
+              outcome: 'denied',
+              actorId: user.id,
+              actorRole: user.role.name,
+              detail: r.error,
+            );
+            return;
+          }
+          // Sign-in is a push trigger as well as a pull one. A CHO who registered
+          // off-grid has identity and cloud-verifier rows queued in the outbox at
+          // critical priority; until they reach MariaDB no other handset can
+          // authenticate that phone. Registration attempts the same drain and
+          // fails silently while offline, so without this retry the rows would sit
+          // queued through every later sign-in and cloud recovery would answer
+          // "no such account" for a worker who registered weeks ago.
+          try {
+            final svc = await buildEphemeralSyncService();
+            await svc.drain(maxBatches: 3).timeout(registrationTimeout);
+          } catch (_) {
+            // Still offline, unconfigured URL, or timed out — the rows stay
+            // honestly queued for the next trigger. Never gate the session.
+          }
+        })
+        .catchError((_) {
+          /* ignore */
+        });
 
     return SessionActive(user, linkedHouseholdId: await _linkedFor(user));
   }
@@ -251,8 +300,10 @@ class SessionController {
     // In an offline-first architecture for remote CHPS compounds, network failures
     // or unconfigured sync URLs must NEVER prevent local account creation.
     try {
-      final auth = await ServerAuthClient.signIn(phone: saved.phone, pin: pin)
-          .timeout(registrationTimeout);
+      final auth = await ServerAuthClient.signIn(
+        phone: saved.phone,
+        pin: pin,
+      ).timeout(registrationTimeout);
       if (auth.isOk) {
         final svc = await buildEphemeralSyncService();
         await svc.drain(maxBatches: 3).timeout(registrationTimeout);
@@ -273,7 +324,8 @@ class SessionController {
       outcome: 'allowed',
       actorId: saved.id,
       actorRole: saved.role.name,
-      detail: '${saved.role.label} — local account registered; cloud verifier queued in outbox.',
+      detail:
+          '${saved.role.label} — local account registered; cloud verifier queued in outbox.',
     );
 
     return SessionActive(saved, linkedHouseholdId: await _linkedFor(saved));
@@ -289,7 +341,9 @@ class SessionController {
       );
     }
     // Revoke any active server-side refresh token (best effort — network may be off).
-    await ServerAuthClient.signOut().catchError((_) {/* ignore */});
+    await ServerAuthClient.signOut().catchError((_) {
+      /* ignore */
+    });
     await _delete(_kUserIdKey);
     _failedAttempts = 0;
     _lockedUntil = null;
@@ -322,6 +376,17 @@ class SessionController {
       return await _readFallback(_kFallbackLastPhoneKey);
     }
     return null;
+  }
+
+  /// The last phone from either store, unconditionally. Unlike
+  /// [_readLastPhone] this does not wait for secure storage to have failed
+  /// first, because the lost-records check runs before any secure-storage call
+  /// has set that flag — and on a device that dropped its database the
+  /// preference copy is the only evidence left that an account existed.
+  Future<String?> _readLastPhoneAnywhere() async {
+    final direct = await _read(_kLastPhoneKey);
+    if (direct != null) return direct;
+    return _readFallback(_kFallbackLastPhoneKey);
   }
 
   // Secure storage is unavailable on some desktop test hosts and can throw on

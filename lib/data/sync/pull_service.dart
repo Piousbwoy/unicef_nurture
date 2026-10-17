@@ -8,14 +8,16 @@
 ///
 /// The contract, in one paragraph: pages are fetched until the server says
 /// `has_more: false`; each page is merged in one transaction — households and
-/// persons last-writer-wins on their client-written `updated_at`, visits,
-/// assessments and referrals insert-if-absent (clinical history is
-/// append-only, and a row that already exists locally was itself pushed, so
-/// the server can only be re-offering it) — and the `server_time` of the FIRST
-/// page becomes the next watermark, stored per-user in `sync_state`. The next
-/// pull sends that watermark (minus a one-second overlap) as `since`; the
-/// overlap plus the merge rules make re-delivery harmless, and the server owns
-/// the change markers, so device clocks are only ever used for display.
+/// persons last-writer-wins on their client-written `updated_at`, visits and
+/// assessments insert-if-absent (clinical history is append-only, and a row that
+/// already exists locally was itself pushed, so the server can only be
+/// re-offering it), and referrals merge on the server's own revision marker
+/// because a referral status is revised in place — see [_mergeReferral]. The
+/// `server_time` of the FIRST page becomes the next watermark, stored per-user
+/// in `sync_state`. The next pull sends that watermark (minus a one-second
+/// overlap) as `since`; the overlap plus the merge rules make re-delivery
+/// harmless, and the server owns the change markers, so device clocks are only
+/// ever used for display.
 ///
 /// Failure behaviour is deliberately boring: a pull that fails at page 3 of 5
 /// has committed its earlier pages but advances nothing, so the next pull
@@ -25,6 +27,7 @@ library;
 
 import 'package:sqflite/sqflite.dart' show DatabaseExecutor;
 
+import '../../domain/enums.dart';
 import '../local/app_database.dart';
 import '../local/preferences_store.dart';
 import '../local/sync_state_dao.dart';
@@ -139,8 +142,10 @@ class PullService {
     }
     String auth = picked;
 
-    final watermarkKey =
-        SyncStateKeys.scoped(SyncStateKeys.pullWatermark, userId);
+    final watermarkKey = SyncStateKeys.scoped(
+      SyncStateKeys.pullWatermark,
+      userId,
+    );
     final since = _overlapped(await SyncStateDao.read(watermarkKey));
 
     // Terminal states funnel through [done] so every completed attempt — and
@@ -180,17 +185,20 @@ class PullService {
 
       while (true) {
         if (pages > _maxPages) {
-          return done(PullReport(
-            status: PullStatus.unavailable,
-            pages: pages,
-            detail: 'Pull did not converge after $_maxPages pages.',
-          ));
+          return done(
+            PullReport(
+              status: PullStatus.unavailable,
+              pages: pages,
+              detail: 'Pull did not converge after $_maxPages pages.',
+            ),
+          );
         }
 
         final query = <String, String>{'cursor': '$cursor'};
         if (since != null) query['since'] = since;
-        final uri =
-            Uri.parse('$baseUrl/api/pull').replace(queryParameters: query);
+        final uri = Uri.parse(
+          '$baseUrl/api/pull',
+        ).replace(queryParameters: query);
         var reply = await PlatformHttpClient.get(
           uri,
           headers: {'Authorization': auth},
@@ -201,9 +209,9 @@ class PullService {
         // exactly once, so a genuinely revoked session cannot loop here.
         if (reply.statusCode == 401 && !refreshedAuth) {
           refreshedAuth = true;
-          final ok = await ServerAuthClient
-              .refreshAccessToken()
-              .then((r) => r.isOk);
+          final ok = await ServerAuthClient.refreshAccessToken().then(
+            (r) => r.isOk,
+          );
           if (ok) {
             final fresh = await ServerAuthClient.pickAuthorization();
             if (fresh != null) {
@@ -218,44 +226,53 @@ class PullService {
         }
 
         if (reply.statusCode == 401 || reply.statusCode == 403) {
-          return done(PullReport(
-            status: PullStatus.unauthorized,
-            pages: pages,
-            detail:
-                'The server rejected this device\u2019s credentials '
-                '(HTTP ${reply.statusCode}). Sign in again.',
-          ));
+          return done(
+            PullReport(
+              status: PullStatus.unauthorized,
+              pages: pages,
+              detail:
+                  'The server rejected this device\u2019s credentials '
+                  '(HTTP ${reply.statusCode}). Sign in again.',
+            ),
+          );
         }
 
         final body = reply.jsonBody;
         if (body == null) {
-          return done(PullReport(
-            status: PullStatus.unavailable,
-            pages: pages,
-            detail:
-                'The server answer was not JSON (HTTP ${reply.statusCode}).',
-          ));
+          return done(
+            PullReport(
+              status: PullStatus.unavailable,
+              pages: pages,
+              detail:
+                  'The server answer was not JSON (HTTP ${reply.statusCode}).',
+            ),
+          );
         }
         if (reply.statusCode != 200 || body['ok'] != true) {
-          return done(PullReport(
-            status: PullStatus.unavailable,
-            pages: pages,
-            detail: body['error'] is String
-                ? body['error'] as String
-                : 'The server answered HTTP ${reply.statusCode}.',
-          ));
+          return done(
+            PullReport(
+              status: PullStatus.unavailable,
+              pages: pages,
+              detail: body['error'] is String
+                  ? body['error'] as String
+                  : 'The server answered HTTP ${reply.statusCode}.',
+            ),
+          );
         }
 
         // The first page anchors the session: its server_time is the only
         // clock reading this pull will trust, however long paging takes.
         final serverTime = body['server_time'];
         if (serverTime is! String || serverTime.isEmpty) {
-          return done(PullReport(
-            status: PullStatus.unavailable,
-            pages: pages,
-            detail: 'The server did not include server_time; the watermark '
-                'cannot be advanced safely.',
-          ));
+          return done(
+            PullReport(
+              status: PullStatus.unavailable,
+              pages: pages,
+              detail:
+                  'The server did not include server_time; the watermark '
+                  'cannot be advanced safely.',
+            ),
+          );
         }
         sessionWatermark ??= serverTime;
         final scopedTo = body['scoped_to'];
@@ -266,16 +283,19 @@ class PullService {
 
         final data = body['data'];
         if (data is! Map<String, dynamic>) {
-          return done(PullReport(
-            status: PullStatus.unavailable,
-            pages: pages,
-            detail: 'Malformed pull page: data is not an object.',
-          ));
+          return done(
+            PullReport(
+              status: PullStatus.unavailable,
+              pages: pages,
+              detail: 'Malformed pull page: data is not an object.',
+            ),
+          );
         }
 
         final db = await AppDatabase.instance.database;
-        final merged =
-            await db.transaction((txn) => _applyPage(txn, data, columns));
+        final merged = await db.transaction(
+          (txn) => _applyPage(txn, data, columns),
+        );
         applied += merged.applied;
         skipped += merged.skipped;
         pages++;
@@ -283,11 +303,13 @@ class PullService {
         if (body['has_more'] != true) break;
         final next = body['next_cursor'];
         if (next is! int || next <= cursor) {
-          return done(PullReport(
-            status: PullStatus.unavailable,
-            pages: pages,
-            detail: 'Server pagination did not advance.',
-          ));
+          return done(
+            PullReport(
+              status: PullStatus.unavailable,
+              pages: pages,
+              detail: 'Server pagination did not advance.',
+            ),
+          );
         }
         cursor = next;
       }
@@ -306,14 +328,18 @@ class PullService {
         '$applied',
       );
 
-      return done(PullReport(
-        status: PullStatus.success,
-        rowsApplied: applied,
-        rowsSkipped: skipped,
-        pages: pages,
-      ));
+      return done(
+        PullReport(
+          status: PullStatus.success,
+          rowsApplied: applied,
+          rowsSkipped: skipped,
+          pages: pages,
+        ),
+      );
     } on HttpFailure catch (e) {
-      return done(PullReport(status: PullStatus.unavailable, detail: e.message));
+      return done(
+        PullReport(status: PullStatus.unavailable, detail: e.message),
+      );
     } catch (e) {
       return done(PullReport(status: PullStatus.unavailable, detail: '$e'));
     }
@@ -363,28 +389,35 @@ class PullService {
     // request still reads 'pending' on the phone that wrote it, and a pulled
     // row is by definition already on the server.
     for (final row in _rows(data[Tables.careRequests])) {
-      if (await _mergeLww(
-        txn,
-        Tables.careRequests,
-        {...row, 'sync_state': 'synced'},
-        columns,
-      )) {
+      if (await _mergeLww(txn, Tables.careRequests, {
+        ...row,
+        'sync_state': 'synced',
+      }, columns)) {
         applied++;
       } else {
         skipped++;
       }
     }
-    for (final table in const [
-      Tables.visits,
-      Tables.assessments,
-      Tables.referrals,
-    ]) {
+    for (final table in const [Tables.visits, Tables.assessments]) {
       for (final row in _rows(data[table])) {
         if (await _mergeIfAbsent(txn, table, row, columns)) {
           applied++;
         } else {
           skipped++;
         }
+      }
+    }
+    // Referrals are NOT append-only. A status is changed in place on the same
+    // row id — the facility confirms arrival, the worker records that the
+    // family never came — so a merge that only ever inserts leaves every other
+    // device holding the status the referral had the moment it first arrived
+    // there. The nurse who issued the referral would never learn the child was
+    // treated, however many pulls ran.
+    for (final row in _rows(data[Tables.referrals])) {
+      if (await _mergeReferral(txn, row, columns)) {
+        applied++;
+      } else {
+        skipped++;
       }
     }
     final self = data[Tables.users];
@@ -461,8 +494,12 @@ class PullService {
     final map = _localColumns(table, row, columns);
     if (map == null || map.isEmpty) return false;
 
-    final local =
-        await txn.query(table, where: 'id = ?', whereArgs: [id], limit: 1);
+    final local = await txn.query(
+      table,
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
     if (local.isEmpty) {
       try {
         await txn.insert(table, map);
@@ -485,7 +522,92 @@ class PullService {
     }
   }
 
-  /// Visits, assessments and referrals: insert-if-absent. A row that already
+  /// A referral that already exists locally takes the server's newer state.
+  ///
+  /// Ordered rules, so the merge can be argued about line by line:
+  ///
+  ///  1. Absent locally → insert.
+  ///  2. The local row still has an un-pushed outbox entry → the local write
+  ///     wins and the row is skipped. This phone knows something the server
+  ///     does not yet; overwriting it would lose a field decision quietly.
+  ///  3. The local status is settled (treated, declined, cancelled, died) and
+  ///     the incoming one is not → skip. A later answer about the patient is
+  ///     evidence, not a licence to reopen closed paperwork.
+  ///  4. Otherwise apply when the server's revision marker is newer than the
+  ///     marker stored locally. Both are the server's own UTC clock stamped by
+  ///     its trigger, so the comparison is not exposed to a device whose clock
+  ///     is a day out — which is exactly why device-written `updated_at` is not
+  ///     used here.
+  ///
+  /// A row with no marker at all (a server predating the trigger, or a
+  /// hand-inserted row) is never overwritten on a guess.
+  Future<bool> _mergeReferral(
+    DatabaseExecutor txn,
+    Map<String, dynamic> row,
+    Map<String, Set<String>> columns,
+  ) async {
+    final id = row['id'];
+    if (id is! String || id.isEmpty) return false;
+    final map = _localColumns(Tables.referrals, row, columns);
+    if (map == null || map.isEmpty) return false;
+    // A row that came off the server is by definition on the server, so it must
+    // never read as locally dirty — on an insert OR on a status update. Leaving
+    // the pushed `sync_state` in place would make this phone push the row back
+    // on the next drain, and the server would log a change that never happened.
+    if (map.containsKey('sync_state')) map['sync_state'] = 'synced';
+
+    final local = await txn.query(
+      Tables.referrals,
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (local.isEmpty) {
+      try {
+        await txn.insert(Tables.referrals, map);
+        return true;
+      } catch (_) {
+        // The person row is not on this device yet; the next full pull heals it.
+        return false;
+      }
+    }
+
+    final current = local.single;
+    final pending = await txn.query(
+      Tables.outbox,
+      columns: const ['id'],
+      where: 'entity_table = ? AND entity_id = ? AND synced_at IS NULL',
+      whereArgs: [Tables.referrals, id],
+      limit: 1,
+    );
+    if (pending.isNotEmpty) return false;
+
+    final incomingStatus = ReferralStatus.values.firstWhere(
+      (s) => s.name == row['status'],
+      orElse: () => ReferralStatus.issued,
+    );
+    final localStatus = ReferralStatus.values.firstWhere(
+      (s) => s.name == current['status'],
+      orElse: () => ReferralStatus.issued,
+    );
+    if (localStatus.isSettled && !incomingStatus.isSettled) return false;
+
+    final incomingRev = row['pull_updated_at'] as String?;
+    final currentRev = current['pull_updated_at'] as String?;
+    if (incomingRev == null) return false;
+    if (currentRev != null && currentRev.compareTo(incomingRev) >= 0) {
+      return false;
+    }
+
+    try {
+      await txn.update(Tables.referrals, map, where: 'id = ?', whereArgs: [id]);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Visits and assessments: insert-if-absent. A row that already
   /// exists locally was itself pushed from this ecosystem, and these tables
   /// are append-only by design — the server can only be re-offering what this
   /// device already has, which the watermark overlap makes routine.

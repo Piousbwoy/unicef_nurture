@@ -460,7 +460,16 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
         }
       }
       if (localized == null) {
-        await _recoverSpeech(run);
+        // Nothing bundled in the requested language, and no usable machine
+        // translation. Say so and stop. Handing the English sentence to a
+        // device voice would read a different language aloud to a caregiver who
+        // asked for theirs, and would wake the TTS engine for content we cannot
+        // honestly voice — silence misattributed is worse than no audio.
+        run.reasonCode = 'translation_unavailable';
+        run.source =
+            '$selected translation is not bundled. Choose English or '
+            'ask a health worker to read the guidance.';
+        run.emit(CaregiverPlaybackPhase.fallback);
         return;
       }
       if (!_PlaybackCoordinator.quiet || localized.trim().isEmpty) {
@@ -534,9 +543,6 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
       _fallback(run);
       return;
     }
-    final sourceLanguage = OfflineSpeechLanguage.canonical(
-      run.speech.sourceLanguage,
-    );
     if (run.language == 'English' &&
         OfflineSpeechLanguage.canonical(run.speech.language) != 'English') {
       run.reasonCode ??= 'translation_fallback_english';
@@ -548,31 +554,12 @@ class DeviceCaregiverVoice implements CaregiverVoiceBackend {
     await _quietForRecovery(run);
     if (!_current(run)) return;
 
-    // Never read translated words with an English voice or overlap a failed
-    // engine. Keep the localized transcript if no recovery voice succeeds.
-    if (_PlaybackCoordinator.quiet &&
-        sourceLanguage == 'English' &&
-        run.language != 'English' &&
-        run.speech.english.trim().isNotEmpty) {
-      final transcript = run.transcript;
-      final language = run.language;
-      final provenance = run.provenance;
-      final reason = run.reasonCode;
-      run.transcript = run.speech.english;
-      run.language = 'English';
-      run.provenance = '';
-      run.reasonCode = 'translation_fallback_english';
-      if (await _synthesize(run)) {
-        if (_current(run)) run.emit(CaregiverPlaybackPhase.completed);
-        return;
-      }
-      await _quietForRecovery(run);
-      if (!_current(run)) return;
-      run.transcript = transcript;
-      run.language = language;
-      run.provenance = provenance;
-      run.reasonCode = reason;
-    }
+    // No proven device voice exists for the requested language. Do not
+    // substitute an English one: reading English aloud to a caregiver who asked
+    // for Dagbani, Hausa or Twi is a language bridge, not a fallback — it
+    // implies the app spoke their language when it did not, and clinical
+    // guidance understood in the wrong language is a safety problem, not a
+    // nicety. Keep the localized transcript and hand it back as readable text.
     if (_current(run)) _fallback(run);
   }
 

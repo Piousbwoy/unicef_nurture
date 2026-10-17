@@ -105,8 +105,7 @@ class _FollowUpCheckInScreenState extends ConsumerState<FollowUpCheckInScreen> {
   }
 
   bool get _went => _reach == FollowUpReach.went;
-  bool get _answered =>
-      _reach != null && _reach != FollowUpReach.unknown;
+  bool get _answered => _reach != null && _reach != FollowUpReach.unknown;
 
   /// A patient who is no better needs a clinical decision, not another
   /// check-in. This is the case the old flow lost: "attended" was recorded,
@@ -139,8 +138,9 @@ class _FollowUpCheckInScreenState extends ConsumerState<FollowUpCheckInScreen> {
       : 'Answer that first. This desk only records what you established, never '
             'what it could assume.';
 
-  String get _actionLabel =>
-      _error != null && _missing == null ? 'Retry save' : (_missing ?? 'Save follow-up');
+  String get _actionLabel => _error != null && _missing == null
+      ? 'Retry save'
+      : (_missing ?? 'Save follow-up');
 
   @override
   Widget build(BuildContext context) {
@@ -148,10 +148,14 @@ class _FollowUpCheckInScreenState extends ConsumerState<FollowUpCheckInScreen> {
     return PopScope(
       canPop: !_busy,
       child: Scaffold(
-        backgroundColor: AppColors.surface,
+        // The desk's own bright paper, not the warm app's ivory: this sheet is
+        // opened from the referral thread and must read as the same machine.
+        backgroundColor: FhwLuxePalette.porcelainCanvas,
         appBar: AppBar(
           title: const Text('Record follow-up'),
-          backgroundColor: AppColors.surface,
+          backgroundColor: FhwLuxePalette.porcelainCanvas,
+          surfaceTintColor: Colors.transparent,
+          foregroundColor: FhwLuxePalette.textPrimary,
         ),
         body: SafeArea(
           child: ListView(
@@ -334,8 +338,10 @@ class _FollowUpCheckInScreenState extends ConsumerState<FollowUpCheckInScreen> {
       final repository = ref.read(careRepositoryProvider);
       final householdId =
           widget.householdId ??
-          (await repository.person(user, widget.referral.personId))
-              ?.householdId;
+          (await repository.person(
+            user,
+            widget.referral.personId,
+          ))?.householdId;
       if (householdId == null) {
         throw const _UnfiledAnswer(
           'The patient behind this referral is not on this phone, so the '

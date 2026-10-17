@@ -173,7 +173,7 @@ abstract final class CaregiverDao {
     final rows = await txn.query(
       Tables.caregiverActivity,
       where: '$_scopeWhere${personId == null ? '' : ' AND person_id = ?'}',
-      whereArgs: [..._args(scope), if (personId != null) personId],
+      whereArgs: [..._args(scope), ?personId],
       orderBy: 'occurred_at DESC, id',
     );
     return rows.map(CaregiverActivity.fromMap).toList(growable: false);
@@ -424,14 +424,6 @@ abstract final class CaregiverDao {
           for (final key in draft.answers.keys.toList()..sort())
             key: draft.answers[key]!.name,
         },
-        // Worry, duration and pre-care context travel with the report so the
-        // nurse summary can show them for older checks too. Absent on rows
-        // finalized before these screens existed — readers tolerate null.
-        if (draft.concerns != null)
-          'concerns': draft.concerns,
-        if (draft.durationKey != null) 'duration': draft.durationKey,
-        if (draft.givenCare.isNotEmpty)
-          'given': draft.givenCare.toList()..sort(),
       },
     );
     final existing = await txn.query(

@@ -162,10 +162,21 @@ async function handleChallenge(req, res) {
     }
     const user = users[0];
     const [verifiers] = await conn.execute(
-      'SELECT server_salt FROM user_verifiers WHERE user_id = ? LIMIT 1',
+      'SELECT server_salt, pin_iterations, cloud_iterations FROM user_verifiers WHERE user_id = ? LIMIT 1',
       [user.id]
     );
     let serverSalt = verifiers.length > 0 ? verifiers[0].server_salt : null;
+    // The cost this verifier was stretched at. Null on rows written before the
+    // column existed, which we pass through as absent rather than inventing a
+    // number — the client then uses its own platform cost, as it always did.
+    const pinIterations =
+      verifiers.length > 0 && verifiers[0].pin_iterations != null
+        ? Number(verifiers[0].pin_iterations)
+        : null;
+    const cloudIterations =
+      verifiers.length > 0 && verifiers[0].cloud_iterations != null
+        ? Number(verifiers[0].cloud_iterations)
+        : null;
 
     // If the user was created by a legacy client (no user_verifiers row yet,
     // possibly because outbox hasn't synced) and they have users.pin_hash set,
@@ -203,6 +214,11 @@ async function handleChallenge(req, res) {
       user_id: user.id,
       phone: user.phone,
       server_salt: serverSalt,
+      // Advertised so a replacement handset on a different platform derives the
+      // identical verifier instead of assuming its own compile-time cost and
+      // silently being told "Invalid credentials". Non-secret.
+      ...(pinIterations !== null ? { pin_iterations: pinIterations } : {}),
+      ...(cloudIterations !== null ? { cloud_iterations: cloudIterations } : {}),
     });
   } catch (err) {
     console.error('challenge failed for phone', phone, ':', err.message);
@@ -459,11 +475,177 @@ async function handleLogout(req, res) {
   }
 }
 
+// POST /api/auth/register — credential BOOTSTRAP for a brand-new device.
+//
+// Why this exists: /api/sync requires a JWT, and a JWT requires a challenge, and a
+// challenge requires a user_verifiers row — which is precisely what a first
+// registration is trying to deliver. Without this endpoint a device that registers
+// while offline can never push its own way online: the credential that unlocks the
+// push is inside the push. Registration therefore stayed local-only and cloud
+// recovery answered "no account found" for a worker who had been registered for days.
+//
+// SECURITY — this route is deliberately unauthenticated, and is safe only because
+// it is CREATE-ONLY:
+//   * if a verifier already exists for this user_id -> 409, never overwritten.
+//     Credential rotation stays on the authenticated paths (resetPin / changePin
+//     push user_verifiers while holding a JWT).
+//   * if the phone number is already registered under a different user_id -> 409,
+//     so guessing a colleague's number cannot hijack their account.
+// An attacker can at most pre-create a credential for a phone nobody has registered
+// yet; they cannot displace, read or mutate an existing worker's identity, and the
+// value they would write is a one-way HMAC of a PIN they do not know.
+async function handleProvisionRegistration(req, res) {
+  const body = req.body || {};
+  const f = (k) => (typeof body[k] === 'string' ? body[k].trim() : '');
+
+  const userId = f('user_id');
+  const phone = f('phone');
+  const serverSalt = f('server_salt');
+  const verifier = f('verifier');
+
+  // The cost the client actually stretched at, so a handset on another platform
+  // can reproduce the same verifier later. Optional: absent means an older
+  // client, and the row simply advertises nothing until the credential is next
+  // rotated. Bounded because these numbers are echoed back to other clients,
+  // and a stored 10^9 would become someone else's denial-of-service.
+  const iterField = (name) => {
+    const raw = body[name];
+    if (raw === undefined || raw === null || raw === '') return null;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 1 || n > 1000000) return undefined;
+    return n;
+  };
+  const pinIterations = iterField('pin_iterations');
+  const cloudIterations = iterField('cloud_iterations');
+  if (pinIterations === undefined || cloudIterations === undefined) {
+    return res.status(400).json({
+      ok: false,
+      error: 'pin_iterations and cloud_iterations must be integers between 1 and 1000000.',
+    });
+  }
+
+  if (!userId || !phone || !serverSalt || !verifier) {
+    return res
+      .status(400)
+      .json({ ok: false, error: 'user_id, phone, server_salt and verifier are required.' });
+  }
+  // Shape checks only — these are opaque base64/base64url blobs, and the server
+  // must never need to understand their contents to store them safely.
+  if (phone.length < 7 || phone.length > 20 || !/^[0-9+\s-]+$/.test(phone)) {
+    return res.status(400).json({ ok: false, error: 'Phone number is not valid.' });
+  }
+  if (serverSalt.length < 16 || serverSalt.length > 64) {
+    return res.status(400).json({ ok: false, error: 'server_salt is not valid.' });
+  }
+  if (verifier.length < 32 || verifier.length > 128) {
+    return res.status(400).json({ ok: false, error: 'verifier is not valid.' });
+  }
+
+  // Same sliding-window limiter the login path uses, keyed by caller and phone,
+  // so this route cannot be used to spam credential creation.
+  const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').toString().split(',')[0].trim();
+  const rk = `register:${ip}:${phone}`;
+  const rl = rateLimiter.check(rk);
+  rateLimiter.record(rk);
+  if (!rl.ok) {
+    return res.status(429).json({
+      ok: false,
+      error: 'Too many provisioning attempts.',
+      retry_after_seconds: rl.retrySec,
+    });
+  }
+
+  let conn;
+  try {
+    conn = await pool.getConnection();
+
+    const [existing] = await conn.execute(
+      'SELECT user_id FROM user_verifiers WHERE user_id = ? LIMIT 1',
+      [userId]
+    );
+    if (existing.length > 0) {
+      return res.status(409).json({
+        ok: false,
+        error: 'This account already has a cloud credential. Rotate it while signed in.',
+      });
+    }
+
+    const [clash] = await conn.execute(
+      'SELECT id FROM users WHERE phone = ? AND id <> ? LIMIT 1',
+      [phone, userId]
+    );
+    if (clash.length > 0) {
+      return res.status(409).json({
+        ok: false,
+        error: 'That phone number is already registered to a different account.',
+      });
+    }
+
+    const now = nowIso();
+    await conn.execute(
+      `INSERT INTO users
+         (id, full_name, phone, role, region, district, community,
+          chps_zone, facility_name, staff_id, preferred_language, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         full_name = VALUES(full_name), role = VALUES(role),
+         region = VALUES(region), district = VALUES(district),
+         community = VALUES(community), chps_zone = VALUES(chps_zone),
+         facility_name = VALUES(facility_name), staff_id = VALUES(staff_id),
+         preferred_language = VALUES(preferred_language)`,
+      [
+        userId,
+        f('full_name') || 'Unnamed user',
+        phone,
+        f('role') || 'frontlineHealthWorker',
+        f('region') || null,
+        f('district') || null,
+        f('community') || null,
+        f('chps_zone') || null,
+        f('facility_name') || null,
+        f('staff_id') || null,
+        f('preferred_language') || 'English',
+        f('created_at') || now,
+      ]
+    );
+
+    // pin_hash / pin_salt are never written here: this table holds only the
+    // domain-separated cloud verifier, per the GHS separation of on-device and
+    // cloud credentials.
+    await conn.execute(
+      `INSERT INTO user_verifiers (user_id, server_salt, verifier, device_id, pin_iterations, cloud_iterations, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE server_salt = VALUES(server_salt), verifier = VALUES(verifier),
+         device_id = VALUES(device_id), pin_iterations = VALUES(pin_iterations),
+         cloud_iterations = VALUES(cloud_iterations), updated_at = VALUES(updated_at)`,
+      [
+        userId,
+        serverSalt,
+        verifier,
+        f('device_id') || null,
+        pinIterations,
+        cloudIterations,
+        now,
+        now,
+      ]
+    );
+
+    rateLimiter.clear(rk);
+    return res.status(201).json({ ok: true, user_id: userId, provisioned: true });
+  } catch (err) {
+    console.error('registration provisioning failed for', phone, ':', err.message);
+    return res.status(500).json({ ok: false, error: 'Server error during provisioning.' });
+  } finally {
+    if (conn) conn.release();
+  }
+}
+
 module.exports = {
   handleChallenge,
   handleLogin,
   handleRefresh,
   handleLogout,
+  handleProvisionRegistration,
   expectedVerifierFromLocalHash,
   expectedVerifierFromPinBlankDevice,
   legacyVerifyPinDirect,

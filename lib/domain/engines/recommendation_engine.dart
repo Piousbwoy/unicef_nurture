@@ -583,23 +583,32 @@ abstract final class RecommendationEngine {
 
   // ---------------------------------------------------------- Guard-rails
 
-  /// Absolute danger signs that must never be under-triaged. The primary
-  /// mechanism is structural: a finding its engine tagged
-  /// [ClinicalFinding.isDangerSign] is a danger sign regardless of the
-  /// severity it was assigned or the wording of its label. The keyword list
-  /// remains as a backstop for findings not yet tagged, so the guard-rail
-  /// holds even mid-migration. Either way, if an engine ever mislabels a
-  /// convulsions finding as merely "priority", this pass still forces the
-  /// plan to urgent. Findings are positive assertions (an engine only emits
-  /// one when the sign is present), so a hit here is a true danger sign.
+  /// Absolute danger signs that must never be under-triaged.
+  ///
+  /// The primary mechanism is structural: a finding its engine tagged
+  /// [ClinicalFinding.isDangerSign] is a danger sign regardless of the severity
+  /// it was assigned or the wording of its label.
+  ///
+  /// The keyword list is a backstop for *protocol* findings that predate the
+  /// flag, and it deliberately matches on label text — an engine only emits a
+  /// finding when the sign is actually present, so a hit is a true danger sign.
+  /// It is never allowed to fire on on-device model output: a model assertion
+  /// is not a positive clinical finding, and escalating a patient to urgent
+  /// because an experimental label happened to contain the word "sepsis" would
+  /// quietly hand the model the triage authority the research contract withholds
+  /// from it. Only [ClinicalFinding.isDangerSign], which no model path sets, can
+  /// escalate such a finding.
   static List<String> _neverMissHits(List<ClinicalFinding> findings) {
     final hits = <String>[];
     for (final f in findings) {
-      final structural = f.isDangerSign;
-      final byKeyword = _neverMiss.any(
-        (sign) => f.label.toLowerCase().contains(sign),
-      );
-      if (structural || byKeyword) {
+      // Structural first: an engine that tagged this a danger sign means it.
+      if (f.isDangerSign) {
+        hits.add(f.label);
+        continue;
+      }
+      // Keyword backstop applies to protocol findings only.
+      if (f.aiGenerated) continue;
+      if (_neverMiss.any((sign) => f.label.toLowerCase().contains(sign))) {
         hits.add(f.label);
       }
     }

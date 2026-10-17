@@ -88,10 +88,15 @@ Future<ProviderContainer> _pumpShell(
           piper: models.piper,
         )),
         fhwWarmupRuntimeReadyProvider.overrideWithValue(models.runtimeReady),
-        narrationPreferenceReaderProvider.overrideWith((_) => () async => false),
-        narrationPreferenceWriterProvider.overrideWith((_) => (_) async {
-          fail('Warm-up must not write narration preferences');
-        }),
+        narrationPreferenceReaderProvider.overrideWith(
+          (_) =>
+              () async => false,
+        ),
+        narrationPreferenceWriterProvider.overrideWith(
+          (_) => (_) async {
+            fail('Warm-up must not write narration preferences');
+          },
+        ),
         visibleHouseholdsProvider.overrideWith((ref) async => [_household]),
         dayPlanProvider.overrideWith((ref) async => _emptyPlan),
         openReferralsProvider.overrideWith((ref) async => const []),
@@ -130,7 +135,9 @@ void main() {
   GoogleFonts.config.allowRuntimeFetching = false;
 
   for (final language in ['Hausa', 'Twi']) {
-    testWidgets('FHW shell entry silently warms only $language', (tester) async {
+    testWidgets('FHW shell entry silently warms only $language', (
+      tester,
+    ) async {
       final models = _WarmupHarness();
       final container = await _pumpShell(
         tester,
@@ -149,53 +156,57 @@ void main() {
   }
 
   for (final fails in [false, true]) {
-    testWidgets('offline runtime guard declines ${fails ? 'errors' : 'uncached runtime'}', (
-      tester,
-    ) async {
-      final models = _WarmupHarness()
-        ..runtimeCached = false
-        ..runtimeError = fails;
+    testWidgets(
+      'offline runtime guard declines ${fails ? 'errors' : 'uncached runtime'}',
+      (tester) async {
+        final models = _WarmupHarness()
+          ..runtimeCached = false
+          ..runtimeError = fails;
+        final container = await _pumpShell(
+          tester,
+          user: _user.copyWith(preferredLanguage: 'Hausa'),
+          warmup: models,
+        );
+        expect(models.log.loads, isEmpty);
+        expect(models.neural.isLoaded('Hausa'), isFalse);
+        expect(models.piper.supportsLanguage('Hausa'), isFalse);
+        expect(tester.takeException(), isNull);
+
+        models.runtimeCached = true;
+        models.runtimeError = false;
+        container.read(_accountProvider.notifier).state = _user.copyWith(
+          preferredLanguage: 'Twi',
+        );
+        await tester.pump();
+        await tester.pumpAndSettle();
+        expect(models.neural.isLoaded('Twi'), isTrue);
+        expect(models.piper.supportsLanguage('Twi'), isTrue);
+      },
+    );
+  }
+
+  testWidgets(
+    'offline runtime check completion cannot warm a superseded language',
+    (tester) async {
+      final models = _WarmupHarness();
+      final gate = models.runtimeGate = Completer<void>();
       final container = await _pumpShell(
         tester,
         user: _user.copyWith(preferredLanguage: 'Hausa'),
         warmup: models,
       );
       expect(models.log.loads, isEmpty);
-      expect(models.neural.isLoaded('Hausa'), isFalse);
-      expect(models.piper.supportsLanguage('Hausa'), isFalse);
-      expect(tester.takeException(), isNull);
-
-      models.runtimeCached = true;
-      models.runtimeError = false;
-      container.read(_accountProvider.notifier).state =
-          _user.copyWith(preferredLanguage: 'Twi');
+      container.read(_accountProvider.notifier).state = _user.copyWith(
+        preferredLanguage: 'Twi',
+      );
+      await tester.pumpAndSettle();
+      gate.complete();
       await tester.pump();
       await tester.pumpAndSettle();
-      expect(models.neural.isLoaded('Twi'), isTrue);
-      expect(models.piper.supportsLanguage('Twi'), isTrue);
-    });
-  }
-
-  testWidgets('offline runtime check completion cannot warm a superseded language', (
-    tester,
-  ) async {
-    final models = _WarmupHarness();
-    final gate = models.runtimeGate = Completer<void>();
-    final container = await _pumpShell(
-      tester,
-      user: _user.copyWith(preferredLanguage: 'Hausa'),
-      warmup: models,
-    );
-    expect(models.log.loads, isEmpty);
-    container.read(_accountProvider.notifier).state =
-        _user.copyWith(preferredLanguage: 'Twi');
-    await tester.pumpAndSettle();
-    gate.complete();
-    await tester.pump();
-    await tester.pumpAndSettle();
-    expect(models.log.loads, ['translation:Twi', 'piper:Twi']);
-    expect(models.log.maxActive, 1);
-  });
+      expect(models.log.loads, ['translation:Twi', 'piper:Twi']);
+      expect(models.log.maxActive, 1);
+    },
+  );
 
   testWidgets('offline runtime check cannot start loading after shell exit', (
     tester,
@@ -225,8 +236,9 @@ void main() {
     expect(models.log.loads, isEmpty);
 
     for (final language in ['Hausa', 'Twi']) {
-      container.read(_accountProvider.notifier).state =
-          _user.copyWith(preferredLanguage: language);
+      container.read(_accountProvider.notifier).state = _user.copyWith(
+        preferredLanguage: language,
+      );
       await tester.pump();
       await tester.pumpAndSettle();
       expect(models.neural.isLoaded(language), isTrue);
@@ -235,7 +247,10 @@ void main() {
     expect(models.neural.isLoaded('Hausa'), isFalse);
     expect(models.piper.supportsLanguage('Hausa'), isFalse);
     expect(models.log.loads, [
-      'translation:Hausa', 'piper:Hausa', 'translation:Twi', 'piper:Twi',
+      'translation:Hausa',
+      'piper:Hausa',
+      'translation:Twi',
+      'piper:Twi',
     ]);
     expect(models.log.nonLoadingCalls, isEmpty);
     expect(container.read(narrationEnabledProvider), isFalse);
@@ -247,12 +262,15 @@ void main() {
     final models = _WarmupHarness();
     final container = await _pumpShell(tester, warmup: models);
     for (final language in ['English', 'Dagbani', 'French', '']) {
-      container.read(_accountProvider.notifier).state =
-          _user.copyWith(preferredLanguage: language);
+      container.read(_accountProvider.notifier).state = _user.copyWith(
+        preferredLanguage: language,
+      );
       await tester.pumpAndSettle();
     }
     container.read(_accountProvider.notifier).state = AppUser.fromMap({
-      ..._user.toMap(), 'role': 'caregiver', 'preferred_language': 'Twi',
+      ..._user.toMap(),
+      'role': 'caregiver',
+      'preferred_language': 'Twi',
     });
     await tester.pumpAndSettle();
     container.read(_accountProvider.notifier).state = null;
@@ -262,32 +280,40 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a switch skips stale Piper work and serializes the new language', (
-    tester,
-  ) async {
-    final models = _WarmupHarness();
-    final gate = models.translation.gate = Completer<void>();
-    final container = await _pumpShell(
-      tester, user: _user.copyWith(preferredLanguage: 'Hausa'), warmup: models,
-    );
-    expect(find.text('Begin with the person here.'), findsOneWidget);
-    expect(models.neural.isLoaded('Hausa'), isFalse);
-    expect(models.piper.supportsLanguage('Hausa'), isFalse);
-    expect(models.log.loads, ['translation:Hausa']);
+  testWidgets(
+    'a switch skips stale Piper work and serializes the new language',
+    (tester) async {
+      final models = _WarmupHarness();
+      final gate = models.translation.gate = Completer<void>();
+      final container = await _pumpShell(
+        tester,
+        user: _user.copyWith(preferredLanguage: 'Hausa'),
+        warmup: models,
+      );
+      expect(find.text('Receive patient'), findsOneWidget);
+      expect(models.neural.isLoaded('Hausa'), isFalse);
+      expect(models.piper.supportsLanguage('Hausa'), isFalse);
+      expect(models.log.loads, ['translation:Hausa']);
 
-    container.read(_accountProvider.notifier).state =
-        _user.copyWith(preferredLanguage: 'Twi');
-    await tester.pumpAndSettle();
-    expect(models.log.loads, ['translation:Hausa']);
-    gate.complete();
-    await tester.pumpAndSettle();
+      container.read(_accountProvider.notifier).state = _user.copyWith(
+        preferredLanguage: 'Twi',
+      );
+      await tester.pumpAndSettle();
+      expect(models.log.loads, ['translation:Hausa']);
+      gate.complete();
+      await tester.pumpAndSettle();
 
-    expect(models.log.loads, ['translation:Hausa', 'translation:Twi', 'piper:Twi']);
-    expect(models.log.maxActive, 1);
-    expect(models.neural.isLoaded('Twi'), isTrue);
-    expect(models.piper.supportsLanguage('Twi'), isTrue);
-    expect(models.piper.supportsLanguage('Hausa'), isFalse);
-  });
+      expect(models.log.loads, [
+        'translation:Hausa',
+        'translation:Twi',
+        'piper:Twi',
+      ]);
+      expect(models.log.maxActive, 1);
+      expect(models.neural.isLoaded('Twi'), isTrue);
+      expect(models.piper.supportsLanguage('Twi'), isTrue);
+      expect(models.piper.supportsLanguage('Hausa'), isFalse);
+    },
+  );
 
   testWidgets('rapid switches coalesce and reuse an in-flight language load', (
     tester,
@@ -295,11 +321,14 @@ void main() {
     final models = _WarmupHarness();
     final gate = models.translation.gate = Completer<void>();
     final container = await _pumpShell(
-      tester, user: _user.copyWith(preferredLanguage: 'Hausa'), warmup: models,
+      tester,
+      user: _user.copyWith(preferredLanguage: 'Hausa'),
+      warmup: models,
     );
     for (final language in ['Twi', 'English', 'Hausa', ' ha ']) {
-      container.read(_accountProvider.notifier).state =
-          _user.copyWith(preferredLanguage: language);
+      container.read(_accountProvider.notifier).state = _user.copyWith(
+        preferredLanguage: language,
+      );
       await tester.pumpAndSettle();
     }
     expect(models.log.loads, ['translation:Hausa']);
@@ -309,8 +338,10 @@ void main() {
     expect(models.piper.supportsLanguage('Hausa'), isTrue);
     expect(models.log.maxActive, 1);
 
-    container.read(_accountProvider.notifier).state =
-        _user.copyWith(preferredLanguage: 'Hausa', facilityName: 'Updated');
+    container.read(_accountProvider.notifier).state = _user.copyWith(
+      preferredLanguage: 'Hausa',
+      facilityName: 'Updated',
+    );
     await tester.pumpAndSettle();
     expect(models.log.loads, ['translation:Hausa', 'piper:Hausa']);
   });
@@ -321,52 +352,63 @@ void main() {
     final models = _WarmupHarness();
     final gate = models.voice.gate = Completer<void>();
     final container = await _pumpShell(
-      tester, user: _user.copyWith(preferredLanguage: 'Hausa'), warmup: models,
+      tester,
+      user: _user.copyWith(preferredLanguage: 'Hausa'),
+      warmup: models,
     );
     expect(models.log.loads, ['translation:Hausa', 'piper:Hausa']);
-    container.read(_accountProvider.notifier).state =
-        _user.copyWith(preferredLanguage: 'Twi');
+    container.read(_accountProvider.notifier).state = _user.copyWith(
+      preferredLanguage: 'Twi',
+    );
     await tester.pumpAndSettle();
     expect(models.log.loads, ['translation:Hausa', 'piper:Hausa']);
     gate.complete();
     await tester.pumpAndSettle();
     expect(models.log.loads, [
-      'translation:Hausa', 'piper:Hausa', 'translation:Twi', 'piper:Twi',
+      'translation:Hausa',
+      'piper:Hausa',
+      'translation:Twi',
+      'piper:Twi',
     ]);
     expect(models.log.maxActive, 1);
     expect(models.piper.supportsLanguage('Twi'), isTrue);
   });
 
   for (final leave in ['English', 'sign-out', 'shell-exit', 'caregiver']) {
-    testWidgets('$leave cancels pending warm-up without disposing shared models', (
-      tester,
-    ) async {
-      final models = _WarmupHarness();
-      final gate = models.translation.gate = Completer<void>();
-      final container = await _pumpShell(
-        tester, user: _user.copyWith(preferredLanguage: 'Hausa'), warmup: models,
-      );
-      expect(models.log.loads, ['translation:Hausa']);
-      if (leave == 'shell-exit') {
-        container.read(_showShellProvider.notifier).state = false;
-      } else {
-        container.read(_accountProvider.notifier).state = switch (leave) {
-          'sign-out' => null,
-          'caregiver' => AppUser.fromMap({
-            ..._user.toMap(), 'role': 'caregiver', 'preferred_language': 'Hausa',
-          }),
-          _ => _user.copyWith(preferredLanguage: 'English'),
-        };
-      }
-      await tester.pumpAndSettle();
-      gate.complete();
-      await tester.pumpAndSettle();
-      expect(models.log.loads, ['translation:Hausa']);
-      expect(models.neural.isLoaded('Hausa'), isTrue);
-      expect(models.piper.supportsLanguage('Hausa'), isFalse);
-      expect(models.log.nonLoadingCalls, isEmpty);
-      expect(tester.takeException(), isNull);
-    });
+    testWidgets(
+      '$leave cancels pending warm-up without disposing shared models',
+      (tester) async {
+        final models = _WarmupHarness();
+        final gate = models.translation.gate = Completer<void>();
+        final container = await _pumpShell(
+          tester,
+          user: _user.copyWith(preferredLanguage: 'Hausa'),
+          warmup: models,
+        );
+        expect(models.log.loads, ['translation:Hausa']);
+        if (leave == 'shell-exit') {
+          container.read(_showShellProvider.notifier).state = false;
+        } else {
+          container.read(_accountProvider.notifier).state = switch (leave) {
+            'sign-out' => null,
+            'caregiver' => AppUser.fromMap({
+              ..._user.toMap(),
+              'role': 'caregiver',
+              'preferred_language': 'Hausa',
+            }),
+            _ => _user.copyWith(preferredLanguage: 'English'),
+          };
+        }
+        await tester.pumpAndSettle();
+        gate.complete();
+        await tester.pumpAndSettle();
+        expect(models.log.loads, ['translation:Hausa']);
+        expect(models.neural.isLoaded('Hausa'), isTrue);
+        expect(models.piper.supportsLanguage('Hausa'), isFalse);
+        expect(models.log.nonLoadingCalls, isEmpty);
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   testWidgets('shell reentry shares the queue while an old load is finishing', (
@@ -375,13 +417,16 @@ void main() {
     final models = _WarmupHarness();
     final gate = models.voice.gate = Completer<void>();
     final container = await _pumpShell(
-      tester, user: _user.copyWith(preferredLanguage: 'Hausa'), warmup: models,
+      tester,
+      user: _user.copyWith(preferredLanguage: 'Hausa'),
+      warmup: models,
     );
     expect(models.log.loads, ['translation:Hausa', 'piper:Hausa']);
     container.read(_showShellProvider.notifier).state = false;
     await tester.pumpAndSettle();
-    container.read(_accountProvider.notifier).state =
-        _user.copyWith(preferredLanguage: 'Twi');
+    container.read(_accountProvider.notifier).state = _user.copyWith(
+      preferredLanguage: 'Twi',
+    );
     container.read(_showShellProvider.notifier).state = true;
     await tester.pumpAndSettle();
     expect(models.log.loads, ['translation:Hausa', 'piper:Hausa']);
@@ -393,50 +438,58 @@ void main() {
     expect(models.log.nonLoadingCalls, isEmpty);
   });
 
-  testWidgets('failed packs stay unavailable and a later language still warms', (
-    tester,
-  ) async {
-    final models = _WarmupHarness();
-    models.translation.failures.add('Hausa');
-    models.voice.failures.add('Hausa');
-    final container = await _pumpShell(
-      tester, user: _user.copyWith(preferredLanguage: 'Hausa'), warmup: models,
-    );
-    expect(models.log.loads, ['translation:Hausa', 'piper:Hausa']);
-    expect(models.neural.isLoaded('Hausa'), isFalse);
-    expect(models.piper.supportsLanguage('Hausa'), isFalse);
-    expect(tester.takeException(), isNull);
-    container.read(_accountProvider.notifier).state =
-        _user.copyWith(preferredLanguage: 'Twi');
-    await tester.pump();
-    await tester.pumpAndSettle();
-    expect(models.neural.isLoaded('Twi'), isTrue);
-    expect(models.piper.supportsLanguage('Twi'), isTrue);
-    expect(models.log.nonLoadingCalls, isEmpty);
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets(
+    'failed packs stay unavailable and a later language still warms',
+    (tester) async {
+      final models = _WarmupHarness();
+      models.translation.failures.add('Hausa');
+      models.voice.failures.add('Hausa');
+      final container = await _pumpShell(
+        tester,
+        user: _user.copyWith(preferredLanguage: 'Hausa'),
+        warmup: models,
+      );
+      expect(models.log.loads, ['translation:Hausa', 'piper:Hausa']);
+      expect(models.neural.isLoaded('Hausa'), isFalse);
+      expect(models.piper.supportsLanguage('Hausa'), isFalse);
+      expect(tester.takeException(), isNull);
+      container.read(_accountProvider.notifier).state = _user.copyWith(
+        preferredLanguage: 'Twi',
+      );
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(models.neural.isLoaded('Twi'), isTrue);
+      expect(models.piper.supportsLanguage('Twi'), isTrue);
+      expect(models.log.nonLoadingCalls, isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
-  testWidgets('unexpected runtime errors do not escape or block the other service', (
-    tester,
-  ) async {
-    final models = _WarmupHarness();
-    models.translation.throwAvailability = true;
-    final container = await _pumpShell(
-      tester, user: _user.copyWith(preferredLanguage: 'Hausa'), warmup: models,
-    );
-    expect(models.neural.isLoaded('Hausa'), isFalse);
-    expect(models.piper.supportsLanguage('Hausa'), isTrue);
-    expect(tester.takeException(), isNull);
-    models.translation.throwAvailability = false;
-    models.voice.throwAvailability = true;
-    container.read(_accountProvider.notifier).state =
-        _user.copyWith(preferredLanguage: 'Twi');
-    await tester.pump();
-    await tester.pumpAndSettle();
-    expect(models.neural.isLoaded('Twi'), isTrue);
-    expect(models.piper.supportsLanguage('Twi'), isFalse);
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets(
+    'unexpected runtime errors do not escape or block the other service',
+    (tester) async {
+      final models = _WarmupHarness();
+      models.translation.throwAvailability = true;
+      final container = await _pumpShell(
+        tester,
+        user: _user.copyWith(preferredLanguage: 'Hausa'),
+        warmup: models,
+      );
+      expect(models.neural.isLoaded('Hausa'), isFalse);
+      expect(models.piper.supportsLanguage('Hausa'), isTrue);
+      expect(tester.takeException(), isNull);
+      models.translation.throwAvailability = false;
+      models.voice.throwAvailability = true;
+      container.read(_accountProvider.notifier).state = _user.copyWith(
+        preferredLanguage: 'Twi',
+      );
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(models.neural.isLoaded('Twi'), isTrue);
+      expect(models.piper.supportsLanguage('Twi'), isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('the clinic header builds instead of collapsing the shell', (
     tester,
@@ -454,10 +507,31 @@ void main() {
     await _pumpShell(tester);
 
     // The grey-panel symptom was the *body* disappearing with the header, so
-    // the header alone is not enough evidence.
-    expect(find.text('Begin with the person here.'), findsOneWidget);
-    expect(find.text('Receive a patient'), findsOneWidget);
+    // the header alone is not enough evidence: pin one control from each.
+    expect(find.text('Receive patient'), findsOneWidget);
+    expect(
+      find.textContaining('does not rule out urgent care needs'),
+      findsOneWidget,
+    );
   });
+
+  testWidgets(
+    'the header carries the queue, the record count and the sync line',
+    (tester) async {
+      await _pumpShell(tester);
+
+      // The queue badge is the dashboard's one way into the live queue now the
+      // register card is gone; the record inventory and the honest sync readout
+      // moved up from the old second hero, so the tab became a single panel with
+      // nothing lost.
+      expect(find.text('Queue clear'), findsOneWidget);
+      expect(find.text('1 on record'), findsOneWidget);
+      expect(
+        find.text('Network available · No items waiting to send'),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('a long zone stays on one line inside the header', (
     tester,

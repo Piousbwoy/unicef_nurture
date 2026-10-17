@@ -1,0 +1,139 @@
+00:00 +0: loading C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart
+00:00 +0: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: analysis uses the same experimental display permission as reasoning
+00:00 +1: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: experimental card leads clinical findings without changing urgent care
+00:08 +2: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the experimental score never calls itself confidence
+00:13 +3: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: pending save is explicit and late inference cannot rewrite it
+00:14 +4: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: a blocked model draws no ring
+00:17 +5: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: failed inference save is explicit and keeps protocol care
+00:17 +6: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: research-only signals cannot add a PSBI treatment or referral
+00:19 +7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: research-only signals cannot add a PSBI treatment or referral
+00:19 +8: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: pre-referral stabilisation still outranks the model hero
+00:23 +9: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: pre-referral stabilisation still outranks the model hero
+00:23 +10: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: 14-day-old convulsions activate clinical PSBI outside model support
+00:26 +11: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the evidence behind the verdict is shown, not folded away
+00:26 +12: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the evidence behind the verdict is shown, not folded away
+00:26 +13: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: uncollected symptoms and ambiguous cord redness stay unknown
+00:26 +14: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the decision is stated once, not four times
+00:26 +15: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the decision is stated once, not four times
+00:27 +16: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the decision is stated once, not four times
+00:27 +17: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the decision is stated once, not four times
+00:29 +18: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: analysis states suppress numbers and preserve input correction
+00:30 +19: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the worklist keeps the title the queue already uses
+00:32 +20: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: research output requires matching usable permitted evidence
+00:32 +21: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: one doorway to the report, not three
+00:32 +22: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: one doorway to the report, not three
+00:36 +23: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: late experimental output preserves referral and worklist choices
+00:36 +24: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: saved clinical findings never acquire an experimental score
+00:38 +25: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: clinical override reason survives analysis and evidence navigation
+00:44 +26: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: complete decision workspace supports 320px and 200% text
+00:47 +27: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: decision header and worklist support 320px and 200% text
+00:47 +28: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: the sheet lists each action once: EPI and food sit in their own sections
+00:50 +29: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: a dose reads once: the schedule is only under IMMUNISATION
+00:53 +30: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: a folded sentence keeps the clinical driver beside the count
+00:54 +31: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: with the schedule folded away, the deck says nothing rather than all-clear
+00:55 +32: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: with no immunisation gap the verdict line is the saved one
+00:57 +33: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: action completion survives reordering without losing distinct indications
+00:57 +34: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: vitals strip shows decision-relevant vitals and hides when none
+01:00 +35: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/assess_tab_test.dart: AssessTab degrades to a restricted state without the capability
+01:03 +36: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/assess_tab_test.dart: AssessTab shows the intake action, search and an honest empty record
+01:05 +37: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/assess_tab_test.dart: AssessTab finds a household by the name of a person inside it
+01:07 +38: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/assess_tab_test.dart: AssessTab filters the register to one care group
+01:07 +39: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/assess_tab_test.dart: AssessTab gives every record row its own assess shortcut
+01:08 +40: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/assess_tab_test.dart: AssessTab keeps household search when patient names cannot load
+01:11 +41: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_today_tab_test.dart: the body is a single panel with no second hero
+01:14 +42: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_today_tab_test.dart: the body settles with animations disabled and throws nothing
+01:15 +43: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: FHW shell entry silently warms only Hausa
+01:16 +44: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: FHW shell entry silently warms only Hausa
+01:16 +45: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: FHW shell entry silently warms only Hausa
+01:17 +46: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: FHW shell entry silently warms only Hausa
+01:17 +47: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: FHW shell entry silently warms only Hausa
+01:17 +48: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: FHW shell entry silently warms only Hausa
+01:19 +49: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: FHW shell entry silently warms only Hausa
+01:21 +50: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: FHW shell entry silently warms only Twi
+01:22 +51: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: offline runtime guard declines uncached runtime
+01:23 +52: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: offline runtime guard declines errors
+01:24 +53: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: offline runtime check completion cannot warm a superseded language
+01:25 +54: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: offline runtime check cannot start loading after shell exit
+01:25 +55: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: language changes warm the new preference without narration
+01:26 +56: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: unsupported preferences and non-FHW accounts never warm
+01:27 +57: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: a switch skips stale Piper work and serializes the new language
+01:28 +58: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: empty schedule describes local records without reassurance
+01:30 +59: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: empty schedule describes local records without reassurance
+01:31 +60: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: empty schedule describes local records without reassurance
+01:31 +61: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: empty schedule describes local records without reassurance
+01:31 +62: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: empty schedule describes local records without reassurance
+01:32 +63: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: empty schedule describes local records without reassurance
+01:32 +64: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: caregiver cancels pending warm-up without disposing shared models
+01:32 +65: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: all overdue and today contacts have identity, dates and actions at 320px / 200%
+01:33 +66: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: all overdue and today contacts have identity, dates and actions at 320px / 200%
+01:35 +67: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: all overdue and today contacts have identity, dates and actions at 320px / 200%
+01:36 +68: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: all overdue and today contacts have identity, dates and actions at 320px / 200%
+01:37 +69: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: all overdue and today contacts have identity, dates and actions at 320px / 200%
+01:38 +70: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: a header that builds leaves the tab body on screen
+01:38 +71: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: overdue-only work remains actionable with a household fallback
+01:39 +72: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: overdue-only work remains actionable with a household fallback
+01:40 +73: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: overdue-only work remains actionable with a household fallback
+01:40 +74: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: a scheduled contact opens the intake for its household, not a new visit
+01:43 +75: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: missing plan identity resolves through existing providers
+01:43 +76: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: urgent chase explains saved status and preserves check-in action
+01:48 +77: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the desk sorts an unanswered referral into the bucket it earned
+01:52 +78: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: household keeps clinical content without a family-code action at phone width
+01:53 +79: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: household keeps clinical content without a family-code action at phone width
+01:54 +80: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: household keeps clinical content without a family-code action at phone width
+01:55 +81: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: household keeps clinical content without a family-code action at phone width
+01:57 +82: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the desk an answered case leaves the awaiting column and asks to be revisited
+01:57 +83: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: summary screen has no overflows at phone width
+01:58 +84: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the desk two unanswered visits make it a trace, not a bad afternoon
+01:58 +85: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the desk reads at 320px and 200% text and opens the check-in
+02:01 +86: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: result screen has no overflows at phone width
+02:03 +87: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the desk hands over SBAR, support and the household record
+02:04 +88: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the desk calling opens the dialler and writes nothing
+02:05 +89: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the desk the staff code is the only thing that names a verifier
+02:08 +90: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the desk a verifier records the facility outcome as treated
+02:10 +91: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the desk a verifier records a death witnessed at the facility
+02:12 +92: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the desk a verifier may confirm arrival, treatment or death
+02:12 +93: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/sbar_card_test.dart: fromAssessment composes every SBAR section from the record
+02:12 +94: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/sbar_card_test.dart: fromAssessment composes every SBAR section from the record
+02:12 +95: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/sbar_card_test.dart: fromAssessment composes every SBAR section from the record
+02:13 +96: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/sbar_card_test.dart: fromAssessment composes every SBAR section from the record
+02:13 +97: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/sbar_card_test.dart: fromAssessment composes every SBAR section from the record
+02:15 +98: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/sbar_card_test.dart: fromAssessment composes every SBAR section from the record
+02:16 +99: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in is one write carrying the answer, the status and the note
+02:17 +100: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in is one write carrying the answer, the status and the note
+02:18 +101: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in is one write carrying the answer, the status and the note
+02:18 +102: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in an unanswered knock leaves a issued referral alone
+02:19 +103: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in an unanswered knock leaves a travelling referral alone
+02:20 +104: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in an unanswered knock leaves a arrived referral alone
+02:21 +105: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in an unanswered knock leaves a treated referral alone
+02:23 +106: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in an unanswered knock leaves a didNotAttend referral alone
+02:24 +107: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in an unanswered knock leaves a refused referral alone
+02:25 +108: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in an unanswered knock leaves a cancelled referral alone
+02:27 +109: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in an unanswered knock leaves a died referral alone
+02:28 +110: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: FloatingAcrylicDock renders every destination with a key and reports taps
+02:30 +111: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: FloatingAcrylicDock renders every destination with a key and reports taps
+02:31 +112: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: FloatingAcrylicDock renders every destination with a key and reports taps
+02:31 +113: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in not going has to be explained before it can be saved
+02:32 +114: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: FloatingAcrylicDock selection follows the index and the pill glides
+02:33 +115: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in worse or the same can raise a chained referral on the spot
+02:34 +116: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: FloatingAcrylicDock reduced motion: pill jumps instantly but still switches
+02:34 +117: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in getting better offers no second referral
+02:35 +118: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: FloatingAcrylicDock fits 320px at 200% text without overflow
+02:35 +119: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in a failed save keeps every answer and retries once
+02:36 +120: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in a failed save keeps every answer and retries once
+02:36 +121: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in a failed save keeps every answer and retries once
+02:36 +122: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: CatalystCapsule fits 320px at 200% text without overflow
+02:37 +123: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in leaving without saving writes nothing
+02:37 +124: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: BentoTelemetryDeck wide mode shows real telemetry and every tile taps through
+02:38 +125: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: BentoTelemetryDeck stacks narrow, names offline state honestly, no overflow
+02:39 +126: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: StaggeredEntrance animates in under motion
+02:39 +127: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: StaggeredEntrance renders the static final frame under reduced motion
+02:40 +128: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: SwipeRevealActions tap is the primary action; drag reveals; tap while open closes
+02:40 +129: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: SwipeRevealActions reveal still works under reduced motion — it snaps
+02:40 +130: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: CockpitGauge draws exactly the number it is given
+02:41 +131: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: CockpitGauge renders no band chips when no uncertainty is given
+02:41 +132: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: CockpitGauge the dial sweep obeys the motion gate
+02:41 +133: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: CockpitGauge fits 320px at 200% text without overflow
+02:45 +134: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/clinic_queue_test.dart: the queue is many open visits, newest first, joined per household, and closes on completion
+02:46 +135: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/clinic_queue_test.dart: clinic day stats derive received, still-open and door-to-provider time
+02:47 +136: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/clinic_queue_test.dart: the board lists tickets in arrival order and gates cancel
+02:50 +137: All tests passed!

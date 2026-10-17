@@ -1,0 +1,109 @@
+diff --git a/lib/domain/services/caregiver_today_planner.dart b/lib/domain/services/caregiver_today_planner.dart
+index afe4039..ef46315 100644
+--- a/lib/domain/services/caregiver_today_planner.dart
++++ b/lib/domain/services/caregiver_today_planner.dart
+@@ -91,8 +91,9 @@ class CaregiverTodayPlanner {
+       // Emergency information remains visible even when another person is selected.
+       if (!urgent &&
+           selectedPersonId != null &&
+-          item.personId != selectedPersonId)
++          item.personId != selectedPersonId) {
+         return;
++      }
+       (urgent ? attention : routine).putIfAbsent(item.identity, () => item);
+     }
+ 
+@@ -130,23 +131,12 @@ class CaregiverTodayPlanner {
+         urgent: urgent,
+       );
+     }
+-    // "I have arrived" closes the reminder, not the danger sign. The report
+-    // itself still reads as un-cleared wherever it is shown; what stops here is
+-    // a Today card nagging a family that already went and came back.
+-    bool reachedFacility(HomeCheck check) => activity.any(
+-      (a) =>
+-          a.scope == scope &&
+-          a.personId == check.personId &&
+-          a.kind == CaregiverActivityKind.arrival &&
+-          a.occurredAt.isAfter(check.checkedAt),
+-    );
+     final concerning =
+         checks
+             .where(
+               (c) =>
+                   c.householdId == scope.householdId &&
+-                  c.verdict != HomeCheckVerdict.fine &&
+-                  !reachedFacility(c),
++                  c.verdict != HomeCheckVerdict.fine,
+             )
+             .toList()
+           ..sort((a, b) => b.checkedAt.compareTo(a.checkedAt));
+@@ -172,46 +162,6 @@ class CaregiverTodayPlanner {
+         urgent: true,
+       );
+     }
+-    // The recheck promise: a caregiver who ticked "I will check again
+-    // tomorrow" sees that promise today, whatever else is selected, until
+-    // a new check for the same person discharges it.
+-    for (final person in people.values) {
+-      final promised = activity.any(
+-        (a) =>
+-            a.scope == scope &&
+-            a.personId == person.id &&
+-            a.kind == CaregiverActivityKind.dailyTask &&
+-            a.sourceId != 'everyday' &&
+-            a.itemKey == 'recheck' &&
+-            a.occurrenceKey == dateKey,
+-      );
+-      if (!promised) continue;
+-      final checkedToday = checks.any(
+-        (c) =>
+-            c.householdId == scope.householdId &&
+-            c.personId == person.id &&
+-            caregiverDateKey(c.checkedAt) == dateKey,
+-      );
+-      if (checkedToday) continue;
+-      add(
+-        CaregiverFocus(
+-          personId: person.id,
+-          sourceId: 'recheck',
+-          itemKey: 'recheck-promised',
+-          source: CaregiverFocusSource.homeCheck,
+-          title:
+-              'You promised to check '
+-              '${person.fullName.split(' ').first} again today',
+-          detail:
+-              'A check asked to be repeated today. If anything worries you, '
+-              'run the danger-sign check now.',
+-          route: CaregiverFocusRoute.check,
+-          priority: 2,
+-          sourceTime: today,
+-        ),
+-        urgent: true,
+-      );
+-    }
+     final orderedContacts =
+         contacts.where((c) => c.householdId == scope.householdId).toList()
+           ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+@@ -240,8 +190,9 @@ class CaregiverTodayPlanner {
+     for (final assessment in assessments) {
+       final previous = latest[assessment.personId];
+       if (previous == null ||
+-          previous.performedAt.isBefore(assessment.performedAt))
++          previous.performedAt.isBefore(assessment.performedAt)) {
+         latest[assessment.personId] = assessment;
++      }
+     }
+     for (final assessment in latest.values) {
+       int? days = assessment.result.followUpInDays;
+@@ -280,8 +231,9 @@ class CaregiverTodayPlanner {
+             c.personId == assessment.personId &&
+             c.assessmentId == assessment.id &&
+             c.purpose.trim().toLowerCase() == purpose,
+-      ))
++      )) {
+         continue;
++      }
+       final origin = assessment.performedAt.toLocal();
+       final due = DateTime(origin.year, origin.month, origin.day + days);
+       add(

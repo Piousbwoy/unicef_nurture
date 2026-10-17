@@ -6,6 +6,7 @@ import '../../../app/providers.dart';
 import '../../../core/audio/speech_content_policy.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/glass.dart';
+import '../../../core/theme/lumina.dart';
 import '../../../core/theme/motion.dart';
 import '../../../domain/entities/caregiver.dart';
 import '../../../domain/entities/core.dart';
@@ -192,9 +193,7 @@ class CaregiverFamilyTab extends ConsumerWidget {
                           members.valueOrNull?.isEmpty == true
                               ? 'Add a family member above to see everyday ideas.'
                               : 'No everyday ideas are listed here yet. Confirm ages in the family record for age-specific guidance.',
-                          style: AppType.body.copyWith(
-                            color: CompanionColors.muted,
-                          ),
+                          style: Lumina.body(color: Lumina.diveSoft),
                         ),
                       ),
                     LayoutBuilder(
@@ -268,9 +267,7 @@ class CaregiverFamilyTab extends ConsumerWidget {
                       const SizedBox(height: 8),
                       Text(
                         'Done means you reported trying an activity today. It does not confirm recovery or close a referral.',
-                        style: AppType.caption.copyWith(
-                          color: CompanionColors.muted,
-                        ),
+                        style: Lumina.body(size: 12, color: Lumina.inkMuted),
                       ),
                     ],
                   ],
@@ -295,18 +292,12 @@ class _SectionTitle extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          title,
-          style: AppType.title.copyWith(
-            fontSize: 19,
-            color: CompanionColors.ink,
-          ),
-        ),
+        Text(title, style: Lumina.display(19, weight: 700)),
         if (subtitle != null) ...[
           const SizedBox(height: 5),
           Text(
             subtitle!,
-            style: AppType.caption.copyWith(color: CompanionColors.muted),
+            style: Lumina.body(size: 12.5, color: Lumina.inkMuted),
           ),
         ],
       ],
@@ -319,17 +310,7 @@ class _PearlCard extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(20),
-    decoration: BoxDecoration(
-      color: CaregiverLuxePalette.pearlSurface,
-      borderRadius: BorderRadius.circular(28),
-      border: Border.all(color: CaregiverLuxePalette.hairLineQuiet, width: 0.5),
-      boxShadow: CaregiverLuxePalette.featheredShadow,
-    ),
-    child: child,
-  );
+  Widget build(BuildContext context) => LumenCard(hero: true, child: child);
 }
 
 class _LocalPlaceholder extends StatelessWidget {
@@ -339,10 +320,7 @@ class _LocalPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 16),
-    child: Text(
-      label,
-      style: AppType.body.copyWith(color: CompanionColors.muted),
-    ),
+    child: Text(label, style: Lumina.body(size: 13.5, color: Lumina.inkMuted)),
   );
 }
 
@@ -364,114 +342,151 @@ class _FamilyHero extends ConsumerWidget {
         : now.hour < 17
         ? 'Good afternoon'
         : 'Good evening';
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: CaregiverLuxePalette.pearlSurface,
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: CaregiverLuxePalette.hairLineQuiet),
-        boxShadow: CaregiverLuxePalette.featheredShadow,
-      ),
-      child: Stack(
-        children: [
-          const Positioned(
-            right: -16,
-            top: 6,
-            child: ExcludeSemantics(child: _FamilyOrbitMark()),
+    return Column(
+      children: [
+        Container(
+          height: 1.4,
+          margin: const EdgeInsets.only(bottom: 3),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.transparent, Lumina.glow, Colors.transparent],
+            ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(22, 21, 22, 19),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+        ),
+        Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(Lumina.rLg),
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Lumina.deep, Lumina.navy, Color(0xFF1E4785)],
+              stops: [0.0, 0.55, 1.0],
+            ),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x4D040E1F),
+                blurRadius: 34,
+                offset: Offset(0, 14),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: const Alignment(1.1, -1.1),
+                      radius: 1.15,
+                      colors: [
+                        Lumina.bright.withValues(alpha: 0.26),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const Positioned(
+                right: -16,
+                top: 6,
+                child: ExcludeSemantics(child: _FamilyOrbitMark()),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 21, 22, 19),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 7,
-                      height: 7,
-                      decoration: const BoxDecoration(
-                        color: CaregiverLuxePalette.azurePrimary,
-                        shape: BoxShape.circle,
+                    LumeFrost(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 7,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const LumePulse(color: Lumina.glow, size: 7),
+                          const SizedBox(width: 9),
+                          Flexible(
+                            child: Text(
+                              DateFormat(
+                                'EEEE  ·  d MMMM',
+                              ).format(now).toUpperCase(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(height: 18),
                     Text(
-                      DateFormat('EEEE  ·  d MMMM').format(now).toUpperCase(),
-                      style: AppType.eyebrow.copyWith(
-                        color: CaregiverLuxePalette.twilightMuted,
-                        letterSpacing: 1.0,
-                        fontSize: 9.5,
+                      '$part, $name.',
+                      style: Lumina.display(25, color: Colors.white),
+                    ),
+                    const SizedBox(height: 7),
+                    Text(
+                      household?.name ?? 'Your family, together.',
+                      style: Lumina.body(
+                        size: 15,
+                        color: Lumina.diveInk,
+                        weight: 600,
+                      ),
+                    ),
+                    if (household != null &&
+                        household.community.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        household.community,
+                        style: Lumina.body(size: 12.5, color: Lumina.diveMuted),
+                      ),
+                    ],
+                    const SizedBox(height: 17),
+                    LumeFrost(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 9,
+                      ),
+                      radius: 14,
+                      sigma: 10,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.lock_outline_rounded,
+                            size: 14,
+                            color: Lumina.diveInk,
+                          ),
+                          const SizedBox(width: 7),
+                          Flexible(
+                            child: Text(
+                              'Local-only notes and home checks are not '
+                              'automatically uploaded.',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                height: 1.35,
+                                fontWeight: FontWeight.w600,
+                                color: Lumina.diveInk,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 19),
-                Text(
-                  '$part, $name.',
-                  style: AppType.headline.copyWith(
-                    color: CaregiverLuxePalette.twilightMidnight,
-                    fontSize: 24,
-                    height: 1.12,
-                    letterSpacing: -0.7,
-                  ),
-                ),
-                const SizedBox(height: 7),
-                Text(
-                  household?.name ?? 'Your family, together.',
-                  style: AppType.body.copyWith(
-                    color: CaregiverLuxePalette.twilightNavy,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (household != null && household.community.isNotEmpty) ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    household.community,
-                    style: AppType.caption.copyWith(
-                      color: CaregiverLuxePalette.twilightMuted,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 17),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 11,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: CaregiverLuxePalette.azureIce,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: CaregiverLuxePalette.hairLineQuiet,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.lock_outline_rounded,
-                        size: 14,
-                        color: CaregiverLuxePalette.twilightNavy,
-                      ),
-                      const SizedBox(width: 7),
-                      Flexible(
-                        child: Text(
-                          'Local-only notes and home checks are not automatically uploaded',
-                          style: AppType.caption.copyWith(
-                            color: CaregiverLuxePalette.twilightNavy,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -498,7 +513,7 @@ class _FamilyOrbitPainter extends CustomPainter {
     final orbitPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1
-      ..color = CaregiverLuxePalette.azurePrimary.withValues(alpha: 0.12);
+      ..color = Lumina.glow.withValues(alpha: 0.16);
     for (final rect in [
       Rect.fromCenter(center: center, width: 58, height: 36),
       Rect.fromCenter(center: center, width: 90, height: 68),
@@ -518,8 +533,8 @@ class _FamilyOrbitPainter extends CustomPainter {
         point,
         radius,
         Paint()
-          ..color = CaregiverLuxePalette.azurePrimary.withValues(
-            alpha: i == stars.length - 1 ? 0.28 : 0.16,
+          ..color = Lumina.glow.withValues(
+            alpha: i == stars.length - 1 ? 0.42 : 0.22,
           ),
       );
     }
@@ -601,7 +616,7 @@ class _FamilyCarouselState extends ConsumerState<_FamilyCarousel> {
         if (widget.members.isEmpty)
           Text(
             'Add the people you care for to get started.',
-            style: AppType.body.copyWith(color: CompanionColors.muted),
+            style: Lumina.body(color: Lumina.inkMuted),
           )
         else if (!settings.hasValue) ...[
           if (settings.hasError)
@@ -684,40 +699,47 @@ class _MemberOrb extends StatelessWidget {
       _ => null,
     };
     final portrait = Container(
-      width: 76,
-      height: 76,
-      padding: const EdgeInsets.all(4),
+      width: 82,
+      height: 82,
+      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: CaregiverLuxePalette.pearlSurface,
-        border: Border.all(
-          color: selected
-              ? CaregiverLuxePalette.azurePrimary
-              : CaregiverLuxePalette.hairLineQuiet,
-          width: selected ? 2.5 : 1,
-        ),
+        gradient: selected ? Lumina.tide : null,
+        border: selected
+            ? null
+            : Border.all(color: Lumina.core.withValues(alpha: 0.16)),
+        boxShadow: selected && VisualEffects.of(context).blur
+            ? const [Lumina.aura]
+            : const [],
       ),
       child: ClipOval(
-        child: image == null
-            ? ColoredBox(
-                color: CaregiverLuxePalette.azureIce,
-                child: Icon(
+        child: ColoredBox(
+          color: Lumina.pearl,
+          child: image == null
+              ? Icon(
                   person == null
                       ? Icons.family_restroom_rounded
                       : Icons.person_outline_rounded,
-                  color: CompanionColors.blue,
+                  color: Lumina.core,
                   size: 30,
+                )
+              : Image.asset(
+                  image,
+                  fit: BoxFit.cover,
+                  excludeFromSemantics: true,
                 ),
-              )
-            : Image.asset(image, fit: BoxFit.cover, excludeFromSemantics: true),
+        ),
       ),
     );
     final name = Text(
       label,
       textAlign: wide ? TextAlign.start : TextAlign.center,
-      style: AppType.label.copyWith(
-        color: selected ? CompanionColors.blue : CompanionColors.ink,
-        fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+      style: TextStyle(
+        fontFamily: 'Sora',
+        fontSize: 12.5,
+        fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+        letterSpacing: -0.1,
+        color: selected ? Lumina.core : Lumina.ink,
       ),
     );
     return Semantics(
@@ -773,41 +795,72 @@ class _QuickActions extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      FilledButton.icon(
-        onPressed: onCheck,
-        style: FilledButton.styleFrom(
-          minimumSize: const Size(48, 56),
-          padding: const EdgeInsets.all(16),
-          backgroundColor: CompanionColors.blue,
-          foregroundColor: Colors.white,
+      Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(Lumina.rMd),
+          gradient: Lumina.tide,
+          boxShadow: VisualEffects.of(context).blur
+              ? const [Lumina.aura]
+              : const [],
+        ),
+        child: Material(
+          color: Colors.transparent,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(Lumina.rMd),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onCheck,
+            child: SizedBox(
+              height: 58,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.health_and_safety_outlined,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Text(
+                      'Check on someone now',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontFamily: 'Sora',
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
-        icon: const Icon(Icons.health_and_safety_outlined),
-        label: const Text('Check on someone now', textAlign: TextAlign.center),
       ),
-      const SizedBox(height: 12),
+      const SizedBox(height: 14),
       Wrap(
-        spacing: 4,
-        runSpacing: 0,
+        spacing: 10,
+        runSpacing: 8,
         children: [
-          for (final (label, icon, action) in [
-            ('Local foods', Icons.restaurant_outlined, onFood),
-            ('Play & learn', Icons.toys_outlined, onPlay),
-            ('Audio guides', Icons.volume_up_outlined, onListen),
-          ])
-            TextButton.icon(
-              onPressed: action,
-              style: TextButton.styleFrom(
-                minimumSize: const Size(48, 48),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                foregroundColor: CompanionColors.ink,
-                tapTargetSize: MaterialTapTargetSize.padded,
-              ),
-              icon: Icon(icon, size: 19, color: CompanionColors.blue),
-              label: Text(label, style: AppType.label),
-            ),
+          GhostPill(
+            label: 'Local foods',
+            icon: Icons.restaurant_outlined,
+            onPressed: onFood,
+          ),
+          GhostPill(
+            label: 'Play & learn',
+            icon: Icons.toys_outlined,
+            onPressed: onPlay,
+          ),
+          GhostPill(
+            label: 'Audio guides',
+            icon: Icons.volume_up_outlined,
+            onPressed: onListen,
+          ),
         ],
       ),
     ],
@@ -829,9 +882,8 @@ class CaregiverFocusCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final accent = focus.priority <= 1
-        ? AppColors.triageRed
-        : CompanionColors.blue;
+    // On the hero blue, alarm is a warm pearl-red, calm is plain light.
+    final accent = focus.priority <= 1 ? const Color(0xFFFFB4B4) : Colors.white;
     final now = ref.watch(caregiverCalendarProvider).toLocal();
     final overdue =
         focus.dueDate != null &&
@@ -847,15 +899,20 @@ class CaregiverFocusCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Container(
+              height: 3,
+              margin: const EdgeInsets.only(bottom: 14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(3),
+                gradient: LinearGradient(
+                  colors: [accent, accent.withValues(alpha: 0.12)],
+                ),
+              ),
+            ),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    focus.source.label,
-                    style: AppType.label.copyWith(color: accent),
-                  ),
-                ),
+                Expanded(child: MicroLabel(focus.source.label, color: accent)),
                 const SizedBox(width: 8),
                 AudioButton(
                   text:
@@ -872,45 +929,54 @@ class CaregiverFocusCard extends ConsumerWidget {
             const SizedBox(height: 10),
             Text(
               focus.title,
-              style: AppType.title.copyWith(
-                color: CompanionColors.ink,
-                fontSize: 18,
-              ),
+              style: Lumina.display(17.5, weight: 700, color: Colors.white),
             ),
             const SizedBox(height: 8),
             Text(
               who,
-              style: AppType.caption.copyWith(color: CompanionColors.muted),
+              style: Lumina.body(
+                size: 12.5,
+                weight: 600,
+                color: Lumina.diveMuted,
+              ),
             ),
             const SizedBox(height: 10),
-            Text(
-              focus.detail,
-              style: AppType.body.copyWith(color: CompanionColors.muted),
-            ),
+            Text(focus.detail, style: Lumina.body(color: Lumina.diveSoft)),
             if (due != null) ...[
               const SizedBox(height: 10),
               Text(
                 due,
-                style: AppType.label.copyWith(
-                  color: overdue ? AppColors.triageRed : CompanionColors.muted,
+                style: Lumina.body(
+                  size: 12.5,
+                  weight: 700,
+                  color: overdue ? const Color(0xFFFFB4B4) : Lumina.diveMuted,
                 ),
               ),
             ],
             const SizedBox(height: 18),
-            FilledButton.icon(
-              onPressed: () => onOpen(),
-              style: FilledButton.styleFrom(
-                backgroundColor: accent,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(48, 48),
-                padding: const EdgeInsets.all(14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+            if (focus.priority <= 1)
+              FilledButton.icon(
+                onPressed: () => onOpen(),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.triageRed,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(48, 50),
+                  padding: const EdgeInsets.all(14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(Lumina.rSm),
+                  ),
                 ),
+                icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                label: const Text('Open guidance', textAlign: TextAlign.center),
+              )
+            else
+              SapphireButton(
+                onPressed: () => onOpen(),
+                icon: Icons.arrow_forward_rounded,
+                label: 'Open guidance',
+                expand: true,
+                radius: Lumina.rSm,
               ),
-              icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-              label: const Text('Open guidance', textAlign: TextAlign.center),
-            ),
             if (focus.canComplete) ...[
               const SizedBox(height: 8),
               CaregiverTaskToggle(

@@ -14,6 +14,7 @@ import 'package:intl/intl.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/fhw_luxe.dart';
 import '../../core/theme/motion.dart';
 import '../../domain/entities/visit.dart';
 import '../visit/roll_call_screen.dart';
@@ -39,7 +40,9 @@ class _ClinicQueueScreenState extends ConsumerState<ClinicQueueScreen> {
 
   Future<void> _resume(String householdId) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => RollCallScreen(householdId: householdId)),
+      MaterialPageRoute(
+        builder: (_) => RollCallScreen(householdId: householdId),
+      ),
     );
     if (mounted) _refresh();
   }
@@ -73,12 +76,16 @@ class _ClinicQueueScreenState extends ConsumerState<ClinicQueueScreen> {
     if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
     try {
-      await ref.read(careRepositoryProvider).completeVisit(user, ticket.visit.id);
+      await ref
+          .read(careRepositoryProvider)
+          .completeVisit(user, ticket.visit.id);
       if (mounted) _refresh();
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not close the session. Try again.')),
+          const SnackBar(
+            content: Text('Could not close the session. Try again.'),
+          ),
         );
       }
     } finally {
@@ -91,9 +98,9 @@ class _ClinicQueueScreenState extends ConsumerState<ClinicQueueScreen> {
     final queue = ref.watch(clinicQueueProvider);
     final pace = ref.watch(clinicDayStatsProvider);
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: FhwLuxePalette.porcelainCanvas,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: FhwLuxePalette.pureWhite,
         surfaceTintColor: Colors.transparent,
         title: const Text('Clinic queue'),
       ),
@@ -192,7 +199,12 @@ class _QueueTicketCard extends StatelessWidget {
         : '${waited.inHours}h ${waited.inMinutes % 60}m';
     final cancellable = ticket.assessedCount == 0 && !busy;
     final card = ClinicCard(
-      accent: ticket.pending > 0 ? AppColors.brass : AppColors.triageGreen,
+      // An open consult wears the desk's electric sapphire; a closed one wears
+      // the infrastructure green. Neither is a verdict: the IMCI bands stay
+      // reserved for what is wrong with a child, so a queue cannot look sick.
+      accent: ticket.pending > 0
+          ? FhwLuxePalette.sapphireElectric
+          : FhwLuxePalette.emeraldPulse,
       title: ticket.householdName,
       subtitle:
           'Arrived $arrival · ${ticket.assessedCount}/${ticket.presentCount} '
@@ -208,14 +220,14 @@ class _QueueTicketCard extends StatelessWidget {
                   vertical: 5,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceTint,
+                  color: FhwLuxePalette.pearlSurface,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
                   'Waiting $waitedLabel',
                   style: AppType.label.copyWith(
                     fontSize: 12,
-                    color: AppColors.inkMuted,
+                    color: FhwLuxePalette.textSecondary,
                   ),
                 ),
               ),
@@ -240,9 +252,7 @@ class _QueueTicketCard extends StatelessWidget {
             const SizedBox(height: 8),
             TextButton.icon(
               onPressed: onCancel,
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.triageRed,
-              ),
+              style: TextButton.styleFrom(foregroundColor: AppColors.triageRed),
               icon: const Icon(Icons.close_rounded, size: 18),
               label: const Text('Cancel open session'),
             ),
@@ -283,11 +293,7 @@ class _EmptyQueue extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(20, 60, 20, 28),
     children: [
       const SizedBox(height: 24),
-      const Icon(
-        Icons.inbox_rounded,
-        size: 56,
-        color: AppColors.inkFaint,
-      ),
+      const Icon(Icons.inbox_rounded, size: 56, color: AppColors.inkFaint),
       const SizedBox(height: 16),
       Text(
         'No open sessions',
@@ -334,9 +340,9 @@ class _ClinicPace extends StatelessWidget {
           Text(
             stats.hasAssessments
                 ? 'Average wait to first assessment: '
-                    '${stats.avgMinutesToFirstAssessment!.round()} min'
+                      '${stats.avgMinutesToFirstAssessment!.round()} min'
                 : 'No saved assessments yet — pace appears after the first '
-                    'consultation is recorded.',
+                      'consultation is recorded.',
             style: AppType.caption,
           ),
         ],

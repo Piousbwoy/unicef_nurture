@@ -107,10 +107,14 @@ class CaregiverCarePlanTab extends ConsumerWidget {
                                 children: [
                                   Row(
                                     children: [
-                                      Icon(
-                                        Icons.event_note_rounded,
-                                        color: Colors.white,
-                                        size: 32,
+                                      LumeFrost(
+                                        padding: EdgeInsets.all(9),
+                                        sigma: 16,
+                                        child: Icon(
+                                          Icons.event_note_rounded,
+                                          color: Colors.white,
+                                          size: 32,
+                                        ),
                                       ),
                                       SizedBox(width: 14),
                                       Expanded(
@@ -209,8 +213,11 @@ class CaregiverCarePlanTab extends ConsumerWidget {
                 CaregiverPersonSelector(members: data.members),
                 const LumeSection(
                   title: 'Advice from the clinic',
-                  child: SpeakableText(
-                    "Each saved plan keeps its original date. Contact the clinic if advice is unclear or the person's condition changes.",
+                  child: LumeWell(
+                    padding: EdgeInsets.all(14),
+                    child: SpeakableText(
+                      "Each saved plan keeps its original date. Contact the clinic if advice is unclear or the person's condition changes.",
+                    ),
                   ),
                 ),
                 if (people.isEmpty)

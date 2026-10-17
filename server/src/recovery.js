@@ -120,15 +120,27 @@ async function handleCaseloadRestore(req, res) {
         referrals = rRows;
       }
     } else {
-      // Frontline worker — restore households in their JWT (region, district,
-      // community) tuple OR created_by === their user_id. Source of truth is
-      // the JWT claims (claims.region etc.), NOT user input.
+      // Frontline worker — restore every household in her REGION, plus anything
+      // she created herself. Identical scope to pull.js householdScope(): a
+      // caseload restore and a delta pull must agree or a device converges on
+      // one and not the other. Source of truth is the JWT claims (claims.region
+      // etc.), NOT user input.
+      //
+      // The region is matched by mutual prefix because record sources disagree
+      // on the spelling ('Northern' from a recovery-created account vs
+      // 'Northern Region' from the setup wizard), and an exact equality hides
+      // every colleague household from the account that most needs them.
       const region = claims.region || user.region;
-      const district = claims.district || user.district;
-      const community = claims.community || user.community;
+      const householdWhere = region
+        ? "(created_by = ? OR (region IS NOT NULL AND " +
+          "(region LIKE ? OR ? LIKE CONCAT(region, '%'))))"
+        : '(created_by = ?)';
+      const householdArgs = region
+        ? [userId, `${region}%`, region]
+        : [userId];
       const [hRows] = await pool.query(
-        'SELECT * FROM households WHERE (region = ? AND district = ? AND community = ?) OR created_by = ?',
-        [region, district, community, userId]
+        `SELECT * FROM households WHERE ${householdWhere}`,
+        householdArgs
       );
       households = hRows;
 

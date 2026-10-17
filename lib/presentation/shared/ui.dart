@@ -79,6 +79,35 @@ IconData triageIcon(TriageLevel level) => switch (level) {
   TriageLevel.routine => Icons.check_circle_outline_rounded,
 };
 
+/// The verdict band when it has to *fill* a surface instead of badge a row —
+/// the handoff brief plate and the decision hero — as the plate and the ink
+/// that stays legible on it. Same three trained hues as [triageColours], only
+/// deepened toward a shadow corner; there is no third place a verdict colour
+/// may come from.
+///
+/// Priority and Watch share the amber plate deliberately. The badge layer
+/// already treats them as one band, and a verdict may not be legible only as a
+/// shade of yellow: the words name the level, so the hue stays with the three
+/// colours a CHO was trained on.
+({Gradient plate, Color ink}) triagePlate(TriageLevel level) => switch (level) {
+  TriageLevel.urgent => (
+    plate: AppColors.redPlate,
+    ink: AppColors.verdictInkOnRed,
+  ),
+  TriageLevel.priority => (
+    plate: AppColors.amberPlate,
+    ink: AppColors.verdictInkOnAmber,
+  ),
+  TriageLevel.watch => (
+    plate: AppColors.amberPlate,
+    ink: AppColors.verdictInkOnAmber,
+  ),
+  TriageLevel.routine => (
+    plate: AppColors.greenPlate,
+    ink: AppColors.verdictInkOnGreen,
+  ),
+};
+
 class TriageBadge extends StatelessWidget {
   const TriageBadge(this.level, {super.key, this.label, this.compact = false});
 
@@ -1012,16 +1041,8 @@ class LuxeHeroHeader extends StatelessWidget {
         child: Stack(
           children: [
             // Two light blooms — felt as depth, never seen as shapes.
-            Positioned(
-              top: -46,
-              right: -30,
-              child: _bloom(150, 0.10),
-            ),
-            Positioned(
-              bottom: -60,
-              left: -40,
-              child: _bloom(170, 0.07),
-            ),
+            Positioned(top: -46, right: -30, child: _bloom(150, 0.10)),
+            Positioned(bottom: -60, left: -40, child: _bloom(170, 0.07)),
             Padding(
               padding: EdgeInsets.all(compact ? Gap.lg : Gap.xl),
               child: Column(
@@ -1125,7 +1146,10 @@ class LuxeStatPill extends StatelessWidget {
         ),
         Text(
           label,
-          style: AppType.caption.copyWith(color: AppColors.white80, fontSize: 11),
+          style: AppType.caption.copyWith(
+            color: AppColors.white80,
+            fontSize: 11,
+          ),
         ),
       ],
     ),

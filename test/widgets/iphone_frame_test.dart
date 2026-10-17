@@ -186,4 +186,37 @@ void main() {
       await mouse.removePointer();
     },
   );
+
+  testWidgets(
+    'web control-dock device dropdown opens through the chrome Overlay and '
+    'switches the simulated device (Navigator-free: the dock sits above the '
+    'app Navigator, so a PopupMenuButton would throw here)',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: const Scaffold(body: Center(child: Text('APP'))),
+          builder: (context, child) => IPhoneFrame(child: child!),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The dock shows the default handset.
+      expect(find.text('Galaxy S24 Ultra'), findsOneWidget);
+
+      // Tap the device selector: the other models must actually appear.
+      await tester.tap(find.text('Galaxy S24 Ultra'));
+      await tester.pumpAndSettle();
+      expect(find.text('iPhone 16'), findsOneWidget);
+      expect(find.text('iPad Pro 11"'), findsOneWidget);
+
+      // Pick a different model and confirm the switch lands with no exception.
+      await tester.tap(find.text('iPhone 16'));
+      await tester.pumpAndSettle();
+      expect(find.text('iPhone 16'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

@@ -24,6 +24,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/fhw_luxe.dart';
 import '../../data/reference/northern_ghana.dart';
 import '../../data/repositories/care_repository.dart';
 import '../../domain/entities/core.dart';
@@ -122,9 +123,9 @@ class HouseholdTile extends ConsumerWidget {
                     vertical: Gap.xs,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.canvas,
+                    color: FhwLuxePalette.pearlSurface,
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: AppColors.line),
+                    border: Border.all(color: FhwLuxePalette.hairLine),
                   ),
                   child: Text(
                     '$count',
@@ -225,9 +226,7 @@ class _QuickAssessButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.primaryLight,
           borderRadius: BorderRadius.circular(Gap.radiusSm),
-          border: Border.all(
-            color: AppColors.primary.withValues(alpha: 0.22),
-          ),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.22)),
         ),
         child: const Icon(
           Icons.play_circle_outline_rounded,
@@ -251,8 +250,7 @@ class HouseholdFormSheet extends ConsumerStatefulWidget {
   const HouseholdFormSheet({super.key});
 
   @override
-  ConsumerState<HouseholdFormSheet> createState() =>
-      _HouseholdFormSheetState();
+  ConsumerState<HouseholdFormSheet> createState() => _HouseholdFormSheetState();
 }
 
 class _HouseholdFormSheetState extends ConsumerState<HouseholdFormSheet> {
@@ -277,10 +275,11 @@ class _HouseholdFormSheetState extends ConsumerState<HouseholdFormSheet> {
     super.dispose();
   }
 
-  List<String> get _districts =>
-      _region == null ? const [] : NorthernGhana.districtsOf(_region!).map(
-        (d) => d.name,
-      ).toList(growable: false);
+  List<String> get _districts => _region == null
+      ? const []
+      : NorthernGhana.districtsOf(
+          _region!,
+        ).map((d) => d.name).toList(growable: false);
 
   List<String> get _communities => (_region == null || _district == null)
       ? const []

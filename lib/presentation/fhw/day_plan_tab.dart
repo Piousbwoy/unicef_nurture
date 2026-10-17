@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/fhw_luxe.dart';
 import '../../data/repositories/insight_repository.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
@@ -24,7 +25,7 @@ class DayPlanTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => ColoredBox(
-    color: AppColors.surface,
+    color: FhwLuxePalette.porcelainCanvas,
     child: ref
         .watch(dayPlanProvider)
         .when(
@@ -65,7 +66,8 @@ class _PlanBody extends StatelessWidget {
           subtitle: 'Schedule for ${_date(context, plan.generatedAt)}',
           child: const NarrationSection(
             narrationKey: 'fhw:day-plan:intro',
-            text: 'Review the saved purpose, then open the household or assess the '
+            text:
+                'Review the saved purpose, then open the household or assess the '
                 'patient. Opening a record does not mark a contact completed.',
             child: SpeakableText(
               'Review the saved purpose, then open the household or assess the '
@@ -90,7 +92,11 @@ class _PlanBody extends StatelessWidget {
               priority: byPerson[referral.personId],
             ),
         ],
-        _SectionHeading(title: 'Overdue', count: plan.overdueContacts.length),
+        _SectionHeading(
+          title: 'Overdue',
+          count: plan.overdueContacts.length,
+          tone: FhwLuxePalette.commandNavy,
+        ),
         for (final contact in plan.overdueContacts)
           _ContactTile(
             key: ValueKey('contact-${contact.id}'),
@@ -98,7 +104,11 @@ class _PlanBody extends StatelessWidget {
             priority: byHousehold[contact.householdId],
             overdue: true,
           ),
-        _SectionHeading(title: 'Due today', count: plan.dueContacts.length),
+        _SectionHeading(
+          title: 'Due today',
+          count: plan.dueContacts.length,
+          tone: AppColors.primary,
+        ),
         for (final contact in plan.dueContacts)
           _ContactTile(
             key: ValueKey('contact-${contact.id}'),
@@ -109,7 +119,7 @@ class _PlanBody extends StatelessWidget {
           const ClinicCard(
             child: Text(
               'No care reviews scheduled on this phone',
-              style: TextStyle(color: AppColors.ink, height: 1.4),
+              style: TextStyle(color: FhwLuxePalette.textPrimary, height: 1.4),
             ),
           ),
         if (plan.priorities.isNotEmpty) ...[
@@ -137,31 +147,61 @@ class _SectionHeading extends StatelessWidget {
     required this.title,
     required this.count,
     this.detail,
+    this.tone,
   });
   final String title;
   final int count;
   final String? detail;
+  final Color? tone;
 
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(top: Gap.lg, bottom: Gap.md),
     child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Semantics(
-          header: true,
-          child: Text(
-            '$title ($count)',
-            style: const TextStyle(
-              color: AppColors.ink,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
+        // A register heading: the label keeps its exact text, then a hairline
+        // rules the rest of the line the way the printed form does. The label
+        // is Flexible and the rule Expanded, so at the accessibility floor the
+        // rule closes to nothing rather than pushing the label off the row.
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Flexible(
+              child: Semantics(
+                header: true,
+                child: Text(
+                  '$title ($count)',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.title.copyWith(
+                    color: tone ?? FhwLuxePalette.textPrimary,
+                    fontSize: 16.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+              ),
             ),
-          ),
+            const SizedBox(width: Gap.sm),
+            Expanded(
+              child: IgnorePointer(
+                child: SizedBox(
+                  height: 1,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(color: FhwLuxePalette.hairLine),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
         if (detail != null) ...[
           const SizedBox(height: Gap.sm),
-          SpeakableText(detail!, style: const TextStyle(color: AppColors.inkMuted)),
+          SpeakableText(
+            detail!,
+            style: const TextStyle(color: AppColors.inkMuted),
+          ),
         ],
       ],
     ),
@@ -199,17 +239,39 @@ class _ContactTile extends ConsumerWidget {
         subtitle: household == null
             ? 'Household details unavailable'
             : '${household.name} · ${household.community}',
+        accent: overdue ? FhwLuxePalette.commandNavy : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(contact.purpose, style: const TextStyle(color: AppColors.ink)),
-            const SizedBox(height: Gap.sm),
             Text(
-              '${overdue ? 'Overdue' : 'Due today'} · ${_date(context, contact.dueDate)}',
+              contact.purpose,
               style: const TextStyle(
-                color: AppColors.inkMuted,
-                fontWeight: FontWeight.w600,
+                color: FhwLuxePalette.textPrimary,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                height: 1.35,
               ),
+            ),
+            const SizedBox(height: Gap.md),
+            // A coloured status seat riding the date it hangs on: overdue in
+            // the desk's command navy, due-today in cool pearl. The date is
+            // kept in exactly one label so the register reads rather than
+            // repeats.
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                _DueSeat(overdue: overdue),
+                Text(
+                  '${overdue ? 'Was due' : 'Due'} ${_date(context, contact.dueDate)}',
+                  style: const TextStyle(
+                    color: AppColors.inkMuted,
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
             ),
             if (contact.priority != TriageLevel.routine) ...[
               const SizedBox(height: Gap.sm),
@@ -238,6 +300,50 @@ class _ContactTile extends ConsumerWidget {
   }
 }
 
+/// The scheduling state of one review, as a coloured seat. Overdue wears the
+/// desk's command navy (an attention signal on the calendar, never a triage
+/// verdict — so it borrows no clinical red); a due-today review recedes to a
+/// cool pearl chip. A [Wrap] host keeps the pair intact at 320px / 200%.
+class _DueSeat extends StatelessWidget {
+  const _DueSeat({required this.overdue});
+  final bool overdue;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = overdue ? Colors.white : AppColors.primaryDark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: overdue
+            ? FhwLuxePalette.commandNavy
+            : FhwLuxePalette.pearlSurface,
+        borderRadius: BorderRadius.circular(999),
+        border: overdue ? null : Border.all(color: FhwLuxePalette.hairLine),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            overdue ? Icons.schedule_rounded : Icons.today_rounded,
+            size: 13,
+            color: fg,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            overdue ? 'Overdue' : 'Due today',
+            style: AppType.label.copyWith(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.2,
+              color: fg,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// A compact explanation of the existing ranking, not a new clinical verdict.
 class HouseholdPriorityCard extends StatelessWidget {
   const HouseholdPriorityCard({super.key, required this.priority});
@@ -253,12 +359,15 @@ class HouseholdPriorityCard extends StatelessWidget {
       children: [
         const Text(
           'Saved-record reason',
-          style: TextStyle(color: AppColors.ink, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            color: FhwLuxePalette.textPrimary,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         const SizedBox(height: Gap.sm),
         Text(
           priority.reason,
-          style: const TextStyle(color: AppColors.inkMuted),
+          style: const TextStyle(color: FhwLuxePalette.textSecondary),
         ),
         const SizedBox(height: Gap.sm),
         Text(
@@ -365,7 +474,7 @@ class _ChaseTile extends ConsumerWidget {
             Text(
               '${referral.status.label} · Arrival unconfirmed',
               style: const TextStyle(
-                color: AppColors.ink,
+                color: FhwLuxePalette.textPrimary,
                 fontWeight: FontWeight.w600,
               ),
             ),

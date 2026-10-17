@@ -63,16 +63,15 @@ class PremiumDesignTokens {
     boxShadow: const [AppShadows.card],
   );
 
+  /// The urgent plate as a decoration. The hue is the IMCI red from
+  /// [AppColors] — [AppColors.redPlate] is that red with a shadow corner, not a
+  /// second red.
   static BoxDecoration urgentCard() => BoxDecoration(
-    gradient: const LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [Color(0xFFDC2626), Color(0xFFB91C1C)],
-    ),
+    gradient: AppColors.redPlate,
     borderRadius: BorderRadius.circular(20),
     boxShadow: [
       BoxShadow(
-        color: const Color(0xFFDC2626).withValues(alpha: 0.4),
+        color: AppColors.triageRed.withValues(alpha: 0.4),
         blurRadius: 20,
         offset: const Offset(0, 8),
       ),

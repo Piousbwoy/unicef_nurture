@@ -274,7 +274,7 @@ class _EmergencyTunnelScreenState extends State<EmergencyTunnelScreen> {
     return Scaffold(
       backgroundColor: _stage == _Stage.verdict
           ? c.bg
-          : const Color(0xFF2B0708),
+          : AppColors.emergencyGround,
       body: SafeArea(
         child: _stage == _Stage.path
             ? _buildPath()

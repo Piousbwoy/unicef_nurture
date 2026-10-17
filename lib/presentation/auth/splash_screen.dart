@@ -78,7 +78,18 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       context.go(Routes.onboarding);
       return;
     }
-    context.go(session is SessionNeedsSetup ? Routes.setup : Routes.signIn);
+    // A device that still remembers an account but no longer holds one has
+    // lost its local records, so it goes to sign-in — the only screen that can
+    // recover the account from the sync server. Routing it to the fresh-install
+    // role choice would imply the account never existed and invite a duplicate
+    // registration for a phone that is already registered.
+    final lostRecords =
+        session is SessionNeedsSetup && session.localRecordsLost;
+    context.go(
+      session is SessionNeedsSetup && !lostRecords
+          ? Routes.setup
+          : Routes.signIn,
+    );
   }
 
   @override
@@ -90,7 +101,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       onTap: _route,
       behavior: HitTestBehavior.opaque,
       child: Scaffold(
-        backgroundColor: const Color(0xFFE6F2FF), // Soft baby-blue tint behind features
+        backgroundColor: const Color(
+          0xFFE6F2FF,
+        ), // Soft baby-blue tint behind features
         body: Column(
           children: [
             // ── 1. Header Zone: Logo & Typography ────────────────────────────
@@ -257,9 +270,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                                 end: Alignment.bottomCenter,
                                 colors: [
                                   const Color(0xFFEBF5FF),
-                                  const Color(
-                                    0xFFEBF5FF,
-                                  ).withValues(alpha: 0),
+                                  const Color(0xFFEBF5FF).withValues(alpha: 0),
                                 ],
                               ),
                             ),
@@ -315,9 +326,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
               clipper: const _BottomWaveClipper(),
               child: Container(
                 width: double.infinity,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF11408F),
-                ),
+                decoration: const BoxDecoration(color: Color(0xFF11408F)),
                 child: Stack(
                   children: [
                     // Subtle Sahelian traditional smock geometric pattern overlay
@@ -330,7 +339,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                       ),
                     ),
                     Padding(
-                      padding: EdgeInsets.fromLTRB(20, 64, 20, math.max(20, bottomPadding + 12)),
+                      padding: EdgeInsets.fromLTRB(
+                        20,
+                        64,
+                        20,
+                        math.max(20, bottomPadding + 12),
+                      ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -338,7 +352,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                             child: AnimatedBuilder(
                               animation: _pulse,
                               builder: (context, child) {
-                                final scale = 1.0 + 0.08 * math.sin(_pulse.value * math.pi);
+                                final scale =
+                                    1.0 +
+                                    0.08 * math.sin(_pulse.value * math.pi);
                                 return Transform.scale(
                                   scale: scale,
                                   child: child,
@@ -379,7 +395,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                           AnimatedBuilder(
                             animation: _pulse,
                             builder: (context, child) => Opacity(
-                              opacity: 0.45 + 0.25 * math.sin(_pulse.value * math.pi),
+                              opacity:
+                                  0.45 +
+                                  0.25 * math.sin(_pulse.value * math.pi),
                               child: child,
                             ),
                             child: Text(
@@ -407,19 +425,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Widget _buildDivider() {
-    return Container(
-      width: 1,
-      height: 38,
-      color: const Color(0xFFABC5EA),
-    );
+    return Container(width: 1, height: 38, color: const Color(0xFFABC5EA));
   }
 }
 
 class _FeatureBadge extends StatelessWidget {
-  const _FeatureBadge.custom({
-    required this.painter,
-    required this.label,
-  });
+  const _FeatureBadge.custom({required this.painter, required this.label});
 
   final CustomPainter painter;
   final String label;
@@ -429,11 +440,7 @@ class _FeatureBadge extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
-          width: 34,
-          height: 34,
-          child: CustomPaint(painter: painter),
-        ),
+        SizedBox(width: 34, height: 34, child: CustomPaint(painter: painter)),
         const SizedBox(height: 7),
         Text(
           label,
@@ -604,13 +611,12 @@ class _OfflineIconPainter extends CustomPainter {
     final arcCenter = Offset(c.dx, c.dy + s * 0.16);
     for (final r in [0.13, 0.23, 0.33]) {
       canvas.drawPath(
-        Path()
-          ..arcTo(
-            Rect.fromCircle(center: arcCenter, radius: s * r),
-            -2.20,
-            1.25,
-            false,
-          ),
+        Path()..arcTo(
+          Rect.fromCircle(center: arcCenter, radius: s * r),
+          -2.20,
+          1.25,
+          false,
+        ),
         stroke..strokeWidth = s * 0.07,
       );
     }
@@ -712,8 +718,14 @@ class _TrustedCareIconPainter extends CustomPainter {
     canvas.save();
     canvas.clipPath(shieldPath);
     final dark = Paint()..color = const Color(0xFF1B4FA8);
-    canvas.drawRect(Rect.fromLTRB(w * 0.10, h * 0.02, w * 0.50, h * 0.50), dark);
-    canvas.drawRect(Rect.fromLTRB(w * 0.50, h * 0.50, w * 0.90, h * 0.98), dark);
+    canvas.drawRect(
+      Rect.fromLTRB(w * 0.10, h * 0.02, w * 0.50, h * 0.50),
+      dark,
+    );
+    canvas.drawRect(
+      Rect.fromLTRB(w * 0.50, h * 0.50, w * 0.90, h * 0.98),
+      dark,
+    );
     canvas.restore();
 
     // Outline

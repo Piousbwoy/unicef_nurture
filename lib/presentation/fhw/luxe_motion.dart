@@ -161,7 +161,9 @@ class _BreathingDotState extends State<BreathingDot>
                   color: widget.colour,
                   boxShadow: [
                     BoxShadow(
-                      color: halo.withValues(alpha: 0.35 + 0.25 * (1 - breathe)),
+                      color: halo.withValues(
+                        alpha: 0.35 + 0.25 * (1 - breathe),
+                      ),
                       blurRadius: widget.size * (1.6 + 1.2 * (breathe - 1)),
                       spreadRadius: widget.size * 0.15 * (breathe - 1),
                     ),

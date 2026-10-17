@@ -104,6 +104,16 @@ CREATE TABLE IF NOT EXISTS user_verifiers (
   -- Domain-separated HMAC cloud verifier (base64 of final 32-byte hash).
   -- Never transmitted back to any client, ever. Compared constant-time.
   verifier     VARCHAR(128) NOT NULL,
+  -- The stretching cost this verifier was derived at, advertised by
+  -- /api/auth/challenge so a replacement handset on a DIFFERENT platform can
+  -- reproduce it. The client picks its cost from compile-time flags (web 500,
+  -- native debug 1000, native release 20000/120000), so a phone that assumed
+  -- its own cost would derive a different verifier and be locked out of an
+  -- account registered on another platform. NULL on rows written before this
+  -- column existed, which means "unknown" — the client then falls back to its
+  -- own platform cost, preserving the previous behaviour rather than guessing.
+  pin_iterations    INT NULL,
+  cloud_iterations  INT NULL,
   device_id    VARCHAR(64)  NULL,
   created_at   VARCHAR(40)  NOT NULL,
   updated_at   VARCHAR(40)  NOT NULL,

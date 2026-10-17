@@ -26,6 +26,7 @@ library;
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:sqflite/sqflite.dart';
 
 import '../../domain/entities/core.dart';
@@ -46,17 +47,9 @@ import 'server_auth_client.dart';
 ///
 /// Enable from the command line:
 /// `flutter run --dart-define=DEMO_MODE=true`
-const bool kDemoMode = bool.fromEnvironment(
-  'DEMO_MODE',
-  defaultValue: false,
-);
+const bool kDemoMode = bool.fromEnvironment('DEMO_MODE', defaultValue: false);
 
-enum RecoveryStatus {
-  success,
-  notFound,
-  wrongPin,
-  networkError,
-}
+enum RecoveryStatus { success, notFound, wrongPin, networkError }
 
 class RecoveryResult {
   const RecoveryResult({
@@ -107,7 +100,8 @@ abstract final class CloudRecoveryService {
     if (kDemoMode) return _simulateCloudRecovery(cleanPhone, pin);
     return const RecoveryResult(
       status: RecoveryStatus.notFound,
-      message: 'No account exists on this device, and no sync server is '
+      message:
+          'No account exists on this device, and no sync server is '
           'configured for cloud recovery. Register a new account, or set up '
           'sync in Me → Sync settings to restore from the district server.',
     );
@@ -138,10 +132,15 @@ abstract final class CloudRecoveryService {
             message: login.error,
           );
         }
-        if (err.contains('credentials') || err.contains('wrong') || err.contains('invalid pin') || err.contains('pin incorrect')) {
+        if (err.contains('credentials') ||
+            err.contains('wrong') ||
+            err.contains('invalid pin') ||
+            err.contains('pin incorrect')) {
           return RecoveryResult(
             status: RecoveryStatus.wrongPin,
-            message: login.error ?? 'That PIN does not match your server credentials.',
+            message:
+                login.error ??
+                'That PIN does not match your server credentials.',
           );
         }
         if (err.contains('network') || err.contains('timed out')) {
@@ -154,7 +153,8 @@ abstract final class CloudRecoveryService {
         // to register rather than a wrong-pin loop.
         return RecoveryResult(
           status: RecoveryStatus.notFound,
-          message: login.error ?? 'No profile found for this phone on the server.',
+          message:
+              login.error ?? 'No profile found for this phone on the server.',
         );
       }
 
@@ -184,7 +184,8 @@ abstract final class CloudRecoveryService {
       if (lookupReply.statusCode != 200) {
         return RecoveryResult(
           status: RecoveryStatus.networkError,
-          message: 'Server returned HTTP ${lookupReply.statusCode}: ${lookupReply.bodyText}',
+          message:
+              'Server returned HTTP ${lookupReply.statusCode}: ${lookupReply.bodyText}',
         );
       }
 
@@ -234,8 +235,9 @@ abstract final class CloudRecoveryService {
       // this a recovered caregiver signs in with no family at all, and the app
       // looks dead.
       final rawBinding = userMap['linked_household_id'];
-      final linkedHouseholdId =
-          rawBinding is String && rawBinding.isNotEmpty ? rawBinding : null;
+      final linkedHouseholdId = rawBinding is String && rawBinding.isNotEmpty
+          ? rawBinding
+          : null;
 
       // The server rows are `SELECT *`-shaped: they can carry server-owned
       // bookkeeping columns plus NULLs where the local schema promises
@@ -259,26 +261,23 @@ abstract final class CloudRecoveryService {
           Tables.referrals,
         ]) {
           try {
-            localColumns[table] = (await db.rawQuery('PRAGMA table_info($table)'))
-                .map((r) => r['name'] as String)
-                .toSet();
+            localColumns[table] = (await db.rawQuery(
+              'PRAGMA table_info($table)',
+            )).map((r) => r['name'] as String).toSet();
           } catch (_) {
-            localColumns[table] = const {}; // that table merges as an honest no-op
+            localColumns[table] =
+                const {}; // that table merges as an honest no-op
           }
         }
       }
 
       await db.transaction((txn) async {
-        await txn.insert(
-          Tables.users,
-          {
-            ...user.toMap(),
-            'pin_hash': localHash,
-            'pin_salt': localSalt,
-            'linked_household_id': linkedHouseholdId,
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
+        await txn.insert(Tables.users, {
+          ...user.toMap(),
+          'pin_hash': localHash,
+          'pin_salt': localSalt,
+          'linked_household_id': linkedHouseholdId,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
         restoredCount++;
 
         if (caseloadData != null) {
@@ -324,12 +323,23 @@ abstract final class CloudRecoveryService {
         status: RecoveryStatus.success,
         user: user,
         restoredRecordsCount: restoredCount,
-        message: 'Cloud restoration completed. Restored $restoredCount records from MariaDB.',
+        message:
+            'Cloud restoration completed. Restored $restoredCount records from MariaDB.',
       );
     } catch (e) {
+      // The raw exception is a developer diagnostic, not a message for a health
+      // worker standing in the sun — and this string is what the sign-in screen
+      // shows verbatim. Name the two truths that matter to them instead: this
+      // device holds no local account for the phone, and the server that could
+      // recover one was unreachable, with the address to check.
+      debugPrint('Cloud recovery network error: $e');
       return RecoveryResult(
         status: RecoveryStatus.networkError,
-        message: 'Network error during cloud recovery: ${e.toString()}',
+        message:
+            'This device holds no local account for that phone, and the sync '
+            'server at $baseUrl could not be reached to recover one. Start the '
+            'district server or check the network, then try again — or '
+            'register on this device.',
       );
     }
   }
@@ -337,7 +347,10 @@ abstract final class CloudRecoveryService {
   /// Interactive simulation for field trials and web demos where MariaDB is
   /// offline. Reachable ONLY under `--dart-define=DEMO_MODE=true` — see the
   /// gates in [restoreAccount]; production builds never fabricate an identity.
-  static Future<RecoveryResult> _simulateCloudRecovery(String phone, String pin) async {
+  static Future<RecoveryResult> _simulateCloudRecovery(
+    String phone,
+    String pin,
+  ) async {
     await Future<void>.delayed(const Duration(milliseconds: 1400));
 
     // For demonstration, if user types PIN shorter than 4 digits, reject as invalid
@@ -356,7 +369,9 @@ abstract final class CloudRecoveryService {
     final isWorker = phone.startsWith('02') || phone.startsWith('05');
     final user = AppUser(
       id: 'recovered-$phone-${now.millisecondsSinceEpoch}',
-      fullName: isWorker ? 'Nurse Fatima (Cloud Restored)' : 'Aisha Ibrahim (Cloud Restored)',
+      fullName: isWorker
+          ? 'Nurse Fatima (Cloud Restored)'
+          : 'Aisha Ibrahim (Cloud Restored)',
       phone: phone,
       role: isWorker ? UserRole.frontlineHealthWorker : UserRole.caregiver,
       region: 'Northern',
@@ -375,88 +390,76 @@ abstract final class CloudRecoveryService {
 
     await db.transaction((txn) async {
       // 1. Restore User Row
-      await txn.insert(
-        Tables.users,
-        {
-          ...user.toMap(),
-          'pin_hash': hash,
-          'pin_salt': salt,
-          'linked_household_id': isWorker ? null : hhId,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await txn.insert(Tables.users, {
+        ...user.toMap(),
+        'pin_hash': hash,
+        'pin_salt': salt,
+        'linked_household_id': isWorker ? null : hhId,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
 
       // 2. Seed restored sample household to showcase downstream recovery
-      await txn.insert(
-        Tables.households,
-        {
-          'id': hhId,
-          'name': isWorker ? 'Savelugu Recovered Caseload' : 'Ibrahim & Aisha Household',
-          'region': 'Northern',
-          'district': 'Savelugu Municipal',
-          'community': 'Diare CHPS',
-          'created_by': user.id,
-          'head_name': isWorker ? 'Multiple Enrolled Families' : 'Ibrahim Yakutu',
-          'contact_phone': phone,
-          'latitude': 9.6241,
-          'longitude': -0.8322,
-          'family_size': 6,
-          'has_valid_nhis': 1,
-          'walking_minutes_to_facility': 18,
-          'landmark': 'Near Diare Central Mosque',
-          'created_at': now.subtract(const Duration(days: 45)).toIso8601String(),
-          'updated_at': now.toIso8601String(),
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await txn.insert(Tables.households, {
+        'id': hhId,
+        'name': isWorker
+            ? 'Savelugu Recovered Caseload'
+            : 'Ibrahim & Aisha Household',
+        'region': 'Northern',
+        'district': 'Savelugu Municipal',
+        'community': 'Diare CHPS',
+        'created_by': user.id,
+        'head_name': isWorker ? 'Multiple Enrolled Families' : 'Ibrahim Yakutu',
+        'contact_phone': phone,
+        'latitude': 9.6241,
+        'longitude': -0.8322,
+        'family_size': 6,
+        'has_valid_nhis': 1,
+        'walking_minutes_to_facility': 18,
+        'landmark': 'Near Diare Central Mosque',
+        'created_at': now.subtract(const Duration(days: 45)).toIso8601String(),
+        'updated_at': now.toIso8601String(),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
       count++;
 
       // 3. Seed restored sample family members (Persons)
-      await txn.insert(
-        Tables.persons,
-        {
-          'id': 'person-mother-$phone',
-          'household_id': hhId,
-          'full_name': 'Aisha Ibrahim',
-          // Must be a real ClientType name: the register reader maps stored
-          // names back onto the enum, and a legacy alias used to crash the
-          // AI Triage tab with "Bad state: No element".
-          'client_type': 'pregnantWoman',
-          'sex': 'female',
-          'date_of_birth': '1998-04-12',
-          'age_years_approx': 27,
-          'phone': phone,
-          'mother_id': null,
-          'is_dob_estimated': 0,
-          'nhis_number': 'NH-84920193-4',
-          'created_at': now.subtract(const Duration(days: 45)).toIso8601String(),
-          'updated_at': now.toIso8601String(),
-          'is_active': 1,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await txn.insert(Tables.persons, {
+        'id': 'person-mother-$phone',
+        'household_id': hhId,
+        'full_name': 'Aisha Ibrahim',
+        // Must be a real ClientType name: the register reader maps stored
+        // names back onto the enum, and a legacy alias used to crash the
+        // AI Triage tab with "Bad state: No element".
+        'client_type': 'pregnantWoman',
+        'sex': 'female',
+        'date_of_birth': '1998-04-12',
+        'age_years_approx': 27,
+        'phone': phone,
+        'mother_id': null,
+        'is_dob_estimated': 0,
+        'nhis_number': 'NH-84920193-4',
+        'created_at': now.subtract(const Duration(days: 45)).toIso8601String(),
+        'updated_at': now.toIso8601String(),
+        'is_active': 1,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
       count++;
 
-      await txn.insert(
-        Tables.persons,
-        {
-          'id': 'person-child-$phone',
-          'household_id': hhId,
-          'full_name': 'Zainab Ibrahim (Recovered)',
-          'client_type': 'childUnderFive',
-          'sex': 'female',
-          'date_of_birth': now.subtract(const Duration(days: 120)).toIso8601String(),
-          'age_years_approx': 0,
-          'phone': null,
-          'mother_id': 'person-mother-$phone',
-          'is_dob_estimated': 0,
-          'nhis_number': null,
-          'created_at': now.subtract(const Duration(days: 45)).toIso8601String(),
-          'updated_at': now.toIso8601String(),
-          'is_active': 1,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await txn.insert(Tables.persons, {
+        'id': 'person-child-$phone',
+        'household_id': hhId,
+        'full_name': 'Zainab Ibrahim (Recovered)',
+        'client_type': 'childUnderFive',
+        'sex': 'female',
+        'date_of_birth': now
+            .subtract(const Duration(days: 120))
+            .toIso8601String(),
+        'age_years_approx': 0,
+        'phone': null,
+        'mother_id': 'person-mother-$phone',
+        'is_dob_estimated': 0,
+        'nhis_number': null,
+        'created_at': now.subtract(const Duration(days: 45)).toIso8601String(),
+        'updated_at': now.toIso8601String(),
+        'is_active': 1,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
       count++;
     });
 
@@ -464,7 +467,8 @@ abstract final class CloudRecoveryService {
       status: RecoveryStatus.success,
       user: user,
       restoredRecordsCount: count,
-      message: 'Restored account and $count clinical records from MariaDB Main Server.',
+      message:
+          'Restored account and $count clinical records from MariaDB Main Server.',
     );
   }
 }

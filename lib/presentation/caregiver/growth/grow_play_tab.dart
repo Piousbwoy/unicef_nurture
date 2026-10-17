@@ -93,10 +93,14 @@ class CaregiverGrowPlayTab extends ConsumerWidget {
                         children: [
                           Row(
                             children: [
-                              Icon(
-                                Icons.toys_rounded,
-                                color: Colors.white,
-                                size: 32,
+                              LumeFrost(
+                                padding: EdgeInsets.all(9),
+                                sigma: 16,
+                                child: Icon(
+                                  Icons.toys_rounded,
+                                  color: Colors.white,
+                                  size: 32,
+                                ),
                               ),
                               SizedBox(width: 14),
                               Expanded(
@@ -214,6 +218,14 @@ class CaregiverGrowPlayTab extends ConsumerWidget {
                                     ],
                                   ),
                                 OutlinedButton(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    side: BorderSide(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.45,
+                                      ),
+                                    ),
+                                  ),
                                   onPressed: () => Navigator.of(context).push(
                                     GlassPageRoute<void>(
                                       builder: (_) => CaregiverPersonDetail(
@@ -270,6 +282,7 @@ class _PlayTogether extends ConsumerWidget {
     }
     final activity = NurturingCareEngine.activityToday(band, now);
     return LumeSection(
+      hero: true,
       title: 'Play together today',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -284,11 +297,19 @@ class _PlayTogether extends ConsumerWidget {
                   children: [
                     Text(
                       person.fullName,
-                      style: Lumina.display(16, weight: 700),
+                      style: Lumina.display(
+                        16,
+                        weight: 700,
+                        color: Colors.white,
+                      ),
                     ),
                     Text(
                       caregiverAge(person),
-                      style: Lumina.body(size: 13, weight: 600),
+                      style: Lumina.body(
+                        size: 13,
+                        weight: 600,
+                        color: Lumina.diveMuted,
+                      ),
                     ),
                   ],
                 ),
@@ -323,31 +344,23 @@ class _PlayTogether extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 18),
-          Text(activity, style: Lumina.display(22)),
+          Text(activity, style: Lumina.display(22, color: Colors.white)),
           const SizedBox(height: 12),
-          Container(
+          LumeWell(
             padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Lumina.ice,
-              borderRadius: BorderRadius.circular(Lumina.rSm),
-              border: Border.all(color: Lumina.core.withValues(alpha: 0.10)),
-            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Icon(
                   Icons.auto_awesome_rounded,
                   size: 18,
-                  color: Lumina.core,
+                  color: Lumina.glow,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     band.tip,
-                    style: caregiverBody(
-                      size: 14.5,
-                      color: Lumina.ink,
-                    ),
+                    style: caregiverBody(size: 14.5, color: Lumina.diveSoft),
                   ),
                 ),
               ],
@@ -417,17 +430,16 @@ class _MorePlayIdeas extends StatelessWidget {
         collapsedShape: const Border(),
         title: Text(
           'More play ideas',
-          style: caregiverBody(size: 15).copyWith(
-            fontWeight: FontWeight.w700,
-            color: Lumina.azure,
-          ),
+          style: caregiverBody(
+            size: 15,
+          ).copyWith(fontWeight: FontWeight.w700, color: Colors.white),
         ),
         subtitle: Text(
           '${ideas.length} more for ${band.label.toLowerCase()} • ${person.fullName}',
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 12.5,
             fontWeight: FontWeight.w500,
-            color: Lumina.inkMuted,
+            color: Lumina.diveMuted,
           ),
         ),
         children: [
@@ -444,7 +456,7 @@ class _MorePlayIdeas extends StatelessWidget {
                       height: 6,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Lumina.azure.withValues(alpha: 0.45),
+                        color: Lumina.glow.withValues(alpha: 0.6),
                       ),
                     ),
                   ),
@@ -516,6 +528,10 @@ class _PlayTimerState extends State<_PlayTimer> with WidgetsBindingObserver {
             : 'Optional two-minute timer: ${_remaining ~/ 60}:${(_remaining % 60).toString().padLeft(2, '0')}',
       ),
       OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.white,
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.45)),
+        ),
         onPressed: _timer == null
             ? _start
             : () {
@@ -679,19 +695,17 @@ class _WeightSparkline extends StatelessWidget {
     final minW = weights.reduce((a, b) => a < b ? a : b);
     final maxW = weights.reduce((a, b) => a > b ? a : b);
     final range = maxW - minW;
-    return Container(
+    return SizedBox(
       height: 60,
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-      decoration: BoxDecoration(
-        color: Lumina.ice,
-        borderRadius: BorderRadius.circular(Lumina.rSm),
-      ),
-      child: CustomPaint(
-        size: Size.infinite,
-        painter: _SparklinePainter(
-          weights: weights,
-          min: range > 0 ? minW : minW - 0.5,
-          max: range > 0 ? maxW : maxW + 0.5,
+      child: LumeWell(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        child: CustomPaint(
+          size: Size.infinite,
+          painter: _SparklinePainter(
+            weights: weights,
+            min: range > 0 ? minW : minW - 0.5,
+            max: range > 0 ? maxW : maxW + 0.5,
+          ),
         ),
       ),
     );

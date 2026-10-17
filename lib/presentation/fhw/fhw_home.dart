@@ -7,10 +7,10 @@ import '../../core/theme/fhw_luxe.dart';
 import '../assessment/emergency_tunnel.dart';
 import '../shared/narration_button.dart';
 import 'assess_tab.dart';
+import 'clinic_widgets.dart' show DeskFilterBar;
 import 'day_plan_tab.dart';
 import 'home_tab.dart';
 import 'luxe_components.dart';
-import 'luxe_motion.dart';
 import 'profile_tab.dart';
 import 'receive_patient_sheet.dart';
 import 'referrals_tab.dart';
@@ -47,6 +47,19 @@ class _FhwHomeState extends ConsumerState<FhwHome> {
     if (user == null) return const SizedBox.shrink();
     final queue = ref.watch(clinicQueueProvider);
     final waiting = queue.valueOrNull?.length ?? 0;
+    // The hero's two honest readouts — how many records this phone holds, and
+    // what is still waiting to sync — now live on the header, so the Today tab
+    // is one panel rather than a header stacked on a second hero.
+    final householdCount =
+        ref.watch(visibleHouseholdsProvider).valueOrNull?.length ?? 0;
+    final sync = ref.watch(syncStatusProvider).valueOrNull;
+    final connection = ref
+        .watch(connectivityProvider)
+        .when(
+          data: (online) => online ? 'Network available' : 'Working offline',
+          error: (_, _) => 'Connection unknown',
+          loading: () => 'Checking connection',
+        );
 
     return Scaffold(
       backgroundColor: FhwLuxePalette.porcelainCanvas,
@@ -58,9 +71,18 @@ class _FhwHomeState extends ConsumerState<FhwHome> {
             zone: user.chpsZone ?? user.community,
             waiting: waiting,
             queueLoading: queue.isLoading,
+            queueError: queue.hasError,
+            householdCount: householdCount,
+            connectionLabel: connection,
+            pendingSync: sync?.pending,
+            syncFailures: sync?.failing,
             onReceive: _receive,
             onEmergency: _emergency,
             onRefresh: refreshClinicWorkspace,
+            onOpenQueue: () => _select(2, followUpTab: 0),
+            onOpenRecords: () => _select(1),
+            onSync: () => _select(3),
+            onRetryQueue: () => ref.invalidate(clinicQueueProvider),
           ),
           Expanded(
             child: IndexedStack(
@@ -111,23 +133,10 @@ class _FhwHomeState extends ConsumerState<FhwHome> {
     children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Wrap(
-            spacing: 8,
-            children: [
-              ChoiceChip(
-                label: const Text('Care reviews'),
-                selected: _followUpTab == 0,
-                onSelected: (_) => setState(() => _followUpTab = 0),
-              ),
-              ChoiceChip(
-                label: const Text('Referrals'),
-                selected: _followUpTab == 1,
-                onSelected: (_) => setState(() => _followUpTab = 1),
-              ),
-            ],
-          ),
+        child: DeskFilterBar(
+          options: const ['Care reviews', 'Referrals'],
+          selectedIndex: _followUpTab,
+          onSelected: (index) => setState(() => _followUpTab = index),
         ),
       ),
       Expanded(
@@ -175,13 +184,14 @@ class _FhwHomeState extends ConsumerState<FhwHome> {
   }
 }
 
-/// The deep-blue gradient header that replaces the old flat white AppBar and the
-/// red strip. It is fixed chrome above every tab: a time-of-day greeting, the
-/// worker's name and CHPS zone, a live queue count, a brass-edged "Receive
-/// patient" pill, and the emergency action — still unmistakably red, because
-/// red belongs to clinical safety and nothing else — docked beside it rather
-/// than eating a band of body height. A radial light sheen over the midnight
-/// blue gives the surface depth, so it reads as luxurious lit glass.
+/// The matte command-navy header that sits above every tab. Where the earlier
+/// chrome pooled light and glowed, this band is deliberately flat: an
+/// operations console reads as structure, not atmosphere. A time-of-day
+/// greeting, the worker's name and CHPS zone, a live queue count, one solid
+/// white receive action, and the emergency control — still unmistakably red,
+/// because red belongs to clinical safety and nothing else — docked beside it.
+/// Square corners and a hairline under the band keep it chrome; every control
+/// on it is solid, with no glow or gradient to soften it.
 class _ClinicHeader extends StatelessWidget {
   const _ClinicHeader({
     required this.greeting,
@@ -189,9 +199,18 @@ class _ClinicHeader extends StatelessWidget {
     required this.zone,
     required this.waiting,
     required this.queueLoading,
+    required this.queueError,
+    required this.householdCount,
+    required this.connectionLabel,
+    required this.pendingSync,
+    required this.syncFailures,
     required this.onReceive,
     required this.onEmergency,
     required this.onRefresh,
+    required this.onOpenQueue,
+    required this.onOpenRecords,
+    required this.onSync,
+    required this.onRetryQueue,
   });
 
   final String greeting;
@@ -199,214 +218,238 @@ class _ClinicHeader extends StatelessWidget {
   final String zone;
   final int waiting;
   final bool queueLoading;
+  final bool queueError;
+  final int householdCount;
+  final String connectionLabel;
+  final int? pendingSync;
+  final int? syncFailures;
   final VoidCallback onReceive;
   final VoidCallback onEmergency;
   final VoidCallback onRefresh;
+  final VoidCallback onOpenQueue;
+  final VoidCallback onOpenRecords;
+  final VoidCallback onSync;
+  final VoidCallback onRetryQueue;
 
   @override
   Widget build(BuildContext context) {
-    const radius = BorderRadius.only(
-      bottomLeft: Radius.circular(32),
-      bottomRight: Radius.circular(32),
-    );
     return Container(
       width: double.infinity,
       decoration: const BoxDecoration(
-        gradient: FhwLuxePalette.sapphireHeroGradient,
-        borderRadius: radius,
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x59050F26),
-            blurRadius: 34,
-            offset: Offset(0, 16),
-          ),
-        ],
+        // Deep sapphire lacquer: the command bar reads as a solid of dyed
+        // depth — lit toward the crown and settling darker at the base — so the
+        // desk opens on a made object rather than a flat navy slab. Held dark
+        // end-to-end so every white control keeps field-sunlight contrast: this
+        // is structure with mass, not atmosphere. The top hairline is the
+        // lacquer catching the key light.
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            FhwLuxePalette.sapphireDeep,
+            FhwLuxePalette.commandNavy,
+            FhwLuxePalette.sapphireGroove,
+          ],
+          stops: [0.0, 0.52, 1.0],
+        ),
+        border: Border(
+          top: BorderSide(color: Color(0x1FFFFFFF), width: 1),
+          bottom: BorderSide(color: Color(0x33000000)),
+        ),
       ),
-      child: ClipRRect(
-        borderRadius: radius,
-        child: Stack(
-          children: [
-            // Depth: a cool light pools from the top-right and a faint royal
-            // glow lifts from the bottom-left — the lit-glass sheen that
-            // separates a luxurious surface from a flat blue block.
-            const Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    center: Alignment(0.9, -0.7),
-                    radius: 1.2,
-                    colors: [Color(0x2E9FC4FF), Color(0x00000000)],
-                  ),
-                ),
-              ),
-            ),
-            const Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    center: Alignment(-0.9, 1.0),
-                    radius: 1.0,
-                    colors: [Color(0x261B56DB), Color(0x00000000)],
-                  ),
-                ),
-              ),
-            ),
-            SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(22, 10, 18, 22),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 10, 18, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                greeting.toUpperCase(),
-                                style: AppType.eyebrow.copyWith(
-                                  color: Colors.white.withValues(alpha: 0.66),
-                                ),
-                              ),
-                              const SizedBox(height: 5),
-                              Text(
-                                name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppType.title.copyWith(
-                                  fontSize: 25,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.5,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 9),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 6,
-                                crossAxisAlignment: WrapCrossAlignment.center,
+                        Text(
+                          greeting.toUpperCase(),
+                          style: AppType.eyebrow.copyWith(
+                            color: Colors.white.withValues(alpha: 0.6),
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppType.title.copyWith(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.4,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 9),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            // A Wrap hands its children unbounded width,
+                            // so `Flexible` is invalid here and throws at
+                            // build time; the line needs its own ceiling
+                            // for the ellipsis to have anything to work
+                            // against.
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 220),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  // A Wrap hands its children unbounded width,
-                                  // so `Flexible` is invalid here and throws at
-                                  // build time; the line needs its own ceiling
-                                  // for the ellipsis to have anything to work
-                                  // against.
-                                  ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: 220,
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(
-                                          Icons.place_outlined,
-                                          size: 13,
-                                          color: Colors.white70,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Flexible(
-                                          child: Text(
-                                            zone,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: AppType.caption.copyWith(
-                                              color: Colors.white70,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                  const Icon(
+                                    Icons.place_outlined,
+                                    size: 13,
+                                    color: Colors.white70,
                                   ),
-                                  _QueueBadge(
-                                    waiting: waiting,
-                                    loading: queueLoading,
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      zone,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppType.caption.copyWith(
+                                        color: Colors.white70,
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
-                            ],
-                          ),
-                        ),
-                        _HeaderIconChip(
-                          child: const NarrationButton(iconColor: Colors.white),
-                        ),
-                        const SizedBox(width: 6),
-                        _HeaderIconChip(
-                          child: IconButton(
-                            tooltip: 'Refresh local records',
-                            onPressed: onRefresh,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints.tightFor(
-                              width: 48,
-                              height: 48,
                             ),
-                            color: Colors.white,
-                            iconSize: 22,
-                            icon: const Icon(Icons.refresh_rounded),
-                          ),
+                            _QueueBadge(
+                              waiting: waiting,
+                              loading: queueLoading,
+                              error: queueError,
+                              onTap: queueError ? onRetryQueue : onOpenQueue,
+                            ),
+                            _RecordBadge(
+                              count: householdCount,
+                              onTap: onOpenRecords,
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                    const SizedBox(height: 18),
-                    Row(
-                      children: [
-                        Expanded(child: _ReceivePill(onTap: onReceive)),
-                        const SizedBox(width: 10),
-                        _EmergencyDock(onTap: onEmergency),
-                      ],
+                  ),
+                  _HeaderIconChip(
+                    child: const NarrationButton(iconColor: Colors.white),
+                  ),
+                  const SizedBox(width: 6),
+                  _HeaderIconChip(
+                    child: IconButton(
+                      tooltip: 'Refresh local records',
+                      onPressed: onRefresh,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 48,
+                        height: 48,
+                      ),
+                      color: Colors.white,
+                      iconSize: 22,
+                      icon: const Icon(Icons.refresh_rounded),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: _ReceivePill(onTap: onReceive)),
+                  const SizedBox(width: 10),
+                  _EmergencyDock(onTap: onEmergency),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // The honest sync readout, moved up from the old second hero: a
+              // plain instrument line, not a glowing panel.
+              _ConnectionLine(
+                label: connectionLabel,
+                pending: pendingSync,
+                failures: syncFailures,
+                onTap: onSync,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// A quiet brass-edged chip reporting how many patients are still open in the
-/// clinic queue. Brass is chrome; it never carries a clinical verdict.
+/// A quiet chip reporting how many patients are still open in the clinic
+/// queue. It reads as a static status instrument — a plain dot, never a
+/// pulsing one — because chrome reports state; it does not perform it. It is
+/// the one way into the live queue from the dashboard, so it takes a tap.
 class _QueueBadge extends StatelessWidget {
-  const _QueueBadge({required this.waiting, required this.loading});
+  const _QueueBadge({
+    required this.waiting,
+    required this.loading,
+    required this.error,
+    required this.onTap,
+  });
 
   final int waiting;
   final bool loading;
+  final bool error;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final label = loading
+    final label = error
+        ? 'Queue check failed · tap to retry'
+        : loading
         ? 'Checking queue\u2026'
         : waiting == 0
         ? 'Queue clear'
         : '$waiting in the queue';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: FhwLuxePalette.glassBorderLight),
-      ),
+    return _HeaderPill(
+      onTap: onTap,
+      semanticsLabel: label,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (!loading)
-            const Padding(
-              padding: EdgeInsets.only(right: 5),
-              child: BreathingDot(size: 6),
+          if (!loading && !error)
+            Padding(
+              padding: const EdgeInsets.only(right: 5),
+              child: Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: waiting == 0
+                      ? Colors.white.withValues(alpha: 0.4)
+                      : FhwLuxePalette.sapphireElectric,
+                ),
+              ),
             ),
-          const Icon(
-            Icons.groups_rounded,
-            size: 13,
-            color: FhwLuxePalette.sapphireElectric,
+          Icon(
+            error ? Icons.refresh_rounded : Icons.groups_rounded,
+            size: 15,
+            color: Colors.white,
           ),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: AppType.label.copyWith(fontSize: 11.5, color: Colors.white),
+          const SizedBox(width: 6),
+          // The label can be as long as 'Queue check failed · tap to retry',
+          // so it shrinks-and-ellipsizes inside the pill instead of ever
+          // overflowing the header row on a narrow phone.
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.label.copyWith(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+              ),
+            ),
           ),
         ],
       ),
@@ -414,7 +457,150 @@ class _QueueBadge extends StatelessWidget {
   }
 }
 
-/// The premium receiving action: a translucent pill edged in brass.
+/// The shared chrome for a tappable status pill on the navy header. The queue
+/// and record counts sit in identical pills, so the two read as one set of
+/// instruments rather than two ad-hoc chips.
+class _HeaderPill extends StatelessWidget {
+  const _HeaderPill({
+    required this.onTap,
+    required this.semanticsLabel,
+    required this.child,
+  });
+
+  final VoidCallback onTap;
+  final String semanticsLabel;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: semanticsLabel,
+    child: Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+          ),
+          child: child,
+        ),
+      ),
+    ),
+  );
+}
+
+/// How many households this phone holds, seated beside the queue count. It is
+/// the record inventory the old hero carried, now a quiet instrument that
+/// opens the register when tapped.
+class _RecordBadge extends StatelessWidget {
+  const _RecordBadge({required this.count, required this.onTap});
+
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => _HeaderPill(
+    onTap: onTap,
+    semanticsLabel: '$count households on record',
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.home_work_rounded, size: 15, color: Colors.white),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            '$count on record',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.label.copyWith(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// The honest connection + sync line — same contract strings as the hero it
+/// replaces, set as a plain instrument row beneath the actions.
+class _ConnectionLine extends StatelessWidget {
+  const _ConnectionLine({
+    required this.label,
+    required this.pending,
+    required this.failures,
+    required this.onTap,
+  });
+
+  final String label;
+  final int? pending;
+  final int? failures;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = pending == null
+        ? '$label · Sync status unavailable'
+        : failures != null && failures! > 0
+        ? '$label · $pending waiting · $failures need attention'
+        : '$label · '
+              '${pending == 0 ? 'No items waiting to send' : '$pending saved on this phone'}';
+    return Semantics(
+      button: true,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+            child: Row(
+              children: [
+                Icon(
+                  label == 'Working offline'
+                      ? Icons.wifi_off_rounded
+                      : Icons.sync_rounded,
+                  size: 16,
+                  color: Colors.white.withValues(alpha: 0.7),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    text,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.caption.copyWith(
+                      color: Colors.white.withValues(alpha: 0.66),
+                      fontSize: 11.5,
+                    ),
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: Colors.white54,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The primary receiving action: a solid white control on the navy band. On
+/// matte chrome, one solid white button reads as the one way forward — no
+/// gradient, no glow, just the highest-contrast action on the screen.
 class _ReceivePill extends StatelessWidget {
   const _ReceivePill({required this.onTap});
 
@@ -424,50 +610,25 @@ class _ReceivePill extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(999),
+      borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(10),
         child: Container(
           height: Gap.tapTarget,
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: 18),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withValues(alpha: 0.30),
-                Colors.white.withValues(alpha: 0.12),
-              ],
-            ),
-            border: Border.all(
-              color: FhwLuxePalette.glassBorderLight,
-              width: 1.2,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x2E000000),
-                blurRadius: 16,
-                offset: Offset(0, 6),
-              ),
-            ],
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.16),
-                ),
-                child: const Icon(
-                  Icons.add_rounded,
-                  color: Colors.white,
-                  size: 16,
-                ),
+              const Icon(
+                Icons.add_rounded,
+                color: FhwLuxePalette.commandNavy,
+                size: 19,
               ),
               const SizedBox(width: 10),
               Flexible(
@@ -477,7 +638,7 @@ class _ReceivePill extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
                   style: AppType.label.copyWith(
-                    color: Colors.white,
+                    color: FhwLuxePalette.commandNavy,
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.2,
@@ -493,10 +654,9 @@ class _ReceivePill extends StatelessWidget {
 }
 
 /// The danger action. It stays unmistakably red — red belongs to clinical
-/// safety and nothing else — but it is rendered as a lit crimson-to-deep-red
-/// gradient with a soft red glow, a bevelled light edge and an alert glyph in
-/// a glass badge, so it reads as a premium, urgent control rather than a flat
-/// block. The ValueKey and label are unchanged.
+/// safety and nothing else — rendered flat and matte beside the white receive
+/// action, so the two read as one instrument row: one way in, one way fast.
+/// The ValueKey and label are unchanged.
 class _EmergencyDock extends StatelessWidget {
   const _EmergencyDock({required this.onTap});
 
@@ -507,50 +667,27 @@ class _EmergencyDock extends StatelessWidget {
     return Material(
       key: const ValueKey('fhw-emergency'),
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(999),
+      borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(10),
         child: Container(
           height: Gap.tapTarget,
           alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 18),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFFE5393F), Color(0xFFB0141C)],
-            ),
-            border: Border.all(color: Color(0x4DFFFFFF), width: 1),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x66B0141C),
-                blurRadius: 22,
-                offset: Offset(0, 8),
-              ),
-            ],
+            color: AppColors.triageRed,
+            borderRadius: BorderRadius.circular(10),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.16),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.34),
-                    width: 1,
-                  ),
-                ),
-                child: const Icon(
-                  Icons.emergency_rounded,
-                  color: Colors.white,
-                  size: 15,
-                ),
+              const Icon(
+                Icons.emergency_rounded,
+                color: Colors.white,
+                size: 17,
               ),
-              const SizedBox(width: 9),
+              const SizedBox(width: 8),
               Text(
                 'Emergency',
                 style: AppType.label.copyWith(
@@ -568,9 +705,9 @@ class _EmergencyDock extends StatelessWidget {
   }
 }
 
-/// A frosted circular chip that hosts an icon-only control on the deep-blue
-/// header. Narration and refresh share it so the tertiary tier reads as a
-/// deliberate, tappable pair rather than two bare default icons.
+/// A flat circular seat for an icon-only control on the navy header.
+/// Narration and refresh share it so the tertiary tier reads as a deliberate,
+/// tappable pair rather than two bare default icons.
 class _HeaderIconChip extends StatelessWidget {
   const _HeaderIconChip({required this.child});
 
@@ -584,16 +721,9 @@ class _HeaderIconChip extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.white.withValues(alpha: 0.20),
-            Colors.white.withValues(alpha: 0.05),
-          ],
-        ),
+        color: Colors.white.withValues(alpha: 0.08),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.26),
+          color: Colors.white.withValues(alpha: 0.16),
           width: 1,
         ),
       ),

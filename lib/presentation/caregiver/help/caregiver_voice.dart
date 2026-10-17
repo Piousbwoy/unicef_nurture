@@ -8,6 +8,7 @@ import '../../../app/providers.dart';
 import '../../../core/audio/caregiver_playback.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/glass.dart';
+import '../../../core/theme/lumina.dart';
 import '../../../domain/entities/caregiver.dart';
 import '../../shared/speech_language_sheet.dart';
 import '../../shared/offline_voice_check.dart';
@@ -317,12 +318,21 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
       CaregiverPlaybackPhase.fallback => 'Audio unavailable',
       null => widget.label,
     };
+    // The listen row lives both on the pearl canvas and inside a dive card;
+    // it borrows the card's own well styling when it stands on the blue.
+    final dive = LumeField.of(context);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.checkBlue.withValues(alpha: 0.05),
+        color: dive
+            ? const Color(0x14FFFFFF)
+            : AppColors.checkBlue.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.checkBlue.withValues(alpha: 0.12)),
+        border: Border.all(
+          color: dive
+              ? Colors.white.withValues(alpha: 0.10)
+              : AppColors.checkBlue.withValues(alpha: 0.12),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -353,10 +363,10 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
                       liveRegion: true,
                       child: Text(
                         status,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.checkNavy,
+                          color: dive ? Colors.white : AppColors.checkNavy,
                         ),
                       ),
                     ),
@@ -364,9 +374,11 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
                     if (state != null)
                       Text(
                         '${state.language} • ${state.source}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: AppColors.caregiverMuted,
+                          color: dive
+                              ? Lumina.diveMuted
+                              : AppColors.caregiverMuted,
                         ),
                       ),
                   ],
@@ -380,7 +392,7 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: dive ? const Color(0x0DFFFFFF) : Colors.white,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -390,10 +402,10 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
                   const SizedBox(height: 6),
                   Text(
                     transcript,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13.5,
                       height: 1.5,
-                      color: AppColors.checkNavy,
+                      color: dive ? Lumina.diveInk : AppColors.checkNavy,
                     ),
                   ),
                   if (transcriptLanguage != 'English' &&
@@ -443,9 +455,9 @@ class _CaregiverListenState extends ConsumerState<CaregiverListen>
                         'Read the English original, or choose English in the language picker.'
                   : 'Draft $language translation from the bundled speech bank. '
                         'Bundled voices are synthetic. Native-speaker and clinical review are needed.',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11.5,
-                color: AppColors.caregiverMuted,
+                color: dive ? Lumina.diveMuted : AppColors.caregiverMuted,
               ),
             ),
           ),
@@ -473,6 +485,7 @@ class _VoicePlayButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dive = LumeField.of(context);
     final label = active
         ? 'Stop audio'
         : 'Listen in $language. Hold to choose another language.';
@@ -491,11 +504,12 @@ class _VoicePlayButton extends StatelessWidget {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: AppColors.checkBlue,
+                color: dive ? Colors.white : AppColors.checkBlue,
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.checkBlue.withValues(alpha: 0.3),
+                    color: (dive ? Colors.white : AppColors.checkBlue)
+                        .withValues(alpha: 0.3),
                     blurRadius: active ? 16 : 8,
                     offset: const Offset(0, 3),
                   ),
@@ -507,7 +521,7 @@ class _VoicePlayButton extends StatelessWidget {
                     : active
                     ? Icons.stop_rounded
                     : Icons.play_arrow_rounded,
-                color: Colors.white,
+                color: dive ? Lumina.core : Colors.white,
                 size: 28,
               ),
             ),

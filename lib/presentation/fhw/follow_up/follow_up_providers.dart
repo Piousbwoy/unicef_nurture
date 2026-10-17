@@ -60,10 +60,7 @@ final followUpDeskProvider = FutureProvider<FollowUpBoard>((ref) async {
   final raw = await ref.read(careRepositoryProvider).followUpDesk(user);
   final plan = ref.watch(dayPlanProvider).valueOrNull;
   final route = {
-    for (final contact in [
-      ...?plan?.dueContacts,
-      ...?plan?.overdueContacts,
-    ])
+    for (final contact in [...?plan?.dueContacts, ...?plan?.overdueContacts])
       contact.householdId,
   };
   final now = DateTime.now();

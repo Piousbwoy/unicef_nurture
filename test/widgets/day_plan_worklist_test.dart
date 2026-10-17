@@ -1,5 +1,4 @@
 import 'package:carebridge_ai/app/providers.dart';
-import 'package:carebridge_ai/core/theme/app_theme.dart';
 import 'package:carebridge_ai/core/theme/fhw_luxe.dart';
 import 'package:carebridge_ai/data/repositories/insight_repository.dart';
 import 'package:carebridge_ai/domain/engines/vulnerability_engine.dart';
@@ -142,7 +141,7 @@ void main() {
           )
           .first,
     );
-    expect(surface.color, AppColors.surface);
+    expect(surface.color, FhwLuxePalette.porcelainCanvas);
     final card = tester.widget<Material>(
       find
           .descendant(

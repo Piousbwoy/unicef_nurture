@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/fhw_luxe.dart';
 import '../../core/theme/lumen.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
@@ -12,10 +13,6 @@ import '../../domain/enums.dart';
 import '../registration/patient_intake_screen.dart';
 import 'clinic_widgets.dart';
 import 'household_screen.dart';
-import 'lumen_hero.dart';
-import 'lumen_register.dart';
-import 'luxe_motion.dart';
-import 'receive_patient_sheet.dart';
 
 final activeClinicSessionProvider = FutureProvider.autoDispose<Visit?>((ref) {
   final user = ref.watch(currentUserProvider);
@@ -100,16 +97,7 @@ class FhwHomeTab extends ConsumerWidget {
     final plan = ref.watch(dayPlanProvider);
     final referrals = ref.watch(openReferralsProvider);
     final households = ref.watch(visibleHouseholdsProvider);
-    final sync = ref.watch(syncStatusProvider);
-    final network = ref.watch(connectivityProvider);
     final queue = ref.watch(clinicQueueProvider);
-    final urgent = referrals.valueOrNull
-        ?.where(
-          (r) =>
-              r.urgency == ReferralUrgency.immediate ||
-              r.urgency == ReferralUrgency.sameDay,
-        )
-        .toList();
 
     void refresh() {
       ref.invalidate(dayPlanProvider);
@@ -122,179 +110,191 @@ class FhwHomeTab extends ConsumerWidget {
       ref.invalidate(syncStatusProvider);
     }
 
-    final pending = sync.valueOrNull?.pending;
-    final failures = sync.valueOrNull?.failing;
-    final tickets = queue.valueOrNull ?? const <ClinicQueueTicket>[];
-    final connection = network.when(
-      data: (online) => online ? 'Network available' : 'Working offline',
-      error: (_, _) => 'Connection unknown',
-      loading: () => 'Checking connection',
-    );
-    final dueToday = plan.valueOrNull?.dueContacts.length ?? 0;
-    final overdue = plan.valueOrNull?.overdueContacts.length ?? 0;
-    final peopleWaiting = tickets.fold<int>(0, (sum, t) => sum + t.pending);
-
-    Future<void> receivePatient() async {
-      await showReceivePatientSheet(
-        context,
-        knownHouseholds: households.valueOrNull ?? const [],
-      );
-      if (context.mounted) refresh();
-    }
-
-    return Sanctum(
-      focus: const Alignment(0, -0.7),
-      child: RefreshIndicator(
-        onRefresh: () async => refresh(),
-        child: ListView(
-          key: const PageStorageKey('fhw-today'),
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-          children: [
-            StaggeredEntrance(
-              children: [
-                LumenHero(
-                  dateLabel: DateFormat('EEEE, d MMMM').format(DateTime.now()),
-                  zone: user.chpsZone ?? user.community,
-                  connectionLabel: connection,
-                  pendingSync: pending,
-                  syncFailures: failures,
-                  householdCount: households.valueOrNull?.length ?? 0,
-                  openSessions: tickets.length,
-                  peopleWaiting: peopleWaiting,
-                  dueToday: dueToday,
-                  overdue: overdue,
-                  urgentReferrals: urgent?.length ?? 0,
-                  onReceive: receivePatient,
-                  onResume: onOpenQueue,
-                  onFollowThrough: onOpenReferrals ?? onOpenQueue,
-                  onSync: onOpenProfile ?? onOpenFamilies,
-                ),
-                const SizedBox(height: 12),
-                if (queue.isLoading)
-                  const LinearProgressIndicator(minHeight: 2)
-                else if (queue.hasError)
-                  ClinicStatusLine(
-                    text: 'Open sessions could not be checked. Tap to retry.',
-                    icon: Icons.refresh_rounded,
-                    onTap: () => ref.invalidate(clinicQueueProvider),
-                  ),
-                if (tickets.isNotEmpty) ...[
-                  const SizedBox(height: 22),
-                  // The register: the day's open sessions on a carved ledger.
-                  // Honest progress only — assessed of received — never a triage
-                  // guess.
-                  LumenRegister(tickets: tickets, onOpenQueue: onOpenQueue),
-                ],
-              ],
+    return RefreshIndicator(
+      onRefresh: () async => refresh(),
+      child: ListView(
+        key: const PageStorageKey('fhw-today'),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+        children: [
+          // The header now carries the live queue and the sync readout, so the
+          // body opens with what the day has actually produced. A failed queue
+          // check still surfaces here — the honest way to retry it.
+          if (queue.hasError)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: ClinicStatusLine(
+                text: 'Open sessions could not be checked. Tap to retry.',
+                icon: Icons.refresh_rounded,
+                onTap: () => ref.invalidate(clinicQueueProvider),
+              ),
             ),
-            if (plan.hasError || referrals.hasError || households.hasError) ...[
-              const SizedBox(height: 12),
-              ClinicStatusLine(
+          if (plan.hasError || referrals.hasError || households.hasError)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: ClinicStatusLine(
                 text: 'Some records could not be loaded. Tap to retry.',
                 icon: Icons.refresh_rounded,
                 onTap: refresh,
               ),
-            ],
-            const SizedBox(height: 28),
-            const _DailyRegisterTally(),
-            plan.maybeWhen(
-              data: (data) {
-                final priority = data.priorities
-                    .where(
-                      (p) =>
-                          p.band == VulnerabilityBand.critical ||
-                          p.band == VulnerabilityBand.high,
-                    )
-                    .take(3)
-                    .toList();
-                if (priority.isEmpty) return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 20),
-                  child: LumenCard(
-                    title: 'Bring these records forward',
-                    subtitle:
-                        'Priorities from saved records—not a diagnosis of who is unwell now.',
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (final item in priority)
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(
-                              item.household.name,
-                              style: AppType.label,
-                            ),
-                            subtitle: Text(item.reason, style: AppType.caption),
-                            trailing: const Icon(Icons.chevron_right_rounded),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => HouseholdScreen(
-                                  householdId: item.household.id,
-                                ),
-                              ),
-                            ),
-                          ),
-                        TextButton(
-                          onPressed: onOpenQueue,
-                          child: const Text('Open care reviews'),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-              orElse: () => const SizedBox.shrink(),
             ),
-            const _FamilyReports(),
-            const SizedBox(height: 10),
-            // The way into search reuses the hero's magnetic capsule, so the
-            // whole page shares one tactile language: it draws inward on the
-            // press and settles. The label is unchanged.
-            MagneticCapsule(
-              radius: Gap.radius,
-              onTap: onOpenFamilies,
-              child: SizedBox(
-                height: Gap.tapTarget,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.search_rounded,
-                        size: 19,
-                        color: AppColors.primary,
+          const _DailyRegisterTally(),
+          plan.maybeWhen(
+            data: (data) {
+              final priority = data.priorities
+                  .where(
+                    (p) =>
+                        p.band == VulnerabilityBand.critical ||
+                        p.band == VulnerabilityBand.high,
+                  )
+                  .take(3)
+                  .toList();
+              if (priority.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SectionSpine('From saved records'),
+                    LumenCard(
+                      title: 'Bring these records forward',
+                      subtitle:
+                          'Priorities from saved records—not a diagnosis of who is unwell now.',
+                      count: priority.length,
+                      // The one card on the desk you are meant to act on wears
+                      // the electric rail; every other panel stays plain
+                      // lacquer, so the accent alone carries the hierarchy.
+                      accent: FhwLuxePalette.sapphireElectric,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          RuledColumn(
+                            rule: Colors.white.withValues(alpha: 0.12),
+                            children: [
+                              for (final item in priority)
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(
+                                    item.household.name,
+                                    style: AppType.label.copyWith(
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    item.reason,
+                                    style: AppType.caption.copyWith(
+                                      color: FhwLuxePalette.lacquerInk,
+                                    ),
+                                  ),
+                                  trailing: const Icon(
+                                    Icons.chevron_right_rounded,
+                                    color: Colors.white70,
+                                  ),
+                                  onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => HouseholdScreen(
+                                        householdId: item.household.id,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          TextButton(
+                            onPressed: onOpenQueue,
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text('Open care reviews'),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      Flexible(
+                    ),
+                  ],
+                ),
+              );
+            },
+            orElse: () => const SizedBox.shrink(),
+          ),
+          const _FamilyReports(),
+          const SizedBox(height: 10),
+          // The way into search, finished in the desk's own material: the same
+          // hairline edge and soft drop the porcelain cards carry, with the
+          // glyph seated in sapphire ice. On a white canvas a bare outline reads
+          // as an unfinished input; this reads as an instrument on the desk.
+          // The label is unchanged.
+          Container(
+            decoration: BoxDecoration(
+              color: FhwLuxePalette.cardSurface,
+              borderRadius: BorderRadius.circular(Gap.radiusSm),
+              border: Border.all(color: FhwLuxePalette.hairLine),
+              boxShadow: Chiaroscuro.alabaster,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(Gap.radiusSm),
+              child: InkWell(
+                onTap: onOpenFamilies,
+                borderRadius: BorderRadius.circular(Gap.radiusSm),
+                child: Container(
+                  height: Gap.tapTarget,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 30,
+                        height: 30,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: FhwLuxePalette.sapphireIce,
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: const Icon(
+                          Icons.search_rounded,
+                          size: 17,
+                          color: FhwLuxePalette.sapphireRoyal,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
                         child: Text(
                           'Find a patient or household',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppType.label.copyWith(
                             fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.primary,
+                            fontWeight: FontWeight.w700,
+                            color: FhwLuxePalette.textPrimary,
                           ),
                         ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        size: 18,
+                        color: FhwLuxePalette.textFaint,
                       ),
                     ],
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 14),
-            const Text(
+          ),
+          const SizedBox(height: 14),
+          // The desk's own caveat, set in the system's caption voice rather than
+          // a bare TextStyle, and inset to sit on the card's text column.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: Text(
               'This workspace shows records available on this phone. A quiet list does not rule out urgent care needs.',
-              style: TextStyle(
-                color: AppColors.inkMuted,
+              style: AppType.caption.copyWith(
+                color: FhwLuxePalette.textSecondary,
                 fontSize: 12,
                 height: 1.5,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -327,29 +327,26 @@ class _DailyRegisterTally extends ConsumerWidget {
           ? const SizedBox.shrink()
           : Padding(
               padding: const EdgeInsets.only(bottom: 20),
-              child: LumenCard(
-                title: 'Today’s tally',
-                subtitle:
-                    'Counted from records you saved on this phone today. Each '
-                    'child counts once, however often they were seen.',
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final narrow =
-                        constraints.maxWidth < 300 ||
-                        MediaQuery.textScalerOf(context).scale(12) > 18;
-                    final width = narrow
-                        ? constraints.maxWidth
-                        : (constraints.maxWidth - 16) / 2;
-                    return Wrap(
-                      spacing: 16,
-                      runSpacing: 2,
-                      children: [
-                        for (final cell in [
-                          _TallyCell(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SectionSpine('Recorded today'),
+                  LumenCard(
+                    title: 'Today’s tally',
+                    subtitle:
+                        'Counted from records you saved on this phone today. Each '
+                        'child counts once, however often they were seen.',
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final narrow =
+                            constraints.maxWidth < 320 ||
+                            MediaQuery.textScalerOf(context).scale(12) > 18;
+                        final cells = [
+                          _TallyStat(
                             value: '${day.childrenSeen}',
                             label: 'Under-5 seen',
                           ),
-                          _TallyCell(
+                          _TallyStat(
                             // The denominator is the honest half: five
                             // positives out of five tested and five out of
                             // forty are different days.
@@ -358,38 +355,73 @@ class _DailyRegisterTally extends ConsumerWidget {
                                 : '${day.rdtPositive}/${day.rdtDone}',
                             label: 'RDT positive / tested',
                           ),
-                          _TallyCell(
+                          _TallyStat(
                             value: '${day.sam}',
                             label: 'SAM (severe)',
                             tone: AppColors.triageRed,
                           ),
-                          _TallyCell(
+                          _TallyStat(
                             value: '${day.mam}',
                             label: 'MAM (moderate)',
                             tone: AppColors.triageAmber,
                           ),
-                          _TallyCell(
+                          _TallyStat(
                             value: '${day.immunised}',
                             label: 'Immunisations given',
                           ),
-                          _TallyCell(
+                          _TallyStat(
                             value: '${day.referralsIssued}',
                             label: 'Referrals issued',
                           ),
-                        ])
-                          SizedBox(width: width, child: cell),
-                      ],
-                    );
-                  },
-                ),
+                        ];
+                        // A tally sheet reads as a table, not a wall of big
+                        // numbers: two aligned columns of quiet figures divided
+                        // by hairlines. On a narrow phone or at the 200% text
+                        // floor it folds to a single ruled column.
+                        if (narrow) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (var i = 0; i < cells.length; i++) ...[
+                                if (i > 0) const _TallyRule(),
+                                cells[i],
+                              ],
+                            ],
+                          );
+                        }
+                        return Column(
+                          children: [
+                            for (var r = 0; r < 3; r++) ...[
+                              if (r > 0) const _TallyRule(),
+                              IntrinsicHeight(
+                                child: Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    Expanded(child: cells[r * 2]),
+                                    const _TallyVRule(),
+                                    Expanded(child: cells[r * 2 + 1]),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
     );
   }
 }
 
-class _TallyCell extends StatelessWidget {
-  const _TallyCell({required this.value, required this.label, this.tone});
+/// One figure in the tally table: a quiet tabular number over its label, with
+/// a small clinical swatch when the column is a nutrition verdict (SAM / MAM).
+/// The hue marks the class of measure; it never recolours the figure.
+class _TallyStat extends StatelessWidget {
+  const _TallyStat({required this.value, required this.label, this.tone});
 
   final String value;
   final String label;
@@ -397,40 +429,81 @@ class _TallyCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 10),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        // The figure is carved sapphire — structural light, not painted ink —
-        // scaled down inside a fixed well so a wide numerator or the 200% text
-        // floor can never overflow the ledger column.
+        // Scaled down inside a fixed ceiling so a wide numerator ('3/5') or the
+        // 200% text floor can never overflow the column.
         ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 78),
+          constraints: const BoxConstraints(maxWidth: 132),
           child: FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: tone == null
-                ? Monolith(value: value, fontSize: 27, pearled: true)
-                : Monolith(
-                    value: value,
-                    fontSize: 27,
-                    pearled: false,
-                    tone: tone!,
-                  ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            label,
-            style: AppType.caption.copyWith(
-              fontSize: 12,
-              color: AppColors.inkMuted,
+            child: Text(
+              value,
+              style: AppType.numeral.copyWith(
+                fontSize: 26,
+                height: 1.0,
+                letterSpacing: -0.6,
+                color: Colors.white,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
           ),
         ),
+        const SizedBox(height: 7),
+        Row(
+          children: [
+            if (tone != null) ...[
+              Container(
+                width: 9,
+                height: 9,
+                decoration: BoxDecoration(
+                  color: tone,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 7),
+            ],
+            Expanded(
+              child: Text(
+                label,
+                style: AppType.caption.copyWith(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: FhwLuxePalette.lacquerInk,
+                ),
+              ),
+            ),
+          ],
+        ),
       ],
     ),
+  );
+}
+
+/// A hairline between tally rows.
+class _TallyRule extends StatelessWidget {
+  const _TallyRule();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox(
+    height: 1,
+    child: DecoratedBox(decoration: BoxDecoration(color: Color(0x1FFFFFFF))),
+  );
+}
+
+/// A hairline between the two tally columns, stretched to the row height by the
+/// enclosing [IntrinsicHeight].
+class _TallyVRule extends StatelessWidget {
+  const _TallyVRule();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox(
+    width: 1,
+    child: DecoratedBox(decoration: BoxDecoration(color: Color(0x1FFFFFFF))),
   );
 }
 
@@ -450,13 +523,23 @@ class _FamilyReports extends ConsumerWidget {
           ? const SizedBox.shrink()
           : Padding(
               padding: const EdgeInsets.only(bottom: 20),
-              child: LumenCard(
-                title: 'What families reported',
-                subtitle:
-                    'Home checks on this shared phone. Reported observations, not clinical examinations.',
-                child: Column(
-                  children: [for (final report in reports) _ReportRow(report)],
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SectionSpine('Reported at home'),
+                  LumenCard(
+                    title: 'What families reported',
+                    subtitle:
+                        'Home checks on this shared phone. Reported observations, not clinical examinations.',
+                    count: reports.length,
+                    child: RuledColumn(
+                      rule: Colors.white.withValues(alpha: 0.12),
+                      children: [
+                        for (final report in reports) _ReportRow(report),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
     );
@@ -470,22 +553,36 @@ class _ReportRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final person = ref.watch(personProvider(report.personId));
+    final urgent = report.verdict == HomeCheckVerdict.urgent;
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: Icon(
-        Icons.description_outlined,
-        color: report.verdict == HomeCheckVerdict.urgent
-            ? AppColors.triageRed
-            : AppColors.primary,
+      // On the lacquer panel a quiet report sits in a glass well with a white
+      // glyph; an urgent report keeps the true triage red on a soft red well,
+      // so the clinical verdict is still the only colour that raises its voice.
+      leading: Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: urgent
+              ? FhwLuxePalette.clinicalRed.withValues(alpha: 0.28)
+              : Colors.white.withValues(alpha: 0.16),
+        ),
+        child: Icon(
+          Icons.description_outlined,
+          size: 17,
+          color: urgent ? AppColors.triageRed : Colors.white,
+        ),
       ),
       title: Text(
         person.valueOrNull?.fullName ?? 'Open household record',
-        style: AppType.label,
+        style: AppType.label.copyWith(color: Colors.white),
       ),
       subtitle: Text(
         '${report.verdict.label} · ${DateFormat('d MMM, HH:mm').format(report.checkedAt)}',
+        style: AppType.caption.copyWith(color: FhwLuxePalette.lacquerInk),
       ),
-      trailing: const Icon(Icons.chevron_right_rounded),
+      trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white70),
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => HouseholdScreen(householdId: report.householdId),

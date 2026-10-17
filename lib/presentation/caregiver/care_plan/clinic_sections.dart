@@ -5,12 +5,25 @@ import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import 'package:carebridge_ai/app/providers.dart';
 import 'package:carebridge_ai/core/theme/app_theme.dart';
+import 'package:carebridge_ai/core/theme/lumina.dart';
 import 'package:carebridge_ai/data/repositories/care_repository.dart';
 import 'package:carebridge_ai/domain/entities/visit.dart';
 import 'package:carebridge_ai/domain/enums.dart';
 import 'package:carebridge_ai/presentation/shared/ui.dart';
 import '../caregiver_providers.dart';
 import '../widgets/companion.dart';
+
+/// The quiet honesty note that travels with each care-plan section.
+Widget _sectionCaveat(IconData icon, String text) => Row(
+  crossAxisAlignment: CrossAxisAlignment.start,
+  children: [
+    Icon(icon, size: 18, color: Lumina.core),
+    const SizedBox(width: 10),
+    Expanded(
+      child: Text(text, style: Lumina.body(size: 13, color: Lumina.inkMuted)),
+    ),
+  ],
+);
 
 // ----------------------------------------------------------------- Referrals
 
@@ -26,14 +39,20 @@ class CaregiverReferralsSection extends ConsumerWidget {
       error: (e, _) => ErrorView(error: e),
       data: (list) {
         if (list.isEmpty) return const SizedBox.shrink();
-        return SectionCard(
+        return LumeSection(
           title: 'Referrals to complete',
-          subtitle:
-              'Show the saved referral details to a health worker. A code alone '
-              'does not confirm that a facility can retrieve the record.',
-          icon: Icons.local_hospital_outlined,
           child: Column(
-            children: [for (final r in list) _ReferralTile(referral: r)],
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _sectionCaveat(
+                Icons.local_hospital_outlined,
+                'Show the saved referral details to a health worker. A code '
+                'alone does not confirm that a facility can retrieve the '
+                'record.',
+              ),
+              const SizedBox(height: 14),
+              for (final r in list) _ReferralTile(referral: r),
+            ],
           ),
         );
       },
@@ -50,66 +69,64 @@ class _ReferralTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final person = ref.watch(personProvider(referral.personId));
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: Gap.sm),
-      padding: const EdgeInsets.all(Gap.md),
-      decoration: BoxDecoration(
-        color: AppColors.canvas,
-        borderRadius: BorderRadius.circular(Gap.radiusSm),
-        border: Border.all(color: AppColors.line),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: Gap.md,
-                  vertical: Gap.xs,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  referral.referenceCode,
-                  style: const TextStyle(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Gap.sm),
+      child: LumeWell(
+        padding: const EdgeInsets.all(Gap.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Gap.md,
+                    vertical: Gap.xs,
+                  ),
+                  decoration: BoxDecoration(
                     color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                    letterSpacing: 1,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    referral.referenceCode,
+                    style: const TextStyle(
+                      color: Lumina.core,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                      letterSpacing: 1,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: Gap.sm),
-              Expanded(
-                child: Text(
-                  person.valueOrNull?.fullName ?? '…',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14.5,
+                const SizedBox(width: Gap.sm),
+                Expanded(
+                  child: Text(
+                    person.valueOrNull?.fullName ?? '…',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14.5,
+                      color: Lumina.ink,
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: Gap.xs),
-          Text(
-            referral.reason,
-            style: const TextStyle(fontSize: 13.5, height: 1.35),
-          ),
-          const SizedBox(height: Gap.xs),
-          Text(
-            'Go to: ${referral.facilityName} · ${referral.urgency.label} · '
-            '${referral.status.label}',
-            style: const TextStyle(
-              fontSize: 12.5,
-              color: AppColors.inkMuted,
-              fontWeight: FontWeight.w600,
+              ],
             ),
-          ),
-        ],
+            const SizedBox(height: Gap.xs),
+            Text(
+              referral.reason,
+              style: const TextStyle(fontSize: 13.5, height: 1.35),
+            ),
+            const SizedBox(height: Gap.xs),
+            Text(
+              'Go to: ${referral.facilityName} · ${referral.urgency.label} · '
+              '${referral.status.label}',
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: Lumina.inkMuted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -131,14 +148,20 @@ class CaregiverContactsSection extends ConsumerWidget {
       error: (e, _) => ErrorView(error: e),
       data: (list) {
         if (list.isEmpty) return const SizedBox.shrink();
-        return SectionCard(
+        return LumeSection(
           title: 'Appointments coming up',
-          subtitle:
-              'These are saved scheduled contacts. Check the details with '
-              'your health worker; the app cannot confirm facility availability.',
-          icon: Icons.event_available_rounded,
           child: Column(
-            children: [for (final c in list) _ContactTile(contact: c)],
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _sectionCaveat(
+                Icons.event_available_rounded,
+                'These are saved scheduled contacts. Check the details with '
+                'your health worker; the app cannot confirm facility '
+                'availability.',
+              ),
+              const SizedBox(height: 14),
+              for (final c in list) _ContactTile(contact: c),
+            ],
           ),
         );
       },
@@ -167,7 +190,8 @@ class _ContactTile extends ConsumerWidget {
               vertical: Gap.xs,
             ),
             decoration: BoxDecoration(
-              color: overdue ? AppColors.triageAmberBg : AppColors.primaryLight,
+              color: Colors.white,
+              border: Border.all(color: const Color(0xFFE2EBF5)),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
@@ -175,7 +199,7 @@ class _ContactTile extends ConsumerWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
-                color: overdue ? AppColors.triageAmber : AppColors.primary,
+                color: overdue ? AppColors.triageAmber : Lumina.core,
               ),
             ),
           ),
@@ -196,7 +220,7 @@ class _ContactTile extends ConsumerWidget {
                   '${_dueLabel(contact.daysUntilDue)}',
                   style: TextStyle(
                     fontSize: 12.5,
-                    color: overdue ? AppColors.triageAmber : AppColors.inkMuted,
+                    color: overdue ? AppColors.triageAmber : Lumina.inkMuted,
                     fontWeight: overdue ? FontWeight.w700 : FontWeight.w500,
                   ),
                 ),
@@ -236,16 +260,19 @@ class CaregiverBarrierCard extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
-    return SectionCard(
+    return LumeSection(
       title: 'What makes care difficult?',
-      subtitle:
-          'Save what made care difficult. This report uses the existing clinical '
-          'sync when available. Saving or syncing does not mean a health worker '
-          'has read it or will respond. For urgent help, call or go to a facility.',
-      icon: Icons.report_problem_outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _sectionCaveat(
+            Icons.report_problem_outlined,
+            'Save what made care difficult. This report uses the existing '
+            'clinical sync when available. Saving or syncing does not mean a '
+            'health worker has read it or will respond. For urgent help, call '
+            'or go to a facility.',
+          ),
+          const SizedBox(height: 14),
           history.when(
             loading: () => const Text('Loading earlier reports…'),
             error: (_, _) => CompanionLoadError(
@@ -261,13 +288,17 @@ class CaregiverBarrierCard extends ConsumerWidget {
                       '${list.map((b) => b.label).toSet().join(', ')}.',
                       style: const TextStyle(
                         fontSize: 12.5,
-                        color: AppColors.inkMuted,
+                        color: Lumina.inkMuted,
                         fontStyle: FontStyle.italic,
                       ),
                     ),
                   ),
           ),
           OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Lumina.core,
+              side: BorderSide(color: Lumina.core.withValues(alpha: 0.45)),
+            ),
             onPressed: () => _report(context, ref),
             icon: const Icon(Icons.add_comment_outlined),
             label: const Text('Report a difficulty'),

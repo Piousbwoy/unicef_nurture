@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/providers.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/lumina.dart';
 import '../../../core/audio/caregiver_playback.dart';
 import '../../../domain/entities/caregiver.dart';
 import '../../../domain/entities/core.dart';
@@ -30,7 +30,8 @@ class _MilestoneScreenState extends ConsumerState<CaregiverMilestoneScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!(ModalRoute.isCurrentOf(context) ?? true) || !TickerMode.valuesOf(context).enabled) {
+    if (!(ModalRoute.isCurrentOf(context) ?? true) ||
+        !TickerMode.valuesOf(context).enabled) {
       _voice?.stop(notify: false);
     }
     if (_check != null) return;
@@ -85,10 +86,12 @@ class _MilestoneScreenState extends ConsumerState<CaregiverMilestoneScreen> {
     _spoken = key;
     if (next == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && (ModalRoute.of(context)?.isCurrent ?? true) &&
+      if (mounted &&
+          (ModalRoute.of(context)?.isCurrent ?? true) &&
           TickerMode.valuesOf(context).enabled &&
           (WidgetsBinding.instance.lifecycleState == null ||
-           WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) &&
+              WidgetsBinding.instance.lifecycleState ==
+                  AppLifecycleState.resumed) &&
           c.isCurrent() &&
           _spoken == key &&
           (ref.read(caregiverSettingsProvider(c.scope)).valueOrNull?.autoRead ??
@@ -120,11 +123,18 @@ class _MilestoneScreenState extends ConsumerState<CaregiverMilestoneScreen> {
     void resetNarration() {
       _spoken = null;
       _voice?.stop();
-      WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _changed(); });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _changed();
+      });
     }
+
     ref.listen(narrationLanguageProvider, (_, _) => resetNarration());
-    ref.listen(caregiverSettingsProvider(scope).select((value) => value.valueOrNull?.autoRead),
-        (_, _) => resetNarration());
+    ref.listen(
+      caregiverSettingsProvider(
+        scope,
+      ).select((value) => value.valueOrNull?.autoRead),
+      (_, _) => resetNarration(),
+    );
     ref.watch(caregiverSettingsProvider(scope));
     return CompanionPage(
       title: 'Milestone check',
@@ -249,9 +259,15 @@ class _MilestoneScreenState extends ConsumerState<CaregiverMilestoneScreen> {
                   child: OutlinedButton(
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(72, 72),
-                      backgroundColor: answer == option
-                          ? AppColors.checkBlueTint
-                          : null,
+                      backgroundColor: answer == option ? Lumina.tint : null,
+                      foregroundColor: answer == option
+                          ? Lumina.core
+                          : Lumina.ink,
+                      side: BorderSide(
+                        color: answer == option
+                            ? Lumina.core.withValues(alpha: 0.45)
+                            : const Color(0xFFE2EBF5),
+                      ),
                     ),
                     onPressed: () => c.answer(option),
                     child: Text(

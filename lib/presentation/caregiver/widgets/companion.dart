@@ -31,12 +31,16 @@ String caregiverAge(Person person) =>
 
 /// The caregiver body voice. The theme's default is the app-wide warm ink at
 /// 1.6 leading; on these blue-tinted cards that reads green and floats apart,
-/// so caregiver surfaces set their own: cool navy, 15px, 1.5 leading.
+/// so caregiver surfaces set their own: cool navy, 15px, 1.5 leading. Color
+/// stays null unless pinned so the text inherits the ground it stands on —
+/// ink on the pearl canvas, diveSoft inside a dive card.
 TextStyle caregiverBody({Color? color, double? size, double? height}) =>
-    AppType.body.copyWith(
+    TextStyle(
+      fontFamily: 'Manrope',
       fontSize: size ?? 15,
+      fontWeight: FontWeight.w500,
       height: height ?? 1.5,
-      color: color ?? CompanionColors.ink,
+      color: color,
     );
 
 class CompanionCard extends StatelessWidget {
@@ -46,17 +50,21 @@ class CompanionCard extends StatelessWidget {
     required this.child,
     this.eyebrow,
     this.tone,
+    this.hero = false,
   });
   final String title;
   final String? eyebrow;
   final Widget child;
   final Color? tone;
+
+  /// The one card on a screen that should wear the sapphire dive. Everything
+  /// else rests on pearl — a page of heroes is a page with no hero.
+  final bool hero;
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 16),
-    child: GlassSurface(
-      blur: false,
-      tier: GlassTier.card,
+    child: LumenCard(
+      hero: hero,
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -68,7 +76,7 @@ class CompanionCard extends StatelessWidget {
                 fontSize: 11,
                 letterSpacing: 1.1,
                 height: 1.2,
-                color: CompanionColors.accent,
+                color: hero ? Lumina.glow : Lumina.core,
               ),
             ),
             const SizedBox(height: 8),
@@ -81,11 +89,14 @@ class CompanionCard extends StatelessWidget {
               fontSize: 20,
               height: 1.25,
               letterSpacing: -0.2,
-              color: tone ?? CompanionColors.ink,
+              color: tone ?? (hero ? Colors.white : Lumina.ink),
             ),
           ),
           const SizedBox(height: 12),
-          DefaultTextStyle.merge(style: caregiverBody(), child: child),
+          DefaultTextStyle.merge(
+            style: caregiverBody(color: hero ? Lumina.diveSoft : null),
+            child: child,
+          ),
         ],
       ),
     ),
@@ -96,11 +107,7 @@ class CompanionCard extends StatelessWidget {
 /// person reads the same everywhere. Types with no artwork fall back to the
 /// neutral glyph rather than showing the wrong face.
 class CaregiverPortraitOrb extends StatelessWidget {
-  const CaregiverPortraitOrb({
-    super.key,
-    required this.person,
-    this.size = 56,
-  });
+  const CaregiverPortraitOrb({super.key, required this.person, this.size = 56});
   final Person person;
   final double size;
   @override
@@ -223,7 +230,6 @@ class CompanionPage extends ConsumerStatefulWidget {
     required this.child,
     this.actions,
     this.heroChrome = true,
-    this.lume = false,
   });
   final String title;
   final Widget child;
@@ -232,12 +238,6 @@ class CompanionPage extends ConsumerStatefulWidget {
   /// The caregiver gradient bar. Screens that already open with their own
   /// navy hero pass false so two blue bands never stack.
   final bool heroChrome;
-
-  /// The lights-out state. Urgency in this app is not red added to a bright
-  /// screen, it is light taken away: the pearl canvas drops to midnight and
-  /// the cards on it become lit instruments in a dark room. Descendants read
-  /// [LumeField] to find out which ground they are standing on.
-  final bool lume;
   @override
   ConsumerState<CompanionPage> createState() => _CompanionPageState();
 }
@@ -249,65 +249,50 @@ class _CompanionPageState extends ConsumerState<CompanionPage> {
     final scope = ref.watch(caregiverScopeProvider);
     _owner ??= scope;
     final hero = widget.heroChrome;
-    final lume = widget.lume;
-    final ground = lume ? Lumina.abyss : AppColors.caregiverCanvas;
-    final ink = lume ? Lumina.diveInk : CompanionColors.ink;
+    // The page ground never changes under the caregiver — urgency is carried
+    // by the alarm card, not by a lights-out theme flip.
+    final ground = AppColors.caregiverCanvas;
     return CompanionTheme(
-      child: LumeField(
-        lume: lume,
-        child: TweenAnimationBuilder<Color?>(
-          tween: ColorTween(end: ground),
-          duration: const Duration(milliseconds: 320),
-          curve: Curves.easeOut,
-          builder: (context, color, child) => Scaffold(
-            backgroundColor: color,
-            appBar: AppBar(
-              toolbarHeight: 56 + MediaQuery.textScalerOf(context).scale(16),
-              // The bar and the page are one ground: the caregiver body is cool
-              // blue, so a warm ivory bar above it reads as a different app.
-              backgroundColor: hero && !lume ? Colors.transparent : color,
-              foregroundColor: hero || lume
-                  ? (lume ? Lumina.diveInk : Colors.white)
-                  : CompanionColors.ink,
-              elevation: 0,
-              scrolledUnderElevation: 0,
-              flexibleSpace: hero && !lume
-                  ? const DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: AppColors.caregiverGradient,
-                      ),
-                      child: SizedBox.expand(),
-                    )
-                  : null,
-              title: Text(
-                widget.title,
-                style: TextStyle(
-                  fontFamily: 'Sora',
-                  fontWeight: FontWeight.w700,
-                  fontSize: 18,
-                  color: lume
-                      ? Lumina.diveInk
-                      : hero
-                      ? Colors.white
-                      : CompanionColors.ink,
-                ),
-              ),
-              actions: widget.actions ?? [const CaregiverEmergencyButton()],
-            ),
-            body: child,
-          ),
-          child: scope == null || scope != _owner
-              ? Center(
-                  child: Text(
-                    'Your account changed. Reopen your family.',
-                    style: caregiverBody(color: lume ? ink : null),
+      child: Scaffold(
+        backgroundColor: ground,
+        appBar: AppBar(
+          toolbarHeight: 56 + MediaQuery.textScalerOf(context).scale(16),
+          // The bar and the page are one ground: the caregiver body is cool
+          // blue, so a warm ivory bar above it reads as a different app.
+          backgroundColor: hero ? Colors.transparent : ground,
+          foregroundColor: hero ? Colors.white : CompanionColors.ink,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          flexibleSpace: hero
+              ? const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: AppColors.caregiverGradient,
                   ),
+                  child: SizedBox.expand(),
                 )
-              : DefaultTextStyle.merge(
-                  style: caregiverBody(color: lume ? ink : null),
-                  child: widget.child,
-                ),
+              : null,
+          title: Text(
+            widget.title,
+            style: TextStyle(
+              fontFamily: 'Sora',
+              fontWeight: FontWeight.w700,
+              fontSize: 18,
+              color: hero ? Colors.white : CompanionColors.ink,
+            ),
+          ),
+          actions: widget.actions ?? [const CaregiverEmergencyButton()],
         ),
+        body: scope == null || scope != _owner
+            ? Center(
+                child: Text(
+                  'Your account changed. Reopen your family.',
+                  style: caregiverBody(color: null),
+                ),
+              )
+            : DefaultTextStyle.merge(
+                style: caregiverBody(color: null),
+                child: widget.child,
+              ),
       ),
     );
   }
@@ -560,12 +545,14 @@ class _CaregiverTaskToggleState extends ConsumerState<CaregiverTaskToggle> {
     bool failed = false,
     String? note,
   }) {
-    final tone = widget.tone ?? AppColors.checkBlue;
+    // Every checklist card wears the dive gradient now, so a line inside one
+    // reads as light ink even when the call site never said so.
+    final light = widget.light || LumeField.of(context);
+    final tone = widget.tone ?? (light ? Lumina.ice : AppColors.checkBlue);
     final step = widget.step;
     final total = widget.totalSteps ?? 0;
     final first = step == null || step <= 1;
     final last = step == null || step >= total;
-    final light = widget.light;
     return Semantics(
       button: true,
       checked: done,
@@ -736,7 +723,9 @@ class _StepMarker extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [AppColors.checkBlueLight, AppColors.checkBlue],
+            colors: light
+                ? [Colors.white, Lumina.ice]
+                : [AppColors.checkBlueLight, AppColors.checkBlue],
           ),
           boxShadow: [
             BoxShadow(
@@ -746,7 +735,11 @@ class _StepMarker extends StatelessWidget {
             ),
           ],
         ),
-        child: const Icon(Icons.check_rounded, size: 19, color: Colors.white),
+        child: Icon(
+          Icons.check_rounded,
+          size: 19,
+          color: light ? Lumina.core : Colors.white,
+        ),
       );
     }
     return Container(
@@ -888,10 +881,10 @@ class CaregiverPersonSelector extends ConsumerWidget {
                                 Text(caregiverAge(selected)),
                                 Text(
                                   selected.clientType.label,
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     fontSize: 12.5,
                                     fontWeight: FontWeight.w600,
-                                    color: CompanionColors.muted,
+                                    color: Lumina.inkMuted,
                                   ),
                                 ),
                               ],

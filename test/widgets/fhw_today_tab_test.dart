@@ -2,11 +2,11 @@
 /// whatever signal there happens to be.
 ///
 /// These pin the behaviours that make the tab trustworthy rather than
-/// decorative: one obvious way in, an honest connection and sync line, resume
-/// offered before a duplicate session is created, urgent referrals chased
-/// without implying the family never attended, and priority ordering labelled
-/// as a reading of saved records rather than a diagnosis. Layout is checked at
-/// the accessibility floor (320px, 200% text) because the field devices small.
+/// decorative: one obvious way in, an honest connection and sync line, the
+/// queue ledger offering resume before a duplicate session is created, and
+/// priority ordering labelled as a reading of saved records rather than a
+/// diagnosis. Layout is checked at the accessibility floor (320px, 200% text)
+/// because the field devices small.
 library;
 
 import 'package:carebridge_ai/app/providers.dart';
@@ -150,10 +150,9 @@ Future<void> _pump(
         connectivityProvider.overrideWith((ref) => Stream.value(online)),
       ],
       child: MaterialApp(
-        // disableAnimations: the Today tab permanently shows BreathingDot
-        // sync signals, whose infinite pulse would otherwise starve
-        // pumpAndSettle. Reduced motion renders the identical static layout,
-        // which is what these content pins need.
+        // disableAnimations: reduced motion renders the identical static
+        // layout, which is what these content pins need, and any tween that
+        // ignored the motion gate would hang pumpAndSettle here.
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(textScale),
@@ -178,142 +177,34 @@ Future<void> _pump(
 void main() {
   GoogleFonts.config.allowRuntimeFetching = false;
 
-  testWidgets('one obvious action and an honest connection line', (
-    tester,
-  ) async {
-    await _pump(tester, pendingSync: 3);
+  testWidgets('the body is a single panel with no second hero', (tester) async {
+    await _pump(tester);
 
-    // The hero opens on the first moment: receive the person in front of you.
-    expect(find.text('Begin with the person here.'), findsOneWidget);
-    expect(find.text('Receive a patient'), findsOneWidget);
-    expect(
-      find.text('Network available · 3 saved on this phone'),
-      findsOneWidget,
-    );
+    // The queue, the receive action and the honest sync readout now live on
+    // the shell header, so the Today body opens on what the day produced — not
+    // on a second hero or a 'what the day owes' card.
+    expect(find.text('Begin with the person here.'), findsNothing);
+    expect(find.text('What the day still owes'), findsNothing);
+    expect(find.byKey(const ValueKey('lumen-register')), findsNothing);
 
-    // The three labelled wells give the full control without any gesture.
-    for (final label in ['Receive', 'Care', 'Close loop']) {
-      expect(find.text(label), findsOneWidget, reason: label);
-    }
-    // An empty schedule is stated as a local-record fact, never as reassurance.
+    // The way into the record set reads as a control on the desk.
+    expect(find.text('Find a patient or household'), findsOneWidget);
+
+    // A quiet list is stated as a local-record fact, never as reassurance.
     expect(
       find.textContaining('does not rule out urgent care needs'),
       findsOneWidget,
     );
   });
 
-  testWidgets('working offline is named, not hidden', (tester) async {
-    await _pump(tester, online: false);
-    expect(
-      find.text('Working offline · No items waiting to send'),
-      findsOneWidget,
-    );
-    expect(find.text('Receive a patient'), findsOneWidget);
-  });
-
-  testWidgets('an open session is offered as a live queue before a new one', (
+  testWidgets('the body settles with animations disabled and throws nothing', (
     tester,
   ) async {
-    await _pump(
-      tester,
-      queue: [
-        ClinicQueueTicket(
-          visit: _openVisit(),
-          householdName: 'Achana household',
-          presentCount: 2,
-          assessedCount: 1,
-        ),
-      ],
-    );
-
-    // The register row reports honest progress — assessed of received —
-    // and never invents a clinical verdict the ticket does not carry.
-    expect(find.text('1 person still to assess'), findsOneWidget);
-    final row = find.descendant(
-      of: find.byKey(const ValueKey('lumen-register')),
-      matching: find.text('1 of 2 assessed · 1 to assess'),
-    );
-    expect(row, findsOneWidget);
-    expect(find.text('Open clinic queue'), findsOneWidget);
-    expect(find.text('Achana household'), findsWidgets);
-  });
-
-  testWidgets('a session with everyone assessed reads as complete', (
-    tester,
-  ) async {
-    await _pump(
-      tester,
-      queue: [
-        ClinicQueueTicket(
-          visit: _openVisit(),
-          householdName: 'Achana household',
-          presentCount: 2,
-          assessedCount: 2,
-        ),
-      ],
-    );
-
-    expect(find.text('Every household is assessed'), findsOneWidget);
-    expect(find.text('All 2 assessed'), findsOneWidget);
-  });
-
-  testWidgets('urgent referrals are chased without blaming the family', (
-    tester,
-  ) async {
-    await _pump(tester, referrals: [_urgent()]);
-
-    // The chase lives on the third moment; the labelled well makes it
-    // reachable with a single tap.
-    await tester.tap(find.text('Close loop'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('1 urgent referral to trace.'), findsOneWidget);
-    expect(find.text('Open follow-up'), findsOneWidget);
-    // It says what to do next, never that the family failed to attend.
-    expect(find.textContaining('No arrival has been recorded'), findsNothing);
-  });
-
-  testWidgets('choosing the care well re-lights the focal to the queue', (
-    tester,
-  ) async {
-    await _pump(
-      tester,
-      queue: [
-        ClinicQueueTicket(
-          visit: _openVisit(),
-          householdName: 'Achana household',
-          presentCount: 2,
-          assessedCount: 1,
-        ),
-      ],
-    );
-
-    // The labelled wells are the whole control — no drag is required, so the
-    // instrument stays operable with motion off or without a fine gesture.
-    await tester.tap(find.byKey(const ValueKey('lumen-well-1')));
-    await tester.pumpAndSettle();
-    expect(find.text('1 person still waiting.'), findsOneWidget);
-    expect(find.text('Resume care'), findsOneWidget);
+    // _pump disables animations; if a removed hero had left an unwired motion
+    // gate, the tab would hang here instead of settling cleanly.
+    await _pump(tester);
     expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('reduced motion renders the identical sanctuary without tweens', (
-    tester,
-  ) async {
-    // _pump disables animations; if any hero tween ignored the gate this
-    // would hang instead of settling.
-    await _pump(tester, pendingSync: 2);
-    expect(find.text('Begin with the person here.'), findsOneWidget);
-    expect(
-      find.text('Network available · 2 saved on this phone'),
-      findsOneWidget,
-    );
-
-    await tester.tap(find.text('Close loop'));
-    await tester.pumpAndSettle();
-    expect(find.text('03  ·  CLOSE THE LOOP'), findsOneWidget);
-    expect(find.text('Keep planned care moving.'), findsOneWidget);
-    expect(tester.takeException(), isNull);
+    expect(find.text('Find a patient or household'), findsOneWidget);
   });
 
   testWidgets('priorities are labelled as records, not a diagnosis', (

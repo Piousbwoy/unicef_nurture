@@ -12,6 +12,7 @@
 library;
 
 import 'dart:async';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 
@@ -44,26 +45,17 @@ abstract final class Lumina {
   static const diveInk = Color(0xFFDCE9FF);
   static const diveMuted = Color(0xFF8FB0DC);
 
-  // ── Hairlines and edges ─────────────────────────────────────────────────
-  /// The gradient of a card's 1px edge: sapphire light catching the top-left
-  /// rim, fading to a whisper before the bottom-right.
-  static const edgeGradient = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [Color(0x2E1B56DB), Color(0x14FFFFFF), Color(0x0F0A1931)],
-    stops: [0.0, 0.45, 1.0],
-  );
+  /// The two whites every hero card writes with: body copy and iconography.
+  static const diveSoft = Color(0xD9FFFFFF);
+  static const diveSoftIcon = Color(0xE6FFFFFF);
 
+  // ── Hairlines and edges ─────────────────────────────────────────────────
   /// A top-only specular line: the flash of light along a glass rim.
   static const specular = LinearGradient(
     colors: [Colors.transparent, Color(0x9FFFFFFF), Colors.transparent],
   );
 
   // ── Shadow pairs — blue-tinted, always two layers ──────────────────────
-  static const lift = [
-    BoxShadow(color: Color(0x140A2A5A), blurRadius: 40, offset: Offset(0, 16)),
-    BoxShadow(color: Color(0x0D0A2A5A), blurRadius: 12, offset: Offset(0, 3)),
-  ];
   static const liftQuiet = [
     BoxShadow(color: Color(0x0F0A2A5A), blurRadius: 24, offset: Offset(0, 10)),
   ];
@@ -73,7 +65,43 @@ abstract final class Lumina {
     offset: Offset(0, 10),
   );
 
+  /// The shadow a hero card throws on the pearl canvas: midnight, not grey.
+  static const diveLift = [
+    BoxShadow(color: Color(0x40040E1F), blurRadius: 30, offset: Offset(0, 14)),
+    BoxShadow(color: Color(0x1A0A1931), blurRadius: 10, offset: Offset(0, 3)),
+  ];
+
+  /// Shade falling from a dive well's top rim into its floor.
+  static const wellShade = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.center,
+    colors: [Color(0x40040E1F), Color(0x00040E1F)],
+  );
+
+  /// The lifted light along a dive well's bottom lip.
+  static const wellLight = LinearGradient(
+    begin: Alignment.bottomCenter,
+    end: Alignment.center,
+    colors: [Color(0x26FFFFFF), Color(0x00FFFFFF)],
+  );
+
+  /// Frost: the ice a chip wears over the dive.
+  static const frost = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0x2EFFFFFF), Color(0x12FFFFFF)],
+  );
+
   // ── Gradients ───────────────────────────────────────────────────────────
+  /// The hero dive: the check-hero blue that every card in the caregiver
+  /// flow now wears — midnight sapphire at the top-left running into open
+  /// light at the bottom-right.
+  static const hero = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF0C2B73), core, bright],
+  );
+
   /// The brand tide: deep sapphire into open blue, used on filled controls.
   static const tide = LinearGradient(
     begin: Alignment.topLeft,
@@ -104,6 +132,7 @@ abstract final class Lumina {
   // ── Motion — liquid ─────────────────────────────────────────────────────
   /// Long release with a breath of overshoot: water settling, not a click.
   static const liquid = Cubic(0.22, 1.12, 0.28, 1.0);
+
   /// Pure deceleration for entrances.
   static const glide = Cubic(0.16, 1.0, 0.3, 1.0);
   static const quick = Duration(milliseconds: 180);
@@ -113,17 +142,24 @@ abstract final class Lumina {
   // ── Typography — razor rules ────────────────────────────────────────────
   /// Display type gets tighter tracking as it grows; micro labels get wide
   /// letterspacing. Sora is the only bundled display face (weights 400-800).
-  static TextStyle display(double size, {Color color = ink, int weight = 800}) =>
+  /// Color stays null unless pinned so text reads correctly on both the
+  /// pearl canvas and a dive card: unstyled text inherits the ground it
+  /// stands on (DefaultTextStyle), explicit colors override it.
+  static TextStyle display(double size, {Color? color, int weight = 800}) =>
       TextStyle(
         fontFamily: 'Sora',
         fontSize: size,
         fontWeight: FontWeight.values[weight ~/ 100 - 1],
         height: size >= 24 ? 1.12 : 1.22,
-        letterSpacing: size >= 28 ? -1.2 : size >= 22 ? -0.7 : -0.3,
+        letterSpacing: size >= 28
+            ? -1.2
+            : size >= 22
+            ? -0.7
+            : -0.3,
         color: color,
       );
 
-  static TextStyle body({double size = 14.5, Color color = inkMuted, int weight = 500}) =>
+  static TextStyle body({double size = 14.5, Color? color, int weight = 500}) =>
       TextStyle(
         fontSize: size,
         fontWeight: FontWeight.values[weight ~/ 100 - 1],
@@ -131,24 +167,19 @@ abstract final class Lumina {
         color: color,
       );
 
-  static TextStyle micro({Color color = inkFaint, int weight = 800}) =>
-      TextStyle(
-        fontSize: 9.5,
-        fontWeight: FontWeight.values[weight ~/ 100 - 1],
-        letterSpacing: 1.6,
-        height: 1.35,
-        color: color,
-      );
+  static TextStyle micro({Color? color, int weight = 800}) => TextStyle(
+    fontSize: 9.5,
+    fontWeight: FontWeight.values[weight ~/ 100 - 1],
+    letterSpacing: 1.6,
+    height: 1.35,
+    color: color,
+  );
 }
 
 /// Tells the subtree it is living in the dive: an alarm dropped the pearl
 /// canvas into deep sapphire, and surfaces should read as lit instruments.
 class LumeField extends InheritedWidget {
-  const LumeField({
-    super.key,
-    required this.lume,
-    required super.child,
-  });
+  const LumeField({super.key, required this.lume, required super.child});
 
   final bool lume;
 
@@ -169,7 +200,7 @@ class MicroLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ink = color ?? Lumina.inkFaint;
+    final ink = color ?? Lumina.glow;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -190,64 +221,276 @@ class MicroLabel extends StatelessWidget {
   }
 }
 
-/// A pearl glass card: white fill, gradient hairline edge, blue shadow pair,
-/// and an optional specular rim. The workhorse surface of the language.
-class LumenCard extends StatelessWidget {
+/// A hero card: the check-hero dive gradient under a white hairline, lit by a
+/// specular rim, throwing a midnight shadow on the pearl canvas. Text and
+/// icons inherit the dive whites unless a call site says otherwise. When
+/// tappable it answers the thumb: the card takes the press as a scale down
+/// and the lift drains away, so releasing feels like surfacing.
+/// A card in one of two grounds. `hero: true` is the dive: the sapphire
+/// gradient with a specular rim and a midnight shadow, reserved for the one
+/// primary card a screen wants you to feel. The default is pearl: a white
+/// sheet with a hairline edge and a quiet lift, ink on light — the resting
+/// surface everything else reads on. Balance is the point: a page of hero
+/// cards is noise; one hero among pearls is an accent. When tappable the
+/// card answers the thumb: it takes the press as a scale down and the lift
+/// drains away, so releasing feels like surfacing.
+class LumenCard extends StatefulWidget {
   const LumenCard({
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(20),
     this.radius = Lumina.rLg,
-    this.fill = Lumina.pearl,
-    this.shadow = Lumina.lift,
     this.specular = true,
+    this.hero = false,
     this.onTap,
   });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
   final double radius;
-  final Color fill;
-  final List<BoxShadow> shadow;
   final bool specular;
+  final bool hero;
   final VoidCallback? onTap;
+
+  @override
+  State<LumenCard> createState() => _LumenCardState();
+}
+
+class _LumenCardState extends State<LumenCard> {
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
     final fx = VisualEffects.of(context);
-    final shape = BorderRadius.circular(radius);
-    Widget content = Padding(padding: padding, child: child);
-    if (onTap != null) {
-      content = InkWell(borderRadius: shape, onTap: onTap, child: content);
+    final hero = widget.hero;
+    final shape = BorderRadius.circular(widget.radius);
+    Widget content = Padding(padding: widget.padding, child: widget.child);
+    if (widget.onTap != null) {
+      content = InkWell(
+        borderRadius: shape,
+        onTap: widget.onTap,
+        onHighlightChanged: (h) => setState(() => _pressed = h),
+        child: content,
+      );
     }
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: shape,
-        gradient: Lumina.edgeGradient,
-        boxShadow: fx.blur ? shadow : const [],
+    final sunk = _pressed && widget.onTap != null;
+    content = LumeField(
+      lume: hero,
+      child: DefaultTextStyle.merge(
+        style: TextStyle(color: hero ? Lumina.diveSoft : Lumina.ink),
+        child: hero
+            ? ListTileTheme(
+                data: const ListTileThemeData(
+                  textColor: Lumina.diveSoft,
+                  iconColor: Lumina.diveSoftIcon,
+                ),
+                child: Theme(
+                  data: Theme.of(context).copyWith(
+                    filledButtonTheme: FilledButtonThemeData(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Lumina.core,
+                      ),
+                    ),
+                    textButtonTheme: TextButtonThemeData(
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                    outlinedButtonTheme: OutlinedButtonThemeData(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.45),
+                        ),
+                      ),
+                    ),
+                    checkboxTheme: CheckboxThemeData(
+                      fillColor: WidgetStateProperty.resolveWith(
+                        (s) => s.contains(WidgetState.selected)
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.12),
+                      ),
+                      checkColor: WidgetStateProperty.all(Lumina.core),
+                      side: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ),
+                  child: IconTheme(
+                    data: const IconThemeData(color: Lumina.diveSoftIcon),
+                    child: content,
+                  ),
+                ),
+              )
+            : content,
       ),
-      padding: const EdgeInsets.all(1.1),
-      child: Material(
-        color: fill,
-        borderRadius: shape,
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          children: [
-            if (specular && fx.blur)
-              const Positioned(
-                top: 0,
-                left: 22,
-                right: 22,
-                child: IgnorePointer(
-                  child: SizedBox(
-                    height: 1.2,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(gradient: Lumina.specular),
+    );
+    return AnimatedScale(
+      duration: fx.scale(Lumina.quick),
+      curve: Lumina.liquid,
+      scale: sunk && fx.motion ? 0.985 : 1,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: shape,
+          gradient: hero ? Lumina.hero : null,
+          color: hero ? null : Lumina.pearl,
+          border: Border.all(
+            color: hero
+                ? Colors.white.withValues(alpha: 0.14)
+                : const Color(0xFFE2EBF5),
+          ),
+          boxShadow: fx.blur
+              ? sunk
+                    ? const []
+                    : hero
+                    ? Lumina.diveLift
+                    : Lumina.liftQuiet
+              : const [],
+        ),
+        child: Material(
+          color: sunk
+              ? (hero ? const Color(0x14FFFFFF) : const Color(0x080A1931))
+              : Colors.transparent,
+          borderRadius: shape,
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            children: [
+              if (hero && widget.specular && fx.blur)
+                const Positioned(
+                  top: 0,
+                  left: 22,
+                  right: 22,
+                  child: IgnorePointer(
+                    child: SizedBox(
+                      height: 1.2,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(gradient: Lumina.specular),
+                      ),
                     ),
                   ),
                 ),
+              content,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A titled section: micro eyebrow, razor display title, content. The
+/// standard block of the tab pages — one margin, one voice. Pearl by
+/// default; `hero: true` puts the sapphire gradient on it for the one
+/// section a page leads with.
+class LumeSection extends StatelessWidget {
+  const LumeSection({
+    super.key,
+    required this.title,
+    required this.child,
+    this.eyebrow,
+    this.hero = false,
+    this.padding = const EdgeInsets.all(20),
+  });
+
+  final String title;
+  final Widget child;
+  final String? eyebrow;
+  final bool hero;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 16),
+    child: LumenCard(
+      hero: hero,
+      radius: Lumina.rMd,
+      padding: padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (eyebrow != null) ...[
+            MicroLabel(eyebrow!, color: hero ? Lumina.glow : Lumina.core),
+            const SizedBox(height: 6),
+          ],
+          Text(
+            title,
+            style: Lumina.display(17, color: hero ? Colors.white : Lumina.ink),
+          ),
+          const SizedBox(height: 14),
+          child,
+        ],
+      ),
+    ),
+  );
+}
+
+/// A sunken well inside a card: content pressed *into* the surface. On a
+/// hero card it is a dive well — translucent ice with a midnight shade from
+/// the top rim and lifted light on the bottom lip. On a pearl card it reads
+/// as mist: a quiet blue-grey recess with a hairline. It senses the ground
+/// through [LumeField], so call sites never branch.
+class LumeWell extends StatelessWidget {
+  const LumeWell({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(16),
+    this.radius = Lumina.rSm,
+    this.fill = const Color(0x14FFFFFF),
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final double radius;
+  final Color fill;
+
+  @override
+  Widget build(BuildContext context) {
+    final fx = VisualEffects.of(context);
+    final dive = LumeField.of(context);
+    final shape = BorderRadius.circular(radius);
+    final floor = dive
+        ? fill
+        : (fill == const Color(0x14FFFFFF) ? Lumina.mist : fill);
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: shape,
+        color: floor,
+        border: Border.all(
+          color: dive
+              ? Colors.white.withValues(alpha: 0.10)
+              : const Color(0xFFE2EBF5),
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: shape,
+        child: Stack(
+          children: [
+            if (dive && fx.blur) ...[
+              const Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 22,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(gradient: Lumina.wellShade),
+                  ),
+                ),
               ),
-            content,
+              const Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: 22,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(gradient: Lumina.wellLight),
+                  ),
+                ),
+              ),
+            ],
+            Padding(padding: padding, child: child),
           ],
         ),
       ),
@@ -255,43 +498,124 @@ class LumenCard extends StatelessWidget {
   }
 }
 
-/// A titled pearl section: micro eyebrow, razor display title, content.
-/// The standard block of the tab pages — one margin, one voice.
-class LumeSection extends StatelessWidget {
-  const LumeSection({
+/// A frosted glass chip for the dive world: real backdrop blur when the
+/// device allows it, the same translucent silhouette when it doesn't. The
+/// ice that makes hero pills feel like they float a hair above the water.
+class LumeFrost extends StatelessWidget {
+  const LumeFrost({
     super.key,
-    required this.title,
     required this.child,
-    this.eyebrow,
-    this.padding = const EdgeInsets.all(20),
+    this.padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    this.radius = 999,
+    this.sigma = 12,
   });
 
-  final String title;
   final Widget child;
-  final String? eyebrow;
   final EdgeInsetsGeometry padding;
+  final double radius;
+  final double sigma;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 16),
-    child: LumenCard(
-      radius: Lumina.rMd,
-      shadow: Lumina.liftQuiet,
+  Widget build(BuildContext context) {
+    final fx = VisualEffects.of(context);
+    final shape = BorderRadius.circular(radius);
+    final chip = Container(
       padding: padding,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (eyebrow != null) ...[
-            MicroLabel(eyebrow!),
-            const SizedBox(height: 6),
-          ],
-          Text(title, style: Lumina.display(17)),
-          const SizedBox(height: 14),
-          child,
-        ],
+      decoration: BoxDecoration(
+        borderRadius: shape,
+        gradient: Lumina.frost,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
       ),
-    ),
+      child: child,
+    );
+    if (!fx.blur) return chip;
+    return ClipRRect(
+      borderRadius: shape,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+        child: chip,
+      ),
+    );
+  }
+}
+
+/// A status dot that breathes: a few slow tides of glow when it first
+/// arrives, then a calm, steady point. It draws the eye once and never
+/// taxes a slow phone (or a settling test pump) with an eternal pulse.
+class LumePulse extends StatefulWidget {
+  const LumePulse({super.key, required this.color, this.size = 8});
+
+  final Color color;
+  final double size;
+
+  @override
+  State<LumePulse> createState() => _LumePulseState();
+}
+
+class _LumePulseState extends State<LumePulse>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 850),
   );
+  bool _started = false;
+  bool _rested = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started || _c.isAnimating) return;
+    _started = true;
+    if (!VisualEffects.of(context).motion) {
+      _rested = true;
+      return;
+    }
+    _breathe(4);
+  }
+
+  Future<void> _breathe(int cycles) async {
+    for (var i = 0; i < cycles; i++) {
+      if (!mounted) return;
+      await _c.forward();
+      if (!mounted) return;
+      await _c.reverse();
+    }
+    if (mounted) setState(() => _rested = true);
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fx = VisualEffects.of(context);
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, _) {
+        final t = _rested ? 0.0 : Curves.easeInOut.transform(_c.value);
+        return Container(
+          width: widget.size,
+          height: widget.size,
+          decoration: BoxDecoration(
+            color: widget.color,
+            shape: BoxShape.circle,
+            boxShadow: fx.blur
+                ? [
+                    BoxShadow(
+                      color: widget.color.withValues(alpha: 0.50 - 0.30 * t),
+                      blurRadius: 10 + 12 * t,
+                      spreadRadius: 1 + 5 * t,
+                    ),
+                  ]
+                : const [],
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// A filled sapphire control. The press dips and the aura tightens; the label
@@ -332,7 +656,7 @@ class _SapphireButtonState extends State<SapphireButton> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         if (widget.icon != null) ...[
-          Icon(widget.icon, size: 18, color: Colors.white),
+          Icon(widget.icon, size: 18, color: Lumina.core),
           const SizedBox(width: 9),
         ],
         Flexible(
@@ -346,7 +670,7 @@ class _SapphireButtonState extends State<SapphireButton> {
               fontSize: 14.5,
               fontWeight: FontWeight.w700,
               letterSpacing: -0.1,
-              color: Colors.white,
+              color: Lumina.core,
             ),
           ),
         ),
@@ -374,24 +698,21 @@ class _SapphireButtonState extends State<SapphireButton> {
             ),
             decoration: BoxDecoration(
               borderRadius: radius,
-              gradient: Lumina.tide,
+              color: _pressed ? Lumina.tint : Lumina.pearl,
               boxShadow: fx.blur
                   ? [
                       BoxShadow(
-                        color: Lumina.azure.withValues(
-                          alpha: _pressed ? 0.48 : 0.30,
+                        color: Lumina.abyss.withValues(
+                          alpha: _pressed ? 0.42 : 0.26,
                         ),
-                        blurRadius: _pressed ? 34 : 24,
+                        blurRadius: _pressed ? 30 : 20,
                         offset: const Offset(0, 10),
                       ),
                     ]
                   : const [],
             ),
             width: widget.expand ? double.infinity : null,
-            child: Opacity(
-              opacity: _live ? 1 : 0.45,
-              child: content,
-            ),
+            child: Opacity(opacity: _live ? 1 : 0.45, child: content),
           ),
         ),
       ),
@@ -449,14 +770,18 @@ class GhostPill extends StatelessWidget {
                 ),
                 const SizedBox(width: 7),
               ],
-              Text(
-                label,
-                style: TextStyle(
-                  fontFamily: 'Sora',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: -0.1,
-                  color: selected ? Colors.white : Lumina.ink,
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'Sora',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.1,
+                    color: selected ? Colors.white : Lumina.ink,
+                  ),
                 ),
               ),
             ],

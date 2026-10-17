@@ -792,7 +792,15 @@ class CareRepository {
       Permission.viewAllHouseholds,
       'view the follow-up desk',
     );
-    final referrals = await ReferralDao.recent(withinDays: withinDays);
+    // The window is measured from the repository's clock, not the wall clock.
+    // Every write on this class is stamped with [_clock], so a desk that read
+    // with a different clock would age its own records twice: a phone left on
+    // the wrong date could drop a referral it issued five minutes ago, and no
+    // screen would say why.
+    final referrals = await ReferralDao.recent(
+      withinDays: withinDays,
+      now: _clock(),
+    );
     final ids = referrals.map((r) => r.id);
     final ledger = await FollowUpDao.forReferrals(ids);
     final people = await PersonDao.byIdMany(

@@ -143,9 +143,7 @@ class _DockItem extends StatelessWidget {
                 style: AppType.label.copyWith(
                   fontSize: 11,
                   fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                  color: selected
-                      ? Colors.white
-                      : FhwLuxePalette.textSecondary,
+                  color: selected ? Colors.white : FhwLuxePalette.textSecondary,
                 ),
               ),
             ],
@@ -252,10 +250,7 @@ class CatalystCapsule extends StatelessWidget {
                   body,
                   const SizedBox(height: 22),
                   ShimmerCatchlight(child: button),
-                  if (footer != null) ...[
-                    const SizedBox(height: 10),
-                    footer!,
-                  ],
+                  if (footer != null) ...[const SizedBox(height: 10), footer!],
                 ],
               ),
             ),
@@ -485,9 +480,7 @@ class _QueueHero extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                count == 0
-                    ? 'Queue clear'
-                    : '$count in the clinic queue',
+                count == 0 ? 'Queue clear' : '$count in the clinic queue',
                 style: AppType.stat.copyWith(fontSize: 19),
               ),
               if (waitLabel != null) ...[
@@ -661,9 +654,7 @@ class _MicroArc extends StatelessWidget {
       child: SizedBox(
         width: 44,
         height: 44,
-        child: CustomPaint(
-          painter: _MicroArcPainter(fraction: fraction),
-        ),
+        child: CustomPaint(painter: _MicroArcPainter(fraction: fraction)),
       ),
     );
   }

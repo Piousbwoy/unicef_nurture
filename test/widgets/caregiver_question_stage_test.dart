@@ -255,21 +255,21 @@ void main() {
     expect(find.byIcon(Icons.chevron_left_rounded), findsNothing);
   });
 
-  testWidgets('a danger sign dims the whole page — the interface dives', (
+  testWidgets('a danger sign raises the alarm card and leaves the page lit', (
     tester,
   ) async {
     await _open(tester);
-    Color? ground() => tester
-        .widget<Scaffold>(find.byType(Scaffold).last)
-        .backgroundColor;
+    Color? ground() =>
+        tester.widget<Scaffold>(find.byType(Scaffold).last).backgroundColor;
     // Ordinary light: the page sits on the pearl canvas.
     expect(ground(), isNot(Lumina.abyss));
 
     await tester.tap(find.text('Yes'));
     await tester.pumpAndSettle();
-    // The alarm does not paste red over a bright screen; it takes the light
-    // away, and every card on the page reads LumeField and dives with it.
-    expect(ground(), Lumina.abyss);
+    // The alarm is one red card you can act on — the page itself never
+    // dives to midnight.
+    expect(ground(), isNot(Lumina.abyss));
+    expect(find.textContaining('This needs attention now.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

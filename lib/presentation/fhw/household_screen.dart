@@ -30,6 +30,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/fhw_luxe.dart';
 import '../../core/theme/glass.dart';
 import '../../core/theme/motion.dart';
 import '../../data/repositories/care_repository.dart';
@@ -601,11 +602,11 @@ class _Fact extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colour = danger ? AppColors.triageRed : AppColors.inkMuted;
+    final colour = danger ? AppColors.triageRed : FhwLuxePalette.textSecondary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.sm),
       decoration: BoxDecoration(
-        color: danger ? AppColors.triageRedBg : AppColors.canvas,
+        color: danger ? AppColors.triageRedBg : FhwLuxePalette.pearlSurface,
         borderRadius: BorderRadius.circular(Gap.radiusSm),
       ),
       // A Wrap, not a Row, so a long value ("To facility: 120 min walk")
@@ -621,7 +622,7 @@ class _Fact extends StatelessWidget {
             value,
             style: TextStyle(
               fontSize: 12,
-              color: danger ? AppColors.triageRed : AppColors.ink,
+              color: danger ? AppColors.triageRed : FhwLuxePalette.textPrimary,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -750,9 +751,9 @@ class _RiskCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(Gap.md),
                     decoration: BoxDecoration(
-                      color: AppColors.canvas,
+                      color: FhwLuxePalette.pearlSurface,
                       borderRadius: BorderRadius.circular(Gap.radiusSm),
-                      border: Border.all(color: AppColors.line),
+                      border: Border.all(color: FhwLuxePalette.hairLine),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -871,7 +872,9 @@ class _FactorTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 3),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: actionable ? AppColors.primaryLight : AppColors.canvas,
+            color: actionable
+                ? FhwLuxePalette.sapphireIce
+                : FhwLuxePalette.pearlSurface,
             borderRadius: BorderRadius.circular(6),
           ),
           child: Text(
@@ -1014,7 +1017,7 @@ class _MemberTile extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: Gap.sm),
       padding: const EdgeInsets.all(Gap.md),
       decoration: BoxDecoration(
-        color: AppColors.canvas,
+        color: FhwLuxePalette.pearlSurface,
         borderRadius: BorderRadius.circular(Gap.radiusSm),
       ),
       child: Column(
@@ -1069,9 +1072,9 @@ class _MemberTile extends ConsumerWidget {
                   vertical: 3,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: FhwLuxePalette.cardSurface,
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: AppColors.line),
+                  border: Border.all(color: FhwLuxePalette.hairLine),
                 ),
                 child: Text(
                   type.protocolLabel,

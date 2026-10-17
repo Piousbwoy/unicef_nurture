@@ -43,9 +43,7 @@ class Tokens {
 
 class ServerAuthResult {
   const ServerAuthResult.ok(this.tokens, this.user) : error = null;
-  const ServerAuthResult.err(this.error)
-      : tokens = null,
-        user = null;
+  const ServerAuthResult.err(this.error) : tokens = null, user = null;
 
   final Tokens? tokens;
   final Map<String, Object?>? user;
@@ -64,9 +62,12 @@ abstract final class ServerAuthClient {
   // ignore: use_setters_to_change_properties
   static void injectStorage(FlutterSecureStorage s) => _storageOverride = s;
   static FlutterSecureStorage get _storage =>
-      _storageOverride ?? const FlutterSecureStorage(
+      _storageOverride ??
+      const FlutterSecureStorage(
         aOptions: AndroidOptions(encryptedSharedPreferences: true),
-        iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
+        iOptions: IOSOptions(
+          accessibility: KeychainAccessibility.first_unlock_this_device,
+        ),
       );
 
   static String? _cachedDeviceId;
@@ -160,8 +161,9 @@ abstract final class ServerAuthClient {
       // ─── Step 1: CHALLENGE ────────────────────────────────────────────────
       // Unauthenticated fetch. Server returns user_id + server_salt (public,
       // non-secret). The PIN is NEVER placed on the wire here or at any step.
-      final challengeUri = Uri.parse('$base/api/auth/challenge')
-          .replace(queryParameters: {'phone': cleanPhone});
+      final challengeUri = Uri.parse(
+        '$base/api/auth/challenge',
+      ).replace(queryParameters: {'phone': cleanPhone});
       final challengeReply = await PlatformHttpClient.get(
         challengeUri,
         headers: const {'Accept': 'application/json'},
@@ -174,24 +176,40 @@ abstract final class ServerAuthClient {
         return ServerAuthResult.err('Too many sign-in attempts.$s');
       }
       if (csc != 200) {
-        final msg = challengeReply.jsonBody?['error'] ??
+        final msg =
+            challengeReply.jsonBody?['error'] ??
             'Challenge endpoint returned HTTP $csc';
         return ServerAuthResult.err(msg.toString());
       }
       final serverSalt = challengeReply.jsonBody?['server_salt'] as String?;
       if (serverSalt == null || serverSalt.isEmpty) {
-        return const ServerAuthResult.err('Server did not issue a challenge salt.');
+        return const ServerAuthResult.err(
+          'Server did not issue a challenge salt.',
+        );
       }
 
       // ─── Step 2: LOCAL VERIFIER COMPUTATION ───────────────────────────────
       // Pin, phone, and server_salt are transformed into a domain-separated
-      // iterated HMAC (120k iterations). The on-device pin_hash/pin_salt are
-      // never referenced here — a blank replacement device never needs them.
-      // The server never sees the raw PIN.
+      // iterated HMAC. The on-device pin_hash/pin_salt are never referenced
+      // here — a blank replacement device never needs them. The server never
+      // sees the raw PIN.
+      //
+      // The server also reports the cost this credential was actually stretched
+      // at. Our own default is a compile-time guess (web 500, native debug 1000,
+      // release 20000/120000), and guessing wrong produces a different verifier
+      // and a bare "Invalid credentials" — which is how an account registered in
+      // the browser became unrecoverable on a phone. Absent on rows written
+      // before that column existed, so we fall back to the platform default.
+      final advertisedPin =
+          (challengeReply.jsonBody?['pin_iterations'] as num?)?.toInt();
+      final advertisedCloud =
+          (challengeReply.jsonBody?['cloud_iterations'] as num?)?.toInt();
       final verifierResponse = Credentials.computeCloudVerifierFromPin(
         pin: pin,
         phone: cleanPhone,
         serverSalt: serverSalt,
+        pinIterations: advertisedPin,
+        cloudIterations: advertisedCloud,
       );
 
       // ─── Step 3: LOGIN WITH VERIFIER RESPONSE ─────────────────────────────
@@ -227,8 +245,9 @@ abstract final class ServerAuthClient {
       }
       final tokens = Tokens(
         accessToken: access,
-        accessExpiresAt:
-            DateTime.now().add(Duration(seconds: expIn.clamp(60, 86400 * 7))),
+        accessExpiresAt: DateTime.now().add(
+          Duration(seconds: expIn.clamp(60, 86400 * 7)),
+        ),
         refreshToken: refresh,
       );
       await saveTokens(tokens);
@@ -268,7 +287,8 @@ abstract final class ServerAuthClient {
       );
       if (reply.statusCode != 200) {
         await clearTokens();
-        final msg = reply.jsonBody?['error'] ??
+        final msg =
+            reply.jsonBody?['error'] ??
             'Refresh failed (HTTP ${reply.statusCode}). Please sign in again.';
         return ServerAuthResult.err(msg.toString());
       }
@@ -280,7 +300,9 @@ abstract final class ServerAuthClient {
       }
       final updated = Tokens(
         accessToken: access,
-        accessExpiresAt: DateTime.now().add(Duration(seconds: expIn.clamp(60, 86400 * 7))),
+        accessExpiresAt: DateTime.now().add(
+          Duration(seconds: expIn.clamp(60, 86400 * 7)),
+        ),
         refreshToken: t.refreshToken,
       );
       await saveTokens(updated);
@@ -356,6 +378,58 @@ abstract final class ServerAuthClient {
       }
     }
     await clearTokens();
+  }
+
+  // ------------------------------------------------ credential bootstrap
+  /// Hands this device's cloud credential to the server directly, so a worker who
+  /// registered while off-grid can still be authenticated from another handset.
+  ///
+  /// This closes a bootstrap deadlock: `/api/sync` needs a JWT, a JWT needs a
+  /// challenge, and a challenge needs the `user_verifiers` row that only the first
+  /// sync could deliver. Without it, a device that registers offline can never
+  /// push itself online, and recovery reports "no account found" for a colleague
+  /// who registered days ago.
+  ///
+  /// Best-effort by design — an offline CHPS compound must still be able to
+  /// register, and the identical payload stays queued in the outbox for the next
+  /// trigger. The server enforces this route as CREATE-ONLY: it will not overwrite
+  /// an existing credential nor displace a phone already owned by another account.
+  static Future<bool> provisionRegistration({
+    required String userId,
+    required String phone,
+    required String serverSalt,
+    required String verifier,
+    required Map<String, Object?> profile,
+    String? deviceId,
+    int? pinIterations,
+    int? cloudIterations,
+  }) async {
+    final base = await PreferencesStore.effectiveSyncApiUrl();
+    if (base.isEmpty) return false;
+    try {
+      final reply = await PlatformHttpClient.post(
+        Uri.parse('$base/api/auth/register'),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+        body: jsonEncode({
+          'user_id': userId,
+          'phone': phone,
+          'server_salt': serverSalt,
+          'verifier': verifier,
+          'device_id': deviceId,
+          // Recorded so /api/auth/challenge can hand the same cost back to a
+          // handset on another platform, which otherwise has to guess.
+          'pin_iterations': pinIterations,
+          'cloud_iterations': cloudIterations,
+          ...profile,
+        }),
+        timeout: const Duration(seconds: 15),
+      );
+      return reply.statusCode == 200 || reply.statusCode == 201;
+    } catch (_) {
+      // Offline, unconfigured or a 409 from an already-provisioned account: the
+      // outbox row still carries the same credential for a later push.
+      return false;
+    }
   }
 
   // ------------------------------------------------------------------ helpers
