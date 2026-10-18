@@ -251,6 +251,41 @@ const TABLES = {
       'sync_state',
     ],
   },
+  //
+  // The accountability spine: the family's recorded consent decisions and the
+  // per-device access trail. Both are PUSH-ONLY by deliberate choice — they are
+  // not added to pull.js PULL_TABLES, because an audit trail about who read a
+  // patient is itself patient data and has no business being downloaded onto
+  // every handset in the region to satisfy a query only a supervisor should run.
+  //
+  // They must still be whitelisted: sync.js answers 400 "Unknown entity_table"
+  // for anything absent and the client treats 4xx as a permanent SendRejected,
+  // so an unlisted table here means consent decisions and access evidence that
+  // never leave the phone — a device lost is a family's whole record of who saw
+  // them lost with it.
+  //
+  // access_ledger is keyed on its globally unique id, NOT on `seq`: `seq` is the
+  // device's own chain position and every handset starts at 1, so keying on it
+  // would let each device overwrite every other device's audit history. The
+  // (device_id, seq) unique key makes a re-pushed entry update in place instead,
+  // which is what a retry after a dropped connection needs to be harmless.
+  consent_events: {
+    pk: ['id'],
+    columns: [
+      'id', 'subject_person_id', 'scope', 'decision', 'notice_version',
+      'language', 'voice_artifact', 'captured_by', 'device_id',
+      'witness_name', 'note', 'occurred_at',
+    ],
+  },
+  access_ledger: {
+    pk: ['id'],
+    columns: [
+      'id', 'seq', 'actor_id', 'actor_role', 'device_id', 'action',
+      'entity_table', 'entity_id', 'subject_person_id', 'purpose', 'basis',
+      'note', 'flagged', 'occurred_at', 'previous_hash', 'entry_hash',
+      'hash_format',
+    ],
+  },
 };
 
 // The operations the app can legitimately send.

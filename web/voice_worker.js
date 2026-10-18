@@ -39,7 +39,7 @@ async function load(kind, base) {
       model.config = JSON.parse(text(await read('model.onnx.json')));
       const session = await ort.InferenceSession.create(await read('model.onnx'), options);
       model.sessions.push(session);
-      names(session.inputNames, ['input', 'input_lengths', 'scales', ...(model.config.num_speakers > 1 ? ['sid'] : [])]);
+      names(session.inputNames, ['input', 'input_lengths', ...(model.config.scales_input === false ? [] : ['scales']), ...(model.config.num_speakers > 1 ? ['sid'] : [])]);
       names(session.outputNames, ['output']);
     } else {
       model.config = JSON.parse(text(await read('generation_config.json')));
@@ -130,10 +130,12 @@ async function execute(request) {
   if (operation === 'translate') return generate(model, request.ids, id);
   if (operation !== 'synthesize') fail('unsupported_operation');
   if (!(request.ids instanceof Int32Array) || !request.ids.length || request.ids.length > 4096) fail('voice_configuration');
+  const hasScales = model.config.scales_input !== false;
   if (!Number.isInteger(request.speaker) || request.speaker < 0 || request.speaker >= model.config.num_speakers ||
-      request.scales.length !== 3 || request.scales.some(value => !Number.isFinite(value) || value <= 0)) fail('voice_configuration');
+      (hasScales && (request.scales.length !== 3 || request.scales.some(value => !Number.isFinite(value) || value <= 0)))) fail('voice_configuration');
   const inputs = {input: int64(request.ids, [1, request.ids.length]),
-    input_lengths: int64([request.ids.length], [1]), scales: new ort.Tensor('float32', request.scales, [3])};
+    input_lengths: int64([request.ids.length], [1])};
+  if (hasScales) inputs.scales = new ort.Tensor('float32', request.scales, [3]);
   if (model.config.num_speakers > 1) inputs.sid = int64([request.speaker], [1]);
   let outputs;
   try {

@@ -11,10 +11,20 @@ enum SpeechProsody { standard, soothing, urgent }
 
 /// Shared, testable tensor/audio contract for ONNX native and WASM runners.
 class PiperModelSpec {
-  PiperModelSpec._(this.sampleRate, this.numSpeakers, this.scales);
+  PiperModelSpec._(
+    this.sampleRate,
+    this.numSpeakers,
+    this.scales, {
+    required this.hasScalesInput,
+  });
   final int sampleRate;
   final int numSpeakers;
   final Float32List scales;
+
+  /// Classic Piper checkpoints expose a live `scales` tensor. HF VITS exports
+  /// bake inference scales into the graph (torch export constant-folds them),
+  /// so those models accept prosody only at load time, never per utterance.
+  final bool hasScalesInput;
 
   /// VITS inference scales are `[noise, length, noise_w]`. These factors are
   /// relative to the checkpoint's own baseline and clamped to a safe band so
@@ -61,6 +71,7 @@ class PiperModelSpec {
       sampleRate,
       speakers,
       Float32List.fromList(values.map((v) => (v as num).toDouble()).toList()),
+      hasScalesInput: config['scales_input'] != false,
     );
   }
 
@@ -74,7 +85,7 @@ class PiperModelSpec {
     final expected = {
       'input',
       'input_lengths',
-      'scales',
+      if (hasScalesInput) 'scales',
       if (numSpeakers > 1) 'sid',
     };
     if (names.length != expected.length || !expected.containsAll(names)) {

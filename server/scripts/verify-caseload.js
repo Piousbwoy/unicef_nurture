@@ -144,6 +144,49 @@ async function push(token, entityTable, entityId, payload, operation = 'insert')
   );
 }
 
+/**
+ * A whole pull session, paged the way PullService pages it: follow next_cursor
+ * until has_more is false. A single page is not enough — rows stream oldest
+ * first in 200-row pages, so on a database that has seen real use the newest
+ * record (the one under test) sits on the LAST page, and a one-page check would
+ * report "missing" for a row the app would in fact receive.
+ */
+async function pullAll(token, since) {
+  const data = {
+    households: [],
+    persons: [],
+    visits: [],
+    assessments: [],
+    referrals: [],
+    care_requests: [],
+  };
+  const seenKeys = new Set();
+  let cursor = 0;
+  let serverTime = null;
+  for (let page = 0; page < 100; page++) {
+    const qs = new URLSearchParams({ cursor: String(cursor) });
+    if (since) qs.set('since', since);
+    const res = await call('GET', `/api/pull?${qs}`, null, token);
+    if (res.status !== 200 || !res.json.ok) {
+      return { status: res.status, data, serverTime, pages: page };
+    }
+    if (page === 0) serverTime = res.json.server_time;
+    for (const table of Object.keys(data)) {
+      data[table].push(...((res.json.data && res.json.data[table]) || []));
+    }
+    // Record any table the server starts sending that this script does not model,
+    // so a surprise addition shows up as a failed check rather than as data the
+    // script quietly drops.
+    for (const key of Object.keys((res.json.data || {}))) {
+      seenKeys.add(key);
+    }
+    if (!res.json.has_more)
+      return { status: 200, data, serverTime, pages: page + 1, seenKeys };
+    cursor = res.json.next_cursor;
+  }
+  return { status: 200, data, serverTime, pages: 100, seenKeys };
+}
+
 (async () => {
   const resolved = await resolveBase();
   if (!resolved) {
@@ -156,9 +199,11 @@ async function push(token, entityTable, entityId, payload, operation = 'insert')
   const stamp = Date.now().toString().slice(-8);
   const now = new Date().toISOString();
 
-  // Three nurses, one region. B deliberately spells the region the SHORT way
+  // Four nurses, two regions. B deliberately spells the region the SHORT way
   // ('Northern'), which is exactly what a recovery-created account writes, so the
-  // tolerant match is exercised rather than assumed. C is a different region.
+  // tolerant match is exercised rather than assumed. C and D work two different
+  // districts of North East, so the same promise is proven in a second region
+  // and the privacy boundary is checked in both directions.
   const nurseA = await provisionAndLogin({
     phone: `05${stamp}01`,
     pin: '4417',
@@ -178,10 +223,18 @@ async function push(token, entityTable, entityId, payload, operation = 'insert')
   const nurseC = await provisionAndLogin({
     phone: `05${stamp}03`,
     pin: '6639',
-    fullName: 'Nurse C — North East',
+    fullName: 'Nurse C — Walewale',
     region: 'North East Region',
-    district: 'Nalerigu Guarlja',
+    district: 'West Mamprusi Municipal',
     community: 'Walewale',
+  });
+  const nurseD = await provisionAndLogin({
+    phone: `05${stamp}04`,
+    pin: '7741',
+    fullName: 'Nurse D — Nalerigu',
+    region: 'North East Region',
+    district: 'East Mamprusi Municipal',
+    community: 'Nalerigu',
   });
 
   const householdId = `hh-case-${stamp}`;
@@ -197,7 +250,8 @@ async function push(token, entityTable, entityId, payload, operation = 'insert')
     `target ${activeBase}\n` +
       `  A ${nurseA.userId} (${nurseA.region} / ${nurseA.district})\n` +
       `  B ${nurseB.userId} (${nurseB.region} / ${nurseB.district})\n` +
-      `  C ${nurseC.userId} (${nurseC.region} / ${nurseC.district})\n`
+      `  C ${nurseC.userId} (${nurseC.region} / ${nurseC.district})\n` +
+      `  D ${nurseD.userId} (${nurseD.region} / ${nurseD.district})\n`
   );
 
   // ── 1. Nurse A registers a family and an ongoing referral, then pushes ──────
@@ -252,11 +306,11 @@ async function push(token, entityTable, entityId, payload, operation = 'insert')
   );
 
   // ── 2. Nurse B, another district and another handset, pulls ─────────────────
-  const pullB = await call('GET', '/api/pull', null, nurseB.token);
-  const dataB = (pullB.json && pullB.json.data) || {};
-  const householdsB = dataB.households || [];
-  const personsB = dataB.persons || [];
-  const referralsB = dataB.referrals || [];
+  const pullB = await pullAll(nurseB.token);
+  const dataB = pullB.data;
+  const householdsB = dataB.households;
+  const personsB = dataB.persons;
+  const referralsB = dataB.referrals;
 
   check(
     "nurse B's pull carries the colleague household across districts",
@@ -275,9 +329,8 @@ async function push(token, entityTable, entityId, payload, operation = 'insert')
   );
 
   // ── 3. The privacy boundary: another region must not receive it ─────────────
-  const pullC = await call('GET', '/api/pull', null, nurseC.token);
-  const dataC = (pullC.json && pullC.json.data) || {};
-  const householdsC = dataC.households || [];
+  const pullC = await pullAll(nurseC.token);
+  const householdsC = pullC.data.households;
   check(
     'a nurse in another region never receives the family',
     !householdsC.some((h) => h.id === householdId),
@@ -320,15 +373,10 @@ async function push(token, entityTable, entityId, payload, operation = 'insert')
   );
   check('an updated referral is accepted (2xx)', pushArrived.status < 300, `${pushArrived.status}`);
 
-  const watermarkMs = Date.parse(pullB.json.server_time) - 1000;
+  const watermarkMs = Date.parse(pullB.serverTime) - 1000;
   const watermark = new Date(watermarkMs).toISOString();
-  const deltaB = await call(
-    'GET',
-    `/api/pull?since=${encodeURIComponent(watermark)}`,
-    null,
-    nurseB.token
-  );
-  const deltaRows = ((deltaB.json && deltaB.json.data) || {}).referrals || [];
+  const deltaB = await pullAll(nurseB.token, watermark);
+  const deltaRows = deltaB.data.referrals;
   const arrivedAgain = deltaRows.find((r) => r.id === referralId);
   check(
     'a delta pull re-offers the referral with the new status',
@@ -340,6 +388,216 @@ async function push(token, entityTable, entityId, payload, operation = 'insert')
     'the re-offered row carries the server-owned revision marker',
     !!(arrivedAgain && arrivedAgain.pull_updated_at),
     arrivedAgain ? `pull_updated_at ${arrivedAgain.pull_updated_at}` : 'no row'
+  );
+
+  // ── 5. The same promise in North East, and the boundary the other way ──────
+  // Nurse D registers a mother and her child in East Mamprusi. Nurse C, posted
+  // in West Mamprusi, has never met them — the child walks into her clinic the
+  // next day. She must receive both, so her search finds the child by name. A
+  // Northern nurse must receive neither.
+  const neHouseholdId = `hh-ne-${stamp}`;
+  const neMotherId = `p-ne-mother-${stamp}`;
+  const neChildId = `p-ne-child-${stamp}`;
+  const neChildName = 'Fuseina Abdulai Wumbei';
+  const neHh = await push(nurseD.token, 'households', neHouseholdId, {
+    id: neHouseholdId,
+    name: 'The Wumbei family',
+    region: nurseD.region,
+    district: nurseD.district,
+    community: nurseD.community,
+    head_name: 'Abdulai Wumbei',
+    landmark: 'opposite the chief palace',
+    created_by: nurseD.userId,
+    created_at: now,
+    updated_at: now,
+  });
+  const neMother = await push(nurseD.token, 'persons', neMotherId, {
+    id: neMotherId,
+    household_id: neHouseholdId,
+    full_name: 'Mariama Wumbei',
+    client_type: 'postpartumWoman',
+    sex: 'F',
+    date_of_birth: '1998-03-04',
+    created_at: now,
+    updated_at: now,
+    is_active: 1,
+  });
+  const neChild = await push(nurseD.token, 'persons', neChildId, {
+    id: neChildId,
+    household_id: neHouseholdId,
+    full_name: neChildName,
+    client_type: 'childUnderFive',
+    sex: 'F',
+    date_of_birth: '2025-01-20',
+    mother_id: neMotherId,
+    created_at: now,
+    updated_at: now,
+    is_active: 1,
+  });
+  check(
+    'nurse D (East Mamprusi) can push the family she registered (2xx)',
+    neHh.status < 300 && neMother.status < 300 && neChild.status < 300,
+    `household ${neHh.status}, mother ${neMother.status}, child ${neChild.status}`
+  );
+
+  const pullC2 = await pullAll(nurseC.token);
+  check(
+    "nurse C (West Mamprusi) receives nurse D's household — another North East district",
+    pullC2.data.households.some((h) => h.id === neHouseholdId),
+    `pull ${pullC2.status}, ${pullC2.pages} page(s), ${pullC2.data.households.length} household row(s)`
+  );
+  check(
+    'nurse C receives the mother and the child by name',
+    pullC2.data.persons.some((p) => p.id === neChildId && p.full_name === neChildName) &&
+      pullC2.data.persons.some((p) => p.id === neMotherId),
+    `${pullC2.data.persons.length} person row(s)`
+  );
+
+  const pullB2 = await pullAll(nurseB.token);
+  check(
+    'a Northern nurse never receives the North East family',
+    !pullB2.data.households.some((h) => h.id === neHouseholdId) &&
+      !pullB2.data.persons.some((p) => p.id === neChildId),
+    `B got ${pullB2.data.households.length} household row(s)`
+  );
+
+  // ── 6. The accountability spine reaches the district, and does not collide ──
+  // Consent decisions and access-trail entries are push-only: they must be
+  // whitelisted (sync.js 400s anything absent, and the client treats 4xx as a
+  // permanent rejection, so an unlisted table means evidence that never leaves
+  // the phone) and they must never be pulled down to other handsets.
+  const ledgerId = `al-${stamp}-d1-1`;
+  const pushLedger = await push(nurseA.token, 'access_ledger', ledgerId, {
+    id: ledgerId,
+    seq: 1,
+    actor_id: nurseA.userId,
+    actor_role: 'frontlineHealthWorker',
+    device_id: 'device-A',
+    action: 'open_record',
+    entity_table: 'households',
+    entity_id: householdId,
+    subject_person_id: personId,
+    purpose: 'continuingCare',
+    basis: 'careRelationship',
+    note: 'own caseload',
+    flagged: 0,
+    occurred_at: now,
+    previous_hash: 'carebridge-access-chain-v1',
+    entry_hash: 'a'.repeat(64),
+    hash_format: 'v1',
+  });
+  check(
+    'the access trail is accepted by the server (whitelisted, not 400)',
+    pushLedger.status < 300,
+    `${pushLedger.status} ${JSON.stringify(pushLedger.json)}`
+  );
+
+  // A second device's FIRST trail entry has the same seq as the first device's
+  // first entry. Every handset's chain starts at 1, so a server keyed on seq
+  // would let one device erase another's audit history — the quietest possible
+  // way to lose an accountability trail.
+  const pushLedger2 = await push(nurseB.token, 'access_ledger', `al-${stamp}-d2-1`, {
+    id: `al-${stamp}-d2-1`,
+    seq: 1,
+    actor_id: nurseB.userId,
+    actor_role: 'frontlineHealthWorker',
+    device_id: 'device-B',
+    action: 'open_record',
+    entity_table: 'households',
+    entity_id: householdId,
+    subject_person_id: personId,
+    purpose: 'continuingCare',
+    basis: 'consent',
+    note: 'family opted in',
+    flagged: 0,
+    occurred_at: now,
+    previous_hash: 'carebridge-access-chain-v1',
+    entry_hash: 'b'.repeat(64),
+    hash_format: 'v1',
+  });
+  check(
+    'a second device’s seq 1 is accepted too',
+    pushLedger2.status < 300,
+    `${pushLedger2.status} ${JSON.stringify(pushLedger2.json)}`
+  );
+
+  const pushConsent = await push(
+    nurseA.token,
+    'consent_events',
+    `ce-${stamp}`,
+    {
+      id: `ce-${stamp}`,
+      subject_person_id: personId,
+      scope: 'crossFacilitySearch',
+      decision: 'granted',
+      notice_version: '2026-10-v2',
+      language: 'Hausa',
+      voice_artifact: 'hausa_piper:consent-notice-2026-10',
+      captured_by: nurseA.userId,
+      device_id: 'device-A',
+      witness_name: 'CHPS compound manager',
+      occurred_at: now,
+    }
+  );
+  check(
+    'a recorded consent decision is accepted, spoken form included',
+    pushConsent.status < 300,
+    `${pushConsent.status} ${JSON.stringify(pushConsent.json)}`
+  );
+
+  // Read back from the district's own copy. Both rows must exist side by side.
+  let dbProbe = null;
+  try {
+    const mysql = require('mysql2/promise');
+    const conn = await mysql.createConnection({
+      host: process.env.DB_HOST,
+      port: parseInt(process.env.DB_PORT || '3306', 10),
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
+    });
+    // Note the column is `id`, not `entity_id`: `entity_id` belongs to sync_log.
+    // Querying the wrong one here returned zero rows and correctly failed the
+    // check, which is the whole point of writing the assertion at all.
+    const [rows] = await conn.execute(
+      'SELECT device_id, seq, basis FROM access_ledger WHERE id LIKE ? ORDER BY device_id',
+      [`al-${stamp}%`]
+    );
+    const [consents] = await conn.execute(
+      'SELECT language, voice_artifact FROM consent_events WHERE id = ?',
+      [`ce-${stamp}`]
+    );
+    dbProbe = { ledger: rows, consents };
+    await conn.end();
+  } catch (e) {
+    dbProbe = { error: e.message };
+  }
+  check(
+    'both devices’ seq 1 survive side by side — no overwrite of audit history',
+    !!dbProbe &&
+      Array.isArray(dbProbe.ledger) &&
+      dbProbe.ledger.length === 2 &&
+      dbProbe.ledger.filter((r) => r.seq === 1).length === 2,
+    JSON.stringify(dbProbe)
+  );
+  check(
+    'the consent row kept the language and the audio artefact that voiced it',
+    !!dbProbe &&
+      Array.isArray(dbProbe.consents) &&
+      dbProbe.consents.length === 1 &&
+      dbProbe.consents[0].language === 'Hausa' &&
+      !!dbProbe.consents[0].voice_artifact,
+    JSON.stringify(dbProbe && dbProbe.consents)
+  );
+
+  // And the trail stays off the download: pulling must not hand another device
+  // someone else's access history.
+  const pullForLedger = await pullAll(nurseC.token);
+  check(
+    'the access trail is never pulled down to another handset',
+    !pullForLedger.seenKeys.has('access_ledger') &&
+      !pullForLedger.seenKeys.has('consent_events'),
+    `server offered keys: ${[...pullForLedger.seenKeys].join(', ')}`
   );
 
   const failed = results.filter((r) => !r.ok);

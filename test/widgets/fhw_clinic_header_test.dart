@@ -261,12 +261,20 @@ void main() {
   ) async {
     final models = _WarmupHarness();
     final container = await _pumpShell(tester, warmup: models);
-    for (final language in ['English', 'Dagbani', 'French', '']) {
+    for (final language in ['English', 'French', '']) {
       container.read(_accountProvider.notifier).state = _user.copyWith(
         preferredLanguage: language,
       );
       await tester.pumpAndSettle();
     }
+    // Dagbani ships a voice pack and no translation pack, so warm-up may load
+    // exactly one of the two.
+    container.read(_accountProvider.notifier).state = _user.copyWith(
+      preferredLanguage: 'Dagbani',
+    );
+    await tester.pumpAndSettle();
+    expect(models.log.loads, ['piper:Dagbani']);
+    expect(models.neural.isLoaded('Dagbani'), isFalse);
     container.read(_accountProvider.notifier).state = AppUser.fromMap({
       ..._user.toMap(),
       'role': 'caregiver',
@@ -275,7 +283,7 @@ void main() {
     await tester.pumpAndSettle();
     container.read(_accountProvider.notifier).state = null;
     await tester.pumpAndSettle();
-    expect(models.log.loads, isEmpty);
+    expect(models.log.loads, ['piper:Dagbani']);
     expect(models.log.nonLoadingCalls, isEmpty);
     expect(tester.takeException(), isNull);
   });

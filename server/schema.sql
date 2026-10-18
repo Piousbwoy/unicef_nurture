@@ -642,6 +642,100 @@ CREATE TABLE IF NOT EXISTS sync_log (
 ) ENGINE=InnoDB;
 
 -- ----------------------------------------------------------------------------
+-- The accountability spine (October 2026).
+--
+-- Two tables that make the app's health-data promises checkable rather than
+-- asserted: what each family agreed to, and who opened which record, when, on
+-- what lawful basis. Health data is "special personal data" under Ghana's Data
+-- Protection Act 2012 (Act 843), so the burden is not to forbid access — a nurse
+-- must never be blocked from a patient — but to be able to justify every single
+-- access afterwards.
+--
+-- Deliberately PUSH-ONLY: neither table appears in src/pull.js PULL_TABLES. An
+-- access trail about a patient is patient data, and downloading every device's
+-- trail onto every handset in the region to answer a question only a supervisor
+-- asks would be the exact over-disclosure the trail exists to prevent. The
+-- district reads it here, not off a phone.
+--
+-- These tables carry no pull_updated_at trigger for the same reason — they are
+-- not delta-pulled, so there is nothing to order a pull by.
+-- ----------------------------------------------------------------------------
+
+-- The family's decisions, as a history rather than a flag. A withdrawal is a new
+-- row: the earlier grant is the defence for anything done while it stood, so
+-- overwriting it would destroy the evidence that the access was lawful then.
+CREATE TABLE IF NOT EXISTS consent_events (
+  id                VARCHAR(64)  NOT NULL,
+  subject_person_id VARCHAR(64)  NOT NULL,
+  scope             VARCHAR(40)  NOT NULL,
+  decision          VARCHAR(24)  NOT NULL,
+  -- Which words the family was actually shown, and in which language. A consent
+  -- recorded against a superseded notice does not cover the new use.
+  notice_version    VARCHAR(32)  NOT NULL,
+  language          VARCHAR(24)  NOT NULL DEFAULT 'English',
+  -- Identity of the audio artefact that *read* the notice aloud, when the family
+  -- was not asked to read it. This is what turns "consent for low-literacy
+  -- users" from an intention into something that can be audited.
+  voice_artifact    VARCHAR(120) NULL,
+  captured_by       VARCHAR(64)  NOT NULL,
+  device_id         VARCHAR(64)  NULL,
+  witness_name      VARCHAR(160) NULL,
+  note              TEXT         NULL,
+  occurred_at       VARCHAR(40)  NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_consent_subject (subject_person_id, scope, occurred_at)
+) ENGINE=InnoDB;
+
+-- One device's access trail, as the district's independent copy of it.
+--
+-- `entry_hash` covers the row's own contents plus the previous row's hash, keyed
+-- with a secret held in the handset's secure enclave and never in the database.
+-- Editing or removing any line therefore invalidates every line after it. The
+-- server copy is what makes that claim worth something to a third party: it is
+-- held where the person accused of tampering does not have write access, and it
+-- can be re-verified per device by walking `seq` in order, grouped on `device_id`.
+CREATE TABLE IF NOT EXISTS access_ledger (
+  id                VARCHAR(64)  NOT NULL,
+  seq               BIGINT       NOT NULL,
+  actor_id          VARCHAR(64)  NOT NULL,
+  actor_role        VARCHAR(32)  NOT NULL,
+  device_id         VARCHAR(64)  NULL,
+  action            VARCHAR(64)  NOT NULL,
+  entity_table      VARCHAR(64)  NOT NULL,
+  entity_id         VARCHAR(64)  NOT NULL,
+  subject_person_id VARCHAR(64)  NOT NULL,
+  -- Why the record was opened, and the law that allowed it. Both NOT NULL on
+  -- purpose: an access with no stated reason is the finding, not the norm.
+  purpose           VARCHAR(32)  NOT NULL,
+  basis             VARCHAR(32)  NOT NULL,
+  note              TEXT         NULL,
+  -- Lawful but worth a second look: break-the-glass, emergency, or an
+  -- out-of-caseload read with no recorded consent. This column is the queue.
+  flagged           TINYINT(1)   NOT NULL DEFAULT 0,
+  occurred_at       VARCHAR(40)  NOT NULL,
+  previous_hash     VARCHAR(64)  NOT NULL,
+  entry_hash        VARCHAR(64)  NOT NULL,
+  hash_format       VARCHAR(8)   NOT NULL DEFAULT 'v1',
+  received_at       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  -- The globally unique id is the ONLY conflict key here, deliberately. It makes
+  -- a retry of the same entry update in place — which is what a re-pushed outbox
+  -- row after a dropped connection must do — while a *different* entry can never
+  -- overwrite another. An early revision also keyed on (device_id, seq); the
+  -- verify-caseload probe caught what that meant: two runs of the same handset at
+  -- the same chain position collided on the unique key, the upsert silently kept
+  -- the older row's id and overwrote its contents, and one access trail quietly
+  -- replaced another. An audit store that can lose a line without erroring is
+  -- worse than no audit store, because it looks complete.
+  KEY idx_ledger_subject (subject_person_id, occurred_at),
+  KEY idx_ledger_flagged (flagged, occurred_at),
+  -- Query-only: the district walks a device's chain in order, and re-verifies the
+  -- hash chain per device. Uniqueness is not asserted here, because seq is
+  -- meaningful only inside one device's own chain and must never be a dedupe key.
+  KEY idx_ledger_device (device_id, seq)
+) ENGINE=InnoDB;
+
+-- ----------------------------------------------------------------------------
 -- Delta-pull change markers for GET /api/pull.
 --
 -- The SERVER owns these markers: device clocks are not trusted. Every INSERT

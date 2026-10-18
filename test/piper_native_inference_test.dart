@@ -20,9 +20,14 @@ void main() {
   for (final voice in [
     ('Twi', 'twi_piper', 29, 'Maakye, wo ho te sɛn?'),
     ('Hausa', 'hausa_piper', 0, 'Sannu. Yaya kake?'),
+    // Character-orthography exports; skipped until the pack is on disk.
+    if (File('assets/tts/twi_farmerline/model.onnx').existsSync())
+      ('Twi', 'twi_farmerline', 0, 'Akwaaba. Wo ho te sɛn?'),
+    if (File('assets/tts/dagbani_piper/model.onnx').existsSync())
+      ('Dagbani', 'dagbani_piper', 0, SpeechBank.qNewbornFeed.dagbani),
   ]) {
     test(
-      'real ${voice.$1} inference, recovery and cleanup',
+      'real ${voice.$1} ${voice.$2} inference, recovery and cleanup',
       () async {
         final base = 'assets/tts/${voice.$2}';
         final manifest = ModelArtifactManifest.parse(
@@ -34,7 +39,7 @@ void main() {
           model: await File('$base/model.onnx').readAsBytes(),
           artifact: manifest.file('model.onnx'),
           config: await File('$base/model.onnx.json').readAsString(),
-          rules: voice.$1 == 'Twi'
+          rules: File('$base/twi_rules.json').existsSync()
               ? await File('$base/twi_rules.json').readAsString()
               : null,
           language: voice.$1,
@@ -69,7 +74,7 @@ void main() {
         print(
           '${voice.$1}: load=${loadMs}ms synth=${synthesisMs}ms audio=${duration.toStringAsFixed(2)}s peak=$peak',
         );
-        if (voice.$1 == 'Twi') {
+        if (voice.$2 == 'twi_piper') {
           final vectors =
               jsonDecode(
                     await File(

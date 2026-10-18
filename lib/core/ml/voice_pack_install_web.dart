@@ -19,7 +19,10 @@ class VoicePackInstaller {
 
   Future<bool> installShell() async => (await _installShell().toDart).toDart;
   String _base(String language, bool translation) {
-    if (!['Twi', 'Hausa'].contains(language)) {
+    if (translation && !['Twi', 'Hausa'].contains(language)) {
+      throw ArgumentError('Unsupported language');
+    }
+    if (!['Twi', 'Hausa', 'Dagbani'].contains(language)) {
       throw ArgumentError('Unsupported language');
     }
     return translation

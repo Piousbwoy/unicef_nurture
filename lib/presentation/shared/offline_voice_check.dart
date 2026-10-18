@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../core/audio/caregiver_playback.dart';
+import '../../core/i18n/speech_bank.dart';
 import '../../core/ml/voice_pack_install.dart';
 
 /// Existing language/settings surfaces share this small, explicit installer.
@@ -120,6 +121,7 @@ class _OfflineVoiceCheckState extends State<OfflineVoiceCheck> {
     final text = switch (_language) {
       'Twi' => 'Maakye, wo ho te sɛn?',
       'Hausa' => 'Sannu. Yaya kake?',
+      'Dagbani' => SpeechBank.qNewbornFeed.dagbani,
       _ => 'Welcome to CareBridge.',
     };
     if (!OfflineSpeechLanguage.names.contains(_language)) {
@@ -129,10 +131,10 @@ class _OfflineVoiceCheckState extends State<OfflineVoiceCheck> {
       );
       return;
     }
-    if (_language == 'Dagbani') {
+    if (_language == 'Dagbani' && !await _installer.installed(_language)) {
       _message(
         generation,
-        'Dagbani uses exact bundled recordings. Dynamic Dagbani speech is not installed.',
+        'Dagbani currently plays exact bundled recordings. Install the Dagbani voice for dynamic speech.',
       );
       return;
     }
@@ -211,15 +213,16 @@ class _OfflineVoiceCheckState extends State<OfflineVoiceCheck> {
             child: const Text('Check voice'),
           ),
           if (_installer.downloadable &&
-              ['Twi', 'Hausa'].contains(_language)) ...[
+              ['Twi', 'Hausa', 'Dagbani'].contains(_language)) ...[
             TextButton(
               onPressed: _busy ? null : () => _install(false),
               child: const Text('Install voice'),
             ),
-            TextButton(
-              onPressed: _busy ? null : () => _install(true),
-              child: const Text('Install translation'),
-            ),
+            if (['Twi', 'Hausa'].contains(_language))
+              TextButton(
+                onPressed: _busy ? null : () => _install(true),
+                child: const Text('Install translation'),
+              ),
           ],
           if (kIsWeb && _installer.downloadable)
             TextButton(

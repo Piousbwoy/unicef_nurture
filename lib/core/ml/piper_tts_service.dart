@@ -33,7 +33,6 @@ class PiperModelConfig {
 }
 
 /// All TTS models the app can use.
-/// No compact dynamic Dagbani voice has been validated for this application.
 const piperModelConfigs = <PiperModelConfig>[
   PiperModelConfig(
     language: 'Hausa',
@@ -46,6 +45,15 @@ const piperModelConfigs = <PiperModelConfig>[
     assetPath: 'assets/tts/twi_piper',
     speakerId: 29, // twi-6 baseline; listening approval remains required.
     voiceLabel: 'Stable Twi · twi-6',
+  ),
+  // Character-orthography VITS export, so no IPA frontend. The checkpoint's
+  // model card carries no licence, which blocks committing these weights:
+  // the pack loads when present locally and stays silent when it is not.
+  PiperModelConfig(
+    language: 'Dagbani',
+    assetPath: 'assets/tts/dagbani_piper',
+    speakerId: 0,
+    voiceLabel: 'GhanaNLP Dagbani · 2025 v2',
   ),
 ];
 

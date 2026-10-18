@@ -28,7 +28,10 @@ class NativePackStore {
       (configuredOrigin.isEmpty ? null : Uri.tryParse(configuredOrigin));
 
   static String base(String language, bool translation) {
-    if (!['Twi', 'Hausa'].contains(language)) {
+    if (translation && !['Twi', 'Hausa'].contains(language)) {
+      throw ArgumentError('Unsupported language pack');
+    }
+    if (!['Twi', 'Hausa', 'Dagbani'].contains(language)) {
       throw ArgumentError('Unsupported language pack');
     }
     return translation

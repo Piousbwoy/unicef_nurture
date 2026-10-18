@@ -6,7 +6,7 @@ class VoicePackInstaller {
   Future<bool> shellReady() async => true;
   Future<bool> installShell() async => true;
   Future<bool> installed(String language, {bool translation = false}) async {
-    if (!['Twi', 'Hausa'].contains(language)) return false;
+    if (!['Twi', 'Hausa', 'Dagbani'].contains(language)) return false;
     return _store.installed(NativePackStore.base(language, translation));
   }
 

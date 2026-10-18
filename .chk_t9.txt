@@ -1,0 +1,38 @@
+00:00 +0: loading C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart
+00:00 +0: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the access trail chains every entry and verifies intact
+00:01 +1: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the access trail editing one row invalidates every row after it
+00:01 +2: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the access trail deleting a row is detected as clearly as editing one
+00:01 +3: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the access trail the evidence row is queued with the access, in one write
+00:02 +4: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the access trail the disclosure names the worker and the reason, not an id
+00:02 +5: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the policy decision her own caseload opens without ceremony and is not flagged
+00:02 +6: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the policy decision a family that opted in is opened on their consent
+00:02 +7: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the policy decision an out-of-caseload look with no consent is allowed but flagged
+00:02 +8: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the policy decision a break-the-glass reason is recorded verbatim
+00:02 +9: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the policy decision an emergency is recorded as an emergency, and reviewed
+00:02 +10: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the policy decision another region is refused, with a way forward
+00:02 +11: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the policy decision a family reading its own record is not a finding
+00:02 +12: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: consent a withdrawal supersedes without erasing the grant
+00:02 +13: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: consent never being asked is not the same as agreeing
+00:02 +14: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: consent a spoken consent records the artefact that voiced it
+00:03 +15: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: data rights a request is open work until it is answered
+00:03 +16: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the register still reaches the whole region
+00:13 +17: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/entry_flow_test.dart: fresh install: splash leads to onboarding, not role choice
+00:18 +18: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: nurse report keeps readable observations without QR sharing
+00:18 +19: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: nurse report keeps readable observations without QR sharing
+00:19 +20: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: nurse report keeps readable observations without QR sharing
+00:19 +21: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/entry_flow_test.dart: role choice: tapping a role routes to sign-in (no "I already have an account" shortcut on the role choice anymore)
+00:20 +22: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+Secure storage read failed for carebridge.session.last_phone: MissingPluginException(No implementation found for method read on channel plugins.it_nomads.com/flutter_secure_storage)
+00:24 +23: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+00:24 +24: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+Secure storage write failed for carebridge.session.user_id: MissingPluginException(No implementation found for method write on channel plugins.it_nomads.com/flutter_secure_storage)
+Secure storage write failed for carebridge.session.last_phone: MissingPluginException(No implementation found for method write on channel plugins.it_nomads.com/flutter_secure_storage)
+00:32 +25: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+00:35 +26: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+00:36 +27: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+00:40 +28: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+Secure storage delete failed for carebridge.session.user_id: MissingPluginException(No implementation found for method delete on channel plugins.it_nomads.com/flutter_secure_storage)
+Secure storage read failed for carebridge.session.last_phone: MissingPluginException(No implementation found for method read on channel plugins.it_nomads.com/flutter_secure_storage)
+Secure storage write failed for carebridge.session.user_id: MissingPluginException(No implementation found for method write on channel plugins.it_nomads.com/flutter_secure_storage)
+Secure storage write failed for carebridge.session.last_phone: MissingPluginException(No implementation found for method write on channel plugins.it_nomads.com/flutter_secure_storage)
+01:08 +29: All tests passed!

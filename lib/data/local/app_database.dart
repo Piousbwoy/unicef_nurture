@@ -84,7 +84,14 @@ import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 /// same-id peer mutations entirely. Storing the server's trusted marker is the
 /// enabler for merging on server order instead of device clocks. Nullable: a
 /// row that has never been pulled simply has no stored marker yet.
-const int kDatabaseVersion = 10;
+/// Version 11 (October 2026 — the accountability spine): the consent ledger, the
+/// tamper-evident access trail, and data-rights requests. Health data is
+/// "special personal data" under Ghana's Data Protection Act 2012 (Act 843), so
+/// the system must be able to show, per access, who looked, at whom, why, and on
+/// what lawful basis — and must be able to prove the resulting trail was not
+/// rewritten afterwards. That last part is why `previous_hash`/`entry_hash` are
+/// per-row here as well: unlike the clinical tables, this chain is verified.
+const int kDatabaseVersion = 11;
 
 const String kDatabaseName = 'carebridge.db';
 
@@ -379,18 +386,31 @@ class AppDatabase {
         'pull_updated_at',
         'TEXT',
       );
-      await _addColumnIfMissing(
-        db,
-        Tables.persons,
-        'pull_updated_at',
-        'TEXT',
-      );
+      await _addColumnIfMissing(db, Tables.persons, 'pull_updated_at', 'TEXT');
       await _addColumnIfMissing(
         db,
         Tables.referrals,
         'pull_updated_at',
         'TEXT',
       );
+    }
+    if (from < 11) {
+      // Version 11: the accountability spine. IF NOT EXISTS everywhere, so a
+      // device that took the upgrade and a device installing fresh end at the
+      // identical schema, and a re-run cannot throw inside onUpgrade — which
+      // would fail the whole open and leave a health worker with no app.
+      await db.execute(_consentEventsTable);
+      for (final statement in _consentEventsIndexes) {
+        await db.execute(statement);
+      }
+      await db.execute(_accessLedgerTable);
+      for (final statement in _accessLedgerIndexes) {
+        await db.execute(statement);
+      }
+      await db.execute(_dataRightsTable);
+      for (final statement in _dataRightsIndexes) {
+        await db.execute(statement);
+      }
     }
   }
 
@@ -448,7 +468,110 @@ abstract final class Tables {
   static const caregiverDrafts = 'caregiver_drafts';
   static const caregiverActivity = 'caregiver_activity';
   static const caregiverSettings = 'caregiver_settings';
+
+  // ── Accountability spine ────────────────────────────────────────────
+  // Append-only by contract, not by trigger: the DAOs in compliance_dao.dart
+  // expose no update or delete, and these three tables are never cascaded from a
+  // patient row. Deleting a person must not be able to delete the evidence of
+  // who read them or of the consent that authorised it — that evidence is the
+  // reason the deletion is lawful in the first place.
+  static const consentEvents = 'consent_events';
+  static const accessLedger = 'access_ledger';
+  static const dataRightsRequests = 'data_rights_requests';
 }
+
+// ---------------------------------------------------------------------------
+// The accountability spine (v11). Declared separately from _schema so the same
+// DDL serves a fresh install and an upgrade, exactly as _careRequestsTable does.
+// ---------------------------------------------------------------------------
+
+/// Append-only history of consent decisions. Never updated, only superseded: the
+/// legal fact that a family *did* consent between two dates is what explains an
+/// access that happened then, so a withdrawal is a new row rather than an edit.
+const String _consentEventsTable =
+    '''
+  CREATE TABLE IF NOT EXISTS ${Tables.consentEvents} (
+    id                TEXT PRIMARY KEY,
+    subject_person_id TEXT NOT NULL,
+    scope             TEXT NOT NULL,
+    decision          TEXT NOT NULL,
+    notice_version    TEXT NOT NULL,
+    language          TEXT NOT NULL DEFAULT 'English',
+    voice_artifact    TEXT,
+    captured_by       TEXT NOT NULL,
+    device_id         TEXT,
+    witness_name      TEXT,
+    note              TEXT,
+    occurred_at       TEXT NOT NULL,
+    sync_state        TEXT NOT NULL DEFAULT 'pending'
+  )
+  ''';
+const List<String> _consentEventsIndexes = [
+  // "What does this family currently allow, per scope" — the query every access
+  // decision runs, so the newest row per (subject, scope) must be cheap.
+  'CREATE INDEX IF NOT EXISTS idx_consent_subject ON '
+      '${Tables.consentEvents}(subject_person_id, scope, occurred_at DESC)',
+];
+
+/// The access trail. `seq` is device-local chain order and `id` is the global
+/// identity, because two phones both begin at 1: a server table keyed on `seq`
+/// would have every device overwrite every other device's audit history. Same
+/// lesson the referral ledger learned with colliding unique columns.
+const String _accessLedgerTable =
+    '''
+  CREATE TABLE IF NOT EXISTS ${Tables.accessLedger} (
+    seq               INTEGER PRIMARY KEY AUTOINCREMENT,
+    id                TEXT NOT NULL UNIQUE,
+    actor_id          TEXT NOT NULL,
+    actor_role        TEXT NOT NULL,
+    device_id         TEXT,
+    action            TEXT NOT NULL,
+    entity_table      TEXT NOT NULL,
+    entity_id         TEXT NOT NULL,
+    subject_person_id TEXT NOT NULL,
+    purpose           TEXT NOT NULL,
+    basis             TEXT NOT NULL,
+    note              TEXT,
+    flagged           INTEGER NOT NULL DEFAULT 0,
+    occurred_at       TEXT NOT NULL,
+    previous_hash     TEXT NOT NULL,
+    entry_hash        TEXT NOT NULL,
+    hash_format       TEXT NOT NULL DEFAULT 'v1',
+    sync_state        TEXT NOT NULL DEFAULT 'pending'
+  )
+  ''';
+const List<String> _accessLedgerIndexes = [
+  // The data subject's right of access is a query, not a report: "who has seen
+  // this child" has to answer instantly at the front door.
+  'CREATE INDEX IF NOT EXISTS idx_ledger_subject ON '
+      '${Tables.accessLedger}(subject_person_id, seq DESC)',
+  // The supervisor's queue.
+  'CREATE INDEX IF NOT EXISTS idx_ledger_flagged ON '
+      '${Tables.accessLedger}(flagged, seq DESC)',
+];
+
+/// A request under a data subject's rights, with a deadline. Modelling it as
+/// work-in-progress rather than as a button is what makes the promise auditable:
+/// an open request that has gone stale is visible to a supervisor by construction.
+const String _dataRightsTable =
+    '''
+  CREATE TABLE IF NOT EXISTS ${Tables.dataRightsRequests} (
+    id                TEXT PRIMARY KEY,
+    subject_person_id TEXT NOT NULL,
+    request_kind      TEXT NOT NULL,
+    status            TEXT NOT NULL,
+    requested_at      TEXT NOT NULL,
+    requested_by      TEXT NOT NULL,
+    resolved_at       TEXT,
+    resolution        TEXT
+  )
+  ''';
+const List<String> _dataRightsIndexes = [
+  'CREATE INDEX IF NOT EXISTS idx_rights_subject ON '
+      '${Tables.dataRightsRequests}(subject_person_id, requested_at DESC)',
+  'CREATE INDEX IF NOT EXISTS idx_rights_open ON '
+      '${Tables.dataRightsRequests}(status, requested_at ASC)',
+];
 
 const List<String> _schema = [
   // --------------------------------------------------------------------------
@@ -988,6 +1111,18 @@ const List<String> _schema = [
   ''',
   'CREATE INDEX idx_audit_time ON ${Tables.auditLog}(occurred_at DESC)',
   'CREATE INDEX idx_audit_actor ON ${Tables.auditLog}(actor_id, occurred_at DESC)',
+
+  // --------------------------------------------------------------------------
+  // Accountability spine (v11) — consent history, the verifiable access trail,
+  // and data-rights requests. Present on a fresh install; added in the version
+  // 11 upgrade for a device that already has clinical data on it.
+  // --------------------------------------------------------------------------
+  _consentEventsTable,
+  ..._consentEventsIndexes,
+  _accessLedgerTable,
+  ..._accessLedgerIndexes,
+  _dataRightsTable,
+  ..._dataRightsIndexes,
 
   // --------------------------------------------------------------------------
   // Sync state. The delta-pull engine's per-user watermark and last-pull

@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "contract": "piper-v1",
+  "language": "Twi",
+  "source": "https://huggingface.co/FarmerlineML/main_twi_TTS",
+  "license": "CC-BY-4.0",
+  "revision": "61b2bbf4e8d626c117a157fc05974e696de478ee67e9028b6053db8acf05f750",
+  "files": [
+    {
+      "name": "model.onnx",
+      "bytes": 38436282,
+      "sha256": "61b2bbf4e8d626c117a157fc05974e696de478ee67e9028b6053db8acf05f750"
+    },
+    {
+      "name": "model.onnx.json",
+      "bytes": 1965,
+      "sha256": "3adc313c846546fdea4806d78f2b0702545d8fe6d83d1a56dbf0e42da432df67"
+    }
+  ]
+}

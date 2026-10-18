@@ -1,0 +1,36 @@
+Formatted lib/presentation/auth/privacy_consent_screen.dart
+Formatted 2 files (1 changed) in 0.03 seconds.
+Analyzing unicef...                                             
+
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\app\providers.dart:233:11 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\core\ml\piper_tts_io.dart:135:15 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\core\ml\piper_tts_io.dart:139:15 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\core\ml\piper_tts_io.dart:213:11 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\data\local\household_dao.dart:365:11 - curly_braces_in_flow_control_structures
+warning - The declaration '_NurturingCareBands' isn't referenced. Try removing the declaration of '_NurturingCareBands' - lib\domain\engines\nurturing_care_engine.dart:1271:22 - unused_element
+warning - The value of the field 'all' isn't used. Try removing the field, or using it - lib\domain\engines\nurturing_care_engine.dart:1272:32 - unused_field
+warning - The value of the field '_whoAnaemiaThreshold' isn't used. Try removing the field, or using it - lib\domain\engines\nutrition\therapeutic_supplements.dart:368:23 - unused_field
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\domain\services\caregiver_check_policy.dart:393:7 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\domain\services\caregiver_check_policy.dart:395:7 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\domain\services\caregiver_check_policy.dart:397:7 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\domain\services\caregiver_check_policy.dart:403:7 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\domain\services\caregiver_today_planner.dart:95:9 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\domain\services\caregiver_today_planner.dart:244:9 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\domain\services\caregiver_today_planner.dart:284:9 - curly_braces_in_flow_control_structures
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\presentation\auth\setup_screen.dart:944:15 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\presentation\auth\setup_screen.dart:970:19 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\presentation\auth\setup_screen.dart:1043:11 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\presentation\auth\setup_screen.dart:1086:13 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\presentation\auth\setup_screen.dart:1149:13 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\presentation\auth\setup_screen.dart:1174:13 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\presentation\auth\setup_screen.dart:1252:11 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\presentation\auth\setup_screen.dart:1267:11 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre. Try replacing the use of the deprecated member with the replacement - lib\presentation\auth\setup_screen.dart:1286:11 - deprecated_member_use
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - test\pull_service_test.dart:348:13 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - test\pull_service_test.dart:380:13 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - test\pull_service_test.dart:459:13 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - test\pull_service_test.dart:567:13 - curly_braces_in_flow_control_structures
+warning - Unused import: 'package:carebridge_ai/presentation/assessment/assessment_feature_adapter.dart'. Try removing the import directive - test\widgets\result_page_simplification_test.dart:18:8 - unused_import
+warning - Unused import: 'package:carebridge_ai/presentation/shared/recommendation_kit.dart'. Try removing the import directive - test\widgets\result_page_simplification_test.dart:24:8 - unused_import
+
+30 issues found. (ran in 9.9s)

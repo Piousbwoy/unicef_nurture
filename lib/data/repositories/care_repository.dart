@@ -23,6 +23,14 @@
 /// **Denials are recorded.** Access control with no trace is a claim. Constraint
 /// 5 of the brief is protection of health data, and "we check permissions"
 /// is only true if it can be shown afterwards.
+///
+/// **The check itself is now evidence.** A permission test answers "may she?" and
+/// then forgets. So these guards also answer the question Act 843 actually asks —
+/// *on what lawful basis, at what time, from which handset, and can you prove the
+/// record of it was not edited afterwards* — and write the answer to a hash-chained
+/// trail before any data is returned. Health data is "special personal data" there
+/// for a reason: a system that cannot reconstruct who saw a child's record has not
+/// protected it, it has merely not been caught.
 library;
 
 import '../../domain/entities/caregiver.dart';
@@ -36,8 +44,26 @@ import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
 import '../../domain/enums.dart';
 import '../local/household_dao.dart';
+import '../local/compliance_dao.dart';
 import '../local/user_dao.dart';
 import '../local/visit_dao.dart';
+import '../sync/server_auth_client.dart';
+import '../../domain/compliance.dart';
+import '../local/app_database.dart';
+import 'record_access.dart';
+
+/// The handset's stable device id, for attribution on the access trail.
+///
+/// Read from the same place auth and sync read it, so one identity is used
+/// everywhere and a forensic review cannot find two names for one phone. Null when
+/// secure storage is unavailable, which degrades attribution but never blocks care.
+Future<String?> _currentDeviceId() async {
+  try {
+    return await ServerAuthClient.deviceId();
+  } catch (_) {
+    return null;
+  }
+}
 
 /// Thrown when a user attempts something their role does not allow.
 ///
@@ -91,12 +117,30 @@ class CareRepository {
   /// An FHW passes through: their scope is a CHPS zone of 3,000–4,500 people, and
   /// restricting them per-household would break the job. A caregiver is checked
   /// against the household their account was bound to at registration.
+  ///
+  /// Passing the role floor is not the end of the question for a health worker, it
+  /// is the beginning of a different one: *why is she allowed to see this family*
+  /// and *will there be a record*. That is answered and recorded here, once per
+  /// access, before the data is handed over.
   Future<void> _requireHouseholdScope(
     AppUser user,
     String householdId,
-    String action,
-  ) async {
-    if (user.can(Permission.viewAllHouseholds)) return;
+    String action, {
+    AccessPurpose purpose = AccessPurpose.continuingCare,
+    String? breakGlassReason,
+    String? subjectPersonId,
+  }) async {
+    if (user.can(Permission.viewAllHouseholds)) {
+      await _accountForAccess(
+        user,
+        householdId,
+        action,
+        purpose: purpose,
+        breakGlassReason: breakGlassReason,
+        subjectPersonId: subjectPersonId,
+      );
+      return;
+    }
 
     final linked = await UserDao.linkedHouseholdFor(user.id);
     if (linked != null && linked == householdId) return;
@@ -117,20 +161,71 @@ class CareRepository {
     );
   }
 
+  /// Runs the policy decision and writes its evidence. Refuses the read only where
+  /// the law refuses it, and only where the evidence itself could not be written
+  /// for access that is not this worker's own caseload — see [RecordAccess].
+  Future<void> _accountForAccess(
+    AppUser user,
+    String householdId,
+    String action, {
+    required AccessPurpose purpose,
+    String? breakGlassReason,
+    String? subjectPersonId,
+  }) async {
+    final db = await AppDatabase.instance.database;
+    final decision = await RecordAccess.open(
+      db,
+      actor: user,
+      householdId: householdId,
+      subjectPersonId: subjectPersonId ?? householdId,
+      purpose: purpose,
+      action: action,
+      breakGlassReason: breakGlassReason,
+      deviceId: await _currentDeviceId(),
+    );
+    if (decision.isRefusal) {
+      throw AccessDenied(
+        action,
+        Permission.viewAllHouseholds,
+        detail: decision.reason,
+      );
+    }
+  }
+
   /// Resolves the household a person belongs to, then scope-checks it. Used by
   /// every person-level read, because a person ID leaks nothing about ownership
-  /// on its own.
+  /// on its own — and because the *subject* of the access, which is what a
+  /// family's disclosure is queried by, is only known from the person row.
   Future<void> _requirePersonScope(
     AppUser user,
     String personId,
-    String action,
-  ) async {
-    if (user.can(Permission.viewAllHouseholds)) return;
+    String action, {
+    AccessPurpose purpose = AccessPurpose.continuingCare,
+    String? breakGlassReason,
+  }) async {
     final person = await PersonDao.byId(personId);
+    if (user.can(Permission.viewAllHouseholds)) {
+      if (person == null) return;
+      await _requireHouseholdScope(
+        user,
+        person.householdId,
+        action,
+        purpose: purpose,
+        breakGlassReason: breakGlassReason,
+        subjectPersonId: personId,
+      );
+      return;
+    }
     if (person == null) {
       throw AccessDenied(action, null, detail: 'That record does not exist.');
     }
-    await _requireHouseholdScope(user, person.householdId, action);
+    await _requireHouseholdScope(
+      user,
+      person.householdId,
+      action,
+      purpose: purpose,
+      subjectPersonId: personId,
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -262,6 +357,191 @@ class CareRepository {
   Future<List<Household>> searchHouseholds(AppUser user, String query) async {
     await _require(user, Permission.viewAllHouseholds, 'search all households');
     return HouseholdDao.search(query, region: user.region);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Accountability: consent, the access trail, and the family's own rights
+  // ---------------------------------------------------------------------------
+
+  /// Records what a family decided about one scope.
+  ///
+  /// Append-only. A withdrawal never rewrites the earlier grant, because the
+  /// grant is what makes an access in between lawful — deleting it would destroy
+  /// the defence of something that already happened.
+  Future<void> recordConsent(
+    AppUser user, {
+    required String subjectPersonId,
+    required ConsentScope scope,
+    required ConsentDecision decision,
+    String language = 'English',
+    String? voiceArtifact,
+    String? witnessName,
+    String? note,
+  }) async {
+    await _requireHouseholdScope(
+      user,
+      // The subject's household authorises nothing on its own — recording a
+      // decision needs the standing to edit this person's record at all.
+      (await PersonDao.byId(subjectPersonId))?.householdId ?? subjectPersonId,
+      'record a consent choice',
+      purpose: AccessPurpose.continuingCare,
+      subjectPersonId: subjectPersonId,
+    );
+    final db = await AppDatabase.instance.database;
+    await ConsentLedgerDao.record(
+      db,
+      event: ConsentEvent(
+        id: 'consent-${DateTime.now().microsecondsSinceEpoch}',
+        subjectPersonId: subjectPersonId,
+        scope: scope,
+        decision: decision,
+        noticeVersion: CareNotice.currentVersion,
+        occurredAt: _clock(),
+        capturedBy: user.id,
+        language: language,
+        voiceArtifact: voiceArtifact,
+        witnessName: witnessName,
+        deviceId: await _currentDeviceId(),
+        note: note,
+      ),
+    );
+  }
+
+  /// The family's current position on every scope. Absence is *not* consent, so a
+  /// scope nobody was asked about reads as null and is treated as not granted.
+  Future<Map<ConsentScope, ConsentEvent?>> consentFor(
+    AppUser user,
+    String subjectPersonId,
+  ) async {
+    await _requirePersonScope(user, subjectPersonId, 'view a consent record');
+    return ConsentLedgerDao.currentFor(subjectPersonId);
+  }
+
+  /// "Who has seen this record" — the data subject's right of access, answered as
+  /// a query rather than as a promise in a policy document.
+  ///
+  /// Takes both ids because a household-level access is recorded against the
+  /// household and a person-level one against the person; a family asking about
+  /// their child wants both halves, and showing only one would be an
+  /// understatement of exactly the wrong kind.
+  Future<List<DisclosureLine>> accessTrail(
+    AppUser user, {
+    required String subjectPersonId,
+    required String householdId,
+  }) async {
+    await _requirePersonScope(user, subjectPersonId, 'view an access trail');
+    return AccessLedgerDao.disclosureFor([
+      subjectPersonId,
+      householdId,
+    ]);
+  }
+
+  /// Recomputes the trail's hash chain. The operation a supervisor runs to check
+  /// that nobody has edited the log — and the one a tamper demonstration flips.
+  Future<ChainVerification> verifyAccessTrail(AppUser user) async {
+    await _require(
+      user,
+      Permission.viewCommunityInsights,
+      'verify the access trail',
+    );
+    return AccessLedgerDao.verify();
+  }
+
+  /// Accesses with no consent and no care relationship behind them: the queue a
+  /// district supervisor is expected to read, not a dashboard nobody opens.
+  Future<List<AccessRecord>> flaggedAccesses(
+    AppUser user, {
+    int limit = 50,
+  }) async {
+    await _require(user, Permission.viewCommunityInsights, 'review flagged access');
+    return AccessLedgerDao.flaggedReviews(limit: limit);
+  }
+
+  /// Opens a record the worker has no relationship to, *with a stated reason*.
+  ///
+  /// This is the path that exists so that no clinician is ever blocked from a
+  /// patient, and so that the choice is uncomfortable in the only way that is
+  /// useful afterwards: it costs a sentence, it is flagged to a supervisor, and it
+  /// appears by name in the family's own disclosure.
+  Future<void> openRecordUnderGlass(
+    AppUser user, {
+    required String householdId,
+    required String subjectPersonId,
+    required String reason,
+  }) async {
+    await _require(user, Permission.viewAllHouseholds, 'open a patient record');
+    final db = await AppDatabase.instance.database;
+    final decision = await RecordAccess.open(
+      db,
+      actor: user,
+      householdId: householdId,
+      subjectPersonId: subjectPersonId,
+      purpose: AccessPurpose.continuingCare,
+      action: 'open_record_under_glass',
+      breakGlassReason: reason,
+      deviceId: await _currentDeviceId(),
+    );
+    if (decision.isRefusal) {
+      throw AccessDenied(
+        'open this record',
+        Permission.viewAllHouseholds,
+        detail: decision.reason,
+      );
+    }
+  }
+
+  /// A family asking to see, correct, object, erase or take away their data.
+  /// Opened as work with a deadline, not as a toast message.
+  Future<void> raiseDataRight(
+    AppUser user, {
+    required String subjectPersonId,
+    required DataRight right,
+  }) async {
+    await _requirePersonScope(user, subjectPersonId, 'request a data right');
+    await DataRightsDao.open(
+      id: 'right-${DateTime.now().microsecondsSinceEpoch}',
+      subjectPersonId: subjectPersonId,
+      right: right,
+      requestedBy: user.id,
+      at: _clock(),
+    );
+  }
+
+  Future<List<RightsRequest>> dataRightsFor(
+    AppUser user,
+    String subjectPersonId,
+  ) async {
+    await _requirePersonScope(user, subjectPersonId, 'view data-rights requests');
+    return DataRightsDao.forSubject(subjectPersonId);
+  }
+
+  /// The outstanding obligations the district owes families, oldest first.
+  Future<List<RightsRequest>> openDataRightsQueue(AppUser user) async {
+    await _require(
+      user,
+      Permission.viewCommunityInsights,
+      'view the data-rights queue',
+    );
+    return DataRightsDao.openQueue();
+  }
+
+  Future<void> resolveDataRight(
+    AppUser user, {
+    required String requestId,
+    required RequestStatus status,
+    required String resolution,
+  }) async {
+    await _require(
+      user,
+      Permission.viewCommunityInsights,
+      'answer a data-rights request',
+    );
+    await DataRightsDao.resolve(
+      requestId,
+      status: status,
+      resolution: resolution,
+      at: _clock(),
+    );
   }
 
   // ---------------------------------------------------------------------------

@@ -200,10 +200,12 @@ void _worker(SendPort responses) {
               Int64List.fromList([ids.length]),
               [1],
             );
-            inputs['scales'] = OrtValueTensor.createTensorWithDataList(
-              spec!.scalesFor(prosody),
-              [3],
-            );
+            if (spec!.hasScalesInput) {
+              inputs['scales'] = OrtValueTensor.createTensorWithDataList(
+                spec!.scalesFor(prosody),
+                [3],
+              );
+            }
             if (spec!.numSpeakers > 1) {
               inputs['sid'] = OrtValueTensor.createTensorWithDataList(
                 Int64List.fromList([speaker]),

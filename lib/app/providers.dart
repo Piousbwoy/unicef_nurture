@@ -155,7 +155,7 @@ class _LanguageWarmupQueue {
 
   void request(String? language) {
     final generation = ++_generation;
-    if (language != 'Hausa' && language != 'Twi') return;
+    if (!['Hausa', 'Twi', 'Dagbani'].contains(language)) return;
     _tail = _tail.then((_) async {
       if (generation != _generation) return;
       try {
@@ -165,12 +165,15 @@ class _LanguageWarmupQueue {
         return;
       }
       if (generation != _generation) return;
-      try {
-        // Per-language initialization reuses loaded/in-flight models. It only
-        // reads bundled/installed packs; no installation or speech is requested.
-        await neural.initializeLanguage(language!);
-      } catch (_) {
-        // Even a platform availability check can throw. Keep the shell usable.
+      if (language != 'Dagbani') {
+        // Only a voice exists for Dagbani; there is no translation pack.
+        try {
+          // Per-language initialization reuses loaded/in-flight models. It only
+          // reads bundled/installed packs; no installation or speech is requested.
+          await neural.initializeLanguage(language!);
+        } catch (_) {
+          // Even a platform availability check can throw. Keep the shell usable.
+        }
       }
       if (generation != _generation) return;
       try {

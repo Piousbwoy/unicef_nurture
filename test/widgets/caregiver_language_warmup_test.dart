@@ -4,9 +4,9 @@
 /// language so the first tap of a play button does not stall for minutes.
 /// A family in the caregiver shell picks their language the same way
 /// (narrationLanguageProvider), so they must get the same warm-up — and the
-/// same guards: Hausa/Twi only, serialized loads, honest runtime caching,
-/// cancellation on language change or sign-out, and never any narration
-/// preference writes or model disposal.
+/// same guards: Hausa/Twi get translation plus voice, Dagbani only a voice,
+/// serialized loads, honest runtime caching, cancellation on language change or
+/// sign-out, and never any narration preference writes or model disposal.
 library;
 
 import 'dart:async';
@@ -198,12 +198,20 @@ void main() {
   ) async {
     final models = _WarmupHarness();
     final container = await _pumpShell(tester, warmup: models);
-    for (final language in ['English', 'Dagbani', 'French', '']) {
+    for (final language in ['English', 'French', '']) {
       container.read(_accountProvider.notifier).state = _family(
         language: language,
       );
       await tester.pumpAndSettle();
     }
+    // Dagbani ships a voice pack and no translation pack, so warm-up may load
+    // exactly one of the two.
+    container.read(_accountProvider.notifier).state = _family(
+      language: 'Dagbani',
+    );
+    await tester.pumpAndSettle();
+    expect(models.log.loads, ['piper:Dagbani']);
+    expect(models.neural.isLoaded('Dagbani'), isFalse);
     container.read(_accountProvider.notifier).state = AppUser.fromMap({
       ..._family(language: 'Twi').toMap(),
       'role': 'frontlineHealthWorker',
@@ -211,7 +219,7 @@ void main() {
     await tester.pumpAndSettle();
     container.read(_accountProvider.notifier).state = null;
     await tester.pumpAndSettle();
-    expect(models.log.loads, isEmpty);
+    expect(models.log.loads, ['piper:Dagbani']);
     expect(models.log.nonLoadingCalls, isEmpty);
     expect(tester.takeException(), isNull);
   });

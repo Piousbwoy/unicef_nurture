@@ -53,7 +53,8 @@ class _WebPiperTtsRunner implements PiperTtsRunner {
     final frontend = PiperPhonemizer.fromConfig(
       config,
       language,
-      twiRules: language == 'Twi'
+      twiRules: language == 'Twi' &&
+              !PiperPhonemizer.usesCharacterFrontend(config)
           ? await VoiceWebBridge.text(base, 'twi_rules.json', cache)
           : null,
     );

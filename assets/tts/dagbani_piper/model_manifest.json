@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "contract": "piper-v1",
+  "language": "Dagbani",
+  "source": "https://huggingface.co/ghananlpcommunity/dagbani_tts-2025_v2",
+  "license": "UNLICENSED - do not publish until the author states a licence",
+  "revision": "0a118aaaf4d1d0a12dd1645899000f872174b7c0bd05ae79fdc253eff86206fa",
+  "files": [
+    {
+      "name": "model.onnx",
+      "bytes": 38436284,
+      "sha256": "0a118aaaf4d1d0a12dd1645899000f872174b7c0bd05ae79fdc253eff86206fa"
+    },
+    {
+      "name": "model.onnx.json",
+      "bytes": 1727,
+      "sha256": "a6b0fc14793ed8519621e654527061639bc1ae402d137efe148e2774ad126e7f"
+    }
+  ]
+}
