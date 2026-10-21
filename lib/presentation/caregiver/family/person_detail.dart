@@ -11,6 +11,7 @@ import '../care_plan/saved_advice.dart';
 import '../check/nurse_summary.dart';
 import '../check/triage_screen.dart';
 import '../widgets/companion.dart';
+import 'your_data_screen.dart';
 
 String caregiverCheckLabel(HomeCheckVerdict verdict) => switch (verdict) {
   HomeCheckVerdict.urgent => 'A danger sign was reported',
@@ -225,6 +226,17 @@ class CaregiverPersonDetail extends ConsumerWidget {
                             child: const Text(
                               'Add a note or later observation',
                             ),
+                          ),
+                          // The right of access, put where the family already is.
+                          OutlinedButton(
+                            onPressed: () => Navigator.of(context).push(
+                              GlassPageRoute<void>(
+                                builder: (_) => CaregiverYourDataScreen(
+                                  person: person,
+                                ),
+                              ),
+                            ),
+                            child: const Text('Who has seen this record'),
                           ),
                           const SizedBox(height: 16),
                           if (events.isEmpty)

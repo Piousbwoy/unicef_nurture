@@ -243,6 +243,70 @@ void main() {
         expect(lines.first.flagged, isTrue);
       });
     });
+
+    testWidgets('the disclosure carries the reason the worker wrote', (
+      tester,
+    ) async {
+      setUpDb(tester);
+      await tester.runAsync(() async {
+        final database = await db();
+        await AccessLedgerDao.append(
+          database,
+          actor: _nurse,
+          deviceId: 'cb-test',
+          action: 'open_record',
+          entityTable: Tables.persons,
+          entityId: _child.id,
+          subjectPersonId: _child.id,
+          purpose: AccessPurpose.emergency,
+          basis: AccessBasis.vitalInterest,
+          at: _t0,
+          note: 'Mother carried the child from another zone at dawn',
+          flagged: true,
+        );
+
+        // The sentence the worker typed is the part a family can actually check,
+        // so it has to survive the projection out of the raw ledger — if it were
+        // dropped, the disclosure page would look tidy and be incomplete.
+        final lines = await AccessLedgerDao.disclosureFor([_child.id]);
+        expect(lines.single.note, contains('another zone at dawn'));
+        expect(lines.single.purpose, AccessPurpose.emergency);
+      });
+    });
+
+    testWidgets('a household with no members registered still has a trail', (
+      tester,
+    ) async {
+      setUpDb(tester);
+      await tester.runAsync(() async {
+        // The chain-of-custody card asks by household id when nobody is
+        // registered yet. That must disclose, not silently return nothing.
+        await appendTwo(await db(), count: 1, subject: _household.id);
+
+        final householdOnly = await AccessLedgerDao.disclosureFor([
+          _household.id,
+        ]);
+        expect(householdOnly, hasLength(1));
+
+        final bothHalves = await AccessLedgerDao.disclosureFor([
+          _child.id,
+          _household.id,
+        ]);
+        expect(bothHalves, hasLength(1));
+      });
+    });
+
+    testWidgets('an empty question is answered empty, not with an error', (
+      tester,
+    ) async {
+      setUpDb(tester);
+      await tester.runAsync(() async {
+        // Screens build these id lists out of whatever is on screen; a page must
+        // never be able to crash a disclosure query with a blank id.
+        expect(await AccessLedgerDao.disclosureFor(const []), isEmpty);
+        expect(await AccessLedgerDao.disclosureFor(['', '']), isEmpty);
+      });
+    });
   });
 
   group('the policy decision', () {
@@ -508,6 +572,195 @@ void main() {
         list = await DataRightsDao.forSubject(_child.id);
         expect(list.single.status, RequestStatus.fulfilled);
         expect(await DataRightsDao.openQueue(), isEmpty);
+      });
+    });
+
+    testWidgets('a family’s request is queued to leave the phone', (
+      tester,
+    ) async {
+      setUpDb(tester);
+      await tester.runAsync(() async {
+        final database = await db();
+        await DataRightsDao.open(
+          id: 'r-2',
+          subjectPersonId: _child.id,
+          right: DataRight.erasure,
+          requestedBy: _mother.id,
+          at: _t0,
+        );
+
+        Future<List<Map<String, Object?>>> queued() => database.query(
+          Tables.outbox,
+          where: 'entity_table = ?',
+          whereArgs: [Tables.dataRightsRequests],
+          orderBy: 'id ASC',
+        );
+
+        // The obligation has to outlive the handset that raised it, so the intent
+        // to send is written in the same transaction as the request. There must be
+        // no moment where a family asked for something and only their own phone
+        // knows about it.
+        var rows = await queued();
+        expect(rows, hasLength(1));
+        expect(rows.single['synced_at'], isNull);
+        expect(rows.single['payload_json'], contains('"status":"open"'));
+        expect(rows.single['payload_json'], contains('"request_kind":"erasure"'));
+
+        await DataRightsDao.resolve(
+          'r-2',
+          status: RequestStatus.refused,
+          resolution:
+              'Immunisation records are ones the law asks the district to keep.',
+          at: _t0.add(const Duration(days: 2)),
+        );
+
+        // The ANSWER travels as the whole updated row. A district that can prove a
+        // request arrived but not how it was met has documented half the
+        // obligation; the server upserts this id in place.
+        rows = await queued();
+        expect(rows, hasLength(2));
+        final last = rows.last['payload_json'] as String;
+        expect(last, contains('"status":"refused"'));
+        expect(last, contains('asks the district to keep'));
+        expect(last, isNot(contains('"resolved_at":null')));
+      });
+    });
+  });
+
+  group('the supervision desk', () {
+    /// A nurse with a name in the users table and a child in the register, so the
+    /// desk's joins have something real to resolve.
+    Future<void> seed(Database database) async {
+      // The household first: `persons.household_id` is a real foreign key, and a
+      // register row that does not exist yet is a test bug, not a product bug.
+      await HouseholdDao.upsert(_household);
+      await database.insert(Tables.users, {
+        'id': _nurse.id,
+        'full_name': _nurse.fullName,
+        'phone': _nurse.phone,
+        'role': _nurse.role.name,
+        'region': _nurse.region,
+        'district': _nurse.district,
+        'community': _nurse.community,
+        'preferred_language': 'English',
+        'created_at': _t0.toIso8601String(),
+      });
+      await PersonDao.upsert(_child);
+      await AccessLedgerDao.append(
+        database,
+        actor: _nurse,
+        deviceId: 'cb-test',
+        action: 'open_record',
+        entityTable: Tables.households,
+        entityId: _household.id,
+        subjectPersonId: _child.id,
+        purpose: AccessPurpose.continuingCare,
+        basis: AccessBasis.breakGlass,
+        at: _t0,
+        note: 'Family was passing through my zone',
+        flagged: true,
+        entryId: 'f-1',
+      );
+    }
+
+    testWidgets('a finding names the worker and the family, not two ids', (
+      tester,
+    ) async {
+      setUpDb(tester);
+      await tester.runAsync(() async {
+        await seed(await db());
+
+        final findings = await AccessLedgerDao.findings();
+        expect(findings, hasLength(1));
+        final finding = findings.single;
+        expect(finding.entryId, 'f-1');
+        // The whole point of the queue is that a supervisor can read it out loud
+        // to somebody afterwards.
+        expect(finding.actorName, _nurse.fullName);
+        expect(finding.subjectName, _child.fullName);
+        expect(finding.basis, AccessBasis.breakGlass);
+        expect(finding.note, contains('passing through'));
+        expect(finding.reviewed, isFalse);
+      });
+    });
+
+    testWidgets(
+      'a review is added as a second line, never by editing the first',
+      (tester) async {
+        setUpDb(tester);
+        await tester.runAsync(() async {
+          final database = await db();
+          await seed(database);
+          final evidence = await AccessLedgerDao.flaggedReviews();
+          final originalHash = evidence.single.entryHash;
+
+          await AccessLedgerDao.append(
+            database,
+            actor: _nurse,
+            deviceId: 'cb-test',
+            action: AccessLedgerDao.reviewAction,
+            entityTable: Tables.accessLedger,
+            entityId: 'f-1',
+            subjectPersonId: _child.id,
+            purpose: AccessPurpose.accountReview,
+            basis: AccessBasis.officialAuthority,
+            at: _t0.add(const Duration(minutes: 90)),
+            note: 'Talked it through; the family was in transit. No fault.',
+          );
+
+          // The finding is closed by association, and the row under investigation
+          // keeps the exact hash that made it evidence.
+          final findings = await AccessLedgerDao.findings();
+          expect(
+            findings,
+            hasLength(1),
+            reason: 'a review is not itself a finding',
+          );
+          expect(findings.single.reviewed, isTrue);
+          final after = await AccessLedgerDao.flaggedReviews();
+          expect(after.single.entryHash, originalHash);
+          expect(after.single.seq, evidence.single.seq);
+        });
+      },
+    );
+
+    testWidgets('the family can see that the review happened', (tester) async {
+      setUpDb(tester);
+      await tester.runAsync(() async {
+        final database = await db();
+        await seed(database);
+        await AccessLedgerDao.append(
+          database,
+          actor: _nurse,
+          deviceId: 'cb-test',
+          action: AccessLedgerDao.reviewAction,
+          entityTable: Tables.accessLedger,
+          entityId: 'f-1',
+          subjectPersonId: _child.id,
+          purpose: AccessPurpose.accountReview,
+          basis: AccessBasis.officialAuthority,
+          at: _t0.add(const Duration(minutes: 90)),
+          note: 'Talked it through; the family was in transit. No fault.',
+        );
+
+        // Oversight the supervised party can never see is housekeeping, not
+        // supervision: the review belongs in the family's disclosure too.
+        final lines = await AccessLedgerDao.disclosureFor([
+          _child.id,
+          _household.id,
+        ]);
+        expect(lines, hasLength(2));
+        expect(
+          lines.map((l) => l.purpose),
+          contains(AccessPurpose.accountReview),
+        );
+        expect(
+          lines
+              .firstWhere((l) => l.purpose == AccessPurpose.accountReview)
+              .note,
+          contains('in transit'),
+        );
+        expect(lines.every((l) => l.actorName == _nurse.fullName), isTrue);
       });
     });
   });

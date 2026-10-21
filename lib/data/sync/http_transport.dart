@@ -73,7 +73,11 @@ class HttpSyncTransport implements SyncTransport {
       if (refreshed.isOk) {
         final retryAuth = await _resolveAuthHeader();
         try {
-          final retry = await _postOnce(uri: uri, entry: entry, auth: retryAuth);
+          final retry = await _postOnce(
+            uri: uri,
+            entry: entry,
+            auth: retryAuth,
+          );
           return _classify(retry.statusCode);
         } on HttpFailure catch (e) {
           return _mapFailure(e);
@@ -123,6 +127,11 @@ class HttpSyncTransport implements SyncTransport {
         return const SendRejected(
           'The base URL is malformed. Check the sync server address in settings.',
         );
+      case HttpFailureKind.insecureTransport:
+        // Permanent, and the fix is the address rather than the network: say
+        // exactly what was refused instead of dressing it up as a connection
+        // problem the drainer would otherwise retry all morning.
+        return SendRejected(e.message);
     }
   }
 
@@ -175,6 +184,13 @@ class HttpSyncTransport implements SyncTransport {
 /// [NotConfiguredTransport], which leaves records honestly pending instead of
 /// marking them delivered to a district server that does not exist.
 Future<SyncTransport> resolveSyncTransport() async {
+  // A demonstration build may talk plaintext to a laptop on a LAN cable, because
+  // the alternative is a security control that gets deleted wholesale after it
+  // breaks a rehearsal. Stated here, at the composition root, rather than
+  // inherited silently from a build flag: `kDebugMode` already covers
+  // `flutter run`, and this covers a release build launched with DEMO_MODE set —
+  // which is exactly the case a district would never install.
+  if (kDemoMode) PlatformHttpClient.allowInsecureTransports = true;
   final http = await HttpSyncTransport.fromPreferences();
   if (http != null) return http;
   return kDemoMode ? const LoopbackTransport() : const NotConfiguredTransport();

@@ -1,7 +1,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Voice input only. Audio is consumed in-process and never stored or
+         sent: a check answer is recorded as text, so no audio leaves the mic
+         buffer. The feature is optional, so a device without a usable mic
+         still installs and keeps every other capability. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-feature android:name="android.hardware.microphone" android:required="false"/>
+    <!-- Sync. INTERNET was never declared here, which means the Android build
+         could not reach the district server at all while the desktop and web
+         builds could — every sync path in this repo was verified on a platform
+         that does not enforce this permission. ACCESS_NETWORK_STATE is what
+         connectivity_plus reads to tell a worker honestly whether there is
+         anywhere for her records to go right now, rather than letting the outbox
+         look idle. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <application
         android:label="carebridge_ai"
         android:name="${applicationName}"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"

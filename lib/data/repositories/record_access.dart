@@ -57,6 +57,7 @@ class AccessDecision {
     required this.subjectPersonId,
     this.note,
     this.reason,
+    this.canBreakGlass = false,
   });
 
   final bool allowed;
@@ -76,6 +77,10 @@ class AccessDecision {
   /// than for a log: an honest refusal says what to do next.
   final String? reason;
 
+  /// True when this refusal is one a stated reason would turn into an opening.
+  /// Lets a screen offer the way forward instead of only the wall.
+  final bool canBreakGlass;
+
   bool get isRefusal => !allowed;
 }
 
@@ -89,6 +94,8 @@ class AccessContext {
     required this.isDataSubject,
     required this.crossFacilityConsent,
     required this.now,
+    this.isSensitive = false,
+    this.isResponsibleWorker = false,
   });
 
   final AppUser actor;
@@ -102,6 +109,15 @@ class AccessContext {
   final bool isDataSubject;
   final bool crossFacilityConsent;
   final DateTime now;
+
+  /// The subject's record carries a [SensitivityCategory]. Household-level
+  /// access is never sensitive: the family is findable, the person's own record
+  /// is what the class protects.
+  final bool isSensitive;
+
+  /// The worker who registered the household — the one person outside the family
+  /// for whom a sensitive record still opens without a stated reason.
+  final bool isResponsibleWorker;
 }
 
 abstract final class RecordAccess {
@@ -141,6 +157,12 @@ abstract final class RecordAccess {
       ConsentScope.crossFacilitySearch,
     );
 
+    // Resolved from the person row itself, so a marking that arrived by pull from
+    // a colleague's handset is enforced here exactly as on the device that set it.
+    final person = subjectPersonId == householdId
+        ? null
+        : await PersonDao.byId(subjectPersonId);
+
     return AccessContext(
       actor: actor,
       household: household,
@@ -149,6 +171,8 @@ abstract final class RecordAccess {
       isDataSubject: isDataSubject,
       crossFacilityConsent: ConsentLedgerDao.isGranted(consent),
       now: at,
+      isSensitive: person?.isSensitive ?? false,
+      isResponsibleWorker: actor.id == household?.createdBy,
     );
   }
 
@@ -192,14 +216,22 @@ abstract final class RecordAccess {
       );
     }
 
-    if (ctx.isOwnCaseload) {
+    // For a sensitive record the care relationship narrows to the worker who is
+    // responsible for it. A same-district colleague falls through to the paths
+    // below, where she can still open it — by saying why, or in an emergency.
+    final ownCaseload = ctx.isSensitive
+        ? ctx.isResponsibleWorker
+        : ctx.isOwnCaseload;
+    if (ownCaseload) {
       return AccessDecision(
         allowed: true,
         basis: AccessBasis.careRelationship,
         purpose: purpose,
         flagged: false,
         subjectPersonId: ctx.subjectPersonId,
-        note: 'This patient is in the worker’s caseload',
+        note: ctx.isSensitive
+            ? 'Sensitive record, opened by the worker responsible for it'
+            : 'This patient is in the worker’s caseload',
       );
     }
 
@@ -215,7 +247,10 @@ abstract final class RecordAccess {
       );
     }
 
-    if (ctx.crossFacilityConsent) {
+    // Consent to be *found* by another facility is not consent to have a sensitive
+    // record read: the family agreed to continuity of care, not to disclosure of
+    // the one thing they would most want kept close.
+    if (ctx.crossFacilityConsent && !ctx.isSensitive) {
       return AccessDecision(
         allowed: true,
         basis: AccessBasis.consent,
@@ -234,6 +269,25 @@ abstract final class RecordAccess {
         flagged: true,
         subjectPersonId: ctx.subjectPersonId,
         note: breakGlassReason.trim(),
+      );
+    }
+
+    // The one refusal in the register that exists to be answered rather than
+    // obeyed: silence is not an option for a sensitive record, but a sentence is.
+    if (ctx.isSensitive) {
+      return AccessDecision(
+        allowed: false,
+        basis: AccessBasis.none,
+        purpose: purpose,
+        flagged: true,
+        subjectPersonId: ctx.subjectPersonId,
+        note: 'Sensitive record — opening attempted without a stated reason',
+        reason:
+            'This record is marked sensitive, so it opens without a reason only '
+            'for the worker responsible for it. To open it, say why you need it. '
+            'Your reason is recorded, reviewed by the district, and shown to the '
+            'family.',
+        canBreakGlass: true,
       );
     }
 
@@ -342,6 +396,18 @@ abstract final class RecordAccess {
         _now().difference(cached.at) < _window) {
       return cached.decision;
     }
+
+    // A reason already given covers the sitting, not one query. Without this, a
+    // worker who explained herself once would be refused again by the very next
+    // screen that reads the same record — the household view, then the growth
+    // chart, then the referral — and would learn that the reason is a formality.
+    final glassKey = '${actor.id}|$householdId|$subjectPersonId';
+    final grant = _glass[glassKey];
+    if (grant != null &&
+        breakGlassReason == null &&
+        _now().difference(grant.at) < _glassWindow) {
+      return grant.decision;
+    }
     final recordedAt = _now();
 
     final ctx = await context(
@@ -354,7 +420,21 @@ abstract final class RecordAccess {
       purpose: purpose,
       breakGlassReason: breakGlassReason,
     );
-    if (decision.isRefusal) return decision;
+    if (decision.isRefusal) {
+      // A refused look is still a look someone tried to take. It never reaches the
+      // hash chain — nothing was read — but it lands in the device audit log, so a
+      // supervisor asking "who tried to open this?" gets an answer.
+      await AuditDao.record(
+        action: action,
+        outcome: 'denied',
+        actorId: actor.id,
+        actorRole: actor.role.name,
+        entityTable: Tables.persons,
+        entityId: subjectPersonId,
+        detail: decision.note,
+      );
+      return decision;
+    }
     final committed = await commit(
       db,
       ctx,
@@ -376,6 +456,12 @@ abstract final class RecordAccess {
       if (_recent.length > 400) _recent.clear();
       _recent[key] = _RecentAccess(committed, recordedAt);
     }
+    if (committed.allowed && committed.basis == AccessBasis.breakGlass) {
+      _glass.removeWhere(
+        (_, entry) => recordedAt.difference(entry.at) > _glassWindow,
+      );
+      _glass[glassKey] = _RecentAccess(committed, recordedAt);
+    }
     return committed;
   }
 
@@ -387,11 +473,22 @@ abstract final class RecordAccess {
   /// test can assert that an access wrote an evidence row without a previous
   /// test's collapsed decision silently suppressing it.
   @visibleForTesting
-  static void clearTrailCache() => _recent.clear();
+  static void clearTrailCache() {
+    _recent.clear();
+    _glass.clear();
+  }
 
   /// Decisions already recorded this session, for the window above.
   static final Map<String, _RecentAccess> _recent = <String, _RecentAccess>{};
   static const _window = Duration(minutes: 5);
+
+  /// Stated reasons in force, keyed by worker, household and subject.
+  ///
+  /// Thirty minutes is one sitting with a family — long enough that a worker is
+  /// not asked twice while examining the same child, short enough that a reason
+  /// given in the morning does not silently cover an afternoon of browsing.
+  static final Map<String, _RecentAccess> _glass = <String, _RecentAccess>{};
+  static const _glassWindow = Duration(minutes: 30);
 }
 
 class _RecentAccess {

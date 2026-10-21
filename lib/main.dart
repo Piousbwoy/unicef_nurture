@@ -3,8 +3,11 @@
 ///
 /// The entry point does three things and nothing else: opens the Riverpod
 /// scope, hands routing to [routerProvider] (which owns the session-driven
-/// redirect), and applies the theme. Everything else — the database and the
-/// sync service — is pulled in lazily by the providers themselves.
+/// redirect), and applies the theme. It also mounts [SessionGuard] around the
+/// router, because an inactivity lock belongs to the shell rather than to any
+/// screen — a control each feature has to opt into is a control the next feature
+/// forgets. Everything else — the database and the sync service — is pulled in
+/// lazily by the providers themselves.
 library;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -12,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'app/session_guard.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'data/local/app_database.dart';
@@ -40,8 +44,11 @@ class CareBridgeApp extends ConsumerWidget {
       theme: AppTheme.light,
       routerConfig: router,
       builder: (context, child) {
-        if (kIsWeb) return IPhoneFrame(child: child!);
-        return child!;
+        // The guard wraps whatever the platform chrome produced, on every
+        // platform, so the web demo is not the one build without a lock.
+        return SessionGuard(
+          child: kIsWeb ? IPhoneFrame(child: child!) : child!,
+        );
       },
     );
   }

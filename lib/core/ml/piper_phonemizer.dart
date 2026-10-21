@@ -53,6 +53,13 @@ class PiperPhonemizer {
   final int _spaceId;
   final Map<String, String> _aliases;
 
+  /// The language tag a checkpoint was trained with, if it uses one.
+  static const _languageTokens = {
+    'Twi': 'twi',
+    'Hausa': 'ha',
+    'Dagbani': 'dag',
+  };
+
   /// Separator and punctuation carry no meaning of their own, so a voice may
   /// drop them. Letters and digits may not: a dropped 'ɔ' mispronounces a
   /// word and a dropped '3' changes a dose.
@@ -77,7 +84,7 @@ class PiperPhonemizer {
       );
     }
     final rawMap = cfg['phoneme_id_map'];
-    if (rawMap is! Map || !['Twi', 'Hausa'].contains(language)) {
+    if (rawMap is! Map || !_languageTokens.containsKey(language)) {
       throw const FormatException('Unsupported voice frontend');
     }
     final map = <String, List<int>>{};
@@ -185,7 +192,9 @@ class PiperPhonemizer {
   List<String> phonemes(String text) {
     final normalized = text.toLowerCase().trim();
     if (normalized.isEmpty) return [];
-    if (language == 'Hausa') {
+    if (language != 'Twi') {
+      // Orthographic packs (Hausa, and any trained text-phoneme voice): every
+      // codepoint, including the word separator, is a symbol the model learned.
       final units = normalized
           .replaceAll(RegExp(r'\s+'), ' ')
           .runes
@@ -244,7 +253,7 @@ class PiperPhonemizer {
     _checkUnits(units);
     final pad = phonemeIdMap['_']!;
     final ids = <int>[...phonemeIdMap['^']!, ...pad];
-    final token = '«${languageToken ?? (language == 'Twi' ? 'twi' : 'ha')}»';
+    final token = '«${languageToken ?? _languageTokens[language]}»';
     if (phonemeIdMap.containsKey(token)) {
       ids.addAll([...phonemeIdMap[token]!, ...pad]);
     }

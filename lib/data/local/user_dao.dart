@@ -31,12 +31,12 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
-import 'package:sqflite/sqflite.dart';
 
 import '../../domain/entities/core.dart';
 import '../../domain/enums.dart';
 import 'app_database.dart';
 import 'outbox_dao.dart';
+import 'upsert.dart';
 import '../sync/recovery_service.dart';
 import '../sync/server_auth_client.dart';
 
@@ -290,10 +290,11 @@ abstract final class UserDao {
         'pin_salt': localSalt,
         'linked_household_id': linkedHouseholdId,
       };
-      await txn.insert(
-        Tables.users,
-        localUserRow,
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await upsertWithoutCascade(
+        txn,
+        table: Tables.users,
+        primaryKey: const ['id'],
+        row: localUserRow,
       );
 
       //  // WIRE OUTBOX — intentionally scoped to EXCLUDE on-device credentials.

@@ -20,6 +20,7 @@
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const crypto = require('crypto');
+const { auditAnchors } = require('../src/anchors');
 
 const BASE = process.env.BASE || `http://localhost:${process.env.PORT || 3000}`;
 const DOMAIN = 'carebridge_cloud_auth_v1';
@@ -598,6 +599,247 @@ async function pullAll(token, since) {
     !pullForLedger.seenKeys.has('access_ledger') &&
       !pullForLedger.seenKeys.has('consent_events'),
     `server offered keys: ${[...pullForLedger.seenKeys].join(', ')}`
+  );
+
+  // ── 7. A family's request reaches the district, and its answer replaces it ──
+  // The privacy notice promises an answer within 30 days. A promise only the
+  // family's own handset can evidence is not a promise — so this table is
+  // whitelisted, and it is the one accountability row that is MUTABLE: a request
+  // moves from open to fulfilled/refused. The client re-pushes the whole updated
+  // row under the same id, which must land as an update and not a second request.
+  const rightId = `dr-${stamp}`;
+  const pushRight = await push(nurseA.token, 'data_rights_requests', rightId, {
+    id: rightId,
+    subject_person_id: personId,
+    request_kind: 'rectification',
+    status: 'open',
+    requested_at: now,
+    requested_by: nurseA.userId,
+    resolved_at: null,
+    resolution: null,
+  });
+  check(
+    'a family’s data-rights request is accepted by the server (whitelisted, not 400)',
+    pushRight.status < 300,
+    `${pushRight.status} ${JSON.stringify(pushRight.json)}`
+  );
+
+  const answeredAt = new Date(Date.now() + 86400000).toISOString();
+  const pushAnswer = await push(nurseA.token, 'data_rights_requests', rightId, {
+    id: rightId,
+    subject_person_id: personId,
+    request_kind: 'rectification',
+    status: 'fulfilled',
+    requested_at: now,
+    requested_by: nurseA.userId,
+    resolved_at: answeredAt,
+    resolution: 'Corrected the child’s date of birth against the birth card.',
+  });
+  check(
+    'answering it is accepted as a re-push of the same id',
+    pushAnswer.status < 300,
+    `${pushAnswer.status} ${JSON.stringify(pushAnswer.json)}`
+  );
+
+  let rightsProbe = null;
+  try {
+    const mysql = require('mysql2/promise');
+    const conn = await mysql.createConnection({
+      host: process.env.DB_HOST,
+      port: parseInt(process.env.DB_PORT || '3306', 10),
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
+    });
+    const [rows] = await conn.execute(
+      'SELECT status, request_kind, resolution, resolved_at FROM data_rights_requests WHERE id = ?',
+      [rightId]
+    );
+    rightsProbe = rows;
+    await conn.end();
+  } catch (e) {
+    rightsProbe = { error: e.message };
+  }
+  check(
+    'the district holds ONE request row, answered in place — not duplicated, not lost',
+    Array.isArray(rightsProbe) &&
+      rightsProbe.length === 1 &&
+      rightsProbe[0].status === 'fulfilled' &&
+      !!rightsProbe[0].resolution &&
+      !!rightsProbe[0].resolved_at,
+    JSON.stringify(rightsProbe)
+  );
+
+  // Push-only, like the rest of the spine: an unanswered request names a family, so
+  // the district's whole queue must not arrive on every handset that pulls.
+  check(
+    'a request is never downloaded to another handset',
+    !pullForLedger.seenKeys.has('data_rights_requests'),
+    `server offered keys: ${[...pullForLedger.seenKeys].join(', ')}`
+  );
+
+  // ── 8. Chain anchors: storable, irrevocable, and actually load-bearing ──────
+  // The device commits its chain position every tenth entry so the district can
+  // notice a trail that was shortened later. Three properties have to hold, and the
+  // third is the only one that makes the other two worth having.
+  const anchorDevice = `anchor-${stamp}`;
+  const anchorId = `${anchorDevice}:10`;
+  // A device with a complete trail of its own first, so the honest case really is
+  // clean. A checker that cries wolf on its own test fixture is a checker nobody
+  // reads — the same reason the detectors in the app count rather than accuse.
+  for (let seq = 1; seq <= 9; seq++) {
+    await push(nurseA.token, 'access_ledger', `al-${anchorDevice}-${seq}`, {
+      id: `al-${anchorDevice}-${seq}`,
+      seq,
+      actor_id: nurseA.userId,
+      actor_role: 'frontlineHealthWorker',
+      device_id: anchorDevice,
+      action: 'open_record',
+      entity_table: 'households',
+      entity_id: householdId,
+      subject_person_id: personId,
+      purpose: 'continuingCare',
+      basis: 'careRelationship',
+      note: 'anchor fixture',
+      flagged: 0,
+      occurred_at: now,
+      previous_hash: 'carebridge-access-chain-v1',
+      entry_hash: `f${String(seq).padStart(2, '0')}`.padEnd(64, '0'),
+      hash_format: 'v1',
+    });
+  }
+  await push(nurseA.token, 'access_ledger', `al-${anchorDevice}-10`, {
+    id: `al-${anchorDevice}-10`,
+    seq: 10,
+    actor_id: nurseA.userId,
+    actor_role: 'frontlineHealthWorker',
+    device_id: anchorDevice,
+    action: 'open_record',
+    entity_table: 'households',
+    entity_id: householdId,
+    subject_person_id: personId,
+    purpose: 'continuingCare',
+    basis: 'careRelationship',
+    note: 'anchor fixture',
+    flagged: 0,
+    occurred_at: now,
+    previous_hash: 'carebridge-access-chain-v1',
+    entry_hash: 'c'.repeat(64),
+    hash_format: 'v1',
+  });
+  const anchorPush = await push(nurseA.token, 'ledger_anchors', anchorId, {
+    id: anchorId,
+    device_id: anchorDevice,
+    seq: 10,
+    entry_hash: 'c'.repeat(64),
+    entry_count: 10,
+    anchored_at: now,
+  });
+  check(
+    'a chain anchor is accepted by the district',
+    anchorPush.status < 300,
+    `${anchorPush.status} ${JSON.stringify(anchorPush.json)}`
+  );
+
+  // The attack this closes: sync upserts on the primary key, so without a trigger a
+  // device could re-push its own seq 10 with a new hash and re-sign its past.
+  const reSigned = await push(nurseA.token, 'ledger_anchors', anchorId, {
+    id: anchorId,
+    device_id: anchorDevice,
+    seq: 10,
+    entry_hash: 'd'.repeat(64),
+    entry_count: 10,
+    anchored_at: now,
+  });
+  check(
+    'a device cannot revise an anchor it already sent',
+    reSigned.status >= 400,
+    `${reSigned.status} ${JSON.stringify(reSigned.json)}`
+  );
+
+  // A synthetic shortened trail: the anchor declares five entries at seq 2, two
+  // exist. Detection has to fire here or the anchor table is decoration.
+  const fakeDevice = `shortened-${stamp}`;
+  for (const seq of [1, 2]) {
+    await push(nurseA.token, 'access_ledger', `al-${fakeDevice}-${seq}`, {
+      id: `al-${fakeDevice}-${seq}`,
+      seq,
+      actor_id: nurseA.userId,
+      actor_role: 'frontlineHealthWorker',
+      device_id: fakeDevice,
+      action: 'open_record',
+      entity_table: 'households',
+      entity_id: householdId,
+      subject_person_id: personId,
+      purpose: 'continuingCare',
+      basis: 'careRelationship',
+      note: 'shortened-trail probe',
+      flagged: 0,
+      occurred_at: now,
+      previous_hash: 'carebridge-access-chain-v1',
+      entry_hash: `e${seq}`.padEnd(64, '0'),
+      hash_format: 'v1',
+    });
+  }
+  await push(nurseA.token, 'ledger_anchors', `${fakeDevice}:2`, {
+    id: `${fakeDevice}:2`,
+    device_id: fakeDevice,
+    seq: 2,
+    entry_hash: `e2`.padEnd(64, '0'),
+    entry_count: 5,
+    anchored_at: now,
+  });
+
+  const audit = await auditAnchors();
+  check(
+    'a trail shortened after it was anchored is detected',
+    audit.problems.some(
+      (p) => p.device_id === fakeDevice && p.kind === 'history_shortened'
+    ),
+    `${audit.anchors} anchor(s), ${audit.problems.length} problem(s): ` +
+      audit.problems.map((p) => `${p.device_id}/${p.kind}`).join(', ')
+  );
+  check(
+    'and honest devices are not accused — a complete trail verifies clean',
+    !audit.problems.some(
+      (p) =>
+        p.device_id === anchorDevice ||
+        p.device_id === 'device-A' ||
+        p.device_id === 'device-B'
+    ),
+    audit.problems.map((p) => `${p.device_id}:${p.kind}`).join(', ') || 'clean'
+  );
+
+  // ── 9. Read auditing: how much of the register left the server ───────────
+  // Every pull above delivered rows to a handset. Until this existed, none of it was
+  // recorded anywhere: the server logged writes and was silent on reads.
+  let reads = null;
+  try {
+    const mysql = require('mysql2/promise');
+    const conn = await mysql.createConnection({
+      host: process.env.DB_HOST,
+      port: parseInt(process.env.DB_PORT || '3306', 10),
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
+    });
+    const [rows] = await conn.execute(
+      "SELECT route, user_id, household_count, person_count FROM server_read_log " +
+        'WHERE route = ? ORDER BY id DESC LIMIT 1',
+      ['pull']
+    );
+    reads = rows;
+    await conn.end();
+  } catch (e) {
+    reads = { error: e.message };
+  }
+  check(
+    'every pull is recorded with the size of what it delivered',
+    Array.isArray(reads) &&
+      reads.length === 1 &&
+      !!reads[0].user_id &&
+      Number(reads[0].household_count) > 0,
+    JSON.stringify(reads)
   );
 
   const failed = results.filter((r) => !r.ok);

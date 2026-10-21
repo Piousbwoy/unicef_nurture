@@ -179,4 +179,52 @@ void main() {
       timeout: const Timeout(Duration(minutes: 3)),
     );
   }
+
+  // Track B proof: a piper voice trained from the licensed Dagbani corpus by
+  // tool/track_b must load and speak through the same engine as the shipped
+  // voices. The pack is a local training artifact (data/ is not committed), so
+  // this asserts nothing until a training run has been done on this machine.
+  test(
+    'a Dagbani voice we trained speaks through the app engine',
+    () async {
+      const base = 'data/dagbani';
+      final modelFile = File('$base/model.onnx');
+      if (!modelFile.existsSync()) return;
+      final bytes = await modelFile.readAsBytes();
+      final clock = Stopwatch()..start();
+      final engine = await PiperNativeEngine.load(
+        model: bytes,
+        artifact: ModelArtifact(
+          'model.onnx',
+          bytes.length,
+          sha256.convert(bytes).toString(),
+        ),
+        config: await File('$base/model.onnx.json').readAsString(),
+        language: 'Dagbani',
+        speaker: 0,
+      );
+      addTearDown(engine.dispose);
+      final wav = await engine.synthesize(SpeechBank.qNewbornFeed.dagbani);
+      final data = ByteData.sublistView(wav);
+      final rate = data.getUint32(24, Endian.little);
+      final seconds = (wav.length - 44) / 2 / rate;
+      var peak = 0;
+      for (var offset = 44; offset + 1 < wav.length; offset += 2) {
+        final value = data.getInt16(offset, Endian.little).abs();
+        if (value > peak) peak = value;
+      }
+      expect(seconds, greaterThan(0.1));
+      expect(peak, greaterThan(20));
+      await Directory('build').create(recursive: true);
+      await File('build/dagbani_trained.wav').writeAsBytes(wav);
+      // ignore: avoid_print
+      print(
+        'trained Dagbani pack: ${bytes.length / 1e6} MB on disk, '
+        '${seconds.toStringAsFixed(2)}s audio in ${clock.elapsedMilliseconds}ms, '
+        'peak=$peak',
+      );
+    },
+    skip: !enabled,
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
 }

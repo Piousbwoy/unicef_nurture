@@ -1,0 +1,19 @@
+{
+ "_comment": "These forms must mirror lib/core/audio/speech_answers.dart exactly. Measuring thresholds on different words than the app listens for is measuring nothing.",
+ "dagbani": {
+  "sampling_rate": 16000,
+  "answers_by_id": {
+   "yes": ["Ee"],
+   "no": ["Ayi"],
+   "unsure": ["Mi bɛ mi"]
+  }
+ },
+ "twi": {
+  "sampling_rate": 16000,
+  "answers_by_id": {
+   "yes": ["Ɛyɛ", "Aane", "Yes"],
+   "no": ["Nni", "Mmo"],
+   "unsure": ["Minnim", "Nnim"]
+  }
+ }
+}

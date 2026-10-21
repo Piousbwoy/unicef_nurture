@@ -70,6 +70,10 @@ const TABLES = {
       'id', 'household_id', 'full_name', 'client_type', 'sex', 'date_of_birth',
       'age_years_approx', 'phone', 'mother_id', 'is_dob_estimated',
       'nhis_number', 'created_at', 'updated_at', 'is_active',
+      // The protection class. Whitelisted so the marking leaves the handset that
+      // set it: pull and recovery intersect rows with local columns, so every
+      // device ends up enforcing the same rule as the device that marked it.
+      'sensitivity',
     ],
   },
   maternal_records: {
@@ -286,9 +290,42 @@ const TABLES = {
       'hash_format',
     ],
   },
+  // A family's data-rights request, and the district's answer to it. Whitelisted
+  // so the obligation leaves the handset: a 30-day promise a family can only
+  // evidence from the phone they might lose is not a promise. Keyed on its own id
+  // and NOT registered in pull.js — an open request names a family, so the
+  // district's queue must not spread to every device. Mutable by design
+  // (open -> fulfilled/refused), so a re-push updates the row in place; see
+  // migrations/008 for why last-write-wins is acceptable here.
+  data_rights_requests: {
+    pk: ['id'],
+    columns: [
+      'id', 'subject_person_id', 'request_kind', 'status', 'requested_at',
+      'requested_by', 'resolved_at', 'resolution',
+    ],
+  },
+  // The device's periodic commitment of its own chain position, which is what
+  // lets the district notice a trail that was shortened after the fact. Keyed on
+  // device + seq, so a retry is idempotent and two devices can never collide.
+  //
+  // Stated honestly: the device sends these rows, so an anchor is only as
+  // trustworthy as the device that wrote it. It defeats rewriting history after
+  // it was admitted; it does not defeat a device that lied from the beginning.
+  // See migrations/009.
+  ledger_anchors: {
+    pk: ['id'],
+    columns: [
+      'id', 'device_id', 'seq', 'entry_hash', 'entry_count', 'anchored_at',
+    ],
+  },
 };
 
 // The operations the app can legitimately send.
 const OPERATIONS = new Set(['insert', 'update', 'delete']);
+
+// server_read_log is deliberately absent from TABLES above. That file is the list
+// of tables a device may write; a read log a device could write to is a read log
+// that can be forged or emptied, so it has exactly one writer — the server, in
+// src/read_audit.js. Its absence is the security property, not an omission.
 
 module.exports = { TABLES, OPERATIONS };

@@ -331,6 +331,14 @@ record the phones have pushed, with timestamps.
   recommendation shows its working and states its confidence (*protocol-based /
   high / moderate / low — follow protocol*). A tool that admits when it is
   guessing gets trusted when it is not.
+- **The privacy register is code, not a PDF.** `docs/GOVERNANCE.md` holds the
+  record of processing activities, the access matrix and the control map — and it
+  is *generated* from `lib/domain/governance.dart`, then reconciled in CI against
+  four artefacts that are not opinions: the local schema, `server/schema.sql`, the
+  sync whitelist in `server/src/tables.js` and the pull list in
+  `server/src/pull.js`. Add a table without a declared purpose, widen the pull
+  stream, or cite a safeguard whose file no longer exists, and the test suite
+  fails. That is the only form of compliance document an engineer can trust.
 
 ---
 

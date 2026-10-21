@@ -36,6 +36,13 @@ import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
+import 'database_secret.dart';
+// The encryption engine is chosen at compile time: SQLCipher where it is linked,
+// the plain engine elsewhere. The stub is the default so a web build never pulls
+// in the `dart:io`-only package, and so "not encrypted" stays a reported fact
+// rather than a silent absence.
+import 'db_engine_stub.dart' if (dart.library.io) 'db_engine_io.dart';
+
 /// Bumping this runs [AppDatabase._upgrade]. Every increment needs a matching
 /// case, because a field device may be several versions behind.
 ///
@@ -91,7 +98,14 @@ import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 /// what lawful basis — and must be able to prove the resulting trail was not
 /// rewritten afterwards. That last part is why `previous_hash`/`entry_hash` are
 /// per-row here as well: unlike the clinical tables, this chain is verified.
-const int kDatabaseVersion = 11;
+/// Version 12 (October 2026 — sensitive-record class): `persons.sensitivity`. A
+/// record marked sensitive (HIV status, adolescent reproductive health, violence)
+/// is held to a narrower rule by the policy decision point than the rest of the
+/// district's register. It is a column on the person rather than a separate table
+/// so the marking travels wherever the person travels — push, pull and cloud
+/// recovery all intersect rows with local columns, so a colleague's handset
+/// enforces the same rule as the device that set it.
+const int kDatabaseVersion = 12;
 
 const String kDatabaseName = 'carebridge.db';
 
@@ -160,17 +174,74 @@ class AppDatabase {
 
   Future<Database> _open() async {
     final path = await _resolvePath();
-    return openDatabase(
-      path,
+
+    // The three ways this device can end up unencrypted, each named separately
+    // on purpose. A single "encryption unavailable" string would read like a bug
+    // and hide the difference between a platform that cannot do it, a register
+    // that predates the control, and a keystore that would not keep a key.
+    String? passphrase;
+    final AtRestPosture posture;
+    if (!supportsEncryptionAtRest) {
+      posture = AtRestPosture.plaintext(encryptionUnavailableReason);
+    } else if (await localDatabaseExists(path)) {
+      // SQLCipher cannot open a plaintext file, so existing devices keep opening
+      // the way they were created. In-place conversion is a migration with its
+      // own tests and its own rollback — not something to attempt on a midwife's
+      // phone at three in the morning while she holds an unsent register.
+      posture = const AtRestPosture.plaintext(
+        'This register was created before encryption was added to the app, so it '
+        'is still stored unencrypted. Converting existing devices is a planned '
+        'migration; new installations are encrypted.',
+      );
+    } else {
+      passphrase = await DatabaseSecret.passphraseForNewDatabase();
+      posture = passphrase == null
+          ? const AtRestPosture.plaintext(
+              'This device would not keep a database key, so the register is '
+              'unencrypted. The app refuses to use a key it cannot store: that '
+              'does not protect a database, it makes the database unopenable.',
+            )
+          : const AtRestPosture.encrypted();
+    }
+    _posture = posture;
+
+    final db = await openAppDatabase(
+      path: path,
       version: kDatabaseVersion,
+      passphrase: passphrase,
       onConfigure: (db) async {
         // Off by default in SQLite. Without this, orphaned children of a
         // deleted household would linger and quietly skew every zone count.
         await db.execute('PRAGMA foreign_keys = ON');
+        await _secureDelete(db);
       },
       onCreate: (db, version) async => _createAll(db),
       onUpgrade: _upgrade,
     );
+
+    if (posture.encrypted) {
+      // A converted register keeps its plaintext original as a rollback until this
+      // line has run once. That is one clean launch of proof and no longer: leave
+      // it forever and the migration has produced a plaintext copy of the whole
+      // register on a phone that can be lost.
+      await deleteFile('$path.plaintext-backup');
+    }
+    return db;
+  }
+
+  /// Where the register actually lives on this device. Exposed for
+  /// `database_conversion.dart`, which has to rename files it did not create.
+  Future<String> get resolvedPath => _resolvePath();
+
+  AtRestPosture? _posture;
+
+  /// What is actually protecting the file on this device, as opposed to what the
+  /// build was meant to do. Computed while opening, because reporting a posture
+  /// nothing has established is exactly the claim this file exists to avoid.
+  Future<AtRestPosture> get posture async {
+    if (_posture case final known?) return known;
+    await database;
+    return _posture!;
   }
 
   Future<String> _resolvePath() async {
@@ -197,7 +268,10 @@ class AppDatabase {
       inMemoryDatabasePath,
       options: OpenDatabaseOptions(
         version: kDatabaseVersion,
-        onConfigure: (d) async => d.execute('PRAGMA foreign_keys = ON'),
+        onConfigure: (d) async {
+          await d.execute('PRAGMA foreign_keys = ON');
+          await _secureDelete(d);
+        },
         onCreate: (d, _) async => _createAll(d),
       ),
     );
@@ -411,6 +485,32 @@ class AppDatabase {
       for (final statement in _dataRightsIndexes) {
         await db.execute(statement);
       }
+    }
+    if (from < 12) {
+      // Nullable with no default: an existing record is not sensitive until a
+      // worker says it is, and the absence of a marking must never be read as one.
+      await _addColumnIfMissing(db, Tables.persons, 'sensitivity', 'TEXT');
+    }
+  }
+
+  /// Deletion that actually deletes.
+  ///
+  /// By default SQLite marks a deleted row's space free and leaves its bytes on
+  /// the page, so a name "removed" from the register is still readable with a hex
+  /// editor until the page happens to be reused. For an unencrypted file — which
+  /// every pre-encryption install still is — that makes erasure and "reset this
+  /// device" claims rather than facts. `secure_delete` overwrites the content with
+  /// zeros as it is deleted or replaced.
+  ///
+  /// Read with `rawQuery`, not `execute`: this pragma returns a row, and the
+  /// Android engine refuses row-returning statements through `execute`. That
+  /// difference only shows up on a phone, which is exactly where it would crash.
+  static Future<void> _secureDelete(DatabaseExecutor db) async {
+    try {
+      await db.rawQuery('PRAGMA secure_delete = ON');
+    } catch (_) {
+      // An engine without the pragma still opens: losing overwrite-on-delete is a
+      // weaker register, losing the register is no register at all.
     }
   }
 
@@ -652,6 +752,7 @@ const List<String> _schema = [
     created_at       TEXT NOT NULL,
     updated_at       TEXT NOT NULL,
     is_active        INTEGER NOT NULL DEFAULT 1,
+    sensitivity      TEXT,
     pull_updated_at  TEXT,
     FOREIGN KEY (household_id) REFERENCES ${Tables.households}(id) ON DELETE CASCADE,
     FOREIGN KEY (mother_id) REFERENCES ${Tables.persons}(id) ON DELETE SET NULL

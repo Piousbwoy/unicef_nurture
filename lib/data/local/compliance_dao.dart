@@ -209,6 +209,38 @@ abstract final class AccessLedgerDao {
       },
     );
 
+    // Committing the chain position every tenth entry, into the same transaction.
+    //
+    // Without it, a device that rewrites its own trail can produce a chain that is
+    // internally consistent and simply shorter, and the district copy would show
+    // the same shortened history — nothing would disagree. An anchor records how
+    // many entries existed *at the time* under a given head hash, so history
+    // truncated afterwards contradicts a commitment the device already sent and
+    // cannot take back.
+    //
+    // The limit is stated plainly because it matters to anyone judging this
+    // design: an anchor proves nothing was removed after it was sent. A device that
+    // intended to lie from the first entry can anchor a fiction. What it cannot do
+    // is un-write an access the district has already been told about.
+    final device = deviceId;
+    if (device != null && device.isNotEmpty && seq % anchorEvery == 0) {
+      await OutboxDao.enqueue(
+        db,
+        table: 'ledger_anchors',
+        entityId: '$device:$seq',
+        operation: SyncOperation.insert,
+        priority: SyncPriority.background,
+        payload: {
+          'id': '$device:$seq',
+          'device_id': device,
+          'seq': seq,
+          'entry_hash': entryHash,
+          'entry_count': seq,
+          'anchored_at': at.toIso8601String(),
+        },
+      );
+    }
+
     return AccessRecord(
       seq: seq,
       actorId: actor.id,
@@ -340,6 +372,120 @@ abstract final class AccessLedgerDao {
     return rows.map(_toRecord).toList(growable: false);
   }
 
+  /// The action a supervisor writes when they close a finding. Named once here
+  /// because the same string decides three things: what counts as a review, what
+  /// the findings queue excludes, and what the family's disclosure will render as
+  /// supervision rather than a peek.
+  static const reviewAction = 'review_access';
+
+  /// How often the device commits its chain position to the district.
+  ///
+  /// Ten is a compromise: low enough that a handset lost or edited shortly after
+  /// an access still has a recent commitment, high enough that a busy register
+  /// session does not double the outbox. An anchor is one tiny row per ten
+  /// accesses, pushed on the next window like everything else.
+  static const anchorEvery = 10;
+
+  /// The supervisor's working queue: accesses no consent and no care relationship
+  /// explains, each carrying the worker's name, the family's name, and whether a
+  /// review has already been written against it.
+  ///
+  /// Names are joined rather than left as ids because this list is meant to be
+  /// *acted on*: "Aminata Fusea looked outside her zone at Akosia Yeboah" is a
+  /// sentence a District Supervisor can do something about, and two UUIDs are not.
+  /// The review count comes back as a subquery on the same table so that marking
+  /// a finding reviewed never mutates the finding itself.
+  static Future<List<AccessFinding>> findings({int limit = 50}) async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.rawQuery(
+      'SELECT l.*, u.full_name AS actor_name, '
+      'COALESCE(p.full_name, h.name) AS subject_name, '
+      '(SELECT COUNT(*) FROM ${Tables.accessLedger} r '
+      'WHERE r.action = ? AND r.entity_id = l.id) AS review_count '
+      'FROM ${Tables.accessLedger} l '
+      'LEFT JOIN ${Tables.users} u ON u.id = l.actor_id '
+      'LEFT JOIN ${Tables.persons} p ON p.id = l.subject_person_id '
+      'LEFT JOIN ${Tables.households} h ON h.id = l.subject_person_id '
+      "WHERE l.flagged = 1 AND l.action <> ? "
+      'ORDER BY l.seq DESC LIMIT ?',
+      [AccessLedgerDao.reviewAction, AccessLedgerDao.reviewAction, limit],
+    );
+    return rows.map(AccessFinding.fromRow).toList(growable: false);
+  }
+
+  /// Two questions the finding queue cannot ask, because each is about the
+  /// *shape* of many entries rather than about any one of them.
+  ///
+  /// Both are answered in SQL with a single aggregate each rather than by pulling
+  /// the trail into Dart: this runs on a handset whose memory is already spoken
+  /// for, and a device audit table grows without limit.
+  static Future<List<AccessPattern>> patterns({
+    required DateTime since,
+    int actorThreshold = 4,
+    int subjectThreshold = 4,
+    int limit = 10,
+  }) async {
+    final db = await AppDatabase.instance.database;
+    final sinceText = since.toIso8601String();
+    final out = <AccessPattern>[];
+
+    // One worker, many families, none of them theirs. Deliberately counts
+    // DISTINCT subjects: the same household read five times in one sitting is one
+    // visit, and a detector that reports it is a detector people stop reading.
+    final volume = await db.rawQuery(
+      'SELECT l.actor_id, u.full_name AS actor_name, '
+      'COUNT(DISTINCT l.subject_person_id) AS families, MAX(l.occurred_at) AS latest '
+      'FROM ${Tables.accessLedger} l '
+      'LEFT JOIN ${Tables.users} u ON u.id = l.actor_id '
+      "WHERE l.flagged = 1 AND l.action <> ? AND l.occurred_at >= ? "
+      'GROUP BY l.actor_id HAVING families >= ? '
+      'ORDER BY families DESC LIMIT ?',
+      [reviewAction, sinceText, actorThreshold, limit],
+    );
+    for (final r in volume) {
+      final raw = r['latest'] as String?;
+      out.add(
+        AccessPattern(
+          kind: AccessPatternKind.outOfCaseloadVolume,
+          // A worker whose account row has gone still shows up; an id with no
+          // name is uglier than a guess and far harder to disprove later.
+          actorName: (r['actor_name'] as String?) ?? 'a former health worker',
+          count: (r['families'] as int? ?? 0),
+          latest: raw == null ? since : DateTime.parse(raw),
+        ),
+      );
+    }
+
+    // One protected record, several pairs of eyes. Restricted to marked records
+    // on purpose: three colleagues sharing one district's caseload is normal work
+    // and reporting it would teach the supervisor to ignore this queue.
+    final shared = await db.rawQuery(
+      'SELECT l.subject_person_id, COALESCE(p.full_name, h.name) AS subject_name, '
+      'COUNT(DISTINCT l.actor_id) AS workers, MAX(l.occurred_at) AS latest '
+      'FROM ${Tables.accessLedger} l '
+      'JOIN ${Tables.persons} pr ON pr.id = l.subject_person_id '
+      'LEFT JOIN ${Tables.persons} p ON p.id = l.subject_person_id '
+      'LEFT JOIN ${Tables.households} h ON h.id = l.subject_person_id '
+      "WHERE l.action <> ? AND l.occurred_at >= ? "
+      'AND pr.sensitivity IS NOT NULL '
+      'GROUP BY l.subject_person_id HAVING workers >= ? '
+      'ORDER BY workers DESC LIMIT ?',
+      [reviewAction, sinceText, subjectThreshold, limit],
+    );
+    for (final r in shared) {
+      final raw = r['latest'] as String?;
+      out.add(
+        AccessPattern(
+          kind: AccessPatternKind.sharedSensitiveSubject,
+          subjectName: (r['subject_name'] as String?) ?? 'a protected record',
+          count: (r['workers'] as int? ?? 0),
+          latest: raw == null ? since : DateTime.parse(raw),
+        ),
+      );
+    }
+    return out;
+  }
+
   static AccessRecord _toRecord(Map<String, Object?> m) => AccessRecord(
     seq: m['seq'] as int,
     actorId: m['actor_id'] as String,
@@ -362,9 +508,17 @@ abstract final class AccessLedgerDao {
     flagged: (m['flagged'] as int? ?? 0) == 1,
   );
 
-  static T _byName<T>(List<T> values, Object? name, T fallback) {
+  /// Reads a stored enum name back into its value.
+  ///
+  /// Bound to `Enum` and read statically, never through `dynamic`. The dynamic hop
+  /// analysed clean and then threw `NoSuchMethodError: Class 'AccessPurpose' has no
+  /// instance getter 'name'` the moment anything actually called it — which is how
+  /// a read path survives review and fails on the first supervisor to open the
+  /// desk. The typed form is also what the disclosure projection already does, so
+  /// the two read paths now resolve names the same way.
+  static T _byName<T extends Enum>(List<T> values, Object? name, T fallback) {
     for (final v in values) {
-      if ((v as dynamic).name == name) return v;
+      if (v.name == name) return v;
     }
     return fallback;
   }
@@ -379,6 +533,7 @@ class DisclosureLine {
     required this.basis,
     required this.occurredAt,
     required this.action,
+    this.note,
     required this.flagged,
   });
 
@@ -388,6 +543,10 @@ class DisclosureLine {
   final AccessBasis basis;
   final DateTime occurredAt;
   final String action;
+
+  /// The worker's stated reason, when there was one. This is the line a family
+  /// actually reads, so it travels as far as the rest of the disclosure.
+  final String? note;
   final bool flagged;
 
   factory DisclosureLine.fromRow(Map<String, Object?> m) => DisclosureLine(
@@ -399,6 +558,9 @@ class DisclosureLine {
     basis: _basis(m['basis']),
     occurredAt: DateTime.parse(m['occurred_at'] as String),
     action: m['action'] as String? ?? 'opened',
+    // The stated reason is the part a family actually reads, so it is disclosed
+    // with the rest of the line rather than left in the raw ledger.
+    note: m['note'] as String?,
     flagged: (m['flagged'] as int? ?? 0) == 1,
   );
 
@@ -409,6 +571,63 @@ class DisclosureLine {
   static AccessBasis _basis(Object? n) => AccessBasis.values.firstWhere(
     (b) => b.name == n,
     orElse: () => AccessBasis.none,
+  );
+}
+
+/// One finding on the supervision desk.
+///
+/// Deliberately not the same shape as [DisclosureLine]: the family gets sentences,
+/// the supervisor gets the machinery — device id, entry id, whether anyone has
+/// already written a decision — because the two audiences have different jobs to do.
+class AccessFinding {
+  const AccessFinding({
+    required this.entryId,
+    required this.seq,
+    required this.actorName,
+    required this.actorRole,
+    required this.subjectName,
+    required this.subjectPersonId,
+    required this.deviceId,
+    required this.purpose,
+    required this.basis,
+    required this.occurredAt,
+    required this.reviewed,
+    this.note,
+  });
+
+  /// The ledger row's own globally unique id — what a review points back to.
+  final String entryId;
+  final int seq;
+  final String actorName;
+  final String actorRole;
+  final String subjectName;
+  final String subjectPersonId;
+  final String deviceId;
+  final AccessPurpose purpose;
+  final AccessBasis basis;
+  final DateTime occurredAt;
+  final String? note;
+
+  /// Whether a supervisor has already written a decision against this entry.
+  final bool reviewed;
+
+  factory AccessFinding.fromRow(Map<String, Object?> m) => AccessFinding(
+    entryId: m['id'] as String? ?? '',
+    seq: m['seq'] as int? ?? 0,
+    // An actor or family that has since been removed from the register must still
+    // be named in the queue; a finding that shows "a former health worker" is
+    // uglier than one that silently disappears, and much harder to explain away.
+    actorName: (m['actor_name'] as String?) ?? 'a former health worker',
+    actorRole: (m['actor_role'] as String?) ?? 'health worker',
+    subjectName:
+        (m['subject_name'] as String?) ?? 'a family not in this register',
+    subjectPersonId: m['subject_person_id'] as String? ?? '',
+    deviceId: m['device_id'] as String? ?? 'unknown device',
+    purpose: DisclosureLine._purpose(m['purpose']),
+    basis: DisclosureLine._basis(m['basis']),
+    occurredAt: DateTime.parse(m['occurred_at'] as String),
+    note: m['note'] as String?,
+    reviewed: (m['review_count'] as int? ?? 0) > 0,
   );
 }
 
@@ -559,13 +778,30 @@ abstract final class DataRightsDao {
     required DateTime at,
   }) async {
     final db = await AppDatabase.instance.database;
-    await db.insert(Tables.dataRightsRequests, {
+    final row = <String, Object?>{
       'id': id,
       'subject_person_id': subjectPersonId,
       'request_kind': right.name,
       'status': RequestStatus.open.name,
       'requested_at': at.toIso8601String(),
       'requested_by': requestedBy,
+      'resolved_at': null,
+      'resolution': null,
+    };
+    // The request and its intent to leave the phone go in one write, for the same
+    // reason a clinical record does: a 30-day promise that can only be evidenced
+    // from the handset a family might lose is not a promise. Whitelisted on the
+    // server as push-only, so the district holds the obligation independently.
+    await db.transaction((txn) async {
+      await txn.insert(Tables.dataRightsRequests, row);
+      await OutboxDao.enqueue(
+        txn,
+        table: Tables.dataRightsRequests,
+        entityId: id,
+        operation: SyncOperation.insert,
+        priority: SyncPriority.background,
+        payload: row,
+      );
     });
   }
 
@@ -580,15 +816,34 @@ abstract final class DataRightsDao {
     return rows.map(_fromRow).toList(growable: false);
   }
 
+  /// One request by id, for the paths that must check what was asked before they
+  /// act on it. A family's right to erasure must not be satisfiable by a caller who
+  /// guessed at the kind from the row it happened to be looking at.
+  static Future<RightsRequest?> byId(String id) async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query(
+      Tables.dataRightsRequests,
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : _fromRow(rows.first);
+  }
+
   /// Everything the district still owes an answer to — the queue, with overdue
   /// work first, because a request left open is the failure this table exists to
   /// make visible.
   static Future<List<RightsRequest>> openQueue() async {
     final db = await AppDatabase.instance.database;
-    final rows = await db.query(
-      Tables.dataRightsRequests,
-      where: "status = '${RequestStatus.open.name}'",
-      orderBy: 'requested_at ASC',
+    // The name travels with the row, for the same reason the findings queue joins
+    // it: a queue worked from ids is a queue nobody can actually work.
+    final rows = await db.rawQuery(
+      'SELECT q.*, COALESCE(p.full_name, h.name) AS subject_name '
+      'FROM ${Tables.dataRightsRequests} q '
+      'LEFT JOIN ${Tables.persons} p ON p.id = q.subject_person_id '
+      'LEFT JOIN ${Tables.households} h ON h.id = q.subject_person_id '
+      "WHERE q.status = '${RequestStatus.open.name}' "
+      'ORDER BY q.requested_at ASC',
     );
     return rows.map(_fromRow).toList(growable: false);
   }
@@ -600,16 +855,36 @@ abstract final class DataRightsDao {
     required DateTime at,
   }) async {
     final db = await AppDatabase.instance.database;
-    await db.update(
-      Tables.dataRightsRequests,
-      {
-        'status': status.name,
-        'resolution': resolution,
-        'resolved_at': at.toIso8601String(),
-      },
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.transaction((txn) async {
+      await txn.update(
+        Tables.dataRightsRequests,
+        {
+          'status': status.name,
+          'resolution': resolution,
+          'resolved_at': at.toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      // The answer travels too, as the whole row. A district that can prove it
+      // received a request but not that it met the deadline has documented half an
+      // obligation; re-pushing the same id updates the server's row in place.
+      final rows = await txn.query(
+        Tables.dataRightsRequests,
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      await OutboxDao.enqueue(
+        txn,
+        table: Tables.dataRightsRequests,
+        entityId: id,
+        operation: SyncOperation.insert,
+        priority: SyncPriority.background,
+        payload: Map<String, Object?>.from(rows.single),
+      );
+    });
   }
 
   static RightsRequest _fromRow(Map<String, Object?> m) => RightsRequest(
@@ -621,6 +896,7 @@ abstract final class DataRightsDao {
     ),
     requestedAt: DateTime.parse(m['requested_at'] as String),
     requestedBy: m['requested_by'] as String? ?? '',
+    subjectName: m['subject_name'] as String?,
     status: RequestStatus.values.firstWhere(
       (s) => s.name == m['status'],
       orElse: () => RequestStatus.open,

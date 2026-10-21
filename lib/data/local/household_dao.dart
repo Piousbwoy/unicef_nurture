@@ -17,16 +17,20 @@ import '../../domain/entities/core.dart';
 import '../../domain/enums.dart';
 import 'app_database.dart';
 import 'outbox_dao.dart';
+import 'upsert.dart';
 
 abstract final class HouseholdDao {
   static Future<void> upsert(Household h) async {
     final db = await AppDatabase.instance.database;
     await db.transaction((txn) async {
       final map = h.toMap();
-      await txn.insert(
-        Tables.households,
-        map,
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      // Never `ConflictAlgorithm.replace`: a household row is the parent of every
+      // person in it, and replacing it would cascade-delete the family.
+      await upsertWithoutCascade(
+        txn,
+        table: Tables.households,
+        primaryKey: const ['id'],
+        row: map,
       );
       await OutboxDao.enqueue(
         txn,
@@ -177,10 +181,14 @@ abstract final class PersonDao {
     final db = await AppDatabase.instance.database;
     await db.transaction((txn) async {
       final map = person.toMap();
-      await txn.insert(
-        Tables.persons,
-        map,
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      // A person row parents the growth curve, the assessments, the referrals and
+      // the birth and maternal records. Replacing it would cascade them away, so a
+      // name correction could cost a child its entire immunisation history.
+      await upsertWithoutCascade(
+        txn,
+        table: Tables.persons,
+        primaryKey: const ['id'],
+        row: map,
       );
       await OutboxDao.enqueue(
         txn,
@@ -209,10 +217,11 @@ abstract final class PersonDao {
     final db = await AppDatabase.instance.database;
     await db.transaction((txn) async {
       final hm = household.toMap();
-      await txn.insert(
-        Tables.households,
-        hm,
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await upsertWithoutCascade(
+        txn,
+        table: Tables.households,
+        primaryKey: const ['id'],
+        row: hm,
       );
       await OutboxDao.enqueue(
         txn,
@@ -224,10 +233,11 @@ abstract final class PersonDao {
 
       if (mother != null) {
         final mm = mother.toMap();
-        await txn.insert(
-          Tables.persons,
-          mm,
-          conflictAlgorithm: ConflictAlgorithm.replace,
+        await upsertWithoutCascade(
+          txn,
+          table: Tables.persons,
+          primaryKey: const ['id'],
+          row: mm,
         );
         await OutboxDao.enqueue(
           txn,
@@ -257,10 +267,11 @@ abstract final class PersonDao {
 
       for (final child in children) {
         final cm = child.toMap();
-        await txn.insert(
-          Tables.persons,
-          cm,
-          conflictAlgorithm: ConflictAlgorithm.replace,
+        await upsertWithoutCascade(
+          txn,
+          table: Tables.persons,
+          primaryKey: const ['id'],
+          row: cm,
         );
         await OutboxDao.enqueue(
           txn,
@@ -328,10 +339,7 @@ abstract final class PersonDao {
       'SELECT * FROM ${Tables.persons} WHERE id IN ($placeholders)',
       unique.toList(),
     );
-    return {
-      for (final row in rows)
-        (row['id'] as String): Person.fromMap(row),
-    };
+    return {for (final row in rows) (row['id'] as String): Person.fromMap(row)};
   }
 
   /// The multi-client queue for one visit, ordered the way care is actually

@@ -200,8 +200,8 @@ abstract final class ServerAuthClient {
       // and a bare "Invalid credentials" — which is how an account registered in
       // the browser became unrecoverable on a phone. Absent on rows written
       // before that column existed, so we fall back to the platform default.
-      final advertisedPin =
-          (challengeReply.jsonBody?['pin_iterations'] as num?)?.toInt();
+      final advertisedPin = (challengeReply.jsonBody?['pin_iterations'] as num?)
+          ?.toInt();
       final advertisedCloud =
           (challengeReply.jsonBody?['cloud_iterations'] as num?)?.toInt();
       final verifierResponse = Credentials.computeCloudVerifierFromPin(
@@ -262,6 +262,11 @@ abstract final class ServerAuthClient {
           return ServerAuthResult.err('Network error: ${e.message}');
         case HttpFailureKind.malformedUrl:
           return ServerAuthResult.err('Invalid URL: ${e.message}');
+        // Deliberately its own branch, not folded into "network error": a
+        // refused address is not a connection that might come back, and
+        // reporting it that way is how a worker ends up retrying all morning.
+        case HttpFailureKind.insecureTransport:
+          return ServerAuthResult.err(e.message);
       }
     } catch (e) {
       return ServerAuthResult.err('Sign-in error: $e');
@@ -317,6 +322,8 @@ abstract final class ServerAuthClient {
           return ServerAuthResult.err('Network error: ${e.message}');
         case HttpFailureKind.malformedUrl:
           return ServerAuthResult.err('Invalid URL: ${e.message}');
+        case HttpFailureKind.insecureTransport:
+          return ServerAuthResult.err(e.message);
       }
     } catch (e) {
       return ServerAuthResult.err(e.toString());

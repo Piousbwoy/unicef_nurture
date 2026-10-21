@@ -50,6 +50,7 @@
 'use strict';
 
 const { pool } = require('./db');
+const { recordRead } = require('./read_audit');
 
 const PAGE_LIMIT_DEFAULT = 200;
 const PAGE_LIMIT_MAX = 500;
@@ -266,6 +267,23 @@ async function handlePull(req, res) {
         break;
       }
     }
+
+    // Read audit, before the response: this is the one data flow in the system
+    // that moves a whole district's register onto a handset that then walks out of
+    // the compound, and until now it left no trace at all. It can never fail the
+    // read — see src/read_audit.js for why that trade-off is deliberate.
+    await recordRead({
+      claims,
+      scope,
+      route: 'pull',
+      counts: {
+        households: data.households.length,
+        persons: data.persons.length,
+        total: delivered,
+      },
+      watermark: since,
+      cursor,
+    });
 
     return res.status(200).json({
       ok: true,

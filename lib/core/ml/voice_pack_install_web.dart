@@ -30,11 +30,27 @@ class VoicePackInstaller {
         : 'assets/assets/tts/${language.toLowerCase()}_piper';
   }
 
-  Future<bool> installed(String language, {bool translation = false}) async {
+  static String _asrBase(String language) {
+    if (!['Twi', 'Dagbani'].contains(language)) {
+      throw ArgumentError('Unsupported language');
+    }
+    return 'assets/assets/asr/${language.toLowerCase()}';
+  }
+
+  Future<bool> installed(String language, {bool translation = false}) =>
+      _statusFor(_base(language, translation));
+
+  /// A recogniser is browser-cached the same way a voice is, under the same
+  /// integrity check — and 355 MB is why the button that calls this is on a
+  /// diagnostics screen and says how big it is, not on the check flow.
+  Future<bool> speechInstalled(String language) =>
+      _statusFor(_asrBase(language));
+
+  Future<bool> _statusFor(String base) async {
     try {
       final result =
           (await VoiceWebBridge.call('status', {
-                'base': _base(language, translation),
+                'base': base,
               }))!.dartify()
               as Map;
       return result['integrityReady'] == true;
@@ -47,11 +63,23 @@ class VoicePackInstaller {
     String language, {
     bool translation = false,
     required void Function(int, int) progress,
-  }) async {
+  }) => _installBase(_base(language, translation), progress);
+
+  Future<void> installSpeech(
+    String language, {
+    required void Function(int, int) progress,
+  }) => _installBase(_asrBase(language), progress);
+
+  Future<void> _installBase(
+    String base,
+    void Function(int, int) progress,
+  ) async {
     if (_installation != null) throw StateError('Installation already active');
-    final task = VoiceWebBridge.start('install', {
-      'base': _base(language, translation),
-    }, progress: progress);
+    final task = VoiceWebBridge.start(
+      'install',
+      {'base': base},
+      progress: progress,
+    );
     _installation = task;
     try {
       await task.result;

@@ -180,6 +180,12 @@ CREATE TABLE IF NOT EXISTS persons (
   mother_id        VARCHAR(64)  NULL,
   is_dob_estimated TINYINT(1)   NOT NULL DEFAULT 0,
   nhis_number      VARCHAR(64)  NULL,
+  -- The protection class (hivAndSti, adolescentReproductive, violenceOrAbuse,
+  -- mentalHealth, familyRequest). NULL is an ordinary record. Held on the person
+  -- rather than in a side table so that it travels wherever the person travels:
+  -- a marking that only existed on the device that set it would protect nothing
+  -- from the colleagues' handsets it is meant to constrain. See migrations/009.
+  sensitivity      VARCHAR(32)  NULL,
   created_at       VARCHAR(40)  NOT NULL,
   updated_at       VARCHAR(40)  NOT NULL,
   is_active        TINYINT(1)   NOT NULL DEFAULT 1,
@@ -733,6 +739,101 @@ CREATE TABLE IF NOT EXISTS access_ledger (
   -- hash chain per device. Uniqueness is not asserted here, because seq is
   -- meaningful only inside one device's own chain and must never be a dedupe key.
   KEY idx_ledger_device (device_id, seq)
+) ENGINE=InnoDB;
+
+-- What a family has asked the district to do about their own data.
+--
+-- The third accountability table, and the only mutable one: consent is history,
+-- the access trail is evidence, and a request is WORK — it moves from open to
+-- answered or refused. Its reason for existing on this server rather than only on
+-- the phone is the deadline. A turnaround the privacy notice promises means nothing
+-- if the obligation can only be evidenced by the handset that raised it, which is
+-- also the thing most likely to be lost, reset, or quietly edited.
+--
+-- Push-only, and deliberately not in src/pull.js: an unanswered request names a
+-- family, so the district's whole queue must not be downloaded onto every CHPS
+-- handset. A supervisor-scoped pull is the follow-up. Last-write-wins on the
+-- primary key is accepted here because only a supervisory account resolves
+-- requests, the resolution is stored on the row, and the access ledger records
+-- independently who did it. See migrations/008 for the full reasoning.
+CREATE TABLE IF NOT EXISTS data_rights_requests (
+  id                VARCHAR(64)  NOT NULL,
+  subject_person_id VARCHAR(64)  NOT NULL,
+  -- access | rectification | objection | erasure | portability
+  request_kind      VARCHAR(32)  NOT NULL,
+  -- open | fulfilled | refused. NOT NULL on purpose: the promise is measured
+  -- against this column, not inferred from resolved_at being set.
+  status            VARCHAR(24)  NOT NULL,
+  requested_at      VARCHAR(40)  NOT NULL,
+  requested_by      VARCHAR(64)  NOT NULL,
+  resolved_at       VARCHAR(40)  NULL,
+  -- The answer, in words the family will be given.
+  resolution        TEXT         NULL,
+  received_at       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  KEY idx_rights_open (status, requested_at),
+  KEY idx_rights_subject (subject_person_id, requested_at)
+) ENGINE=InnoDB;
+
+-- ---------------------------------------------------------------------------
+-- Chain anchors, and the server's own record of who read what.
+--
+-- ledger_anchors is the device admitting its chain position at a point in time,
+-- which is what lets the district notice a trail shortened after the fact. It is
+-- whitelisted for device writes because the device must be the one to send it —
+-- and that same fact bounds what it proves: it defeats rewriting history that was
+-- already admitted, not a device that lied from the first entry.
+--
+-- server_read_log is NOT in the device whitelist at all. It records how much of
+-- the register left the server to a handset, which is the exposure a shared field
+-- device actually creates; a log a device could write is a log it could empty.
+-- One writer, the server, in src/read_audit.js.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ledger_anchors (
+  id           VARCHAR(96) NOT NULL,
+  device_id    VARCHAR(64) NOT NULL,
+  seq          BIGINT      NOT NULL,
+  entry_hash   VARCHAR(64) NOT NULL,
+  entry_count  BIGINT      NOT NULL,
+  anchored_at  VARCHAR(40) NOT NULL,
+  received_at  DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  KEY idx_anchor_device (device_id, seq)
+) ENGINE=InnoDB;
+
+-- Append-only, enforced by the database rather than by convention: sync upserts on
+-- the primary key, so a device that could re-push `device:10` with a new hash could
+-- quietly re-sign its own past — defeating the only mechanism that lets the district
+-- notice a shortened trail. See migrations/009 for the reasoning.
+DROP TRIGGER IF EXISTS trg_anchor_rows_are_immutable;
+CREATE TRIGGER trg_anchor_rows_are_immutable BEFORE UPDATE ON ledger_anchors
+FOR EACH ROW
+  SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'ledger_anchors is append-only: an anchor cannot be revised';
+
+DROP TRIGGER IF EXISTS trg_anchor_rows_cannot_be_deleted;
+CREATE TRIGGER trg_anchor_rows_cannot_be_deleted BEFORE DELETE ON ledger_anchors
+FOR EACH ROW
+  SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'ledger_anchors is append-only: an anchor cannot be withdrawn';
+
+CREATE TABLE IF NOT EXISTS server_read_log (
+  id               BIGINT       NOT NULL AUTO_INCREMENT,
+  user_id          VARCHAR(64)  NOT NULL,
+  role             VARCHAR(32)  NULL,
+  route            VARCHAR(32)  NOT NULL,
+  region           VARCHAR(96)  NULL,
+  district         VARCHAR(96)  NULL,
+  community        VARCHAR(96)  NULL,
+  household_count  INT          NOT NULL DEFAULT 0,
+  person_count     INT          NOT NULL DEFAULT 0,
+  row_count        INT          NOT NULL DEFAULT 0,
+  watermark        VARCHAR(40)  NULL,
+  cursor_position  INT          NULL,
+  answered_at      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  KEY idx_read_user_time (user_id, answered_at),
+  KEY idx_read_time (answered_at)
 ) ENGINE=InnoDB;
 
 -- ----------------------------------------------------------------------------

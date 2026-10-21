@@ -1,0 +1,25 @@
+{
+ "repo": "KhayaAI/w2v-bert-dga",
+ "extractor": "SeamlessM4TFeatureExtractor",
+ "preprocessor": {
+  "feature_extractor_type": "SeamlessM4TFeatureExtractor",
+  "feature_size": 80,
+  "num_mel_bins": 80,
+  "padding_side": "right",
+  "padding_value": 1,
+  "processor_class": "Wav2Vec2BertProcessor",
+  "return_attention_mask": true,
+  "sampling_rate": 16000,
+  "stride": 2
+ },
+ "model_input_dim": 160,
+ "frames_per_second": 49.1667,
+ "feature_projection": {
+  "input_feat_per_channel": null,
+  "feature_projection_input_dim": 160,
+  "feat_proj_dropout": 0.0,
+  "adapter_kernel_size_list": null,
+  "adapter_stride_list": null,
+  "num_adapter_layers": 1
+ }
+}

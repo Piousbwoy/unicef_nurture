@@ -28,6 +28,7 @@ import '../../domain/enums.dart';
 import '../../domain/services/follow_up_policy.dart';
 import 'app_database.dart';
 import 'outbox_dao.dart';
+import 'upsert.dart';
 
 /// One row of the roll call: who the CHO expected, and who actually turned up.
 class VisitParticipant {
@@ -103,10 +104,14 @@ abstract final class VisitDao {
     final db = await AppDatabase.instance.database;
     await db.transaction((txn) async {
       final map = visit.toMap();
-      await txn.insert(
-        Tables.visits,
-        map,
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      // A visit parents its roll call and its assessments. Replacing the row would
+      // cascade them both away, so completing a visit twice would erase the
+      // clinical work done inside it.
+      await upsertWithoutCascade(
+        txn,
+        table: Tables.visits,
+        primaryKey: const ['id'],
+        row: map,
       );
       await OutboxDao.enqueue(
         txn,
@@ -126,10 +131,11 @@ abstract final class VisitDao {
     final db = await AppDatabase.instance.database;
     await db.transaction((txn) async {
       final map = visit.toMap();
-      await txn.insert(
-        Tables.visits,
-        map,
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await upsertWithoutCascade(
+        txn,
+        table: Tables.visits,
+        primaryKey: const ['id'],
+        row: map,
       );
       for (final p in participants) {
         await txn.insert(
@@ -373,10 +379,11 @@ abstract final class AssessmentDao {
       await _insertAssessment(txn, a);
 
       final rm = r.toMap();
-      await txn.insert(
-        Tables.referrals,
-        rm,
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await upsertWithoutCascade(
+        txn,
+        table: Tables.referrals,
+        primaryKey: const ['id'],
+        row: rm,
       );
       await OutboxDao.enqueue(
         txn,
@@ -639,10 +646,14 @@ abstract final class ReferralDao {
   /// commit. Callers must already hold a [DatabaseExecutor].
   static Future<void> upsertIn(DatabaseExecutor db, Referral r) async {
     final map = r.toMap();
-    await db.insert(
-      Tables.referrals,
-      map,
-      conflictAlgorithm: ConflictAlgorithm.replace,
+    // A referral parents every follow-up contact made against it — the answers
+    // that say whether the mother actually reached the facility. Replacing the
+    // referral would delete the evidence the follow-up desk exists to collect.
+    await upsertWithoutCascade(
+      db,
+      table: Tables.referrals,
+      primaryKey: const ['id'],
+      row: map,
     );
     await OutboxDao.enqueue(
       db,
@@ -730,10 +741,7 @@ abstract final class ReferralDao {
 
   static String _randomReferenceCode(int length) {
     const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-    return 'CB-${List.generate(
-      length,
-      (_) => alphabet[_referenceCodeRandom.nextInt(alphabet.length)],
-    ).join()}';
+    return 'CB-${List.generate(length, (_) => alphabet[_referenceCodeRandom.nextInt(alphabet.length)]).join()}';
   }
 
   static Future<List<Referral>> open() async {
@@ -771,8 +779,7 @@ abstract final class ReferralDao {
     DateTime? now,
   }) async {
     final db = await AppDatabase.instance.database;
-    final cutoff =
-        (now ?? DateTime.now()).subtract(Duration(days: withinDays));
+    final cutoff = (now ?? DateTime.now()).subtract(Duration(days: withinDays));
     final rows = await db.query(
       Tables.referrals,
       where: 'issued_at >= ?',

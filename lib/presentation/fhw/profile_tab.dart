@@ -23,6 +23,7 @@ import '../../domain/entities/core.dart';
 import '../../domain/enums.dart';
 import '../assessment/form_kit.dart';
 import '../shared/ui.dart';
+import 'storage_posture_card.dart';
 
 class ProfileTab extends ConsumerStatefulWidget {
   const ProfileTab({super.key});
@@ -98,6 +99,9 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
         const SizedBox(height: Gap.md),
 
         const _SyncHealthCard(),
+        const SizedBox(height: Gap.md),
+
+        const StoragePostureCard(),
         const SizedBox(height: Gap.md),
 
         SectionCard(

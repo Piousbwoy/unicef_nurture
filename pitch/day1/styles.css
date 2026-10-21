@@ -1,0 +1,529 @@
+/* CareBridge pitch deck — palette taken from the app itself (FhwLuxePalette),
+   so the slides look like the product rather than like a template.
+   No web fonts: the venue Wi-Fi is not a dependency we want at 3pm. */
+
+:root {
+  --midnight: #081938;
+  --deep: #0d285f;
+  --command: #0b2354;
+  --electric: #2970ff;
+  --royal: #1b56db;
+  --ice: #e8f1ff;
+  --ink-dim: #a8c2e8;
+  --ink-faint: #7f9ac4;
+  --paper: #fbf8f1;
+  --paper-ink: #0a192f;
+}
+
+html,
+body {
+  background: var(--midnight) !important;
+}
+
+.stage {
+  position: absolute;
+  inset: 0;
+  background: var(--midnight);
+  color: var(--ice);
+  padding: 64px 76px 56px;
+  display: flex;
+  flex-direction: column;
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+}
+
+/* ── shared type ─────────────────────────────────────────────── */
+.eyebrow {
+  font-size: 15px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-weight: 600;
+}
+
+.st {
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1.12;
+  margin: 10px 0 0;
+  letter-spacing: -0.018em;
+}
+
+.accentword {
+  color: var(--electric);
+}
+
+.src {
+  margin-top: auto;
+  font-size: 14px;
+  color: var(--ink-faint);
+}
+
+/* ── 1 · cover ──────────────────────────────────────────────── */
+.cover {
+  justify-content: flex-start;
+}
+
+.register {
+  background: var(--paper);
+  color: var(--paper-ink);
+  border-radius: 4px;
+  padding: 16px 22px 14px;
+  width: 100%;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+
+.reg-head {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+  color: #6b7280;
+  border-bottom: 1px solid #d8d3c6;
+  padding-bottom: 8px;
+}
+
+.reg-row {
+  display: flex;
+  gap: 34px;
+  align-items: baseline;
+  font-size: 19px;
+  font-weight: 600;
+  padding: 12px 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.reg-cell {
+  color: var(--paper-ink);
+}
+
+.strike {
+  color: #94a3b8;
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  text-decoration-color: #cbd5e1;
+}
+
+.reg-foot {
+  font-size: 13px;
+  font-style: italic;
+  color: #9aa3b2;
+}
+
+.ct {
+  font-size: 74px;
+  font-weight: 800;
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+  margin: 44px 0 0;
+}
+
+.cover-meta {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.brand {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ice);
+  white-space: nowrap;
+}
+
+.sub {
+  font-size: 19px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+  max-width: 58ch;
+}
+
+.foot-note {
+  margin-top: 18px;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* ── 2 · numbers ────────────────────────────────────────────── */
+.num-row {
+  display: flex;
+  align-items: stretch;
+  gap: 44px;
+  margin-top: 46px;
+}
+
+.num-block {
+  flex: 1;
+}
+
+.rule {
+  width: 1px;
+  background: #1c3a72;
+}
+
+.big {
+  font-size: 122px;
+  font-weight: 800;
+  line-height: 0.9;
+  letter-spacing: -0.045em;
+  color: var(--electric);
+  font-variant-numeric: tabular-nums;
+}
+
+.unit {
+  font-size: 21px;
+  line-height: 1.4;
+  margin-top: 18px;
+  max-width: 26ch;
+  color: var(--ice);
+}
+
+.vs {
+  font-size: 16px;
+  color: var(--ink-faint);
+  margin-top: 14px;
+  line-height: 1.4;
+}
+
+.callout {
+  margin-top: auto;
+  background: var(--deep);
+  border-radius: 8px;
+  padding: 22px 26px;
+  font-size: 19px;
+  line-height: 1.5;
+  color: var(--ice);
+}
+
+/* ── 3 · the visit rail ─────────────────────────────────────── */
+.rail {
+  display: flex;
+  gap: 22px;
+  margin-top: 52px;
+  position: relative;
+}
+
+.rail::before {
+  content: "";
+  position: absolute;
+  top: 21px;
+  left: 6px;
+  right: 6px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--royal), var(--electric));
+  opacity: 0.55;
+}
+
+.node {
+  flex: 1;
+  position: relative;
+  padding-top: 46px;
+}
+
+.node .k {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: var(--midnight);
+  border: 2px solid var(--electric);
+  color: var(--electric);
+  font-size: 18px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nt {
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.ns {
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  margin-top: 12px;
+}
+
+.one-write {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  background: var(--deep);
+  border-radius: 8px;
+  padding: 20px 26px;
+  font-size: 18px;
+  line-height: 1.45;
+}
+
+.ow-n {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 2px solid var(--electric);
+  color: var(--electric);
+  font-weight: 800;
+  font-size: 17px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── 4 · the comparison ─────────────────────────────────────── */
+.duel {
+  display: flex;
+  gap: 26px;
+  margin-top: 42px;
+  align-items: stretch;
+}
+
+.paper-side {
+  flex: 1;
+  background: var(--paper);
+  color: var(--paper-ink);
+  border-radius: 6px;
+  padding: 28px 30px;
+}
+
+.app-side {
+  flex: 1.25;
+  background: var(--deep);
+  border-radius: 6px;
+  padding: 28px 30px;
+}
+
+.paper-tag,
+.app-tag {
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-bottom: 22px;
+}
+
+.paper-tag {
+  color: #8a8577;
+}
+
+.app-tag {
+  color: var(--electric);
+}
+
+.paper-line {
+  font-size: 21px;
+  font-weight: 600;
+  padding: 10px 0;
+  border-bottom: 1px dashed #d3cdbe;
+  font-variant-numeric: tabular-nums;
+}
+
+.box {
+  color: #64748b;
+}
+
+.paper-end {
+  margin-top: 22px;
+  font-size: 17px;
+  line-height: 1.45;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.rung {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  font-size: 19px;
+  line-height: 1.4;
+  padding: 11px 0;
+  color: var(--ice);
+}
+
+.rung > span:last-child {
+  flex: 1;
+}
+
+.rung b {
+  color: #fff;
+}
+
+.dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--electric);
+  transform: translateY(-2px);
+}
+
+.punch {
+  margin-top: auto;
+  font-size: 23px;
+  line-height: 1.45;
+  color: var(--ice);
+  border-left: 3px solid var(--electric);
+  padding-left: 24px;
+}
+
+.punch b {
+  color: var(--electric);
+}
+
+/* ── 5 · the AI, honestly ───────────────────────────────────── */
+.duel.even {
+  margin-top: 38px;
+}
+
+.panel {
+  flex: 1;
+  background: var(--command);
+  border-radius: 8px;
+  padding: 26px 28px;
+}
+
+.panel-tag {
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--electric);
+  margin-bottom: 18px;
+}
+
+.plist {
+  margin: 0;
+  padding: 0 0 0 20px;
+  font-size: 17.5px;
+  line-height: 1.5;
+  color: var(--ice);
+}
+
+.plist li {
+  margin-bottom: 10px;
+}
+
+.panel-note {
+  margin-top: 18px;
+  font-size: 15.5px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  border-top: 1px solid #1c3a72;
+  padding-top: 16px;
+}
+
+.panel-note.plain {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 0;
+  font-size: 18px;
+}
+
+.confession {
+  margin-top: auto;
+  font-size: 20px;
+  line-height: 1.5;
+  color: var(--ice);
+  background: var(--deep);
+  border-left: 3px solid var(--electric);
+  border-radius: 0 8px 8px 0;
+  padding: 22px 28px;
+}
+
+/* ── 6 · voice and reach ────────────────────────────────────── */
+.lang-row {
+  display: flex;
+  gap: 20px;
+  margin-top: 40px;
+}
+
+.chip {
+  flex: 1;
+  background: var(--command);
+  border-radius: 8px;
+  padding: 22px 24px;
+}
+
+.lang {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--electric);
+}
+
+.cap {
+  font-size: 15.5px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+  margin-top: 10px;
+}
+
+.safety {
+  margin-top: 30px;
+  font-size: 19.5px;
+  line-height: 1.5;
+  color: var(--ice);
+  background: var(--deep);
+  border-radius: 8px;
+  padding: 20px 26px;
+}
+
+.safety b {
+  color: var(--electric);
+}
+
+/* ── 7 · trust and the ask ──────────────────────────────────── */
+.trust-rail {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px 26px;
+  margin-top: 40px;
+}
+
+.t-item {
+  background: var(--command);
+  border-radius: 8px;
+  padding: 22px 24px;
+  font-size: 17.5px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.t-item b {
+  color: var(--ice);
+}
+
+.ask-block {
+  margin-top: auto;
+  background: var(--deep);
+  border-radius: 10px;
+  padding: 26px 30px;
+}
+
+.ask-label {
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.ask {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: var(--electric);
+}

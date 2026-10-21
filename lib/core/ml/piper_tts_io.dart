@@ -131,12 +131,14 @@ class _IoPiperTtsRunner implements PiperTtsRunner {
       unawaited(
         playback.then<void>(
           (_) {
-            if (!started.isCompleted)
+            if (!started.isCompleted) {
               started.completeError(StateError('Piper did not start'));
+            }
           },
           onError: (Object _, StackTrace _) {
-            if (!started.isCompleted)
+            if (!started.isCompleted) {
               started.completeError(StateError('Piper playback failed'));
+            }
           },
         ),
       );
@@ -209,8 +211,9 @@ class _IoPiperTtsRunner implements PiperTtsRunner {
       _player = activePlayer;
       _playbackDone = done;
       void failed(Object _) {
-        if (!done.isCompleted)
+        if (!done.isCompleted) {
           done.completeError(StateError('Audio playback failed'));
+        }
       }
 
       // Observe errors immediately, even while setSource/resume is awaiting.

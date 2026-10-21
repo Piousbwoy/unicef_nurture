@@ -28,6 +28,7 @@
 'use strict';
 
 const { pool } = require('./db');
+const { recordRead } = require('./read_audit');
 
 function scrubUser(u) {
   return {
@@ -181,6 +182,29 @@ async function handleCaseloadRestore(req, res) {
     // local table's columns (PRAGMA table_info) before writing, so the marker
     // lands where the schema stores it (households, persons, referrals) and is
     // harmlessly dropped for tables that have no such column.
+
+    // The recovery route delivers a whole caseload in one response, so it is
+    // audited exactly like a pull: the district needs to know that a phone rebuilt
+    // itself and how much of the register came with it.
+    await recordRead({
+      claims,
+      scope: {
+        region: claims.region || user.region,
+        district: claims.district || user.district,
+        community: claims.community || user.community,
+      },
+      route: 'restore_caseload',
+      counts: {
+        households: households.length,
+        persons: persons.length,
+        total:
+          households.length +
+          persons.length +
+          assessments.length +
+          visits.length +
+          referrals.length,
+      },
+    });
 
     return res.status(200).json({
       ok: true,

@@ -48,7 +48,26 @@ class NativePackStore {
         ),
       );
 
+  /// Recognisers exist for the two languages whose answer sets the app holds.
+  /// Anything else has no pack to install, rather than a folder that loads and
+  /// then cannot hear anyone.
+  static String asrBase(String language) {
+    if (!['Twi', 'Dagbani'].contains(language)) {
+      throw ArgumentError('Unsupported speech pack');
+    }
+    return 'assets/asr/${language.toLowerCase()}';
+  }
+
   static void validateInventory(ModelArtifactManifest manifest, String base) {
+    if (base.startsWith('assets/asr/')) {
+      // One encoder graph and its contract. The frontend tables are not listed
+      // here because a raw-waveform pack has none, and `AsrFrontend.fromPack`
+      // is the thing that knows whether the recipe it was handed needs them.
+      for (final name in ['model.onnx', 'frontend.json']) {
+        manifest.file(name);
+      }
+      return;
+    }
     final names = base.contains('/translation_')
         ? [
             'encoder_model.onnx',
@@ -109,8 +128,11 @@ class NativePackStore {
     return rootBundle;
   }
 
-  static String _contract(String base) =>
-      base.contains('/translation_') ? 'marian-v1' : 'piper-v1';
+  static String _contract(String base) {
+    if (base.contains('/translation_')) return 'marian-v1';
+    if (base.startsWith('assets/asr/')) return 'asr-v1';
+    return 'piper-v1';
+  }
 
   Future<bool> installed(String base) async {
     try {

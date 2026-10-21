@@ -1,0 +1,1158 @@
+00:00 +0: loading C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart
+00:00 +0: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the access trail chains every entry and verifies intact
+00:01 +0: C:/Users/Alhaji_stunner/Videos/unicef/test/asr_frontend_fixture_test.dart: synthetic features match the real extractor
+synthetic: max abs feature error 0.0000016838312149047852 at frame 1 dim 143
+00:01 +1: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the access trail chains every entry and verifies intact
+00:01 +1: C:/Users/Alhaji_stunner/Videos/unicef/test/asr_frontend_fixture_test.dart: real features match the real extractor
+real: max abs feature error 0.0000016689300537109375 at frame 10 dim 159
+00:01 +2: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the access trail chains every entry and verifies intact
+00:01 +3: C:/Users/Alhaji_stunner/Videos/unicef/test/asr_frontend_fixture_test.dart: refuses a mel bank whose recorded axes are the other way round
+00:01 +4: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the access trail editing one row invalidates every row after it
+00:01 +5: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the access trail editing one row invalidates every row after it
+00:01 +6: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the access trail deleting a row is detected as clearly as editing one
+00:01 +7: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the access trail the evidence row is queued with the access, in one write
+00:02 +8: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the access trail the disclosure names the worker and the reason, not an id
+00:02 +9: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the access trail the disclosure carries the reason the worker wrote
+00:02 +10: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the access trail a household with no members registered still has a trail
+00:03 +11: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the access trail an empty question is answered empty, not with an error
+00:03 +12: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the policy decision her own caseload opens without ceremony and is not flagged
+00:03 +13: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the policy decision a family that opted in is opened on their consent
+00:03 +14: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the policy decision an out-of-caseload look with no consent is allowed but flagged
+00:03 +15: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the policy decision a break-the-glass reason is recorded verbatim
+00:03 +16: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the policy decision an emergency is recorded as an emergency, and reviewed
+00:03 +17: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the policy decision another region is refused, with a way forward
+00:03 +18: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the policy decision a family reading its own record is not a finding
+00:03 +19: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: consent a withdrawal supersedes without erasing the grant
+00:03 +20: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: consent never being asked is not the same as agreeing
+00:04 +21: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: consent never being asked is not the same as agreeing
+00:04 +22: C:/Users/Alhaji_stunner/Videos/unicef/test/assessment_override_test.dart: Assessment clinician override an override replaces the engine verdict as the governing level
+00:04 +23: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: consent a spoken consent records the artefact that voiced it
+00:04 +24: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: consent a spoken consent records the artefact that voiced it
+00:04 +25: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: consent a spoken consent records the artefact that voiced it
+00:04 +26: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: data rights a request is open work until it is answered
+00:04 +27: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: data rights a family’s request is queued to leave the phone
+00:04 +28: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the supervision desk a finding names the worker and the family, not two ids
+00:05 +29: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the supervision desk a review is added as a second line, never by editing the first
+00:05 +30: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the supervision desk the family can see that the review happened
+00:05 +31: C:/Users/Alhaji_stunner/Videos/unicef/test/accountability_test.dart: the register still reaches the whole region
+00:13 +32: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: milestone draft resumes after confirmation and finalization retries once
+00:14 +33: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: milestone drafts cannot cross question versions or account switches
+00:14 +34: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: stopping for urgent guidance does not wait for storage; retry keeps ID/time
+00:14 +35: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: without a danger sign there is no early verdict to stop for
+00:14 +36: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: urgent answer survives a failed finalization and restart
+00:14 +37: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: NO never auto-advances; all NO and explicit Next are required
+00:14 +38: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: one unsure prevents routine guidance
+00:14 +39: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: concerns reorder the battery, persist, and survive resume
+00:14 +40: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: a danger sign is followed by the questions the nurse asks
+00:14 +41: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: stopping early records what was answered and what was not
+00:14 +42: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: reviewAnswers starts a fresh prefilled session; history is append-only
+00:14 +43: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: draft resumption needs confirmation and preserves original time
+00:14 +44: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: cohort change while open cannot produce a reassuring result
+00:14 +45: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: a permission refusal is not reported as a storage failure
+00:14 +46: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: the last recorded measurement is read into the check
+00:14 +47: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: switching owner cancels queued writes
+00:14 +48: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: serialized setting edits preserve unrelated choices and failure is retryable
+00:14 +49: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: calendar refresh uses local day and resume refreshes dependencies
+00:14 +50: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: voice exposes actual completion, transcript and language; ignores stale events
+00:14 +51: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: only identical registered copy is eligible for translated bank playback
+00:14 +52: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: asking for help an urgent result has asked for nothing yet
+00:14 +53: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: asking for help asking writes one request and holds it
+00:14 +54: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: asking for help asking twice summons one health worker, not two
+00:14 +55: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: asking for help a caution check may ask, and asks for today
+00:14 +56: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: asking for help a failed write says nothing was sent, and leaves the button usable
+00:14 +57: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: asking for help an all-clear result is not offered the ask
+00:14 +58: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: asking for help refresh reads back what was sent while the screen was away
+00:14 +59: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: asking for help withdrawing clears the state only when the repository agrees
+00:14 +60: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_controller_test.dart: asking for help an account switch cannot ask on the old family’s behalf
+00:16 +61: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: negative milestone wording cannot invert caregiver flags
+00:16 +62: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy newborn-2026-08-01 00:00:00.000: only all-NO completion is routine
+00:16 +63: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy newborn-2026-08-01 00:00:00.000: every positive sign is immediately urgent, including partial checks
+00:16 +64: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy newborn-2025-08-01 00:00:00.000: only all-NO completion is routine
+00:16 +65: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy newborn-2025-08-01 00:00:00.000: every positive sign is immediately urgent, including partial checks
+00:16 +66: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy pregnantWoman-2026-08-01 00:00:00.000: only all-NO completion is routine
+00:16 +67: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy pregnantWoman-2026-08-01 00:00:00.000: every positive sign is immediately urgent, including partial checks
+00:16 +68: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy postpartumWoman-2026-08-01 00:00:00.000: only all-NO completion is routine
+00:16 +69: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy postpartumWoman-2026-08-01 00:00:00.000: every positive sign is immediately urgent, including partial checks
+00:16 +70: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy womanOfReproductiveAge-2026-08-01 00:00:00.000: only all-NO completion is routine
+00:16 +71: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy womanOfReproductiveAge-2026-08-01 00:00:00.000: every positive sign is immediately urgent, including partial checks
+00:16 +72: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy childUnderFive-2018-01-01 00:00:00.000: only all-NO completion is routine
+00:16 +73: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy childUnderFive-2018-01-01 00:00:00.000: every positive sign is immediately urgent, including partial checks
+00:16 +74: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy childUnderFive-null: only all-NO completion is routine
+00:16 +75: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy childUnderFive-null: every positive sign is immediately urgent, including partial checks
+00:16 +76: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy a stored arm-tape reading is part of the decision severe wasting escalates an all-clear check to urgent
+00:16 +77: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy a stored arm-tape reading is part of the decision moderate wasting escalates an all-clear check to contact today
+00:16 +78: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy a stored arm-tape reading is part of the decision a healthy tape reading never downgrades a reported danger sign
+00:16 +79: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy a stored arm-tape reading is part of the decision a tape reading never completes an unfinished check
+00:16 +80: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy a stored arm-tape reading is part of the decision the escalation is named, and names no diagnosis
+00:16 +81: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy a stored arm-tape reading is part of the decision a tape reading is not evidence about a young infant
+00:16 +82: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy a stored arm-tape reading is part of the decision advice never credits a family with signs they did not report
+00:16 +83: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy a stored arm-tape reading is part of the decision the spoken verdict claims a danger sign only when one was heard
+00:16 +84: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy every registered person can be checked — no record is refused
+00:16 +85: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy a general-care woman gets the maternal signs without the fetal-movement question
+00:16 +86: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy a child past the window or without a date falls back sensibly
+00:16 +87: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy cohort boundary is 59/60 days and pregnancy-only sign is conditional
+00:16 +88: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: caregiver safety policy cohort and question version changes invalidate a draft
+00:16 +89: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: general food ideas unknown age and infants have no current meal builder
+00:16 +90: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: general food ideas six-month boundary uses calendar months
+00:16 +91: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: general food ideas meals only use actual selections, not avoided or age-restricted ingredients
+00:16 +92: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: general food ideas reported foods can be used out of season; alternatives retain restrictions
+00:16 +93: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: general food ideas no suitable alternative is represented by an empty list
+00:16 +94: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: general food ideas new preparation copy omits nutrient adequacy and outcome claims
+00:16 +95: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: today planner urgent clinic referral and concerning checks precede routine focus
+00:16 +96: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: today planner a recorded arrival closes the danger-sign reminder, not the danger sign
+00:16 +97: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: today planner a recheck promise made yesterday surfaces today until discharged
+00:16 +98: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: today planner follow-up uses the original assessment date, not today
+00:16 +99: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: today planner matching explicit contact wins and duplicates are removed
+00:16 +100: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: today planner unrelated appointment does not suppress a clinician review
+00:16 +101: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: today planner daily completion resets on local midnight without clearing danger signs
+00:16 +102: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: today planner selection filters routine tasks but never hides family emergencies
+00:16 +103: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: today planner unknown birth date invents neither feeding age nor play tasks
+00:16 +104: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_planners_test.dart: today planner malformed clinic plan is surfaced, not replaced with invented follow-up
+00:18 +105: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: v6 upgrade preserves records and matches fresh v7 schema
+00:19 +106: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: draft and settings survive database close and reopen
+00:19 +107: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: concurrent finalization is idempotent and local-only
+00:20 +108: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: concurrent finalization is idempotent and local-only
+00:20 +109: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: concurrent finalization is idempotent and local-only
+00:20 +110: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: concurrent finalization is idempotent and local-only
+00:20 +111: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: concurrent finalization is idempotent and local-only
+00:20 +112: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: failed finalization rolls back the report and preserves a retryable draft
+00:21 +113: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: owner, household, person and persisted role are enforced
+00:22 +114: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: relink denies stale scope and account switching isolates records
+00:22 +115: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: draft ID collisions cannot overwrite another caregiver
+00:23 +116: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_dao_test.dart: CareRequestDao creates the row and queues it at critical priority
+00:23 +117: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: daily task undo is serialized; dates and plan identities are independent
+00:24 +118: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: daily task undo is serialized; dates and plan identities are independent
+00:24 +119: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_dao_test.dart: CareRequestDao an open request already raised for a check is found, not duplicated
+00:24 +120: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: caregiver observations are append-only and cannot finalize reports
+00:24 +121: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_dao_test.dart: CareRequestDao an answered request is no longer open
+00:24 +122: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: malformed and unsupported JSON fail explicitly
+00:25 +123: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: malformed and unsupported JSON fail explicitly
+00:25 +124: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_dao_test.dart: CareRequestDao withdrawing a request that has not left deletes the row and the queue entry together
+00:25 +125: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: partial all-NO cannot finalize; one unsure cannot become routine
+00:25 +126: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_dao_test.dart: CareRequestDao a withdrawn write that rolls back keeps both the row and the entry
+00:25 +127: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: milestones finalize atomically with existing screening semantics
+00:26 +128: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: milestones finalize atomically with existing screening semantics
+00:26 +129: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_dao_test.dart: CareRequestDao an answered request cannot be withdrawn — the reply is the record
+00:26 +130: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: plan progress rejects treatments, fabricated actions and wrong sources
+00:26 +131: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_dao_test.dart: a v8 database gains an empty care_requests table
+00:26 +132: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: later observations and arrivals must match the original person
+00:26 +133: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: support contact validation rejects unsafe numbers and duplicate slots
+00:27 +134: C:/Users/Alhaji_stunner/Videos/unicef/test/caregiver_state_test.dart: device reset clears all companion state
+00:29 +135: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_pull_test.dart: the pull stream server/src/pull.js streams care_requests, scoped by household
+00:30 +136: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: raiseCareRequest a caregiver raises one for their own finalized urgent check
+00:30 +137: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: raiseCareRequest a caregiver raises one for their own finalized urgent check
+00:31 +138: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_pull_test.dart: the pull stream the family’s device receives a worker’s answer
+00:31 +139: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: raiseCareRequest a second tap on the same check returns the first request
+00:31 +140: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_pull_test.dart: the pull stream a re-offered older page cannot undo the newer status
+00:31 +141: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: raiseCareRequest a check that came back fine raises nothing
+00:31 +142: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: raiseCareRequest a caution verdict asks for a visit today, not an emergency
+00:31 +143: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: raiseCareRequest one family cannot ask for another family’s worker
+00:32 +144: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: raiseCareRequest a role without requestCare is refused
+00:32 +145: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: withdrawCareRequest a request that has not been sent can be called back
+00:33 +146: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: withdrawCareRequest withdrawing another household’s request is refused
+00:33 +147: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: withdrawCareRequest withdrawing a request that was never raised is simply no
+00:34 +148: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: withdrawCareRequest withdrawing a request that was never raised is simply no
+00:34 +149: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: withdrawCareRequest withdrawing a request that was never raised is simply no
+00:34 +150: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: withdrawCareRequest withdrawing a request that was never raised is simply no
+00:34 +151: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: withdrawCareRequest withdrawing a request that was never raised is simply no
+00:34 +152: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: withdrawCareRequest withdrawing a request that was never raised is simply no
+00:34 +153: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: withdrawCareRequest withdrawing a request that was never raised is simply no
+00:34 +154: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: withdrawCareRequest withdrawing a request that was never raised is simply no
+00:34 +155: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: withdrawCareRequest withdrawing a request that was never raised is simply no
+00:34 +156: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: careRequestState nothing has been asked, so there is nothing to show
+00:35 +157: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: careRequestState a queued request reads as asked and not yet sent
+00:35 +158: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: careRequestState sent becomes true only when the queue entry has actually gone
+00:36 +159: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: careRequestState an answer stays visible, and cannot be re-raised over
+00:39 +160: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: careRequestState an answer stays visible, and cannot be re-raised over
+00:39 +161: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: careRequestState an answer stays visible, and cannot be re-raised over
+00:39 +162: C:/Users/Alhaji_stunner/Videos/unicef/test/care_request_repository_test.dart: careRequestState an answer stays visible, and cannot be re-raised over
+00:39 +163: C:/Users/Alhaji_stunner/Videos/unicef/test/clinical_reasoning_test.dart: experimental card wraps and shows provenance without clinical probability
+00:43 +164: C:/Users/Alhaji_stunner/Videos/unicef/test/clinical_reasoning_test.dart: determinism (auditability) the same record produces the identical index and narrative
+00:43 +165: C:/Users/Alhaji_stunner/Videos/unicef/test/daily_register_tally_test.dart: DailyRegisterTally.of counts children, not assessments
+00:43 +166: C:/Users/Alhaji_stunner/Videos/unicef/test/daily_register_tally_test.dart: DailyRegisterTally.of counts children, not assessments
+00:43 +167: C:/Users/Alhaji_stunner/Videos/unicef/test/daily_register_tally_test.dart: DailyRegisterTally.of a newborn is an under-five for the register
+00:43 +168: C:/Users/Alhaji_stunner/Videos/unicef/test/clinical_reasoning_test.dart: sensitivity (no one-way answers) measurements just inside the cut-off grade near zero
+00:43 +169: C:/Users/Alhaji_stunner/Videos/unicef/test/clinical_reasoning_test.dart: sensitivity (no one-way answers) the narrative names the patient's own values, not templates
+00:43 +170: C:/Users/Alhaji_stunner/Videos/unicef/test/clinical_reasoning_test.dart: monotonicity (worse never scores lower) adding danger findings only raises the index
+00:43 +171: C:/Users/Alhaji_stunner/Videos/unicef/test/daily_register_tally_test.dart: DailyRegisterTally.of maternal records stay out of the under-five columns
+00:43 +172: C:/Users/Alhaji_stunner/Videos/unicef/test/daily_register_tally_test.dart: DailyRegisterTally.of maternal records stay out of the under-five columns
+00:43 +173: C:/Users/Alhaji_stunner/Videos/unicef/test/daily_register_tally_test.dart: DailyRegisterTally.of maternal records stay out of the under-five columns
+00:43 +174: C:/Users/Alhaji_stunner/Videos/unicef/test/daily_register_tally_test.dart: DailyRegisterTally.of maternal records stay out of the under-five columns
+00:43 +175: C:/Users/Alhaji_stunner/Videos/unicef/test/daily_register_tally_test.dart: DailyRegisterTally.of maternal records stay out of the under-five columns
+00:43 +176: C:/Users/Alhaji_stunner/Videos/unicef/test/daily_register_tally_test.dart: DailyRegisterTally.of a positive is never counted outside a test
+00:43 +177: C:/Users/Alhaji_stunner/Videos/unicef/test/daily_register_tally_test.dart: DailyRegisterTally.of a dose ticked on any pass today counts the child once
+00:43 +178: C:/Users/Alhaji_stunner/Videos/unicef/test/daily_register_tally_test.dart: DailyRegisterTally.of the malnutrition columns carry the last reading, not every reading
+00:43 +179: C:/Users/Alhaji_stunner/Videos/unicef/test/daily_register_tally_test.dart: DailyRegisterTally.of a day with no records is empty, so nothing is rendered
+00:43 +180: C:/Users/Alhaji_stunner/Videos/unicef/test/daily_register_tally_test.dart: the day window and the worker who owns it assessments are one worker's, inside local midnight
+00:45 +181: C:/Users/Alhaji_stunner/Videos/unicef/test/daily_register_tally_test.dart: the day window and the worker who owns it referrals are counted per worker per day
+00:47 +182: C:/Users/Alhaji_stunner/Videos/unicef/test/day_plan_dates_test.dart: overdue-only plans are not empty
+00:47 +183: loading C:/Users/Alhaji_stunner/Videos/unicef/test/engines/anc_engine_test.dart
+00:48 +183: C:/Users/Alhaji_stunner/Videos/unicef/test/day_plan_dates_test.dart: calendar partition and caseload scope use local source records
+00:52 +184: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/anc_engine_test.dart: AncEngine straightforward second-trimester pregnancy is not urgent
+00:52 +185: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/anc_engine_test.dart: AncEngine no MUAC still yields a nutrition status so the food plan renders
+00:53 +186: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/anc_engine_test.dart: AncEngine convulsions are an obstetric emergency — refer now
+00:53 +187: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/anc_engine_test.dart: AncEngine severe hypertension with headache is pre-eclampsia until proven otherwise
+00:53 +188: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/anc_engine_test.dart: AncEngine vaginal bleeding in the third trimester is urgent
+00:53 +189: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/anc_engine_test.dart: AncEngine severe anaemia is at least priority, never routine
+00:53 +190: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/anc_engine_test.dart: AncEngine reduced foetal movement escalates above routine
+00:53 +191: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/anc_engine_test.dart: AncEngine unmeasured inputs are declared, not hidden
+00:53 +192: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/anc_engine_test.dart: AncEngine every finding carries its protocol source
+00:53 +193: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/anc_engine_test.dart: AncEngine post-term pregnancy is flagged, not ignored
+00:56 +194: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/barrier_engine_test.dart: BarrierEngine.detectPatterns one household complaining is a story, not a pattern
+00:56 +195: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/barrier_engine_test.dart: BarrierEngine.detectPatterns the same barrier from three households becomes a pattern
+00:56 +196: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/barrier_engine_test.dart: BarrierEngine.detectPatterns the same household reporting twice counts once
+00:57 +197: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/barrier_engine_test.dart: BarrierEngine.detectPatterns every barrier carries a distinct action, not a platitude
+00:57 +198: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/barrier_engine_test.dart: BarrierEngine.detectPatterns no reports means no patterns
+00:57 +199: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/barrier_engine_test.dart: BarrierEngine.forecast a long walk plus past barriers lowers feasibility
+00:57 +200: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/child_engine_test.dart: ChildEngine — general assessment a well two-year-old with a runny nose is routine
+00:58 +201: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/child_engine_test.dart: ChildEngine — general assessment a general danger sign (lethargy) is urgent
+00:58 +202: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/child_engine_test.dart: ChildEngine — general assessment cough with fast breathing at 8 months is pneumonia (50+ threshold)
+00:58 +203: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/child_engine_test.dart: ChildEngine — general assessment 38/min at 14 months is NOT fast breathing (threshold 40)
+00:58 +204: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/child_engine_test.dart: ChildEngine — general assessment 48/min at 10 months is NOT fast breathing (threshold 50)
+00:58 +205: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/child_engine_test.dart: ChildEngine — general assessment cough with chest indrawing is severe — refer
+00:58 +206: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/child_engine_test.dart: ChildEngine — general assessment bloody diarrhoea is dysentery, at least priority
+00:58 +207: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/child_engine_test.dart: ChildEngine — general assessment fever with stiff neck is meningitis until proven otherwise
+00:58 +208: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/child_engine_test.dart: ChildEngine — general assessment positive malaria RDT with fever gets treatment, not referral
+00:58 +209: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/child_engine_test.dart: ChildEngine — nutrition pathway MUAC 11.2 cm is SAM
+00:58 +210: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/child_engine_test.dart: ChildEngine — nutrition pathway bilateral oedema is SAM regardless of MUAC
+00:58 +211: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/child_engine_test.dart: ChildEngine — nutrition pathway MUAC 12.0 cm is MAM
+00:58 +212: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/child_engine_test.dart: ChildEngine — nutrition pathway MUAC 13.5 cm is adequate
+00:58 +213: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/child_engine_test.dart: ChildEngine — nutrition pathway SAM is urgent — the child is referred, not counselled
+00:58 +214: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/child_engine_test.dart: ChildEngine — nutrition pathway a young infant without MUAC still carries a nutrition status
+00:58 +215: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/child_engine_test.dart: ChildEngine — nutrition pathway an unmeasured MUAC is declared, and the food plan still renders
+01:00 +216: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/cohort_recommendation_test.dart: RecommendationEngine — cohort awareness a newborn plan names its cohort and its watchpoints
+01:00 +217: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/cohort_recommendation_test.dart: RecommendationEngine — cohort awareness a pregnant plan carries the ANC danger-sign counselling
+01:00 +218: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/cohort_recommendation_test.dart: RecommendationEngine — cohort awareness the most acute patient governs the cohort
+01:00 +219: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/cohort_recommendation_test.dart: RecommendationEngine — cohort awareness JSON round-trip preserves cohort and note
+01:00 +220: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/cohort_recommendation_test.dart: RecommendationEngine — cohort awareness a legacy record without cohort fields loads with a null cohort
+01:00 +221: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/cohort_recommendation_test.dart: NutritionEngine — result-driven basket wasting steers the basket to energy, and the reason says so
+01:00 +222: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/cohort_recommendation_test.dart: NutritionEngine — result-driven basket anaemia steers the basket to iron, and the reason says so
+01:01 +223: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/cohort_recommendation_test.dart: NutritionEngine — result-driven basket different results give different baskets
+01:01 +224: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/cohort_recommendation_test.dart: NutritionEngine — result-driven basket the regional iron anchors stay in an anaemic mother's basket
+01:02 +225: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/dispensing_test.dart: DosePerKilogram — counted units 11.2 kg works out to 448 mg and rounds to two 250 mg tablets
+01:02 +226: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/dispensing_test.dart: DosePerKilogram — counted units a halvable unit measures in half-tablets
+01:02 +227: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/dispensing_test.dart: DosePerKilogram — counted units a dose under one whole tablet is reported, not rounded up
+01:02 +228: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/dispensing_test.dart: DosePerKilogram — counted units a rounding that misses the target by over 20% is flagged unusable
+01:02 +229: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/dispensing_test.dart: DosePerKilogram — counted units a stated ceiling caps the dose but the working still shows the maths
+01:02 +230: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/dispensing_test.dart: DosePerKilogram — counted units no ceiling means no invented ceiling
+01:02 +231: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/dispensing_test.dart: DosePerKilogram — counted units no weight produces no number
+01:02 +232: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/dispensing_test.dart: FluidPerKilogram — ORS Plan B 11.2 kg needs 840 ml over 4 hours from one sachet
+01:02 +233: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/dispensing_test.dart: FluidPerKilogram — ORS Plan B 14 kg crosses into a second sachet and a fractional hourly rate
+01:02 +234: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/dispensing_test.dart: FluidPerKilogram — ORS Plan B no weight produces no volume
+01:02 +235: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/dispensing_test.dart: MilligramTarget — figure without a strength table 12 kg is a 120 mg target and the CHO picks the strength
+01:02 +236: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/dispensing_test.dart: MilligramTarget — figure without a strength table no weight produces no target
+01:02 +237: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/dispensing_test.dart: Protocol wiring the amoxicillin step calculates from the weight it is shown
+01:02 +238: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/dispensing_test.dart: Protocol wiring a step with no dispensing stays a plain dose string
+01:02 +239: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/dispensing_test.dart: Protocol wiring fixed-dose protocols carry no weight arithmetic
+01:02 +240: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/dispensing_test.dart: ChildEngine — the calculated amount reaches the action Plan B names the volume for a weighed child
+01:02 +241: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/dispensing_test.dart: ChildEngine — the calculated amount reaches the action Plan B stays generic when the child was not weighed
+01:02 +242: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/dispensing_test.dart: ChildEngine — the calculated amount reaches the action pre-referral rectal artesunate gives mg but no strength count
+01:04 +243: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/growth_zscore_engine_test.dart: GrowthZScoreEngine a child at the WHO median has a z-score of zero
+01:04 +244: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/growth_zscore_engine_test.dart: GrowthZScoreEngine a very low weight-for-height is severe wasting (SAM)
+01:04 +245: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/growth_zscore_engine_test.dart: GrowthZScoreEngine a low weight-for-height is moderate wasting (MAM)
+01:04 +246: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/growth_zscore_engine_test.dart: GrowthZScoreEngine a mildly low weight-for-height is at risk, not malnutrition
+01:04 +247: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/growth_zscore_engine_test.dart: GrowthZScoreEngine a high weight-for-height flags possible overweight
+01:04 +248: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/growth_zscore_engine_test.dart: GrowthZScoreEngine interpolates between reference samples
+01:04 +249: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/growth_zscore_engine_test.dart: GrowthZScoreEngine bilateral oedema is SAM regardless of the numbers
+01:04 +250: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/growth_zscore_engine_test.dart: GrowthZScoreEngine oedema overrides even a missing measurement
+01:04 +251: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/growth_zscore_engine_test.dart: GrowthZScoreEngine a height outside the reference table yields no z-score
+01:04 +252: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/growth_zscore_engine_test.dart: GrowthZScoreEngine missing weight or height yields no z-score
+01:04 +253: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/growth_zscore_engine_test.dart: GrowthZScoreEngine girls use the girls reference
+01:06 +254: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/immunisation_engine_test.dart: ImmunisationEngine a newborn at first contact gets BCG and the birth OPV dose
+01:06 +255: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/immunisation_engine_test.dart: ImmunisationEngine a 10-week-old with birth and 6-week doses gets the 10-week set
+01:06 +256: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/immunisation_engine_test.dart: ImmunisationEngine a child with everything due for age is fully up to date
+01:06 +257: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/immunisation_engine_test.dart: ImmunisationEngine a 40-week-old with no doses has a long overdue list
+01:06 +258: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/immunisation_engine_test.dart: ImmunisationEngine rotavirus is age-barred, not given late
+01:06 +259: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/immunisation_engine_test.dart: ImmunisationEngine the schedule covers the full Ghana EPI antigens
+01:06 +260: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/immunisation_engine_test.dart: ImmunisationEngine the catch-up schedule spaces series doses across sessions
+01:06 +261: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/immunisation_engine_test.dart: ImmunisationEngine a fully up-to-date child has no catch-up sessions
+01:07 +262: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/measurement_safety_engine_test.dart: MeasurementSafetyEngine plausible values pass unflagged
+01:07 +263: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/measurement_safety_engine_test.dart: MeasurementSafetyEngine absent values are skipped, not flagged
+01:07 +264: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/measurement_safety_engine_test.dart: MeasurementSafetyEngine a Fahrenheit temperature is caught
+01:07 +265: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/measurement_safety_engine_test.dart: MeasurementSafetyEngine a MUAC recorded in millimetres is caught
+01:07 +266: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/measurement_safety_engine_test.dart: MeasurementSafetyEngine a height recorded in metres is caught
+01:07 +267: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/measurement_safety_engine_test.dart: MeasurementSafetyEngine a haemoglobin recorded in g/L is caught
+01:07 +268: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/measurement_safety_engine_test.dart: MeasurementSafetyEngine checkAll returns only the implausible values
+01:07 +269: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/measurement_safety_engine_test.dart: MeasurementSafetyEngine a normal blood pressure passes the relational check
+01:07 +270: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/measurement_safety_engine_test.dart: MeasurementSafetyEngine a swapped blood pressure is caught
+01:07 +271: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/measurement_safety_engine_test.dart: MeasurementSafetyEngine flags surface as data-quality findings, never a diagnosis
+01:10 +272: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_day_plan_test.dart: NutritionEngine — the day’s plate a wasted 8-month-old gets meals, mashed, with fortification
+01:10 +273: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_day_plan_test.dart: NutritionEngine — the day’s plate under six months the plate stays empty — breast milk only
+01:10 +274: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_day_plan_test.dart: NutritionEngine — the day’s plate SAM withholds the day plan — therapeutic food first
+01:10 +275: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_day_plan_test.dart: NutritionEngine — the day’s plate a mother gets three meals and the one she is owed
+01:10 +276: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_day_plan_test.dart: NutritionEngine — the day’s plate the day plan and note survive JSON persistence
+01:10 +277: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_day_plan_test.dart: NutritionEngine — the coverage audit anaemia raises an Iron need, and the basket answers it
+01:10 +278: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_day_plan_test.dart: NutritionEngine — the coverage audit a well child’s coverage stays small — vitamin A alone
+01:10 +279: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_day_plan_test.dart: NutritionEngine — the diarrhoea response diarrhoea adds the zinc + fluids + keep-feeding rules
+01:10 +280: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_day_plan_test.dart: NutritionEngine — the diarrhoea response no diarrhoea, no zinc rule
+01:11 +281: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_engine_test.dart: NutritionEngine — pathway selection SAM with oedema is inpatient therapeutic care
+01:11 +282: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_engine_test.dart: NutritionEngine — pathway selection SAM with a danger sign is inpatient, even with appetite
+01:11 +283: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_engine_test.dart: NutritionEngine — pathway selection uncomplicated SAM with appetite is OTP
+01:11 +284: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_engine_test.dart: NutritionEngine — pathway selection SAM never receives home local-food suggestions as treatment
+01:11 +285: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_engine_test.dart: NutritionEngine — pathway selection MAM gets supplementary feeding with local foods
+01:11 +286: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_engine_test.dart: NutritionEngine — pathway selection adequate nutrition gets preventive counselling
+01:11 +287: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_engine_test.dart: NutritionEngine — pathway selection an infant under 6 months is never told to take home foods
+01:11 +288: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_engine_test.dart: NutritionEngine — realism filters lean-season advice acknowledges the hunger gap
+01:11 +289: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_engine_test.dart: NutritionEngine — realism filters a breastfeeding mother with anaemia gets iron-rich foods
+01:11 +290: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_engine_test.dart: NutritionEngine — realism filters every suggestion carries a household measure, not grams
+01:11 +291: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_engine_test.dart: NutritionEngine — the safety net every plan carries escalation signs the family can recognise
+01:11 +292: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_engine_test.dart: NutritionEngine — the safety net SAM escalation watches for treatment failure on RUTF
+01:11 +293: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_engine_test.dart: NutritionEngine — the safety net a pregnant mother is warned about obstetric danger signs
+01:11 +294: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_engine_test.dart: NutritionEngine — the safety net diarrhoea unlocks the WHO Plan-A hydration prescription
+01:11 +295: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_engine_test.dart: NutritionEngine — the safety net a young infant sees the first-foods preview, not a live basket
+01:11 +296: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/nutrition_engine_test.dart: NutritionEngine — the safety net from six months the live basket replaces the preview
+01:13 +297: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/pnc_engine_test.dart: PncEngine heavy bleeding on day 1 is a primary haemorrhage — refer now
+01:13 +298: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/pnc_engine_test.dart: PncEngine fever with foul-smelling discharge is sepsis until proven otherwise
+01:14 +299: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/pnc_engine_test.dart: PncEngine convulsions postpartum are urgent (late eclampsia)
+01:14 +300: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/pnc_engine_test.dart: PncEngine a well mother at day 42 is not referred
+01:14 +301: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/pnc_engine_test.dart: PncEngine self-harm thoughts are never routine
+01:14 +302: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/pnc_engine_test.dart: PncEngine the minor complaint she walked in with is captured
+01:14 +303: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/pnc_engine_test.dart: PncEngine caesarean wound infection escalates
+01:14 +304: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/pnc_engine_test.dart: PncEngine missing measurements lower confidence but never safety
+01:14 +305: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — merging & triage a well child with no findings is routine with no escalation
+01:14 +306: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — merging & triage overall triage is the worst across every engine and finding
+01:14 +307: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — merging & triage duplicate findings are merged, keeping the more severe
+01:14 +308: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — merging & triage duplicate actions are not repeated
+01:14 +309: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — merging & triage same instruction preserves different indications and sources
+01:14 +310: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — merging & triage findings are ordered most-severe first
+01:14 +311: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — merging & triage actions are ordered by urgency, prereferral treatments FIRST within a band
+01:15 +312: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — interaction detection SAM with dehydration demands ReSoMal, not ORS
+01:15 +313: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — interaction detection SAM with a danger sign is routed to inpatient, not OTP
+01:15 +314: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — interaction detection severe anaemia with respiratory distress flags transfusion
+01:15 +315: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — interaction detection a well-fed child with dehydration gets no SAM interaction
+01:15 +316: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — safety guard-rails a danger-sign finding mislabelled priority still forces urgent
+01:15 +317: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — safety guard-rails an experimental model label cannot force urgent triage
+01:15 +318: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — safety guard-rails a properly tagged danger sign still escalates, keyword or not
+01:15 +319: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — safety guard-rails an urgent verdict always carries a referral action
+01:15 +320: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — safety guard-rails no referral is injected when one already exists
+01:15 +321: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — uncertainty & explainability confidence is the least confident of any input
+01:15 +322: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — uncertainty & explainability missing data and danger signs are unioned across engines
+01:15 +323: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — uncertainty & explainability referral capabilities are unioned and follow-up is earliest
+01:15 +324: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — uncertainty & explainability top drivers name the findings behind the verdict
+01:15 +325: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — uncertainty & explainability the caregiver message comes from the most urgent result
+01:15 +326: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/recommendation_engine_test.dart: RecommendationEngine — care plan persistence a care plan survives the JSON round-trip it is stored as
+01:17 +327: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/trajectory_engine_test.dart: TrajectoryEngine no measurements means insufficient data, not "fine"
+01:17 +328: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/trajectory_engine_test.dart: TrajectoryEngine a single reading cannot show a direction
+01:17 +329: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/trajectory_engine_test.dart: TrajectoryEngine a falling MUAC is detected even while every reading looks acceptable
+01:17 +330: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/trajectory_engine_test.dart: TrajectoryEngine a rising MUAC is growing
+01:17 +331: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/trajectory_engine_test.dart: TrajectoryEngine measurements given out of order are still read chronologically
+01:17 +332: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/trajectory_engine_test.dart: TrajectoryEngine the explanation shows the arithmetic in words
+01:17 +333: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/trajectory_engine_test.dart: TrajectoryEngine a child already below the SAM line is flagged immediately
+01:18 +334: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/treatment_response_engine_test.dart: TreatmentResponseEngine a gain of at least 10 g/kg/day is a good response
+01:18 +335: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/treatment_response_engine_test.dart: TreatmentResponseEngine a gain of 5–9.9 g/kg/day is a slow response
+01:18 +336: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/treatment_response_engine_test.dart: TreatmentResponseEngine a gain below 5 g/kg/day is a poor response needing escalation
+01:18 +337: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/treatment_response_engine_test.dart: TreatmentResponseEngine weight loss on treatment is treated as deterioration
+01:18 +338: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/treatment_response_engine_test.dart: TreatmentResponseEngine fewer than three days is reported as too early, not a rate
+01:18 +339: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/treatment_response_engine_test.dart: TreatmentResponseEngine the arithmetic is exposed for the CHO to check
+01:18 +340: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/treatment_response_engine_test.dart: TreatmentResponseEngine.assessFromSeries a child on a SAM programme gets a response verdict
+01:18 +341: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/treatment_response_engine_test.dart: TreatmentResponseEngine.assessFromSeries weight loss on a MAM programme is deterioration
+01:18 +342: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/treatment_response_engine_test.dart: TreatmentResponseEngine.assessFromSeries a well child is not labelled as responding to treatment
+01:18 +343: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/treatment_response_engine_test.dart: TreatmentResponseEngine.assessFromSeries no earlier weight means nothing to compare against
+01:18 +344: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/treatment_response_engine_test.dart: TreatmentResponseEngine.assessFromSeries the most recent earlier weight is the comparison point
+01:20 +345: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/vulnerability_engine_test.dart: VulnerabilityEngine a household with no recorded risk is low band
+01:20 +346: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/vulnerability_engine_test.dart: VulnerabilityEngine an unconfirmed urgent referral dominates the ranking
+01:21 +347: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/vulnerability_engine_test.dart: VulnerabilityEngine missed contacts and barriers accumulate
+01:21 +348: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/vulnerability_engine_test.dart: VulnerabilityEngine modifiable factors are separated so the CHO can act on them
+01:21 +349: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/vulnerability_engine_test.dart: VulnerabilityEngine sparse data is declared, not papered over
+01:21 +350: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/vulnerability_engine_test.dart: VulnerabilityEngine the score is capped at 100
+01:21 +351: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/vulnerability_engine_test.dart: VulnerabilityEngine topFactors returns the strongest drivers first
+01:22 +352: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/young_infant_engine_test.dart: YoungInfantEngine a well two-week-old feeding normally stays routine
+01:23 +353: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/young_infant_engine_test.dart: YoungInfantEngine fast breathing (60+) is severe disease in a young infant
+01:23 +354: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/young_infant_engine_test.dart: YoungInfantEngine not feeding at all is a pink-row sign
+01:23 +355: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/young_infant_engine_test.dart: YoungInfantEngine convulsions are urgent
+01:23 +356: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/young_infant_engine_test.dart: YoungInfantEngine jaundice within the first 24 hours is pathological
+01:23 +357: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/young_infant_engine_test.dart: YoungInfantEngine severe chest indrawing refers
+01:23 +358: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/young_infant_engine_test.dart: YoungInfantEngine local umbilical infection alone is not a referral
+01:23 +359: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/young_infant_engine_test.dart: YoungInfantEngine umbilical redness extending to the skin refers
+01:23 +360: C:/Users/Alhaji_stunner/Videos/unicef/test/engines/young_infant_engine_test.dart: YoungInfantEngine dehydration with diarrhoea escalates
+01:24 +361: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_contact_test.dart: FollowUpContact survives a map round-trip with every answer field
+01:24 +362: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_contact_test.dart: FollowUpContact carries the chained referral it raised
+01:24 +363: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_contact_test.dart: FollowUpContact tolerates the empty barrier and note columns
+01:24 +364: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_contact_test.dart: FollowUpContact falls back to unknown instead of inventing an answer
+01:24 +365: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_contact_test.dart: FollowUpContact is unanswered until the family is actually reached
+01:24 +366: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_contact_test.dart: FollowUpContact labels read as the worker's own words, not clinical jargon
+01:24 +367: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_contact_test.dart: Referral chain records which referral a re-referral answers
+01:24 +368: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_contact_test.dart: Referral chain a first referral has no chain parent
+01:24 +369: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_contact_test.dart: Referral chain a re-referral knows its parent
+01:24 +370: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_contact_test.dart: ScheduledContact carries the referral it exists to chase
+01:24 +371: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_contact_test.dart: ScheduledContact a routine growth visit has no referral
+01:25 +372: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger an answer round-trips with every field the desk reads
+01:27 +373: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the trace reads oldest answer first
+01:27 +374: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger attempts and answers are counted apart
+01:27 +375: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +376: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +377: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +378: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +379: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +380: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +381: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +382: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +383: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +384: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +385: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +386: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +387: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +388: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +389: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +390: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +391: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +392: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +393: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +394: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger the desk loads every ledger in one query
+01:28 +395: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: answer ledger writing the same answer twice does not create a second one
+01:29 +396: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: referral reads for the desk recent returns the whole window, answered cases included
+01:29 +397: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: referral reads for the desk a chained referral is found from its parent
+01:30 +398: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: referral reads for the desk escalation is stamped once and holds
+01:30 +399: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_dao_test.dart: visits that chase a referral a scheduled contact knows which referral it serves
+01:31 +400: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: what an answer implies for the referral status an unanswered attempt changes nothing
+01:31 +401: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: what an answer implies for the referral status seen and treated settles the case
+01:31 +402: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: what an answer implies for the referral status attended but untreated confirms arrival, nothing more
+01:31 +403: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: what an answer implies for the referral status went to the facility but nobody knows the outcome
+01:31 +404: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: what an answer implies for the referral status did not go is recorded as a failure, not a cancellation
+01:31 +405: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: what an answer implies for the referral status a confirmed treatment is never rewritten by a later visit
+01:31 +406: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: what an answer implies for the referral status a patient who died at home closes as a death
+01:31 +407: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: what an answer implies for the referral status a death outranks a claimed treatment
+01:31 +408: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: what an answer implies for the referral status a family that declined closes as a refusal
+01:31 +409: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: what an answer implies for the referral status a death is not recorded from an unanswered knock
+01:31 +410: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: what an answer implies for the referral status a closed death is never reopened by a later visit
+01:31 +411: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: what an answer implies for the desk outcome a death reports as a death, not a settled case
+01:31 +412: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: what an answer implies for the desk outcome a refusal reports as a closed case
+01:32 +413: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: recordFollowUp a settled answer writes the answer, the status and the outbox rows
+01:33 +414: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: recordFollowUp attended-but-untreated stays actionable
+01:33 +415: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: recordFollowUp a barrier answer is recorded against the referral in the same write
+01:34 +416: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: recordFollowUp one unanswered visit is an attempt, two start a trace
+01:34 +417: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: recordFollowUp escalation fires once and keeps its first date
+01:35 +418: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: recordFollowUp a worse child raises a referral chained to the one it answers
+01:35 +419: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: recordFollowUp the visit that produced the answer is closed, and a next one is set
+01:36 +420: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: recordFollowUp a caregiver cannot answer for another family
+01:36 +421: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_schema_v8_test.dart: v7 to v8 adds the answer ledger without touching the old columns
+01:37 +422: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_schema_v8_test.dart: v7 to v8 adds the answer ledger without touching the old columns
+01:37 +423: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: the desk read hands back every case in the window with its answers and its person
+01:37 +424: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: the desk read hands back every case in the window with its answers and its person
+01:37 +425: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_schema_v8_test.dart: v7 to v8 leaves every legacy referral exactly as the family left it
+01:37 +426: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_schema_v8_test.dart: v7 to v8 leaves every legacy referral exactly as the family left it
+01:37 +427: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: the desk read a caregiver does not get the zone desk
+01:37 +428: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_schema_v8_test.dart: v7 to v8 starts the ledger empty instead of inventing past answers
+01:37 +429: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: the desk read a chase the route will not reach can be put on tomorrow
+01:37 +430: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: the desk read a chase the route will not reach can be put on tomorrow
+01:38 +431: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: the desk read a chase the route will not reach can be put on tomorrow
+01:38 +432: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_schema_v8_test.dart: fresh install ships the ledger and both chain columns without a migration
+01:38 +433: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: the desk read a caregiver cannot put a family on a route
+01:38 +434: C:/Users/Alhaji_stunner/Videos/unicef/test/follow_up_record_test.dart: the desk read the desk read reports a chase that is already scheduled
+01:40 +435: C:/Users/Alhaji_stunner/Videos/unicef/test/home_check_test.dart: HomeCheck survives the SQLite round-trip with its words intact
+01:40 +436: C:/Users/Alhaji_stunner/Videos/unicef/test/home_check_test.dart: HomeCheck a clean check round-trips with empty sign lists
+01:40 +437: C:/Users/Alhaji_stunner/Videos/unicef/test/home_check_test.dart: HomeCheck sign wording containing commas stays one sign, not several
+01:40 +438: C:/Users/Alhaji_stunner/Videos/unicef/test/home_check_test.dart: HomeCheck every verdict the triage can produce carries a human label
+01:41 +439: C:/Users/Alhaji_stunner/Videos/unicef/test/household_region_scope_test.dart: an FHW sees and searches every household in her region
+01:45 +440: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: the inactivity policy a foreground pause locks at the window, not before
+01:45 +441: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: the inactivity policy being away from the app locks sooner than an untouched screen
+01:45 +442: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: the inactivity policy the stronger signal wins when both are true
+01:45 +443: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: the inactivity policy a family’s own handset is never locked out of its own record
+01:45 +444: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: the inactivity policy the message quotes the window actually enforced
+01:45 +445: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: the watchdog a tap restarts the window
+01:45 +446: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: the watchdog a lock is offered once, not on every tick afterwards
+01:45 +447: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: the watchdog the away window is measured on resume, not by a timer
+01:45 +448: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: the watchdog a brief switch away does not lock
+01:45 +449: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: locking a session a locked session cannot resume from the fallback pointer
+01:46 +450: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: locking a session a locked session cannot resume from the fallback pointer
+01:46 +451: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: locking a session a locked session cannot resume from the fallback pointer
+01:46 +452: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: locking a session a locked session cannot resume from the fallback pointer
+01:46 +453: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: locking a session a locked session cannot resume from the fallback pointer
+01:46 +454: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: locking a session a locked session cannot resume from the fallback pointer
+Secure storage read failed for carebridge.session.last_phone: MissingPluginException(No implementation found for method read on channel plugins.it_nomads.com/flutter_secure_storage)
+Secure storage read failed for carebridge.session.user_id: MissingPluginException(No implementation found for method read on channel plugins.it_nomads.com/flutter_secure_storage)
+01:46 +455: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: locking a session a locked session cannot resume from the fallback pointer
+01:46 +456: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: locking a session a locked session cannot resume from the fallback pointer
+01:46 +457: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: locking a session a locked session cannot resume from the fallback pointer
+01:46 +458: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: locking a session a locked session cannot resume from the fallback pointer
+01:46 +459: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: locking a session a locked session cannot resume from the fallback pointer
+01:46 +460: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: locking a session a locked session cannot resume from the fallback pointer
+01:46 +461: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: locking a session a locked session cannot resume from the fallback pointer
+01:46 +462: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: locking a session a locked session cannot resume from the fallback pointer
+01:46 +463: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: locking a session a locked session cannot resume from the fallback pointer
+01:46 +464: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: locking a session a locked session cannot resume from the fallback pointer
+Secure storage delete failed for carebridge.session.user_id: MissingPluginException(No implementation found for method delete on channel plugins.it_nomads.com/flutter_secure_storage)
+Secure storage read failed for carebridge.session.last_phone: MissingPluginException(No implementation found for method read on channel plugins.it_nomads.com/flutter_secure_storage)
+Secure storage read failed for carebridge.session.last_phone: MissingPluginException(No implementation found for method read on channel plugins.it_nomads.com/flutter_secure_storage)
+Secure storage read failed for carebridge.session.user_id: MissingPluginException(No implementation found for method read on channel plugins.it_nomads.com/flutter_secure_storage)
+01:46 +465: C:/Users/Alhaji_stunner/Videos/unicef/test/idle_lock_test.dart: locking a session a lock writes its own audit action, not a sign-out
+Secure storage delete failed for carebridge.session.user_id: MissingPluginException(No implementation found for method delete on channel plugins.it_nomads.com/flutter_secure_storage)
+Secure storage read failed for carebridge.session.last_phone: MissingPluginException(No implementation found for method read on channel plugins.it_nomads.com/flutter_secure_storage)
+01:49 +466: C:/Users/Alhaji_stunner/Videos/unicef/test/marian_native_inference_test.dart: (setUpAll)
+01:50 +466: C:/Users/Alhaji_stunner/Videos/unicef/test/marian_native_inference_test.dart: real Marian generation matches Python and releases its worker
+01:50 +466 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/marian_native_inference_test.dart: (tearDownAll)
+01:51 +466 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/marian_tokenizer_test.dart: hausa exact Python Marian token IDs and target decoding
+01:52 +467 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/marian_tokenizer_test.dart: hausa activation blocked by failed parity fixtures
+01:52 +468 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/marian_tokenizer_test.dart: twi exact Python Marian token IDs and target decoding
+01:53 +469 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/marian_tokenizer_test.dart: twi activation blocked by failed parity fixtures
+01:54 +470 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/model_artifact_test.dart: manifest validates exact bytes and immutable metadata
+01:54 +471 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/model_artifact_test.dart: corrupt and truncated artifacts are rejected
+01:54 +472 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/model_artifact_test.dart: malformed, empty, duplicate and incompatible manifests fail closed
+01:54 +473 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/model_artifact_test.dart: artifact path traversal and invalid digests/sizes fail closed
+01:54 +474 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/model_artifact_test.dart: even correctly hashed LFS pointers are not model weights
+01:56 +475 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: verified optional pack survives a new store and is not a runtime claim
+01:57 +476 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: verified optional pack survives a new store and is not a runtime claim
+01:57 +477 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: verified optional pack survives a new store and is not a runtime claim
+01:57 +478 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: verified optional pack survives a new store and is not a runtime claim
+01:57 +479 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: verified optional pack survives a new store and is not a runtime claim
+01:57 +480 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: verified optional pack survives a new store and is not a runtime claim
+01:57 +481 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: verified optional pack survives a new store and is not a runtime claim
+01:57 +482 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: verified optional pack survives a new store and is not a runtime claim
+01:57 +483 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: verified optional pack survives a new store and is not a runtime claim
+01:57 +484 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: verified optional pack survives a new store and is not a runtime claim
+01:57 +485 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: verified optional pack survives a new store and is not a runtime claim
+01:57 +486 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: verified optional pack survives a new store and is not a runtime claim
+01:57 +487 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: verified optional pack survives a new store and is not a runtime claim
+01:57 +488 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: verified optional pack survives a new store and is not a runtime claim
+01:57 +489 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: verified optional pack survives a new store and is not a runtime claim
+01:57 +490 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: corruption keeps the previous pack and cleans staging
+01:57 +491 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: interruption keeps the previous pack and cleans staging
+01:58 +492 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: missing keeps the previous pack and cleans staging
+01:59 +493 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: incomplete inventory and unsafe paths are rejected before activation
+01:59 +494 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/native_pack_store_test.dart: production downloads require HTTPS
+02:01 +495 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/nurturing_care_test.dart: NurturingCareEngine age bands cover every month from birth to five with no gaps
+02:01 +496 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/nurturing_care_test.dart: NurturingCareEngine age bands bands are contiguous — no month can fall between two bands
+02:01 +497 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/nurturing_care_test.dart: NurturingCareEngine age bands outside the tracked window there is no band, not a wrong band
+02:01 +498 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/nurturing_care_test.dart: NurturingCareEngine age bands every band is answerable: milestones, play ideas and a tip
+02:02 +499 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/nurturing_care_test.dart: NurturingCareEngine age bands every band carries at least one CCD red flag
+02:02 +500 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/nurturing_care_test.dart: activityToday always returns one of the band's own activities
+02:02 +501 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/nurturing_care_test.dart: activityToday is deterministic — the same day shows the same idea
+02:02 +502 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/nurturing_care_test.dart: activityToday rotates across the band's activities over a month
+02:02 +503 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/nurturing_care_test.dart: MilestoneCheck survives the SQLite round-trip with the family's words intact
+02:02 +504 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/nurturing_care_test.dart: MilestoneCheck a child growing as expected round-trips with empty not-yet lists
+02:02 +505 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/nurturing_care_test.dart: MilestoneCheck milestone wording containing commas stays one milestone
+02:02 +506 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/nurturing_care_test.dart: MilestoneCheck every verdict the check can produce carries a human label
+02:03 +507 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: all four shipped binaries match hashes, signatures and real versions
+02:04 +508 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: neonatal execution requires current weight, never stored birth weight
+02:04 +509 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: display permission fails closed for every unverified or invalid state
+02:04 +510 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: local sensitivities are sequential, signed and stably ranked
+02:04 +511 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: failed sensitivity retains primary output without invented drivers
+02:04 +512 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: real web graph executes the five-observed policy and sensitivity reruns
+02:04 +513 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: the web-compiled interpreter avoids dart2js-unsupported Int64 accessors
+02:04 +514 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: concurrent initialization loads each asset once
+02:04 +515 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: legacy and synthetic artifacts never yield patient probabilities
+02:04 +516 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: training policy uses five observations and fifteen exact fixed zeros
+02:04 +517 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: malformed experimental policy blocks execution 1007684812
+02:04 +518 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: malformed experimental policy blocks execution 999438394
+02:04 +519 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: malformed experimental policy blocks execution 708850476
+02:04 +520 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: malformed experimental policy blocks execution 431485859
+02:04 +521 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: malformed experimental policy blocks execution 197816492
+02:05 +522 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: malformed experimental policy blocks execution 215755625
+02:05 +523 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: malformed experimental policy blocks execution 37091819
+02:05 +524 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: invalid input_dtype metadata fails explicitly
+02:05 +525 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: invalid input_shape metadata fails explicitly
+02:05 +526 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: invalid output_type metadata fails explicitly
+02:05 +527 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: invalid output_shape metadata fails explicitly
+02:05 +528 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: invalid input_quantization metadata fails explicitly
+02:05 +529 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: invalid input_quantization_arithmetic metadata fails explicitly
+02:05 +530 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: invalid features metadata fails explicitly
+02:05 +531 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: invalid evaluation metadata fails explicitly
+02:05 +532 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: invalid model_version metadata fails explicitly
+02:05 +533 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: missing contract fails closed
+02:05 +534 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: malformed contract fails closed
+02:05 +535 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: missing model and corrupt bytes have distinct states
+02:05 +536 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: required observations are not zero-filled; invalid and unsupported differ
+02:05 +537 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: cohort boundaries never infer newborn eligibility from unknown age
+02:05 +538 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: permitted research execution uses ordered normalization and logit calibration
+02:05 +539 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: invalid interpreter output NaN never becomes 0.5
+02:05 +540 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: invalid interpreter output Infinity never becomes 0.5
+02:05 +541 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: invalid interpreter output -0.1 never becomes 0.5
+02:05 +542 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: invalid interpreter output 1.1 never becomes 0.5
+02:05 +543 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: interpreter exception has explicit unavailable output
+02:05 +544 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_ml_model_pack_test.dart: optional missing observation uses only declared training imputation
+02:06 +545 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: exact transcript coverage preserves const single-clip API and exact equality
+02:06 +546 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: exact transcript coverage sequences cover every word; only whitespace can differ
+02:06 +547 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: exact transcript coverage rejects absent, empty, missing, reordered and partial ids
+02:06 +548 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: exact transcript coverage withLanguage retains all metadata and English remains exact
+02:06 +549 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: offline language identity canonical names and aliases never bridge languages
+02:06 +550 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: offline language identity requires explicit offline evidence and rejects conflicting flags
+02:06 +551 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback untranslated guidance never initializes TTS or audio
+02:07 +552 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback Dagbani sequence waits for every completion with full transcript
+02:07 +553 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback Hausa sequence waits for every completion with full transcript
+02:07 +554 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback Twi sequence waits for every completion with full transcript
+02:07 +555 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback completion emitted synchronously by start is not lost
+02:07 +556 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback missing second asset prevents even the first clip from starting
+02:07 +557 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback Dagbani never falls back to Hausa or English device voices
+02:07 +558 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback voice enumeration exceptions give a readable localized fallback
+02:07 +559 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback English TTS uses only its localized text and selected offline voice
+02:07 +560 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback Twi TTS uses only its localized text and selected offline voice
+02:07 +561 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback Dagbani TTS uses only its localized text and selected offline voice
+02:07 +562 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback Hausa TTS uses only its localized text and selected offline voice
+02:07 +563 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback failed voice configuration does not start speech
+02:07 +564 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback TTS error is never reported as completion
+02:07 +565 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback TTS cancel is never reported as completion
+02:07 +566 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback TTS timeout is never reported as completion
+02:07 +567 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback a failing second clip never reports partial success
+02:07 +568 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback audio stream errors and timeouts cannot complete a sequence
+02:07 +569 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback stopped asset and player loads cannot revive playback
+02:07 +570 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback new owner stops old speech and old callbacks cannot complete new speech
+02:07 +571 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: device playback dispose cancels speech and suppresses subsequent callbacks
+02:07 +572 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: VoiceService strict adapter with plugin failures arbitrary text cannot borrow a named bank clip
+02:07 +573 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: VoiceService strict adapter with plugin failures id candidate accepts only exact English or selected translation
+02:07 +574 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: VoiceService strict adapter with plugin failures explicit sequence cannot substitute partial or changed guidance
+02:07 +575 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: VoiceService strict adapter with plugin failures speakText English cannot be spoken using a non-English voice
+02:07 +576 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: VoiceService strict adapter with plugin failures diagnostics catches plugin errors once and reports installed locales
+02:07 +577 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/offline_playback_test.dart: VoiceService strict adapter with plugin failures no studio recording is claimed without a verified manifest
+02:09 +578 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_character_frontend_test.dart: Twi twi_farmerline_model.onnx.json encodes exactly like its training tokenizer
+02:09 +579 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_character_frontend_test.dart: Twi twi_farmerline_model.onnx.json declares a scale-free tensor contract
+02:09 +580 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_character_frontend_test.dart: Twi twi_farmerline_model.onnx.json refuses text it cannot say faithfully
+02:09 +581 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_character_frontend_test.dart: Twi twi_farmerline_model.onnx.json refuses a table that no longer matches
+02:09 +582 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_character_frontend_test.dart: Twi twi_mms_model.onnx.json encodes exactly like its training tokenizer
+02:09 +583 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_character_frontend_test.dart: Twi twi_mms_model.onnx.json declares a scale-free tensor contract
+02:09 +584 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_character_frontend_test.dart: Twi twi_mms_model.onnx.json refuses text it cannot say faithfully
+02:09 +585 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_character_frontend_test.dart: Twi twi_mms_model.onnx.json refuses a table that no longer matches
+02:09 +586 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_character_frontend_test.dart: Dagbani dagbani_model.onnx.json encodes exactly like its training tokenizer
+02:09 +587 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_character_frontend_test.dart: Dagbani dagbani_model.onnx.json declares a scale-free tensor contract
+02:09 +588 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_character_frontend_test.dart: Dagbani dagbani_model.onnx.json refuses text it cannot say faithfully
+02:09 +589 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_character_frontend_test.dart: Dagbani dagbani_model.onnx.json refuses a table that no longer matches
+02:09 +590 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_character_frontend_test.dart: Hausa hausa_mms_model.onnx.json encodes exactly like its training tokenizer
+02:09 +591 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_character_frontend_test.dart: Hausa hausa_mms_model.onnx.json declares a scale-free tensor contract
+02:09 +592 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_character_frontend_test.dart: Hausa hausa_mms_model.onnx.json refuses text it cannot say faithfully
+02:09 +593 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_character_frontend_test.dart: Hausa hausa_mms_model.onnx.json refuses a table that no longer matches
+02:09 +594 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_character_frontend_test.dart: a classic piper config still requires the scales tensor
+02:10 +595 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: pinned Twi frontend contract reference IDs: twi Akwaaba, wo ho te sɛn?
+02:11 +596 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: pinned Twi frontend contract reference IDs: twi Me da wo ase paa.
+02:11 +597 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: pinned Twi frontend contract reference IDs: twi Onyankopɔn adɔeɛ
+02:11 +598 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: pinned Twi frontend contract reference IDs: twi Mepɛ sɛ mesua Twi kasa yie.
+02:11 +599 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: pinned Twi frontend contract reference IDs: twi Ɛho nhwɛsoɔ bi nie.
+02:11 +600 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: pinned Twi frontend contract reference IDs: twi Yɛfrɛ me Kwame na mefiri Kumasi.
+02:11 +601 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: pinned Twi frontend contract reference IDs: twi nkyekyɛm nwɔtwe
+02:11 +602 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: pinned Twi frontend contract reference IDs: twi aa ee ii oo
+02:11 +603 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: pinned Twi frontend contract reference IDs: eng Good morning, welcome to the news.
+02:11 +604 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: pinned Twi frontend contract reference IDs: eng I think this is the third one.
+02:11 +605 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: pinned Twi frontend contract reference IDs: eng Accra is the capital city of Ghana.
+02:11 +606 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: pinned Twi frontend contract reference IDs: mixed Mepɛ sɛ mesua [computer science] wɔ [University of Ghana].
+02:11 +607 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: pinned Twi frontend contract reference IDs: mixed Ɔkyerɛkyerɛni no kaa sɛ [the examination] bɛba [next week].
+02:11 +608 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: pinned Twi frontend contract unknown characters cannot disappear from speech
+02:11 +609 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: pinned Twi frontend contract empty text produces no BOS/EOS-only utterance
+02:11 +610 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: pinned Twi frontend contract Twi rules are mandatory; text config does not imply raw letters
+02:11 +611 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: pinned Twi frontend contract Hausa uses its own inventory with inter-unit padding
+02:11 +612 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: pinned Twi frontend contract a trained Dagbani text pack pads between every symbol
+02:11 +613 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: Piper audio contract extracts real rank-four output without losing samples
+02:11 +614 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: Piper audio contract rejects silence, non-finite, multi-channel and empty outputs
+02:11 +615 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: Piper audio contract WAV uses exact model sample rate and signed PCM
+02:11 +616 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: Piper audio contract model scales are float32 noise/length/noise-width in order
+02:11 +617 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: Piper audio contract sentence chunks preserve every word and punctuation
+02:11 +618 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: prosody presets (delivery only, never content) standard returns the checkpoint scales unchanged
+02:11 +619 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: prosody presets (delivery only, never content) urgent is faster/crisper, soothing is slower/warmer
+02:11 +620 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: prosody presets (delivery only, never content) every preset stays in a safe finite band and never touches content
+02:11 +621 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_contract_test.dart: prosody presets (delivery only, never content) extreme configs are clamped, never emitted raw
+02:13 +622 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_native_inference_test.dart: (setUpAll)
+02:13 +622 ~1: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_native_inference_test.dart: real Twi twi_piper inference, recovery and cleanup
+02:13 +622 ~2: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_native_inference_test.dart: real Hausa hausa_piper inference, recovery and cleanup
+02:13 +622 ~3: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_native_inference_test.dart: real Twi twi_farmerline inference, recovery and cleanup
+02:13 +622 ~4: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_native_inference_test.dart: real Dagbani dagbani_piper inference, recovery and cleanup
+02:13 +622 ~5: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_native_inference_test.dart: a Dagbani voice we trained speaks through the app engine
+02:13 +622 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_native_inference_test.dart: (tearDownAll)
+02:15 +622 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_service_test.dart: service starts without eagerly loading every language
+02:15 +623 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_service_test.dart: concurrent initialization deduplicates and failure can retry
+02:15 +624 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_service_test.dart: readiness follows runner eviction rather than stale service state
+02:15 +625 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_service_test.dart: disposal waits for pending loads and leaves no loaded model
+02:15 +626 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/piper_service_test.dart: service forwards prosody to the runner, defaults to standard
+02:18 +627 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: a first pull merges a household and its member, and nothing looks locally dirty
+02:19 +628 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: a first pull merges a household and its member, and nothing looks locally dirty
+02:20 +629 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: a first pull merges a household and its member, and nothing looks locally dirty
+02:20 +630 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/rbac_test.dart: Frontline health worker permissions hold the full clinical scope
+02:20 +631 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: re-pulls send the watermark minus one second and merge idempotently
+02:20 +632 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: re-pulls send the watermark minus one second and merge idempotently
+02:20 +633 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: re-pulls send the watermark minus one second and merge idempotently
+02:20 +634 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: a pull that dies mid-pages leaves the watermark standing and heals on retry
+02:21 +635 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: a rejected credential is reported honestly and touches nothing
+02:21 +636 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: with no server configured the pull is a honest no-op
+02:21 +637 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: the debounce collapses eager triggers into one fetch
+02:22 +638 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: the self-user row refreshes the profile but never device credentials or a fresh household binding
+02:23 +639 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: Phase 1: the delivered pull_updated_at marker is stored where the schema has the column and dropped where it does not
+02:23 +640 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: Phase 1: the delivered pull_updated_at marker is stored where the schema has the column and dropped where it does not
+02:23 +641 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: Phase 1: the delivered pull_updated_at marker is stored where the schema has the column and dropped where it does not
+02:23 +642 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: Phase 1: the delivered pull_updated_at marker is stored where the schema has the column and dropped where it does not
+02:23 +643 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: Phase 1: the delivered pull_updated_at marker is stored where the schema has the column and dropped where it does not
+02:23 +644 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: Phase 1: the delivered pull_updated_at marker is stored where the schema has the column and dropped where it does not
+02:23 +645 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: Phase 1: the delivered pull_updated_at marker is stored where the schema has the column and dropped where it does not
+02:24 +646 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: referral status down-propagation a status confirmed elsewhere reaches the device that holds the referral
+02:24 +647 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: referral status down-propagation a local referral that has not been pushed yet is never overwritten
+02:25 +648 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/pull_service_test.dart: referral status down-propagation a settled referral is never reopened by an older server state
+02:26 +649 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/recalibration_store_test.dart: RecalibrationStore an unarmed device collects nothing
+02:26 +650 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/recalibration_store_test.dart: RecalibrationStore an armed device appends one JSONL line per record
+02:26 +651 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/recalibration_store_test.dart: RecalibrationStore exportBatch writes a month-stamped copy and keeps the batch
+02:26 +652 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/recalibration_store_test.dart: RecalibrationStore clear deletes the on-device batch
+02:28 +653 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/recovery_and_registration_test.dart: re-registering a phone replaces the stale account, never leaves two
+02:29 +654 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/recovery_and_registration_test.dart: re-registering a phone replaces the stale account, never leaves two
+02:30 +655 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/recovery_and_registration_test.dart: re-registering a phone replaces the stale account, never leaves two
+02:30 +656 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/recovery_and_registration_test.dart: re-registering a phone replaces the stale account, never leaves two
+02:30 +657 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/recovery_and_registration_test.dart: re-registering a phone replaces the stale account, never leaves two
+02:30 +658 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/recovery_and_registration_test.dart: re-registering a phone replaces the stale account, never leaves two
+02:30 +659 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/recovery_and_registration_test.dart: a registered account survives closing and reopening the database
+02:30 +660 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/recovery_and_registration_test.dart: registration stores the cloud verifier a blank device can actually reproduce
+02:31 +661 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/recovery_and_registration_test.dart: with no server configured, sign-in of an unknown phone is honest and fabricates nothing
+02:31 +662 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/recovery_and_registration_test.dart: with no server configured, recovery says exactly what is missing
+02:31 +663 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/recovery_and_registration_test.dart: live recovery restores a caregiver with her household binding, caseload and a working offline PIN
+02:33 +664 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/referral_code_mint_test.dart: codeExists detects a stored code case-insensitively
+02:34 +665 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/referral_code_mint_test.dart: a minted code is well-formed and not already in the register
+02:34 +666 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/referral_code_mint_test.dart: repeated mints over a growing register never repeat a live code
+02:36 +667 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/research_parity_test.dart: experimental policy exact INT8 and official Python versus Dart outputs
+02:37 +668 ~6: C:/Users/Alhaji_stunner/Videos/unicef/test/research_parity_test.dart: native Flutter runner matches official Python experimental vectors
+  Skip: Requires native app/test host with the TFLite library beside its executable; enable NATIVE_TFLITE there.
+02:37 +668 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/research_parity_test.dart: service preprocessing and adjustment match official experimental vectors
+02:37 +669 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/research_parity_test.dart: neonatal_sepsis boundary/missing preprocessing and exact INT8 input parity
+02:37 +670 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/research_parity_test.dart: preeclampsia_risk boundary/missing preprocessing and exact INT8 input parity
+02:37 +671 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/research_parity_test.dart: lbw_sga boundary/missing preprocessing and exact INT8 input parity
+02:37 +672 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/research_parity_test.dart: legacy_neonatal_sepsis boundary/missing preprocessing and exact INT8 input parity
+02:37 +673 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/research_parity_test.dart: legacy_child_pneumonia boundary/missing preprocessing and exact INT8 input parity
+02:37 +674 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/research_parity_test.dart: legacy_preeclampsia_risk boundary/missing preprocessing and exact INT8 input parity
+02:37 +675 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/research_parity_test.dart: legacy_lbw_sga boundary/missing preprocessing and exact INT8 input parity
+02:37 +676 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/research_parity_test.dart: invalid normalization does not clip into model support
+02:37 +677 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/research_parity_test.dart: neonatal_sepsis official TFLite versus pure-Dart INT8 output
+02:37 +678 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/research_parity_test.dart: preeclampsia_risk official TFLite versus pure-Dart INT8 output
+02:37 +679 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/research_parity_test.dart: lbw_sga official TFLite versus pure-Dart INT8 output
+02:39 +680 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/road_to_health_test.dart: WeightForAgeReference every curve lands on the weight the WHO publishes
+02:39 +681 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/road_to_health_test.dart: WeightForAgeReference the forward direction agrees with the same published line
+02:39 +682 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/road_to_health_test.dart: WeightForAgeReference nothing is extrapolated past the end of the standard
+02:39 +683 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/road_to_health_test.dart: WeightForAgeReference a weight that cannot mean anything is refused, not scored
+02:39 +684 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/road_to_health_test.dart: WeightForAgeReference between tabulated months the median moves between the two
+02:39 +685 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/road_to_health_test.dart: RoadToHealth.read a weighing is placed by exact age at the weighing
+02:39 +686 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/road_to_health_test.dart: RoadToHealth.read a child on the published −2 line is still on the standard
+02:39 +687 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/road_to_health_test.dart: RoadToHealth.read below −3 SD is the red band
+02:39 +688 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/road_to_health_test.dart: RoadToHealth.read the boy and girl standards differ, and the chart follows the child
+02:39 +689 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/road_to_health_test.dart: RoadToHealth.read crossing down into a worse band is reported
+02:39 +690 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/road_to_health_test.dart: RoadToHealth.read a visit with no weight is named, not silently dropped
+02:39 +691 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/road_to_health_test.dart: RoadToHealth.read no date of birth declines, and says why
+02:39 +692 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/road_to_health_test.dart: RoadToHealth.read no weights at all declines as no weighings
+02:39 +693 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/road_to_health_test.dart: RoadToHealth.read past the end of the standard declines rather than extrapolating
+02:39 +694 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/road_to_health_test.dart: RoadToHealth.read with nothing recorded there is nothing to invent
+02:39 +695 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/road_to_health_test.dart: RoadToHealth.read input order cannot change the track
+02:39 +696 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/road_to_health_test.dart: RoadToHealth.read one weighing gives a position, never a direction
+02:40 +697 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_bank_test.dart: every clip in the SpeechBank map is bundled, in the right folder(s)
+02:41 +698 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_bank_test.dart: every audio topic has a bundled clip in every bank
+02:41 +699 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_bank_test.dart: every triage-question key has a clip in every bank
+02:41 +700 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_bank_test.dart: the Dagbani column mirrors dagbani_strings.dart verbatim
+02:41 +701 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_bank_test.dart: every TriageLevel has a family message clip in every language
+02:42 +702 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_bank_test.dart: every caregiver verdict name has a clip in every language
+02:42 +703 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: asr-v1 contract reads a pack that agrees with the app frontend
+02:42 +704 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_bank_test.dart: nurse-words composition orders clips like the sheet reads
+02:42 +705 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: asr-v1 contract refuses a pack whose frame geometry cannot be produced
+02:42 +706 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_bank_test.dart: scriptFor resolves composed clips in all three languages
+02:42 +707 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: asr-v1 contract refuses a frontend the app does not implement
+02:42 +708 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_bank_test.dart: standalone moments stay in sync with their screens
+02:42 +709 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_bank_test.dart: standalone moments stay in sync with their screens
+02:42 +710 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_bank_test.dart: standalone moments stay in sync with their screens
+02:42 +711 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: seamless-fbank frontend turns seconds into the frame count the encoder expects
+02:42 +712 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: seamless-fbank frontend turns seconds into the frame count the encoder expects
+02:42 +713 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: seamless-fbank frontend stays finite on digital silence
+02:42 +714 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: seamless-fbank frontend refuses a mel bank that is not the shape the contract claims
+02:42 +715 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: CTC decoding ranks the emitted answer first and calls it certain
+02:42 +716 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: CTC decoding an all-blank take separates no answers at all
+02:42 +717 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: CTC decoding a doubled letter needs the blank between the two frames
+02:42 +718 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: CTC decoding greedy collapses repeats and reads word pieces as words
+02:42 +719 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: CTC decoding the empty transcription is scored, not skipped
+02:42 +720 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: closed-set matching exact, contained and near-miss all resolve to one answer
+02:42 +721 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: closed-set matching a contradiction between two answers is no answer
+02:42 +722 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: closed-set matching ɛ is never folded to e
+02:42 +723 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: closed-set matching equally far from two answers, it is neither
+02:42 +724 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: closed-set matching nothing outside the set becomes an answer
+02:42 +725 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: endpointing gives up before anything is said
+02:42 +726 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: endpointing closes on a word after a short silence
+02:42 +727 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: endpointing a sound shorter than any word is too short
+02:42 +728 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: endpointing stops a ramble at the ceiling
+02:42 +729 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: listening policy a confident, uncontradicted hearing names the answer
+02:42 +730 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: listening policy the closed set is asked in the app language, with every spoken form
+02:42 +731 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: listening policy a low ranking is unclear, never a guess
+02:42 +732 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: listening policy a confident closed set contradicted by the free reading is unclear
+02:42 +733 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: listening policy silence is reported as silence
+02:42 +734 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: listening policy a refused microphone never reaches the model
+02:42 +735 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: listening policy no pack means no listening
+02:42 +736 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: listening policy an answer set from another language is not listened to
+02:42 +737 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: listening policy dictation hands back words for a human to edit
+02:42 +738 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: listening policy dictation refuses a quiet room
+02:42 +739 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: listening policy one microphone at a time
+02:42 +740 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: listening policy cancelling a take is a result, not a hang
+02:42 +741 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: answer sets Dagbani and Twi are offered, Hausa is not
+02:42 +742 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: answer sets nothing is signed off yet, and the app says so
+02:42 +743 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: answer sets one unverified form makes the whole set unverified
+02:42 +744 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/speech_input_test.dart: pack spelling an answer the pack cannot pronounce is not offered
+02:46 +745 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocol — citable constants pre-eclampsia protocol cites WHO 2011 + GHS Safe Motherhood 2017
+02:46 +746 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocol — citable constants PSBI protocol cites WHO IMCI 2014 + WHO PSBI 2015
+02:46 +747 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocol — citable constants child pneumonia protocol cites WHO IMCI 2014 + GHS STG 2017
+02:46 +748 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — pre-eclampsia activation experimental preeclampsia score cannot activate medication
+02:46 +749 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — pre-eclampsia activation activates on severe hypertension (BP 170/112) even with no AI
+02:46 +750 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — pre-eclampsia activation activates on eclamptic convulsions even with normal BP
+02:46 +751 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — pre-eclampsia activation activates on gestational HTN + proteinuria
+02:46 +752 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — pre-eclampsia activation does NOT activate for a non-pregnant adult with elevated BP
+02:46 +753 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — young-infant PSBI activation experimental neonatal score cannot activate PSBI in a 14-day-old
+02:46 +754 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — young-infant PSBI activation legacy explicit rule-in flag cannot initiate treatment
+02:46 +755 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — young-infant PSBI activation does NOT activate on low-tier AI risk without danger signs
+02:46 +756 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — young-infant PSBI activation does NOT activate when AI is drift-suppressed (null riskProbability) without danger signs
+02:46 +757 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — young-infant PSBI activation deterministic rules keep rule-out coverage when AI is drift-suppressed
+02:46 +758 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — young-infant PSBI activation activates on IMCI danger sign (convulsions) at age 7 days
+02:46 +759 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — young-infant PSBI activation activates on fever >= 37.5 in a 20-day-old
+02:46 +760 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — young-infant PSBI activation activates on hypothermia < 35.5 in a 3-day-old
+02:46 +761 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — young-infant PSBI activation does NOT activate for a 3-month-old (out of PSBI age window)
+02:46 +762 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — child pneumonia activation experimental pneumonia score cannot initiate antibiotics
+02:46 +763 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — child pneumonia activation activates on cough + severe chest indrawing at 24 months
+02:46 +764 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — child pneumonia activation activates on cough + SaO2 85 at 12 months
+02:46 +765 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — child pneumonia activation does NOT activate for a 5-year-old with cough only
+02:46 +766 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — cohort boundaries young infant requires known age 0–59: null
+02:46 +767 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — cohort boundaries young infant requires known age 0–59: -1
+02:46 +768 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — cohort boundaries young infant requires known age 0–59: 0
+02:46 +769 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — cohort boundaries young infant requires known age 0–59: 59
+02:46 +770 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — cohort boundaries young infant requires known age 0–59: 60
+02:46 +771 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — cohort boundaries pneumonia requires completed months 2–59: 1
+02:46 +772 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — cohort boundaries pneumonia requires completed months 2–59: 2
+02:46 +773 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — cohort boundaries pneumonia requires completed months 2–59: 59
+02:46 +774 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — cohort boundaries pneumonia requires completed months 2–59: 60
+02:46 +775 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — cohort boundaries severe BP in an unspecified adult does not imply pregnancy
+02:46 +776 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationProtocolSelector — co-activation a normal well-child assessment activates nothing
+02:46 +777 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: StabilizationAiRisks.fromPredictions — clinical separation suppresses legacy probability and rule-in flags
+02:46 +778 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: RecommendationEngine — pre-referral protocol integration a routine plan with no protocols stays routine
+02:46 +779 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: RecommendationEngine — pre-referral protocol integration an activated pre-referral protocol escalates a routine plan to urgent
+02:46 +780 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: RecommendationEngine — pre-referral protocol integration an activated protocol does not OVERRIDE an already-urgent plan
+02:46 +781 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: RecommendationEngine — pre-referral protocol integration synthesize without stabilization args still works (backwards compat)
+02:46 +782 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: RecommendationEngine — pre-referral protocol integration CarePlan JSON round-trip preserves pre-referral protocols
+02:46 +783 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/stabilization_protocols_test.dart: RecommendationEngine — pre-referral protocol integration the weight the tablet count came from travels with the plan
+02:47 +784 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/sync_no_server_test.dart: no server configured: runOnce leaves the record pending, never synced
+02:48 +785 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/sync_no_server_test.dart: no server configured: drain does not prune the outbox
+02:48 +786 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/sync_no_server_test.dart: the loopback simulation still counts as configured (DEMO_MODE path)
+02:49 +787 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: TherapeuticSupplement — citable constants ANC MMS cites WHO ANC 2020 + GHS 2022
+02:49 +788 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: TherapeuticSupplement — citable constants IFA cites GHS STG 2017 + Adokiya 2022
+02:49 +789 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: TherapeuticSupplement — citable constants KMC cites WHO KMC 2015 + Boundy 2016
+02:49 +790 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: TherapeuticSupplement — citable constants RUTF cites WHO CMAM 2023 + Ghana CMAM 2018
+02:49 +791 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: TherapeuticSupplementSelector — MMS for pregnant women activates MMS for a pregnant woman at 16 weeks, any Hb
+02:49 +792 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: TherapeuticSupplementSelector — MMS for pregnant women flags Ghana-specific Hb threshold 10.4 g/dL in the reason
+02:49 +793 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: TherapeuticSupplementSelector — MMS for pregnant women does NOT activate before 12 weeks gestation
+02:49 +794 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: TherapeuticSupplementSelector — MMS for pregnant women does NOT activate for non-pregnant women (IFA is the right call)
+02:49 +795 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: TherapeuticSupplementSelector — IFA for non-pregnant anaemia activates IFA for Hb 9.8 g/dL in non-pregnant woman
+02:49 +796 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: TherapeuticSupplementSelector — IFA for non-pregnant anaemia does NOT activate IFA when Hb is normal (>= 11.0)
+02:49 +797 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: TherapeuticSupplementSelector — KMC for LBW activates KMC for birth weight 2.1 kg (LBW)
+02:49 +798 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: TherapeuticSupplementSelector — KMC for LBW does NOT activate KMC for birth weight 3.0 kg (normal)
+02:49 +799 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: TherapeuticSupplementSelector — RUTF for SAM activates RUTF for SAM, 18 months, appetite test passed
+02:49 +800 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: TherapeuticSupplementSelector — RUTF for SAM does NOT activate RUTF when appetite test FAILED (refer inpatient)
+02:49 +801 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: TherapeuticSupplementSelector — RUTF for SAM does NOT activate RUTF for children under 6 months
+02:49 +802 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: TherapeuticSupplementSelector — RUTF for SAM does NOT activate RUTF when bilateral pitting oedema present
+02:49 +803 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: TherapeuticSupplementSelector — co-activation a normal healthy 2-year-old activates nothing
+02:49 +804 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: NutritionEngine.plan — Pillar 2 integration a pregnant woman with anaemia gets MMS + the regional iron stack
+02:49 +805 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: NutritionEngine.plan — Pillar 2 integration a child with SAM gets RUTF + therapeutic food required
+02:49 +806 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: NutritionEngine.plan — Pillar 2 integration a normal plan without therapeutic context has empty plan
+02:49 +807 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/therapeutic_supplements_test.dart: NutritionEngine.plan — Pillar 2 integration a LBW newborn (1.8 kg) gets KMC
+02:52 +808 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/transport_policy_test.dart: the transport policy a release build will not send records in plaintext
+02:52 +809 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/transport_policy_test.dart: the transport policy a secure address is always allowed
+02:52 +810 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/transport_policy_test.dart: the transport policy a development or rehearsal build may use the LAN laptop
+02:52 +811 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/transport_policy_test.dart: the transport policy a non-web scheme is refused with the scheme named
+02:52 +812 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/transport_policy_test.dart: the rule at the one HTTP door a plaintext POST never reaches the network layer
+02:52 +813 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/transport_policy_test.dart: the rule at the one HTTP door a secure address goes through normally
+02:52 +814 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/transport_policy_test.dart: the rule at the one HTTP door the refusal survives the taxonomy callers already handle
+02:53 +815 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/voice_ask_test.dart: no speech pack means no microphone on screen
+02:54 +816 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/voice_ask_test.dart: a hearing proposes, and only the tap records
+02:55 +817 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/voice_ask_test.dart: an unverified answer set says so on the proposal
+02:56 +818 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/voice_ask_test.dart: unclear never pre-selects anything
+02:56 +819 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/voice_ask_test.dart: silence is said plainly
+02:56 +820 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/voice_ask_test.dart: a refused microphone is named, not retried silently
+02:56 +821 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/voice_ask_test.dart: listening can be stopped from the same control
+02:57 +822 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/voice_ask_test.dart: the control is a labelled button with a touchable target
+02:57 +823 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/voice_ask_test.dart: dictation writes only into the text callback
+02:57 +824 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/voice_ask_test.dart: Hausa gets no microphone: voice input is Twi and Dagbani only
+03:04 +825 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/assess_tab_test.dart: AssessTab degrades to a restricted state without the capability
+03:07 +826 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/assess_tab_test.dart: AssessTab shows the intake action, search and an honest empty record
+03:09 +827 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/assess_tab_test.dart: AssessTab finds a household by the name of a person inside it
+03:10 +828 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_check_entry_test.dart: a child past five starts the child battery, not a block
+03:10 +829 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_check_entry_test.dart: a child past five starts the child battery, not a block
+03:11 +830 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_check_entry_test.dart: a child past five starts the child battery, not a block
+03:12 +831 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_check_entry_test.dart: a child past five starts the child battery, not a block
+03:14 +832 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_check_entry_test.dart: a general-care woman gets the maternal battery without the fetal-movement worry
+03:15 +833 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_check_entry_test.dart: the check entry fits 320px at 200% text
+03:22 +834 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: nurse report keeps readable observations without QR sharing
+03:25 +835 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_help_hub_test.dart: emergency path is the first action on the hub
+03:27 +835 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+Secure storage read failed for carebridge.session.last_phone: MissingPluginException(No implementation found for method read on channel plugins.it_nomads.com/flutter_secure_storage)
+03:28 +836 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+03:29 +837 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+03:31 +838 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+03:33 +839 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+Secure storage write failed for carebridge.session.user_id: MissingPluginException(No implementation found for method write on channel plugins.it_nomads.com/flutter_secure_storage)
+Secure storage write failed for carebridge.session.last_phone: MissingPluginException(No implementation found for method write on channel plugins.it_nomads.com/flutter_secure_storage)
+03:34 +840 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+03:42 +841 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+03:42 +842 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+03:44 +843 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+03:44 +844 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+03:45 +845 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+03:47 +846 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+03:47 +847 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+03:48 +848 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+03:48 +849 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+03:48 +850 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+03:49 +851 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+03:58 +852 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+03:58 +853 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+03:59 +854 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+03:59 +855 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:00 +856 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:00 +857 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:00 +858 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:01 +859 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:09 +860 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:10 +861 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:11 +862 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:12 +863 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:13 +864 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:14 +865 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:21 +866 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:22 +867 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:22 +868 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:22 +869 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:29 +870 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:29 +871 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:29 +872 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:29 +873 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:29 +874 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:30 +875 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:30 +876 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:30 +877 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:30 +878 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:30 +879 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+04:30 +880 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/caregiver_flow_test.dart: caregiver: fresh-device sign-up through the whole family experience
+Secure storage delete failed for carebridge.session.user_id: MissingPluginException(No implementation found for method delete on channel plugins.it_nomads.com/flutter_secure_storage)
+Secure storage read failed for carebridge.session.last_phone: MissingPluginException(No implementation found for method read on channel plugins.it_nomads.com/flutter_secure_storage)
+Secure storage write failed for carebridge.session.user_id: MissingPluginException(No implementation found for method write on channel plugins.it_nomads.com/flutter_secure_storage)
+Secure storage write failed for carebridge.session.last_phone: MissingPluginException(No implementation found for method write on channel plugins.it_nomads.com/flutter_secure_storage)
+04:36 +881 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/clinic_queue_test.dart: the queue is many open visits, newest first, joined per household, and closes on completion
+04:37 +882 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/clinic_queue_test.dart: clinic day stats derive received, still-open and door-to-provider time
+04:38 +883 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/clinic_queue_test.dart: the board lists tickets in arrival order and gates cancel
+04:43 +884 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/companion_header_test.dart: CompanionPage heroChrome: true fits 320px at 200% text
+04:45 +885 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: empty schedule describes local records without reassurance
+04:45 +886 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: empty schedule describes local records without reassurance
+04:46 +887 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: empty schedule describes local records without reassurance
+04:47 +888 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: all overdue and today contacts have identity, dates and actions at 320px / 200%
+04:51 +889 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/day_plan_worklist_test.dart: overdue-only work remains actionable with a household fallback
+04:51 +890 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/entry_flow_test.dart: fresh install: splash leads to onboarding, not role choice
+04:53 +891 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/entry_flow_test.dart: fresh install: splash leads to onboarding, not role choice
+04:54 +892 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/entry_flow_test.dart: fresh install: splash leads to onboarding, not role choice
+04:54 +893 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/entry_flow_test.dart: fresh install: splash leads to onboarding, not role choice
+04:54 +894 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/entry_flow_test.dart: fresh install, onboarding seen: splash leads to role choice
+04:55 +895 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/entry_flow_test.dart: returning signed-out device: splash leads to sign-in
+04:56 +896 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/entry_flow_test.dart: role choice: tapping a role routes to sign-in (no "I already have an account" shortcut on the role choice anymore)
+04:57 +897 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/entry_flow_test.dart: caregiver: family creation is directly available and requires a name, district and community before consent
+05:00 +898 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: FHW shell entry silently warms only Hausa
+05:01 +899 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: FHW shell entry silently warms only Hausa
+05:02 +900 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: FHW shell entry silently warms only Twi
+05:02 +901 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: offline runtime guard declines uncached runtime
+05:02 +902 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: offline runtime guard declines errors
+05:03 +903 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: offline runtime check completion cannot warm a superseded language
+05:03 +904 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: offline runtime check cannot start loading after shell exit
+05:04 +905 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: language changes warm the new preference without narration
+05:04 +906 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: unsupported preferences and non-FHW accounts never warm
+05:05 +907 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: household keeps clinical content without a family-code action at phone width
+05:05 +908 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: household keeps clinical content without a family-code action at phone width
+05:06 +909 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: household keeps clinical content without a family-code action at phone width
+05:06 +910 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: household keeps clinical content without a family-code action at phone width
+05:07 +911 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: household keeps clinical content without a family-code action at phone width
+05:07 +912 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: household keeps clinical content without a family-code action at phone width
+05:08 +913 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: household keeps clinical content without a family-code action at phone width
+05:08 +914 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: household keeps clinical content without a family-code action at phone width
+05:08 +915 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: household keeps clinical content without a family-code action at phone width
+05:09 +916 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: household keeps clinical content without a family-code action at phone width
+05:09 +917 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: unexpected runtime errors do not escape or block the other service
+05:09 +918 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: summary screen has no overflows at phone width
+05:10 +919 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: summary screen has no overflows at phone width
+05:10 +920 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: summary screen has no overflows at phone width
+05:10 +921 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_clinic_header_test.dart: the header carries the queue, the record count and the sync line
+05:10 +922 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: result screen has no overflows at phone width
+05:10 +923 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_flow_overflow_test.dart: result screen has no overflows at phone width
+05:14 +924 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_today_tab_test.dart: the body is a single panel with no second hero
+05:17 +925 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/glass_surface_test.dart: full mode renders a BackdropFilter for a blurred surface
+05:17 +926 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/glass_surface_test.dart: full mode renders a BackdropFilter for a blurred surface
+05:17 +927 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/glass_surface_test.dart: full mode renders a BackdropFilter for a blurred surface
+05:18 +928 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/glass_surface_test.dart: full mode renders a BackdropFilter for a blurred surface
+05:18 +929 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/glass_surface_test.dart: full mode renders a BackdropFilter for a blurred surface
+05:19 +930 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_today_tab_test.dart: an untested day is an em dash, not a fabricated zero rate
+05:19 +931 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_today_tab_test.dart: an untested day is an em dash, not a fabricated zero rate
+05:19 +932 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/glass_surface_test.dart: reduced motion removes every BackdropFilter
+05:19 +933 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_today_tab_test.dart: a tally that cannot be counted says so
+05:19 +934 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/glass_surface_test.dart: the persisted Lite choice removes every BackdropFilter
+05:19 +935 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_today_tab_test.dart: fits 320px at 200% text without overflow
+05:19 +936 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_today_tab_test.dart: fits 320px at 200% text without overflow
+05:20 +937 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/fhw_today_tab_test.dart: fits 320px at 200% text without overflow
+05:20 +938 ~7: loading C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/grow_play_tab_test.dart
+05:23 +938 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/grow_play_tab_test.dart: the play card names the band and shows the band tip
+05:27 +939 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/hospital_ruler_test.dart: the scale itself a tap lands on the step the vital allows
+05:28 +940 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/grow_play_tab_test.dart: more play ideas reveals the rest of the band
+05:28 +941 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/hospital_ruler_test.dart: the scale itself integer vitals never land between whole numbers
+05:28 +942 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/grow_play_tab_test.dart: the child appears as a portrait on the play card and selector
+05:28 +943 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/grow_play_tab_test.dart: the child appears as a portrait on the play card and selector
+05:29 +944 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/grow_play_tab_test.dart: the child appears as a portrait on the play card and selector
+05:29 +945 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/grow_play_tab_test.dart: the restyle keeps every promise the tab made before
+05:29 +946 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/grow_play_tab_test.dart: the restyle keeps every promise the tab made before
+05:29 +947 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/grow_play_tab_test.dart: the restyle keeps every promise the tab made before
+05:29 +948 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/hospital_ruler_test.dart: the scale itself a vital with no bands says so honestly
+05:30 +949 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/grow_play_tab_test.dart: the tab fits 320px at 200% text
+05:30 +950 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/grow_play_tab_test.dart: the tab fits 320px at 200% text
+05:30 +951 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/hospital_ruler_test.dart: the scale itself no blur and no overflow at 320px and 200% text
+05:30 +952 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/hospital_ruler_test.dart: the scale itself no blur and no overflow at 320px and 200% text
+05:30 +953 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/hospital_ruler_test.dart: the scale on the card the ruler is the instrument; the keypad is the fallback
+05:32 +954 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/hospital_ruler_test.dart: the scale on the card the jog steps the reading, and stops at the end of the scale
+05:33 +955 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/hospital_ruler_test.dart: the scale on the card holding the jog keeps counting
+05:33 +956 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/hospital_ruler_test.dart: the scale on the card the breath counter keeps its pad and gains the scale
+05:34 +957 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/hospital_ruler_test.dart: the scale on the card the MUAC tape and the scale read the same arm
+05:35 +958 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/hospital_ruler_test.dart: the scale on the card the ruler follows the reading the nurse selected
+05:35 +959 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/hospital_ruler_test.dart: the scale on the card three paired digits fit: the pair shrinks, the single does not
+05:36 +960 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/iphone_frame_test.dart: IPhoneFrame wrapping MaterialApp.router (web simulation) throws NO errors
+05:36 +961 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/iphone_frame_test.dart: IPhoneFrame wrapping MaterialApp.router (web simulation) throws NO errors
+05:37 +962 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/iphone_frame_test.dart: IPhoneFrame wrapping MaterialApp.router (web simulation) throws NO errors
+05:39 +963 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/iphone_frame_test.dart: IPhoneFrame: caregiver registration step 0 -> step 1 stays rendered and hit-tests cleanly under a mouse pointer (web regression)
+05:43 +964 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/iphone_frame_test.dart: IPhoneFrame: caregiver registration step 0 -> step 1 stays rendered and hit-tests cleanly under a mouse pointer (web regression)
+05:43 +965 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/iphone_frame_test.dart: web control-dock device dropdown opens through the chrome Overlay and switches the simulated device (Navigator-free: the dock sits above the app Navigator, so a PopupMenuButton would throw here)
+05:46 +966 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: FloatingAcrylicDock renders every destination with a key and reports taps
+05:48 +967 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: FloatingAcrylicDock selection follows the index and the pill glides
+05:49 +968 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/muac_gauge_test.dart: MuacGauge shows the empty zone when no value has been typed
+05:49 +969 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/muac_gauge_test.dart: MuacGauge shows the empty zone when no value has been typed
+05:49 +970 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/muac_gauge_test.dart: MuacGauge shows the empty zone when no value has been typed
+05:50 +971 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/muac_gauge_test.dart: MuacGauge shows the empty zone when no value has been typed
+05:50 +972 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/muac_gauge_test.dart: MuacGauge shows the empty zone when no value has been typed
+05:50 +973 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/muac_gauge_test.dart: MuacGauge shows the empty zone when no value has been typed
+05:50 +974 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/muac_gauge_test.dart: MuacGauge shows the empty zone when no value has been typed
+05:50 +975 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/muac_gauge_test.dart: MuacGauge shows the empty zone when no value has been typed
+05:50 +976 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/muac_gauge_test.dart: MuacGauge shows the empty zone when no value has been typed
+05:51 +977 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/muac_gauge_test.dart: MuacGauge shows the empty zone when no value has been typed
+05:51 +978 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: SwipeRevealActions tap is the primary action; drag reveals; tap while open closes
+05:51 +979 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: SwipeRevealActions reveal still works under reduced motion — it snaps
+05:51 +980 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/muac_gauge_test.dart: MuacGauge switches to the SAM zone below 11.5 cm
+05:51 +981 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/muac_gauge_test.dart: MuacGauge switches to the SAM zone below 11.5 cm
+05:51 +982 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: CockpitGauge renders no band chips when no uncertainty is given
+05:51 +983 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/muac_gauge_test.dart: MuacGauge switches to the MAM zone between 11.5 and 12.5 cm
+05:51 +984 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: CockpitGauge the dial sweep obeys the motion gate
+05:51 +985 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/muac_gauge_test.dart: MuacGauge switches to the watch zone between 12.5 and 13.5 cm
+05:52 +986 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/luxe_components_test.dart: CockpitGauge fits 320px at 200% text without overflow
+05:52 +987 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/muac_gauge_test.dart: MuacGauge switches to the adequate zone at or above 13.5 cm
+05:52 +988 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/muac_gauge_test.dart: MuacGauge ignores junk input and stays in the empty zone
+05:52 +989 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/muac_gauge_test.dart: MuacGauge updates live when the controller is changed externally
+05:55 +990 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/narration_lifecycle_test.dart: account change with the same language resets automatic narration
+05:56 +991 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/neonatal_experimental_persistence_test.dart: real graph result survives SQLite close and reload independently
+05:57 +992 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/neonatal_experimental_persistence_test.dart: real graph result survives SQLite close and reload independently
+05:57 +993 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/neonatal_experimental_persistence_test.dart: real graph result survives SQLite close and reload independently
+05:57 +994 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/neonatal_experimental_persistence_test.dart: real graph result survives SQLite close and reload independently
+05:57 +995 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/neonatal_experimental_persistence_test.dart: real graph result survives SQLite close and reload independently
+05:58 +996 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/neonatal_experimental_persistence_test.dart: real graph result survives SQLite close and reload independently
+05:58 +997 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/neonatal_experimental_persistence_test.dart: real graph result survives SQLite close and reload independently
+Secure storage read failed for carebridge.session.last_phone: MissingPluginException(No implementation found for method read on channel plugins.it_nomads.com/flutter_secure_storage)
+06:04 +998 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/pre_referral_dispensing_test.dart: a weighed child gets the tablet count under the guideline dose
+06:07 +999 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/pre_referral_dispensing_test.dart: an unweighed child shows no number and says why
+06:07 +1000 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/pre_referral_dispensing_test.dart: a rounding too coarse to dispense is warned, not hidden
+06:07 +1001 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/pre_referral_dispensing_test.dart: steps with no weight arithmetic are unaffected
+06:08 +1002 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the desk sorts an unanswered referral into the bucket it earned
+06:11 +1003 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the experimental score never calls itself confidence
+06:11 +1004 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the experimental score never calls itself confidence
+06:13 +1005 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the experimental score never calls itself confidence
+06:13 +1006 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the experimental score never calls itself confidence
+06:14 +1007 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the experimental score never calls itself confidence
+06:14 +1008 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the experimental score never calls itself confidence
+06:15 +1009 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the experimental score never calls itself confidence
+06:16 +1010 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the desk hands over SBAR, support and the household record
+06:17 +1011 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: a blocked model draws no ring
+06:17 +1012 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the desk calling opens the dialler and writes nothing
+06:17 +1013 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: danger signs need no tap and no scroll
+06:18 +1014 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the desk the staff code is the only thing that names a verifier
+06:18 +1015 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: pre-referral stabilisation still outranks the model hero
+06:19 +1016 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the desk a verifier records the facility outcome as treated
+06:19 +1017 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the evidence behind the verdict is shown, not folded away
+06:20 +1018 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the evidence behind the verdict is shown, not folded away
+06:20 +1019 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the evidence behind the verdict is shown, not folded away
+06:20 +1020 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the evidence behind the verdict is shown, not folded away
+06:20 +1021 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the evidence behind the verdict is shown, not folded away
+06:20 +1022 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the evidence behind the verdict is shown, not folded away
+06:20 +1023 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the evidence behind the verdict is shown, not folded away
+06:20 +1024 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the desk is the whole surface, with no second list to fall back to
+06:21 +1025 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: the decision is stated once, not four times
+06:21 +1026 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in is one write carrying the answer, the status and the note
+06:22 +1027 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in is one write carrying the answer, the status and the note
+06:22 +1028 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: one doorway to the report, not three
+06:23 +1029 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_page_simplification_test.dart: one doorway to the report, not three
+06:23 +1030 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in an unanswered knock leaves a travelling referral alone
+06:23 +1031 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in an unanswered knock leaves a arrived referral alone
+06:24 +1032 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in an unanswered knock leaves a treated referral alone
+06:24 +1033 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in an unanswered knock leaves a didNotAttend referral alone
+06:24 +1034 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in an unanswered knock leaves a refused referral alone
+06:25 +1035 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in an unanswered knock leaves a cancelled referral alone
+06:25 +1036 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in an unanswered knock leaves a died referral alone
+06:26 +1037 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in arrival never reads as treatment, in word or in the record
+06:26 +1038 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in treatment needs the words "seen and treated"
+06:27 +1039 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/referral_follow_up_test.dart: the check-in treatment needs the words "seen and treated"
+06:27 +1040 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: experimental card leads clinical findings without changing urgent care
+06:28 +1041 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: experimental card leads clinical findings without changing urgent care
+06:29 +1042 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: experimental card leads clinical findings without changing urgent care
+06:29 +1043 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: experimental card leads clinical findings without changing urgent care
+06:30 +1044 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: experimental card leads clinical findings without changing urgent care
+06:31 +1045 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: experimental card leads clinical findings without changing urgent care
+06:32 +1046 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: pending save is explicit and late inference cannot rewrite it
+06:35 +1047 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/road_to_health_chart_test.dart: RoadToHealthCard plots the weighings it can place
+06:36 +1048 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/road_to_health_chart_test.dart: RoadToHealthCard plots the weighings it can place
+06:36 +1049 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: research-only signals cannot add a PSBI treatment or referral
+06:36 +1050 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: research-only signals cannot add a PSBI treatment or referral
+06:36 +1051 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: research-only signals cannot add a PSBI treatment or referral
+06:37 +1052 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: research-only signals cannot add a PSBI treatment or referral
+06:37 +1053 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: research-only signals cannot add a PSBI treatment or referral
+06:37 +1054 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: research-only signals cannot add a PSBI treatment or referral
+06:37 +1055 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/road_to_health_chart_test.dart: RoadToHealthCard gives a screen reader the numbers behind the picture
+06:37 +1056 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: healthy newborn has no experimental reassurance or clinical score
+06:37 +1057 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: healthy newborn has no experimental reassurance or clinical score
+06:38 +1058 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: healthy newborn has no experimental reassurance or clinical score
+06:38 +1059 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: healthy newborn has no experimental reassurance or clinical score
+06:38 +1060 ~7: loading C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/sbar_card_test.dart
+06:38 +1060 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: 14-day-old convulsions activate clinical PSBI outside model support
+06:39 +1061 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: historical negative never masks a current positive; old positive is not current
+06:39 +1062 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: uncollected symptoms and ambiguous cord redness stay unknown
+06:39 +1063 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: current maternal symptoms override historical false and ignore old positives
+06:39 +1064 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: general adult visit does not imply obstetric eligibility
+06:39 +1065 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: invalid explicit age does not fall back to stored age
+06:39 +1066 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: analysis states suppress numbers and preserve input correction
+06:40 +1067 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: research output requires matching usable permitted evidence
+06:40 +1068 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: metadata failure does not hide analysis state or show output
+06:41 +1069 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/sbar_card_test.dart: fromAssessment composes every SBAR section from the record
+06:42 +1070 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/sbar_card_test.dart: fromAssessment composes every SBAR section from the record
+06:43 +1071 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: saved clinical findings never acquire an experimental score
+06:43 +1072 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: saved clinical findings never acquire an experimental score
+06:43 +1073 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: saved clinical findings never acquire an experimental score
+06:43 +1074 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: clinical override reason survives analysis and evidence navigation
+06:46 +1075 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: complete decision workspace supports 320px and 200% text
+06:48 +1076 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/speech_language_sheet_test.dart: settings samples preserve source language and exact bank content
+06:48 +1077 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/speech_language_sheet_test.dart: settings samples preserve source language and exact bank content
+06:49 +1078 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/speech_language_sheet_test.dart: settings samples preserve source language and exact bank content
+06:49 +1079 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: a dose reads once: the schedule is only under IMMUNISATION
+06:50 +1080 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: a dose reads once: the schedule is only under IMMUNISATION
+06:50 +1081 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/speech_language_sheet_test.dart: one press on a card is the whole choice
+06:50 +1082 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: a folded sentence keeps the clinical driver beside the count
+06:51 +1083 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: a folded sentence keeps the clinical driver beside the count
+06:51 +1084 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/speech_language_sheet_test.dart: AudioButton hold picks a language and tap plays
+06:51 +1085 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: with the schedule folded away, the deck says nothing rather than all-clear
+06:51 +1086 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: with the schedule folded away, the deck says nothing rather than all-clear
+06:52 +1087 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: with the schedule folded away, the deck says nothing rather than all-clear
+06:52 +1088 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/speech_language_sheet_test.dart: compact feedback fits an app bar at large text scale
+06:52 +1089 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: with no immunisation gap the verdict line is the saved one
+06:52 +1090 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: with no immunisation gap the verdict line is the saved one
+06:52 +1091 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: with no immunisation gap the verdict line is the saved one
+06:53 +1092 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/speech_language_sheet_test.dart: caregiver dismissal never plays audio
+06:53 +1093 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/speech_language_sheet_test.dart: caregiver dismissal never plays audio
+06:53 +1094 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: vitals strip shows decision-relevant vitals and hides when none
+06:53 +1095 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: vitals strip shows decision-relevant vitals and hides when none
+06:54 +1096 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: vitals strip shows decision-relevant vitals and hides when none
+06:54 +1097 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/result_screen_triage_test.dart: vitals strip shows decision-relevant vitals and hides when none
+06:54 +1098 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/speech_language_sheet_test.dart: same-id text change invalidates an open picker
+06:54 +1099 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/speech_language_sheet_test.dart: same-id language change invalidates an open picker
+06:54 +1100 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/speech_language_sheet_test.dart: same-id clips change invalidates an open picker
+06:55 +1101 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/speech_language_sheet_test.dart: same-id message replacement stops old playback and hides stale transcript
+06:55 +1102 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/speech_language_sheet_test.dart: account switch away and back rejects an old dialog result
+06:57 +1103 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/vitals_station_test.dart: bands respiratory rate tone follows the IMCI age cut-offs
+06:58 +1104 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/vitals_station_test.dart: bands temperature, SpO2 and MUAC mirror the form cut-offs
+06:58 +1105 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/vitals_station_test.dart: keypad types a decimal temperature and shows its band
+07:03 +1106 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/vitals_station_test.dart: integer vitals have no decimal point
+07:05 +1107 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/vitals_station_test.dart: previous-visit chip shows the last value and the delta
+07:06 +1108 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/vitals_station_test.dart: "Not measured" records the reason and moves on
+07:08 +1109 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/vitals_station_test.dart: re-take clears the reading and counts
+07:11 +1110 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/vitals_station_test.dart: breath counter emits the rate and the seconds counted
+07:12 +1111 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/vitals_station_test.dart: "Count 30s ×2" doubles the count and records 30 seconds
+07:12 +1112 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/vitals_station_test.dart: station carries rr and rr_timer_secs into the result
+07:14 +1113 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/vitals_station_test.dart: "Skip to chart" and "Danger sign now?" go straight to the form
+07:14 +1114 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/vitals_station_test.dart: review page returns a StationResult with every value
+07:16 +1115 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/vitals_station_test.dart: young infant station has no MUAC or height
+07:17 +1116 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/vitals_station_test.dart: newborn station pulse survives retake and reaches the feature bag
+07:19 +1117 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/vitals_station_test.dart: newborn direct pulse is optional for completing clinical assessment
+07:20 +1118 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/vitals_station_test.dart: no BackdropFilter under reduced motion
+07:21 +1119 ~7: C:/Users/Alhaji_stunner/Videos/unicef/test/widgets/vitals_station_test.dart: station fits 320px at 200% text without overflow
+07:23 +1120 ~7: All tests passed!

@@ -1,0 +1,5 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+synthetic: 1.20s -> 59 x 160 features, 59 frames attended
+real: 1.20s -> 59 x 160 features, 59 frames attended
+wrote test\fixtures\asr/frontend_fixtures.json (1110301 bytes)
+pack test\fixtures\asr\pack: 400/160 framing, 39 labels, blank=0, inputs=['input_features', 'attention_mask'], mel (257, 80), 86972 byte bank

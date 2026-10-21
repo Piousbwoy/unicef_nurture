@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../core/audio/caregiver_playback.dart';
+import '../../core/audio/speech_answers.dart';
 import '../../core/i18n/speech_bank.dart';
 import '../../core/ml/voice_pack_install.dart';
 
@@ -84,6 +85,17 @@ class _OfflineVoiceCheckState extends State<OfflineVoiceCheck> {
     if (mounted && generation == _generation) setState(() => _status = value);
   }
 
+  void Function(int, int) _onProgress(int generation) =>
+      (received, total) {
+        if (mounted && generation == _generation) {
+          setState(() {
+            _progress = total > 0 ? received / total : null;
+            _status =
+                '${(received / 1048576).toStringAsFixed(1)} / ${(total / 1048576).toStringAsFixed(1)} MiB';
+          });
+        }
+      };
+
   Future<void> _install(bool translation) => _run((generation) async {
     _message(
       generation,
@@ -92,19 +104,23 @@ class _OfflineVoiceCheckState extends State<OfflineVoiceCheck> {
     await _installer.install(
       _language,
       translation: translation,
-      progress: (received, total) {
-        if (mounted && generation == _generation) {
-          setState(() {
-            _progress = total > 0 ? received / total : null;
-            _status =
-                '${(received / 1048576).toStringAsFixed(1)} / ${(total / 1048576).toStringAsFixed(1)} MiB';
-          });
-        }
-      },
+      progress: _onProgress(generation),
     );
     _message(
       generation,
       'Files verified. Run Check voice; cached files alone do not prove playback or translation readiness.',
+    );
+  });
+
+  Future<void> _installSpeech() => _run((generation) async {
+    _message(
+      generation,
+      'Downloading the $_language listener (several hundred MB)…',
+    );
+    await _installer.installSpeech(_language, progress: _onProgress(generation));
+    _message(
+      generation,
+      'Files verified. Open a check and tap the microphone: cached files alone do not prove hearing.',
     );
   });
   Future<void> _check() => _run((generation) async {
@@ -222,6 +238,11 @@ class _OfflineVoiceCheckState extends State<OfflineVoiceCheck> {
               TextButton(
                 onPressed: _busy ? null : () => _install(true),
                 child: const Text('Install translation'),
+              ),
+            if (SpeechAnswerSet.forLanguage(_language) != null)
+              TextButton(
+                onPressed: _busy ? null : _installSpeech,
+                child: const Text('Install listener'),
               ),
           ],
           if (kIsWeb && _installer.downloadable)

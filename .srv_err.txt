@@ -1,0 +1,1 @@
+sync failed for ledger_anchors/anchor-26855703:10: ledger_anchors is append-only: an anchor cannot be revised

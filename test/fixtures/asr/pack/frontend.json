@@ -1,0 +1,78 @@
+{
+ "language": {
+  "code": "dag",
+  "name": "Dagbani"
+ },
+ "audio": {
+  "sample_rate": 16000,
+  "features": "seamless-fbank",
+  "frame_length": 400,
+  "hop_length": 160,
+  "fft_length": 512,
+  "mel_bins": 80,
+  "input_dim": 160,
+  "stride": 2,
+  "power": 2.0,
+  "preemphasis": 0.97,
+  "remove_dc_offset": true,
+  "mel_floor": 1.192092955078125e-07,
+  "log": "log",
+  "per_band_normalize": {
+   "mode": "zero-mean-unit-variance",
+   "epsilon": 1e-07,
+   "ddof": 1
+  },
+  "pad_with": 1,
+  "frames_per_second": 49.1667,
+  "max_frames": 400
+ },
+ "model": {
+  "inputs": [
+   "input_features",
+   "attention_mask"
+  ],
+  "labels": [
+   "|",
+   "[",
+   "]",
+   "a",
+   "b",
+   "d",
+   "e",
+   "f",
+   "g",
+   "h",
+   "i",
+   "k",
+   "l",
+   "m",
+   "n",
+   "o",
+   "p",
+   "r",
+   "s",
+   "t",
+   "u",
+   "v",
+   "w",
+   "y",
+   "z",
+   "\u00e3",
+   "\u00f5",
+   "\u0129",
+   "\u014b",
+   "\u0169",
+   "\u0254",
+   "\u025b",
+   "\u0303",
+   "\u1ebd",
+   "\u2019",
+   "[UNK]",
+   "[PAD]",
+   "<s>",
+   "</s>"
+  ],
+  "num_labels": 39,
+  "blank_index": 0
+ }
+}

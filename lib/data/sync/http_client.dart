@@ -15,12 +15,17 @@
 ///     browser, CORS block: anything where no reply was received.
 ///   - [HttpFailureKind.timeout] — the server did not answer in time.
 ///   - [HttpFailureKind.malformedUrl] — the configured address is not usable.
+///   - [HttpFailureKind.insecureTransport] — the address was refused because
+///     sending it would put health records on an unencrypted connection.
 library;
 
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:http/http.dart' as http;
+
+import 'transport_policy.dart';
 
 /// A complete HTTP reply: status code plus decoded body text.
 class HttpReply {
@@ -51,6 +56,11 @@ enum HttpFailureKind {
 
   /// The configured address is not a usable URL.
   malformedUrl,
+
+  /// The address is usable but forbidden: a release build will not put health
+  /// records on a cleartext connection. Permanent, so nothing retries it — the
+  /// address has to change, not the network.
+  insecureTransport,
 }
 
 class HttpFailure implements Exception {
@@ -69,6 +79,14 @@ abstract final class PlatformHttpClient {
   /// enough that a dead server cannot stall a sync batch for minutes.
   static const Duration defaultTimeout = Duration(seconds: 15);
 
+  /// Cleartext is refused unless this is a development or demonstration build.
+  ///
+  /// A settable static rather than a direct `kDebugMode` read at the call site,
+  /// so the rule can be tested in both postures and so the composition root can
+  /// widen it for `DEMO_MODE` explicitly instead of the security control silently
+  /// inheriting a build flag nobody meant to consult.
+  static bool allowInsecureTransports = kDebugMode;
+
   /// Test seam: when set, [send] routes through this instead of the network.
   /// Fakes return an [HttpReply] directly, or throw [HttpFailure] to simulate
   /// transport-level problems.
@@ -77,7 +95,8 @@ abstract final class PlatformHttpClient {
     Uri uri,
     Map<String, String> headers,
     String? body,
-  )? override;
+  )?
+  override;
 
   static Future<HttpReply> send(
     String method,
@@ -86,6 +105,16 @@ abstract final class PlatformHttpClient {
     String? body,
     Duration timeout = defaultTimeout,
   }) async {
+    // Before the test seam, so a fake cannot route around the rule either: the
+    // point of the control is that no request leaves with health records on a
+    // cleartext connection, not that most of them do not.
+    final refusal = TransportPolicy.refusalFor(
+      uri,
+      development: allowInsecureTransports,
+    );
+    if (refusal != null) {
+      throw HttpFailure(HttpFailureKind.insecureTransport, refusal);
+    }
     final viaOverride = override;
     if (viaOverride != null) {
       return viaOverride(method, uri, Map.of(headers), body);
@@ -133,14 +162,12 @@ abstract final class PlatformHttpClient {
     Uri uri, {
     Map<String, String> headers = const {},
     Duration timeout = defaultTimeout,
-  }) =>
-      send('GET', uri, headers: headers, timeout: timeout);
+  }) => send('GET', uri, headers: headers, timeout: timeout);
 
   static Future<HttpReply> post(
     Uri uri, {
     Map<String, String> headers = const {},
     String? body,
     Duration timeout = defaultTimeout,
-  }) =>
-      send('POST', uri, headers: headers, body: body, timeout: timeout);
+  }) => send('POST', uri, headers: headers, body: body, timeout: timeout);
 }

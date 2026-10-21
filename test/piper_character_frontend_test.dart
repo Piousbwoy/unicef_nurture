@@ -15,6 +15,10 @@ void main() {
     ('Twi', 'twi_mms_model.onnx.json'),
     ('Dagbani', 'dagbani_model.onnx.json'),
     ('Hausa', 'hausa_mms_model.onnx.json'),
+    // Frontend generated from the licensed Dagbani corpus by
+    // tool/track_b/build_frontend.py: our own training data must clear the
+    // same gate a downloaded checkpoint does.
+    ('Dagbani', 'dagbani_trained_pack.json'),
   ]) {
     final path = 'test/fixtures/voice/${pack.$2}';
     if (!File(path).existsSync()) continue;
@@ -52,9 +56,9 @@ void main() {
     test('${pack.$1} ${pack.$2} refuses text it cannot say faithfully', () {
       final frontend = PiperPhonemizer.fromConfig(config, pack.$1);
       expect(frontend.encode(fixtures.first['text'] as String), isNotEmpty);
-      // A dropped digit would change a dose, and a dropped letter would
-      // mispronounce a word, so neither may pass silently.
-      expect(() => frontend.encode('Give 5 ml'), throwsFormatException);
+      // A letter the checkpoint never learned would be silently dropped, which
+      // mispronounces a word, so it may not pass without an error.
+      expect(() => frontend.encode('aǯa'), throwsFormatException);
     });
 
     test('${pack.$1} ${pack.$2} refuses a table that no longer matches', () {

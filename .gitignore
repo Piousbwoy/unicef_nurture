@@ -63,3 +63,30 @@ web/voice_runtime/
 
 # Agent debug screenshots from Flutter web verification runs.
 .qoder_screens/
+
+# Track B training corpora: licensed audio pulled by tool/track_b/fetch_dagbani.py.
+# Hundreds of MB of third-party recordings; never a repo artifact.
+/data/
+
+# Verification scratch from a working session: `flutter analyze`, `flutter test` and
+# `git diff` captures written beside the repo so a long command's output could be
+# read back reliably. They are evidence for one conversation, not a build artefact.
+# Two of them (.chk_final.txt, .chk_spine.txt) are ~340 KB of log text and were
+# committed once by accident — which is why the patterns are spelled out rather than
+# left to *.log, which these are not.
+/.audit_*
+/.chk_*
+/.d_*
+/.final*
+/.f[0-9].txt
+/.full*
+/.g[0-9].txt
+/.git_*
+/.ver*
+/.qoder/cg_diff.txt
+
+# Throwaway ASR measurement downloads (473 MB of eval audio + HF cache)
+/tool/asr_eval/data/
+/tool/asr_eval/out/
+/tool/asr_eval/__pycache__/
+node_modules

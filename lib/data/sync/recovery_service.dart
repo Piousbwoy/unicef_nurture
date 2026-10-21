@@ -27,11 +27,11 @@ library;
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show debugPrint;
-import 'package:sqflite/sqflite.dart';
 
 import '../../domain/entities/core.dart';
 import '../../domain/enums.dart';
 import '../local/app_database.dart';
+import '../local/upsert.dart';
 import '../local/preferences_store.dart';
 import '../local/user_dao.dart';
 import 'http_client.dart';
@@ -272,12 +272,29 @@ abstract final class CloudRecoveryService {
       }
 
       await db.transaction((txn) async {
-        await txn.insert(Tables.users, {
-          ...user.toMap(),
-          'pin_hash': localHash,
-          'pin_salt': localSalt,
-          'linked_household_id': linkedHouseholdId,
-        }, conflictAlgorithm: ConflictAlgorithm.replace);
+        // One phone number is one live account on this handset. The delete is
+        // explicit because it is the only deletion intended here: a previous row
+        // under another id, for the same number, is a stale account that sign-in
+        // could resolve to instead of the recovered one.
+        await txn.delete(
+          Tables.users,
+          where: 'phone = ? AND id != ?',
+          whereArgs: [userMap['phone'], user.id],
+        );
+        // Not `ConflictAlgorithm.replace`: a user row parents that account's
+        // caregiver drafts and activity, and replacing it would cascade them away
+        // on the very operation that is supposed to bring a family's data back.
+        await upsertWithoutCascade(
+          txn,
+          table: Tables.users,
+          primaryKey: const ['id'],
+          row: {
+            ...user.toMap(),
+            'pin_hash': localHash,
+            'pin_salt': localSalt,
+            'linked_household_id': linkedHouseholdId,
+          },
+        );
         restoredCount++;
 
         if (caseloadData != null) {
@@ -303,10 +320,16 @@ abstract final class CloudRecoveryService {
                 // Nothing to merge on — never guess an identity.
                 continue;
               }
-              await txn.insert(
-                table,
-                map,
-                conflictAlgorithm: ConflictAlgorithm.replace,
+              // A restore is an update of rows that may already exist on this
+              // handset. `ConflictAlgorithm.replace` would delete each one first,
+              // and households and persons and visits and referrals are all cascade
+              // parents: the recovery would have destroyed the local children of
+              // the very rows it was bringing back.
+              await upsertWithoutCascade(
+                txn,
+                table: table,
+                primaryKey: const ['id'],
+                row: map,
               );
               restoredCount++;
             }
@@ -327,6 +350,24 @@ abstract final class CloudRecoveryService {
             'Cloud restoration completed. Restored $restoredCount records from MariaDB.',
       );
     } catch (e) {
+      // A refused address is not a network that answered badly. Falling in with
+      // the message below would tell her to "check the network" and start the
+      // district server, sending her to look in exactly the wrong place, so this
+      // one is surfaced as itself. `networkError` stays the status because it is
+      // the nearest existing bucket and the UI switches on it — what she reads is
+      // the true reason, verbatim.
+      //
+      // Handled inside the generic catch rather than as its own `on HttpFailure`
+      // clause: an earlier typed clause would take every HttpFailure, including
+      // timeouts, and change what a worker sees for a failure that has nothing to
+      // do with this rule.
+      if (e is HttpFailure && e.kind == HttpFailureKind.insecureTransport) {
+        debugPrint('Cloud recovery refused the address: ${e.message}');
+        return RecoveryResult(
+          status: RecoveryStatus.networkError,
+          message: e.message,
+        );
+      }
       // The raw exception is a developer diagnostic, not a message for a health
       // worker standing in the sun — and this string is what the sign-in screen
       // shows verbatim. Name the two truths that matter to them instead: this
@@ -390,76 +431,104 @@ abstract final class CloudRecoveryService {
 
     await db.transaction((txn) async {
       // 1. Restore User Row
-      await txn.insert(Tables.users, {
-        ...user.toMap(),
-        'pin_hash': hash,
-        'pin_salt': salt,
-        'linked_household_id': isWorker ? null : hhId,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await upsertWithoutCascade(
+        txn,
+        table: Tables.users,
+        primaryKey: const ['id'],
+        row: {
+          ...user.toMap(),
+          'pin_hash': hash,
+          'pin_salt': salt,
+          'linked_household_id': isWorker ? null : hhId,
+        },
+      );
 
       // 2. Seed restored sample household to showcase downstream recovery
-      await txn.insert(Tables.households, {
-        'id': hhId,
-        'name': isWorker
-            ? 'Savelugu Recovered Caseload'
-            : 'Ibrahim & Aisha Household',
-        'region': 'Northern',
-        'district': 'Savelugu Municipal',
-        'community': 'Diare CHPS',
-        'created_by': user.id,
-        'head_name': isWorker ? 'Multiple Enrolled Families' : 'Ibrahim Yakutu',
-        'contact_phone': phone,
-        'latitude': 9.6241,
-        'longitude': -0.8322,
-        'family_size': 6,
-        'has_valid_nhis': 1,
-        'walking_minutes_to_facility': 18,
-        'landmark': 'Near Diare Central Mosque',
-        'created_at': now.subtract(const Duration(days: 45)).toIso8601String(),
-        'updated_at': now.toIso8601String(),
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await upsertWithoutCascade(
+        txn,
+        table: Tables.households,
+        primaryKey: const ['id'],
+        row: {
+          'id': hhId,
+          'name': isWorker
+              ? 'Savelugu Recovered Caseload'
+              : 'Ibrahim & Aisha Household',
+          'region': 'Northern',
+          'district': 'Savelugu Municipal',
+          'community': 'Diare CHPS',
+          'created_by': user.id,
+          'head_name': isWorker
+              ? 'Multiple Enrolled Families'
+              : 'Ibrahim Yakutu',
+          'contact_phone': phone,
+          'latitude': 9.6241,
+          'longitude': -0.8322,
+          'family_size': 6,
+          'has_valid_nhis': 1,
+          'walking_minutes_to_facility': 18,
+          'landmark': 'Near Diare Central Mosque',
+          'created_at': now
+              .subtract(const Duration(days: 45))
+              .toIso8601String(),
+          'updated_at': now.toIso8601String(),
+        },
+      );
       count++;
 
       // 3. Seed restored sample family members (Persons)
-      await txn.insert(Tables.persons, {
-        'id': 'person-mother-$phone',
-        'household_id': hhId,
-        'full_name': 'Aisha Ibrahim',
-        // Must be a real ClientType name: the register reader maps stored
-        // names back onto the enum, and a legacy alias used to crash the
-        // AI Triage tab with "Bad state: No element".
-        'client_type': 'pregnantWoman',
-        'sex': 'female',
-        'date_of_birth': '1998-04-12',
-        'age_years_approx': 27,
-        'phone': phone,
-        'mother_id': null,
-        'is_dob_estimated': 0,
-        'nhis_number': 'NH-84920193-4',
-        'created_at': now.subtract(const Duration(days: 45)).toIso8601String(),
-        'updated_at': now.toIso8601String(),
-        'is_active': 1,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await upsertWithoutCascade(
+        txn,
+        table: Tables.persons,
+        primaryKey: const ['id'],
+        row: {
+          'id': 'person-mother-$phone',
+          'household_id': hhId,
+          'full_name': 'Aisha Ibrahim',
+          // Must be a real ClientType name: the register reader maps stored
+          // names back onto the enum, and a legacy alias used to crash the
+          // AI Triage tab with "Bad state: No element".
+          'client_type': 'pregnantWoman',
+          'sex': 'female',
+          'date_of_birth': '1998-04-12',
+          'age_years_approx': 27,
+          'phone': phone,
+          'mother_id': null,
+          'is_dob_estimated': 0,
+          'nhis_number': 'NH-84920193-4',
+          'created_at': now
+              .subtract(const Duration(days: 45))
+              .toIso8601String(),
+          'updated_at': now.toIso8601String(),
+          'is_active': 1,
+        },
+      );
       count++;
 
-      await txn.insert(Tables.persons, {
-        'id': 'person-child-$phone',
-        'household_id': hhId,
-        'full_name': 'Zainab Ibrahim (Recovered)',
-        'client_type': 'childUnderFive',
-        'sex': 'female',
-        'date_of_birth': now
-            .subtract(const Duration(days: 120))
-            .toIso8601String(),
-        'age_years_approx': 0,
-        'phone': null,
-        'mother_id': 'person-mother-$phone',
-        'is_dob_estimated': 0,
-        'nhis_number': null,
-        'created_at': now.subtract(const Duration(days: 45)).toIso8601String(),
-        'updated_at': now.toIso8601String(),
-        'is_active': 1,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await upsertWithoutCascade(
+        txn,
+        table: Tables.persons,
+        primaryKey: const ['id'],
+        row: {
+          'id': 'person-child-$phone',
+          'household_id': hhId,
+          'full_name': 'Zainab Ibrahim (Recovered)',
+          'client_type': 'childUnderFive',
+          'sex': 'female',
+          'date_of_birth': now
+              .subtract(const Duration(days: 120))
+              .toIso8601String(),
+          'age_years_approx': 0,
+          'phone': null,
+          'mother_id': 'person-mother-$phone',
+          'is_dob_estimated': 0,
+          'nhis_number': null,
+          'created_at': now
+              .subtract(const Duration(days: 45))
+              .toIso8601String(),
+          'updated_at': now.toIso8601String(),
+          'is_active': 1,
+        },
+      );
       count++;
     });
 

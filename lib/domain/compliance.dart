@@ -98,6 +98,13 @@ enum AccessBasis {
   /// disclosure.
   breakGlass('Break-the-glass override'),
 
+  /// A worker acting in a stated official capacity — supervising, auditing, or
+  /// answering a family's request. Not consent, not emergency: the basis most
+  /// enterprise systems end up needing and most forget to model, so a supervisor's
+  /// own reads get recorded as what they are instead of being stretched into
+  /// someone's caseload.
+  officialAuthority('Official authority — supervision'),
+
   /// The data subject reading their own record.
   dataSubject('Data subject’s own access'),
 
@@ -106,6 +113,105 @@ enum AccessBasis {
 
   const AccessBasis(this.label);
   final String label;
+}
+
+/// Records that are held to a narrower rule than the rest of the register.
+///
+/// ### Why a district-wide caseload is too wide for these
+///
+/// The ordinary care relationship is the whole district a worker is posted to,
+/// which is right for a vaccination schedule and wrong for an HIV result: in a
+/// small community, the colleague at the next compound may be a neighbour. So a
+/// sensitive record opens without ceremony only for the worker responsible for it
+/// and the family itself. Everyone else — including a same-district colleague —
+/// can still open it, because care is never blocked, but only by stating why, or
+/// in an emergency. The reason is recorded, flagged for review and shown to the
+/// family.
+///
+/// The categories are the ones where disclosure itself does harm in this setting,
+/// not a general "private" flag: a marking that is applied to everything protects
+/// nothing, because every worker learns to type the same reason.
+enum SensitivityCategory {
+  hivAndSti('HIV or a sexually transmitted infection'),
+  adolescentReproductive('Adolescent sexual or reproductive health'),
+  violenceOrAbuse('Violence or abuse'),
+  mentalHealth('Mental health'),
+  familyRequest('The family asked for extra privacy');
+
+  const SensitivityCategory(this.label);
+  final String label;
+
+  /// Null for an unmarked record or a category this build does not know — which
+  /// is still treated as sensitive by the policy, because an unreadable marking
+  /// must fail closed, not open.
+  static SensitivityCategory? fromStored(String? name) {
+    if (name == null) return null;
+    for (final c in values) {
+      if (c.name == name) return c;
+    }
+    return null;
+  }
+}
+
+/// Something the shape of the access trail suggests that no single entry does.
+///
+/// ### Why this exists alongside the finding queue
+///
+/// A flagged entry answers "was *this* look explained?". It cannot answer "is this
+/// worker browsing the district?" or "is everyone at the compound reading the same
+/// woman's HIV result?", because each individual read in those patterns can look
+/// ordinary on its own. Every patient-privacy monitoring product in real service
+/// works on exactly this shift — from single events to volumes.
+///
+/// ### Why it is phrased as a question and not an accusation
+///
+/// Both patterns have innocent readings, and the commonest one in this setting is
+/// a shared caseload or a mass campaign day. A supervisor who is handed "possible
+/// misuse by Aminata Fusea" will defend the worker rather than ask her. So the
+/// sentence states only what was counted, and the follow-up is a conversation.
+enum AccessPatternKind {
+  /// One worker, many families, none of them theirs.
+  outOfCaseloadVolume('Records opened outside the worker’s own caseload'),
+
+  /// One sensitive record, read by several different workers in a short window.
+  sharedSensitiveSubject('Sensitive record opened by several workers');
+
+  const AccessPatternKind(this.label);
+  final String label;
+}
+
+class AccessPattern {
+  const AccessPattern({
+    required this.kind,
+    required this.count,
+    required this.latest,
+    this.actorName,
+    this.subjectName,
+  });
+
+  final AccessPatternKind kind;
+
+  /// How many — distinct families for [AccessPatternKind.outOfCaseloadVolume],
+  /// distinct workers for [AccessPatternKind.sharedSensitiveSubject].
+  final int count;
+  final DateTime latest;
+  final String? actorName;
+  final String? subjectName;
+
+  /// Written to be read aloud to a supervisor, counting-first so the number that
+  /// justifies the conversation is the first thing they see.
+  String get sentence => switch (kind) {
+    AccessPatternKind.outOfCaseloadVolume =>
+      '$actorName opened $count different family records that are not in their '
+          'own caseload, most recently on ${_day(latest)}.',
+    AccessPatternKind.sharedSensitiveSubject =>
+      '$count different workers opened $subjectName’s protected record, most '
+          'recently on ${_day(latest)}.',
+  };
+
+  static String _day(DateTime d) =>
+      '${d.day}/${d.month}/${d.year} at ${d.hour.toString().padLeft(2, '0')}:'
+      '${d.minute.toString().padLeft(2, '0')}';
 }
 
 /// What a family can say yes or no to.
@@ -344,6 +450,7 @@ class RightsRequest {
     required this.right,
     required this.requestedAt,
     required this.requestedBy,
+    this.subjectName,
     this.status = RequestStatus.open,
     this.resolvedAt,
     this.resolution,
@@ -351,6 +458,11 @@ class RightsRequest {
 
   final String id;
   final String subjectPersonId;
+
+  /// Whose record this concerns, as a name rather than an id. Only the district
+  /// queue joins it in, because a family reading their own requests already knows
+  /// who they are — and a supervisor working from UUIDs cannot act on anything.
+  final String? subjectName;
   final DataRight right;
   final DateTime requestedAt;
   final String requestedBy;

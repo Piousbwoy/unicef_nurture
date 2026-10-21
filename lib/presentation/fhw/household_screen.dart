@@ -36,6 +36,7 @@ import '../../core/theme/motion.dart';
 import '../../data/repositories/care_repository.dart';
 import '../../domain/engines/trajectory_engine.dart';
 import '../../domain/engines/vulnerability_engine.dart';
+import '../../domain/compliance.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/entities/visit.dart';
 import '../../domain/enums.dart';
@@ -43,6 +44,7 @@ import '../registration/member_form_screen.dart';
 import '../shared/ui.dart';
 import '../visit/barrier_check_screen.dart';
 import '../visit/roll_call_screen.dart';
+import 'chain_of_custody.dart';
 
 class HouseholdScreen extends ConsumerWidget {
   const HouseholdScreen({super.key, required this.householdId});
@@ -128,6 +130,17 @@ class _Body extends ConsumerWidget {
             loading: () => const SizedBox.shrink(),
             error: (e, _) => ErrorView(error: e),
             data: (list) => _Members(household: household, members: list),
+          ),
+          const SizedBox(height: Gap.lg),
+
+          // The record's own history of being read. Placed directly after the
+          // people, because "who has looked at this child" is a question about
+          // them rather than about the system.
+          members.when(
+            loading: () => const SizedBox.shrink(),
+            error: (e, _) => const SizedBox.shrink(),
+            data: (list) =>
+                ChainOfCustodySection(household: household, members: list),
           ),
           const SizedBox(height: Gap.lg),
 
@@ -997,14 +1010,17 @@ class _Members extends StatelessWidget {
               ],
             ),
           )
-        : Column(children: [for (final p in members) _MemberTile(p)]),
+        : Column(
+            children: [for (final p in members) _MemberTile(p, household)],
+          ),
   );
 }
 
 class _MemberTile extends ConsumerWidget {
-  const _MemberTile(this.person);
+  const _MemberTile(this.person, this.household);
 
   final Person person;
+  final Household household;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1088,6 +1104,8 @@ class _MemberTile extends ConsumerWidget {
             ],
           ),
 
+          _ProtectionLine(person: person, household: household),
+
           last.maybeWhen(
             data: (a) => a == null
                 ? const Padding(
@@ -1135,6 +1153,265 @@ class _MemberTile extends ConsumerWidget {
     if (days < 30) return '$days days ago';
     final months = (days / 30.4375).round();
     return '$months month${months == 1 ? '' : 's'} ago';
+  }
+}
+
+/// The protection marking on one person's row — and the only way past it.
+///
+/// ### Why the way forward is offered before the refusal, not after
+///
+/// The policy refuses a sensitive record to an uninvolved worker, so the honest
+/// sequence in the app would be: tap, hit a wall, read that a reason would work,
+/// go back, find the place to say it. That is a control designed for the log rather
+/// than for the person holding the phone. Here the explanation and the button to
+/// state a reason sit on the same line as the lock, before she taps anything.
+///
+/// ### Why lifting a marking is not offered to everyone who finds it inconvenient
+///
+/// A colleague who was asked to explain herself can ask the responsible worker or
+/// the district to lift it; she cannot lift it herself. A protection with an off
+/// switch in every pocket in the district is an announcement, not a control.
+class _ProtectionLine extends ConsumerWidget {
+  const _ProtectionLine({required this.person, required this.household});
+
+  final Person person;
+  final Household household;
+
+  Future<void> _stateReason(BuildContext context, WidgetRef ref) async {
+    final user = ref.read(currentUserProvider);
+    if (user == null) return;
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Opening ${person.fullName}’s protected record'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Say why you need this one. Your reason is kept with the access, '
+              'goes to the district supervisor, and appears on this family’s own '
+              'record list.',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              minLines: 2,
+              maxLines: 4,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Why I need to open it',
+                hintText: 'Referred to us by…, family travelled from…',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final text = controller.text.trim();
+              if (text.isEmpty) return;
+              Navigator.of(context).pop(text);
+            },
+            child: const Text('Record the reason'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (reason == null || !context.mounted) return;
+    try {
+      await ref
+          .read(careRepositoryProvider)
+          .openRecordUnderGlass(
+            user,
+            householdId: household.id,
+            subjectPersonId: person.id,
+            reason: reason,
+          );
+      if (!context.mounted) return;
+      // Said in full because it is the promise the policy actually makes: access
+      // for this sitting, and the family sees it.
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 6),
+          content: Text(
+            'Reason recorded. You can open ${person.fullName}’s record now, and '
+            'for the next 30 minutes. This family can see that you did.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 6),
+          content: Text(
+            e is AccessDenied ? e.message : 'Could not record the reason: $e',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _mark(BuildContext context, WidgetRef ref) async {
+    final user = ref.read(currentUserProvider);
+    if (user == null) return;
+    final picked = await showDialog<SensitivityCategory>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text('Protect ${person.fullName}’s record'),
+        children: [
+          for (final c in SensitivityCategory.values)
+            ListTile(
+              title: Text(c.label),
+              subtitle: Text('Applies to ${person.fullName}'),
+              onTap: () => Navigator.of(context).pop(c),
+            ),
+        ],
+      ),
+    );
+    if (picked == null || !context.mounted) return;
+    await _run(
+      context,
+      ref,
+      () => ref
+          .read(careRepositoryProvider)
+          .markRecordSensitive(user, personId: person.id, category: picked),
+    );
+  }
+
+  Future<void> _lift(BuildContext context, WidgetRef ref) async {
+    final user = ref.read(currentUserProvider);
+    if (user == null) return;
+    await _run(
+      context,
+      ref,
+      () => ref
+          .read(careRepositoryProvider)
+          .clearRecordSensitivity(user, personId: person.id),
+    );
+  }
+
+  Future<void> _run(
+    BuildContext context,
+    WidgetRef ref,
+    Future<void> Function() action,
+  ) async {
+    try {
+      await action();
+      ref.invalidate(householdProvider(household.id));
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 6),
+          content: Text(
+            e is AccessDenied ? e.message : 'Could not change this: $e',
+          ),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
+    final canMark = user?.can(Permission.recordClinicalVitals) ?? false;
+    final responsible = user != null && user.id == household.createdBy;
+    final marked = person.sensitivity;
+
+    if (marked == null) {
+      // Nothing to show a worker who cannot change anything: an unmarked record is
+      // the ordinary case, and printing a control on every row of a register would
+      // train people to ignore the one row where it matters.
+      if (!canMark) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(top: Gap.sm),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => _mark(context, ref),
+            icon: const Icon(Icons.lock_open_rounded, size: 16),
+            label: const Text('Protect this record'),
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final category = SensitivityCategory.fromStored(marked);
+    final canLift =
+        canMark &&
+        (responsible || (user?.can(Permission.viewCommunityInsights) ?? false));
+    // Wrap rather than Row: at 320px and 200% text a lock, a long category label
+    // and two buttons will not fit on one line, and this app's overflow tests exist
+    // precisely because that combination has shipped before.
+    return Padding(
+      padding: const EdgeInsets.only(top: Gap.sm),
+      child: Wrap(
+        spacing: Gap.sm,
+        runSpacing: Gap.xs,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Icon(
+            Icons.lock_rounded,
+            size: 15,
+            color: FhwLuxePalette.clinicalAmber,
+          ),
+          Flexible(
+            child: Text(
+              // An unrecognised category still reads as protected. Failing open on
+              // a value this build has never seen would let a newer marking be
+              // ignored by an older handset, which is the direction that matters
+              // when devices update at different times in the field.
+              category?.label ??
+                  'Protected — category not recognised on this '
+                      'device',
+              style: AppType.caption.copyWith(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.inkMuted,
+                height: 1.4,
+              ),
+            ),
+          ),
+          if (!responsible)
+            TextButton(
+              onPressed: () => _stateReason(context, ref),
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+              ),
+              child: const Text(
+                'State a reason to open',
+                style: TextStyle(fontSize: 11.5),
+              ),
+            ),
+          if (canLift)
+            TextButton(
+              onPressed: () => _lift(context, ref),
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+              ),
+              child: const Text(
+                'Lift protection',
+                style: TextStyle(fontSize: 11.5),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 

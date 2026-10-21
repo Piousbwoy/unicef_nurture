@@ -13,6 +13,7 @@ import '../../domain/enums.dart';
 import '../registration/patient_intake_screen.dart';
 import 'clinic_widgets.dart';
 import 'household_screen.dart';
+import 'supervisor_desk_screen.dart';
 
 final activeClinicSessionProvider = FutureProvider.autoDispose<Visit?>((ref) {
   final user = ref.watch(currentUserProvider);
@@ -139,6 +140,11 @@ class FhwHomeTab extends ConsumerWidget {
               ),
             ),
           const _DailyRegisterTally(),
+          // Supervision is offered to the accounts that may read an audit trail,
+          // and nothing else: the permission that guards the ledger is the same
+          // one that opens this desk.
+          if (user.can(Permission.viewCommunityInsights))
+            const _SupervisionDeskEntry(),
           plan.maybeWhen(
             data: (data) {
               final priority = data.priorities
@@ -590,6 +596,60 @@ class _ReportRow extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// The supervision desk's entry on the home desk.
+///
+/// Deliberately carries no count. A zero here would read as "nothing to look at",
+/// when the honest fact is "nothing has been recorded on this handset yet" — and a
+/// desk whose empty state looks like a clean bill of health is the failure mode this
+/// whole feature exists to prevent.
+class _SupervisionDeskEntry extends StatelessWidget {
+  const _SupervisionDeskEntry();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 20),
+    child: ClinicCard(
+      onTap: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const SupervisorDeskScreen())),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.policy_outlined,
+            size: 18,
+            color: FhwLuxePalette.sapphireRoyal,
+          ),
+          const SizedBox(width: Gap.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Supervision desk',
+                  style: AppType.label.copyWith(fontSize: 14),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Access that needs explaining, and families still waiting on '
+                  'an answer.',
+                  style: AppType.caption.copyWith(
+                    color: FhwLuxePalette.textSecondary,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Icon(
+            Icons.chevron_right_rounded,
+            color: FhwLuxePalette.textFaint,
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 Future<void> openVisit(BuildContext context, Household household) async {

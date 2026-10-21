@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Transport policy for the district sync server.
+
+    Health data is "special personal data" under Ghana's Data Protection Act 2012
+    (Act 843), and the base posture here is that it does not travel in plaintext:
+    cleartext is refused for every release and profile build, on every host. A
+    district installing this app gets TLS or gets nothing.
+
+    `debug-overrides` is applied by Android only when the build is debuggable, so
+    the LAN laptop on a rehearsal table still works while the artefact a district
+    would actually install does not. `certificates src="user"` inside it exists for
+    the same reason: a local test proxy's CA is a developer's tool, not something a
+    field device should ever be asked to trust.
+
+    The operating system can only enforce this on Android. The same rule is
+    enforced in code at lib/data/sync/transport_policy.dart, because the web and
+    desktop builds — the ones this project actually demos on — have no manifest to
+    read.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <debug-overrides cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

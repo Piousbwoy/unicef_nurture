@@ -1,0 +1,59 @@
+{
+ "language": {
+  "code": "twi"
+ },
+ "audio": {
+  "sample_rate": 16000,
+  "features": "waveform",
+  "input_dim": 1,
+  "normalize_epsilon": 1e-07,
+  "frames_per_second": 16000,
+  "max_frames": 64000
+ },
+ "model": {
+  "inputs": [
+   "input_values",
+   "attention_mask"
+  ],
+  "labels": [
+   "|",
+   "a",
+   "b",
+   "c",
+   "d",
+   "e",
+   "f",
+   "g",
+   "h",
+   "i",
+   "j",
+   "k",
+   "l",
+   "m",
+   "n",
+   "o",
+   "p",
+   "q",
+   "r",
+   "s",
+   "t",
+   "u",
+   "v",
+   "w",
+   "x",
+   "y",
+   "z",
+   "\u0254",
+   "\u025b",
+   "\u2019",
+   "\u2107",
+   "\u2184",
+   "[UNK]",
+   "[PAD]",
+   "<s>",
+   "</s>"
+  ],
+  "num_labels": 36,
+  "blank_index": 33
+ }
+}

@@ -69,8 +69,7 @@ class AppUser {
     id: m['id'] as String,
     fullName: m['full_name'] as String,
     phone: m['phone'] as String,
-    role: enumByNameOrNull(UserRole.values, m['role']) ??
-        UserRole.caregiver,
+    role: enumByNameOrNull(UserRole.values, m['role']) ?? UserRole.caregiver,
     region: m['region'] as String,
     district: m['district'] as String,
     community: m['community'] as String,
@@ -81,20 +80,21 @@ class AppUser {
     createdAt: DateTime.tryParse((m['created_at'] as String?) ?? ''),
   );
 
-  AppUser copyWith({String? preferredLanguage, String? facilityName}) => AppUser(
-    id: id,
-    fullName: fullName,
-    phone: phone,
-    role: role,
-    region: region,
-    district: district,
-    community: community,
-    chpsZone: chpsZone,
-    facilityName: facilityName ?? this.facilityName,
-    staffId: staffId,
-    preferredLanguage: preferredLanguage ?? this.preferredLanguage,
-    createdAt: createdAt,
-  );
+  AppUser copyWith({String? preferredLanguage, String? facilityName}) =>
+      AppUser(
+        id: id,
+        fullName: fullName,
+        phone: phone,
+        role: role,
+        region: region,
+        district: district,
+        community: community,
+        chpsZone: chpsZone,
+        facilityName: facilityName ?? this.facilityName,
+        staffId: staffId,
+        preferredLanguage: preferredLanguage ?? this.preferredLanguage,
+        createdAt: createdAt,
+      );
 }
 
 /// A compound or family unit. The household — not the individual — is the unit
@@ -185,7 +185,8 @@ class Household {
     hasValidNhis: m['has_valid_nhis'] == null
         ? null
         : (m['has_valid_nhis'] as num) == 1,
-    walkingMinutesToFacility: (m['walking_minutes_to_facility'] as num?)?.toInt(),
+    walkingMinutesToFacility: (m['walking_minutes_to_facility'] as num?)
+        ?.toInt(),
     landmark: m['landmark'] as String?,
     createdAt: DateTime.tryParse((m['created_at'] as String?) ?? ''),
     updatedAt: DateTime.tryParse((m['updated_at'] as String?) ?? ''),
@@ -220,6 +221,34 @@ class Household {
     createdAt: createdAt,
     updatedAt: DateTime.now(),
   );
+
+  /// The household with everything that locates it removed, for when its last
+  /// registered member has exercised the right to erasure.
+  ///
+  /// Deliberately only then: while anyone in the household is still under care,
+  /// the landmark and GPS are how a worker finds a sick child in a village without
+  /// addresses, and erasing them would harm the people who did not ask. Region,
+  /// district and community stay, because district counts are how the service is
+  /// planned and they name no one.
+  Household withoutIdentifiers() => Household(
+    id: id,
+    name: erasedName,
+    region: region,
+    district: district,
+    community: community,
+    createdBy: createdBy,
+    familySize: familySize,
+    hasValidNhis: hasValidNhis,
+    walkingMinutesToFacility: walkingMinutesToFacility,
+    createdAt: createdAt,
+    updatedAt: DateTime.now(),
+  );
+
+  static const erasedName = 'Erased household';
+
+  /// One test rather than a string comparison at each call site, so a screen and
+  /// the repository cannot disagree about whether a family has been erased.
+  bool get isErased => name == erasedName;
 }
 
 /// An individual within a household — a woman, a newborn or a child under five.
@@ -242,6 +271,7 @@ class Person {
     this.createdAt,
     this.updatedAt,
     this.isActive = true,
+    this.sensitivity,
   });
 
   final String id;
@@ -271,6 +301,15 @@ class Person {
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final bool isActive;
+
+  /// The protection class this record sits in, by `SensitivityCategory.name`, or
+  /// null for an ordinary record. Stored as the name rather than an enum so this
+  /// entity stays free of the compliance layer, and so a category added in a
+  /// later release is carried through an older device's sync untouched instead
+  /// of being dropped as unreadable.
+  final String? sensitivity;
+
+  bool get isSensitive => sensitivity != null;
 
   int? get ageInDays => dateOfBirth == null
       ? null
@@ -310,7 +349,8 @@ class Person {
   ClientType get effectiveClientType {
     final days = ageInDays;
     if (days == null) return clientType;
-    if (clientType == ClientType.newborn || clientType == ClientType.childUnderFive) {
+    if (clientType == ClientType.newborn ||
+        clientType == ClientType.childUnderFive) {
       return ClientType.forChildAgeInDays(days) ?? clientType;
     }
     return clientType;
@@ -331,6 +371,7 @@ class Person {
     'created_at': (createdAt ?? DateTime.now()).toIso8601String(),
     'updated_at': (updatedAt ?? DateTime.now()).toIso8601String(),
     'is_active': isActive ? 1 : 0,
+    'sensitivity': sensitivity,
   };
 
   factory Person.fromMap(Map<String, Object?> m) => Person(
@@ -352,6 +393,7 @@ class Person {
     createdAt: DateTime.tryParse((m['created_at'] as String?) ?? ''),
     updatedAt: DateTime.tryParse((m['updated_at'] as String?) ?? ''),
     isActive: (m['is_active'] as num?) != 0,
+    sensitivity: m['sensitivity'] as String?,
   );
 
   Person copyWith({
@@ -377,7 +419,60 @@ class Person {
     createdAt: createdAt,
     updatedAt: DateTime.now(),
     isActive: isActive ?? this.isActive,
+    sensitivity: sensitivity,
   );
+
+  /// The same record with its protection class set, or cleared with null.
+  ///
+  /// Separate from [copyWith] on purpose: `copyWith` treats null as "keep", and a
+  /// marking that could not be removed is a marking nobody would dare to set.
+  Person withSensitivity(String? category) => Person(
+    id: id,
+    householdId: householdId,
+    fullName: fullName,
+    clientType: clientType,
+    sex: sex,
+    dateOfBirth: dateOfBirth,
+    ageYearsApprox: ageYearsApprox,
+    phone: phone,
+    motherId: motherId,
+    isDobEstimated: isDobEstimated,
+    nhisNumber: nhisNumber,
+    createdAt: createdAt,
+    updatedAt: DateTime.now(),
+    isActive: isActive,
+    sensitivity: category,
+  );
+
+  /// The same clinical record with every direct identifier removed.
+  ///
+  /// What goes: the name, the phone number and the NHIS number — the three fields
+  /// that let a stranger connect this row to a living person. What stays: the
+  /// date of birth, sex and client type, because every retained clinical reading
+  /// (an immunisation date, a growth curve, an IMCI classification) is meaningless
+  /// without the age and category it was measured against. The id stays too: it is
+  /// a random key that identifies nobody, and the access trail still points at it.
+  Person withoutIdentifiers() => Person(
+    id: id,
+    householdId: householdId,
+    fullName: erasedName,
+    clientType: clientType,
+    sex: sex,
+    dateOfBirth: dateOfBirth,
+    ageYearsApprox: ageYearsApprox,
+    motherId: motherId,
+    isDobEstimated: isDobEstimated,
+    createdAt: createdAt,
+    updatedAt: DateTime.now(),
+    isActive: isActive,
+    sensitivity: sensitivity,
+  );
+
+  /// What an erased record is called, everywhere. One constant so a screen can
+  /// recognise an erased person without parsing free text.
+  static const erasedName = 'Erased record';
+
+  bool get isErased => fullName == erasedName;
 }
 
 /// Obstetric and pregnancy record for a woman. Mirrors the fields in Ghana's
@@ -434,7 +529,7 @@ class MaternalRecord {
     this.urineProtein, // 0/1/2/3/4
     this.urineGlucose, // 0/1/2/3/4
     this.urineKetones, // 0/1/2/3
-    this.urineBlood,   // 0/1/2/3
+    this.urineBlood, // 0/1/2/3
     // ── Pre-eclampsia extras ────────────────────────────────────────────
     this.oedemaHandsOrFace = false,
     this.epigastricPain = false,
@@ -455,8 +550,8 @@ class MaternalRecord {
     // ── Puerperal / PNC fields (days 1 / 3 / 7 / 42) ────────────────────
     this.involutionCmBelowUmbilicus,
     this.lochiaColour, // rubra / serosa / alba
-    this.lochiaOdour,   // normal / offensive
-    this.lochiaAmount,  // light / normal / heavy
+    this.lochiaOdour, // normal / offensive
+    this.lochiaAmount, // light / normal / heavy
     this.woundRedness = false,
     this.woundOedema = false,
     this.woundDischarge = false,
@@ -559,10 +654,11 @@ class MaternalRecord {
   final bool prevHepatitis;
 
   // Puerperal (PNC 1/3/7/42 day checks)
-  final int? involutionCmBelowUmbilicus; // day1 = 1-2, day7 = 4-5, day42 = non-palp
-  final String? lochiaColour;   // 'rubra' / 'serosa' / 'alba'
-  final String? lochiaOdour;    // 'normal' / 'offensive'
-  final String? lochiaAmount;   // 'light'/'normal'/'heavy'
+  final int?
+  involutionCmBelowUmbilicus; // day1 = 1-2, day7 = 4-5, day42 = non-palp
+  final String? lochiaColour; // 'rubra' / 'serosa' / 'alba'
+  final String? lochiaOdour; // 'normal' / 'offensive'
+  final String? lochiaAmount; // 'light'/'normal'/'heavy'
   // Breast / wound / perineum
   final bool woundRedness;
   final bool woundOedema;
@@ -578,25 +674,32 @@ class MaternalRecord {
   // Edinburgh EPDS 10-item answers. Each 0..3. Range 0..30.
   //   ≥13 = probable depression. ≥20 = severe.
   //   Item 10 ≥1 = immediate self-harm referral.
-  final int? edinburghLaugh;   // Q1: been able to laugh and see the funny side
-  final int? edinburghEnjoy;   // Q2: looked forward with enjoyment
-  final int? edinburghBlame;   // Q3: blamed myself unnecessarily
+  final int? edinburghLaugh; // Q1: been able to laugh and see the funny side
+  final int? edinburghEnjoy; // Q2: looked forward with enjoyment
+  final int? edinburghBlame; // Q3: blamed myself unnecessarily
   final int? edinburghAnxious; // Q4: anxious or worried for no good reason
-  final int? edinburghScared;  // Q5: felt scared or panicky for no reason
-  final int? edinburghOverwhelm;// Q6: things been getting on top of me
-  final int? edinburghSleep;   // Q7: difficult to sleep properly
-  final int? edinburghSad;     // Q8: felt sad/miserable
-  final int? edinburghCry;     // Q9: been so unhappy that I have been crying
-  final int? edinburghSelfHarm;// Q10: thought of harming myself
+  final int? edinburghScared; // Q5: felt scared or panicky for no reason
+  final int? edinburghOverwhelm; // Q6: things been getting on top of me
+  final int? edinburghSleep; // Q7: difficult to sleep properly
+  final int? edinburghSad; // Q8: felt sad/miserable
+  final int? edinburghCry; // Q9: been so unhappy that I have been crying
+  final int? edinburghSelfHarm; // Q10: thought of harming myself
 
   final DateTime? updatedAt;
 
   /// Computed Edinburgh EPDS score. Returns null when any item is missing.
   int? get edinburghScore {
     final items = [
-      edinburghLaugh, edinburghEnjoy, edinburghBlame,
-      edinburghAnxious, edinburghScared, edinburghOverwhelm,
-      edinburghSleep, edinburghSad, edinburghCry, edinburghSelfHarm,
+      edinburghLaugh,
+      edinburghEnjoy,
+      edinburghBlame,
+      edinburghAnxious,
+      edinburghScared,
+      edinburghOverwhelm,
+      edinburghSleep,
+      edinburghSad,
+      edinburghCry,
+      edinburghSelfHarm,
     ];
     if (items.any((v) => v == null)) return null;
     return items.fold<int>(0, (a, b) => a + (b ?? 0));
@@ -637,7 +740,8 @@ class MaternalRecord {
   }
 
   /// Naegele's rule: EDD = LMP + 280 days.
-  DateTime? get derivedEdd => lastMenstrualPeriod?.add(const Duration(days: 280));
+  DateTime? get derivedEdd =>
+      lastMenstrualPeriod?.add(const Duration(days: 280));
 
   /// Days since delivery, used to decide which PNC contact is due.
   int? get postpartumDays => deliveryDate == null
@@ -762,22 +866,15 @@ class MaternalRecord {
     sicklingStatus: m['sickling_status'] as String?,
     sickleGenotype: m['sickle_genotype'] as String?,
     hivTested: (m['hiv_tested'] as num?) == 1,
-    hivTestDate: DateTime.tryParse(
-      (m['hiv_test_date'] as String?) ?? '',
-    ),
+    hivTestDate: DateTime.tryParse((m['hiv_test_date'] as String?) ?? ''),
     syphilisTested: (m['syphilis_tested'] as num?) == 1,
     syphilisTestDate: DateTime.tryParse(
       (m['syphilis_test_date'] as String?) ?? '',
     ),
     hbsagTested: (m['hbsag_tested'] as num?) == 1,
-    hbsagTestDate: DateTime.tryParse(
-      (m['hbsag_test_date'] as String?) ?? '',
-    ),
+    hbsagTestDate: DateTime.tryParse((m['hbsag_test_date'] as String?) ?? ''),
     deliveryDate: DateTime.tryParse((m['delivery_date'] as String?) ?? ''),
-    deliveryPlace: enumByNameOrNull(
-      DeliveryPlace.values,
-      m['delivery_place'],
-    ),
+    deliveryPlace: enumByNameOrNull(DeliveryPlace.values, m['delivery_place']),
     deliveryMode: enumByNameOrNull(DeliveryMode.values, m['delivery_mode']),
     plurality: BirthPlurality.values.firstWhere(
       (p) => p.name == m['plurality'],
@@ -794,8 +891,7 @@ class MaternalRecord {
     blurredVision: (m['blurred_vision'] as num?) == 1,
     briskReflexes: (m['brisk_reflexes'] as num?) == 1,
     oliguria: (m['oliguria'] as num?) == 1,
-    weightGainOver1kgPerWeek:
-        (m['weight_gain_over_1kg_per_week'] as num?) == 1,
+    weightGainOver1kgPerWeek: (m['weight_gain_over_1kg_per_week'] as num?) == 1,
     prevHypertension: (m['prev_hypertension'] as num?) == 1,
     prevDiabetes: (m['prev_diabetes'] as num?) == 1,
     prevAnaemia: (m['prev_anaemia'] as num?) == 1,
@@ -804,8 +900,8 @@ class MaternalRecord {
     prevHeartDisease: (m['prev_heart_disease'] as num?) == 1,
     prevKidneyDisease: (m['prev_kidney_disease'] as num?) == 1,
     prevHepatitis: (m['prev_hepatitis'] as num?) == 1,
-    involutionCmBelowUmbilicus:
-        (m['involution_cm_below_umbilicus'] as num?)?.toInt(),
+    involutionCmBelowUmbilicus: (m['involution_cm_below_umbilicus'] as num?)
+        ?.toInt(),
     lochiaColour: m['lochia_colour'] as String?,
     lochiaOdour: m['lochia_odour'] as String?,
     lochiaAmount: m['lochia_amount'] as String?,
@@ -815,8 +911,7 @@ class MaternalRecord {
     woundApproximated: m['wound_approximated'] == null
         ? null
         : (m['wound_approximated'] as num) == 1,
-    episiotomyOrLaceration:
-        (m['episiotomy_or_laceration'] as num?) == 1,
+    episiotomyOrLaceration: (m['episiotomy_or_laceration'] as num?) == 1,
     nipplesCracked: (m['nipples_cracked'] as num?) == 1,
     nipplesInverted: (m['nipples_inverted'] as num?) == 1,
     breastMastitisSigns: (m['breast_mastitis_signs'] as num?) == 1,
@@ -967,8 +1062,7 @@ class BirthRecord {
 
   final DateTime? updatedAt;
 
-  bool get isLowBirthWeight =>
-      birthWeightKg != null && birthWeightKg! < 2.5;
+  bool get isLowBirthWeight => birthWeightKg != null && birthWeightKg! < 2.5;
   bool get isVeryLowBirthWeight =>
       birthWeightKg != null && birthWeightKg! < 1.5;
   bool get isPreterm =>
@@ -1053,8 +1147,9 @@ class BirthRecord {
         ? null
         : (sickleScreenSampleCollected! ? 1 : 0),
     'sickle_screen_sample_date': sickleScreenSampleDate?.toIso8601String(),
-    'hearing_screen_done':
-        hearingScreenDone == null ? null : (hearingScreenDone! ? 1 : 0),
+    'hearing_screen_done': hearingScreenDone == null
+        ? null
+        : (hearingScreenDone! ? 1 : 0),
     'hearing_screen_result': hearingScreenResult,
     'updated_at': (updatedAt ?? DateTime.now()).toIso8601String(),
   };
@@ -1064,10 +1159,7 @@ class BirthRecord {
     birthWeightKg: (m['birth_weight_kg'] as num?)?.toDouble(),
     birthLengthCm: (m['birth_length_cm'] as num?)?.toDouble(),
     gestationWeeksAtBirth: (m['gestation_weeks_at_birth'] as num?)?.toInt(),
-    deliveryPlace: enumByNameOrNull(
-      DeliveryPlace.values,
-      m['delivery_place'],
-    ),
+    deliveryPlace: enumByNameOrNull(DeliveryPlace.values, m['delivery_place']),
     deliveryMode: enumByNameOrNull(DeliveryMode.values, m['delivery_mode']),
     plurality: BirthPlurality.values.firstWhere(
       (p) => p.name == m['plurality'],
@@ -1098,8 +1190,7 @@ class BirthRecord {
     temperatureCelsius: (m['temperature_celsius'] as num?)?.toDouble(),
     respiratoryRatePerMin: (m['respiratory_rate_per_min'] as num?)?.toInt(),
     heartRatePerMin: (m['heart_rate_per_min'] as num?)?.toInt(),
-    oxygenSaturationPerCent:
-        (m['oxygen_saturation_per_cent'] as num?)?.toInt(),
+    oxygenSaturationPerCent: (m['oxygen_saturation_per_cent'] as num?)?.toInt(),
     historyOfConvulsions: (m['history_of_convulsions'] as num?) == 1,
     severeChestIndrawing: (m['severe_chest_indrawing'] as num?) == 1,
     nasalFlaring: (m['nasal_flaring'] as num?) == 1,
@@ -1182,8 +1273,7 @@ class GrowthMeasurement {
   bool get isSamByMuacOrOedema =>
       hasBilateralOedema || (muacMm != null && muacMm! < 115);
 
-  bool get isMamByMuac =>
-      muacMm != null && muacMm! >= 115 && muacMm! < 125;
+  bool get isMamByMuac => muacMm != null && muacMm! >= 115 && muacMm! < 125;
 
   Map<String, Object?> toMap() => {
     'id': id,
@@ -1198,18 +1288,19 @@ class GrowthMeasurement {
     'recorded_by': recordedBy,
   };
 
-  factory GrowthMeasurement.fromMap(Map<String, Object?> m) => GrowthMeasurement(
-    id: m['id'] as String,
-    personId: m['person_id'] as String,
-    takenAt: DateTime.parse(m['taken_at'] as String),
-    muacMm: (m['muac_mm'] as num?)?.toInt(),
-    muacCm: (m['muac_cm'] as num?)?.toDouble(),
-    weightKg: (m['weight_kg'] as num?)?.toDouble(),
-    heightCm: (m['height_cm'] as num?)?.toDouble(),
-    hasBilateralOedema: (m['has_bilateral_oedema'] as num?) == 1,
-    palmarPallorSeverity: m['palmar_pallor_severity'] as String?,
-    recordedBy: m['recorded_by'] as String?,
-  );
+  factory GrowthMeasurement.fromMap(Map<String, Object?> m) =>
+      GrowthMeasurement(
+        id: m['id'] as String,
+        personId: m['person_id'] as String,
+        takenAt: DateTime.parse(m['taken_at'] as String),
+        muacMm: (m['muac_mm'] as num?)?.toInt(),
+        muacCm: (m['muac_cm'] as num?)?.toDouble(),
+        weightKg: (m['weight_kg'] as num?)?.toDouble(),
+        heightCm: (m['height_cm'] as num?)?.toDouble(),
+        hasBilateralOedema: (m['has_bilateral_oedema'] as num?) == 1,
+        palmarPallorSeverity: m['palmar_pallor_severity'] as String?,
+        recordedBy: m['recorded_by'] as String?,
+      );
 }
 
 /// Structured snapshot of an IMCI sick-child or well-child assessment at a
@@ -1411,7 +1502,9 @@ class ChildAssessmentSnapshot {
   ///   12–59mo ≥40 → pneumonia
   /// + chest indrawing → upgrade
   String? get imciPneumoniaClass {
-    if (!coughPresent || respiratoryRatePerMin == null || ageDaysCompleted == null) {
+    if (!coughPresent ||
+        respiratoryRatePerMin == null ||
+        ageDaysCompleted == null) {
       return null;
     }
     final rr = respiratoryRatePerMin!;
@@ -1459,8 +1552,9 @@ class ChildAssessmentSnapshot {
     'able_to_drink_or_breastfeed': ableToDrinkOrBreastfeed == null
         ? null
         : (ableToDrinkOrBreastfeed! ? 1 : 0),
-    'vomits_everything':
-        vomitsEverything == null ? null : (vomitsEverything! ? 1 : 0),
+    'vomits_everything': vomitsEverything == null
+        ? null
+        : (vomitsEverything! ? 1 : 0),
     'has_convulsions_this_visit': hasConvulsionsThisVisit == null
         ? null
         : (hasConvulsionsThisVisit! ? 1 : 0),
@@ -1511,10 +1605,12 @@ class ChildAssessmentSnapshot {
     'tender_swelling_behind_ear': tenderSwellingBehindEar ? 1 : 0,
     'weight_for_height_or_length_zscore': weightForHeightOrLengthZscore,
     'hiv_exposed_or_infected_status': hivExposedOrInfectedStatus,
-    'able_to_finish_rutf':
-        ableToFinishRutf == null ? null : (ableToFinishRutf! ? 1 : 0),
-    'breastfed_today':
-        breastfedToday == null ? null : (breastfedToday! ? 1 : 0),
+    'able_to_finish_rutf': ableToFinishRutf == null
+        ? null
+        : (ableToFinishRutf! ? 1 : 0),
+    'breastfed_today': breastfedToday == null
+        ? null
+        : (breastfedToday! ? 1 : 0),
     'night_feeds_per_24h': nightFeedsPer24h,
     'complementary_foods_given_today': complementaryFoodsGivenToday == null
         ? null
@@ -1528,118 +1624,108 @@ class ChildAssessmentSnapshot {
     'minimum_acceptable_diet': minimumAcceptableDiet == null
         ? null
         : (minimumAcceptableDiet! ? 1 : 0),
-    'immunizations_due_today':
-        immunizationsDueToday?.join(','),
+    'immunizations_due_today': immunizationsDueToday?.join(','),
     'immunizations_given_today': immunizationsGivenToday?.join(','),
     'assessed_by_user_id': assessedByUserId,
     'recorded_by_user_id': recordedByUserId,
     'updated_at': (updatedAt ?? DateTime.now()).toIso8601String(),
   };
 
-  factory ChildAssessmentSnapshot.fromMap(Map<String, Object?> m) =>
-      ChildAssessmentSnapshot(
-        id: m['id'] as String,
-        personId: m['person_id'] as String,
-        assessedAt: DateTime.parse(m['assessed_at'] as String),
-        visitType: (m['visit_type'] as String?) ?? 'initial',
-        ageDaysCompleted: (m['age_days_completed'] as num?)?.toInt(),
-        ableToDrinkOrBreastfeed: m['able_to_drink_or_breastfeed'] == null
-            ? null
-            : (m['able_to_drink_or_breastfeed'] as num) == 1,
-        vomitsEverything: m['vomits_everything'] == null
-            ? null
-            : (m['vomits_everything'] as num) == 1,
-        hasConvulsionsThisVisit: m['has_convulsions_this_visit'] == null
-            ? null
-            : (m['has_convulsions_this_visit'] as num) == 1,
-        isLethargicOrUnconscious: m['is_lethargic_or_unconscious'] == null
-            ? null
-            : (m['is_lethargic_or_unconscious'] as num) == 1,
-        coughPresent: (m['cough_present'] as num?) == 1,
-        coughDurationDays: (m['cough_duration_days'] as num?)?.toInt(),
-        respiratoryRatePerMin:
-            (m['respiratory_rate_per_min'] as num?)?.toInt(),
-        chestIndrawing: (m['chest_indrawing'] as num?) == 1,
-        stridorCalm: (m['stridor_calm'] as num?) == 1,
-        nasalFlaring: (m['nasal_flaring'] as num?) == 1,
-        oxygenSaturationPerCent:
-            (m['oxygen_saturation_per_cent'] as num?)?.toInt(),
-        diarrhoeaPresent: (m['diarrhoea_present'] as num?) == 1,
-        diarrhoeaDurationDays:
-            (m['diarrhoea_duration_days'] as num?)?.toInt(),
-        bloodInStool: (m['blood_in_stool'] as num?) == 1,
-        restlessOrIrritable: m['restless_or_irritable'] == null
-            ? null
-            : (m['restless_or_irritable'] as num) == 1,
-        sunkenEyes:
-            m['sunken_eyes'] == null ? null : (m['sunken_eyes'] as num) == 1,
-        drinksEagerly: m['drinks_eagerly'] == null
-            ? null
-            : (m['drinks_eagerly'] as num) == 1,
-        skinPinchResult: m['skin_pinch_result'] as String?,
-        feverReported: (m['fever_reported'] as num?) == 1,
-        feverDurationDays: (m['fever_duration_days'] as num?)?.toInt(),
-        temperatureCelsius:
-            (m['temperature_celsius'] as num?)?.toDouble(),
-        stiffNeck: (m['stiff_neck'] as num?) == 1,
-        runnyNose: (m['runny_nose'] as num?) == 1,
-        measlesRashPresent: (m['measles_rash_present'] as num?) == 1,
-        measlesCough: (m['measles_cough'] as num?) == 1,
-        measlesCoryza: (m['measles_coryza'] as num?) == 1,
-        measlesConjunctivitis:
-            (m['measles_conjunctivitis'] as num?) == 1,
-        mouthUlcers: (m['mouth_ulcers'] as num?) == 1,
-        eyeDischarge: (m['eye_discharge'] as num?) == 1,
-        cornealClouding: (m['corneal_clouding'] as num?) == 1,
-        measlesWithinPast3Months:
-            (m['measles_within_past_3_months'] as num?) == 1,
-        malariaRdtDone: (m['malaria_rdt_done'] as num?) == 1,
-        malariaRdtResult: m['malaria_rdt_result'] as String?,
-        tourniquetTestDone: (m['tourniquet_test_done'] as num?) == 1,
-        tourniquetTestPositive: m['tourniquet_test_positive'] == null
-            ? null
-            : (m['tourniquet_test_positive'] as num) == 1,
-        skinPetechiae: (m['skin_petechiae'] as num?) == 1,
-        capillaryRefillSeconds:
-            (m['capillary_refill_seconds'] as num?)?.toDouble(),
-        earProblemPresent: (m['ear_problem_present'] as num?) == 1,
-        earPainDurationDays: (m['ear_pain_duration_days'] as num?)?.toInt(),
-        earPusDraining: (m['ear_pus_draining'] as num?) == 1,
-        earPusDurationDays: (m['ear_pus_duration_days'] as num?)?.toInt(),
-        tenderSwellingBehindEar:
-            (m['tender_swelling_behind_ear'] as num?) == 1,
-        weightForHeightOrLengthZscore:
-            (m['weight_for_height_or_length_zscore'] as num?)?.toDouble(),
-        hivExposedOrInfectedStatus:
-            m['hiv_exposed_or_infected_status'] as String?,
-        ableToFinishRutf: m['able_to_finish_rutf'] == null
-            ? null
-            : (m['able_to_finish_rutf'] as num) == 1,
-        breastfedToday: m['breastfed_today'] == null
-            ? null
-            : (m['breastfed_today'] as num) == 1,
-        nightFeedsPer24h: (m['night_feeds_per_24h'] as num?)?.toInt(),
-        complementaryFoodsGivenToday:
-            m['complementary_foods_given_today'] == null
-                ? null
-                : (m['complementary_foods_given_today'] as num) == 1,
-        minimumDietaryDiversity: m['minimum_dietary_diversity'] == null
-            ? null
-            : (m['minimum_dietary_diversity'] as num) == 1,
-        minimumMealFrequency: m['minimum_meal_frequency'] == null
-            ? null
-            : (m['minimum_meal_frequency'] as num) == 1,
-        minimumAcceptableDiet: m['minimum_acceptable_diet'] == null
-            ? null
-            : (m['minimum_acceptable_diet'] as num) == 1,
-        immunizationsDueToday: (m['immunizations_due_today'] as String?)
-            ?.split(',')
-          ?..removeWhere((s) => s.isEmpty),
-        immunizationsGivenToday: (m['immunizations_given_today'] as String?)
-            ?.split(',')
-          ?..removeWhere((s) => s.isEmpty),
-        assessedByUserId: m['assessed_by_user_id'] as String?,
-        recordedByUserId: m['recorded_by_user_id'] as String?,
-        updatedAt: DateTime.tryParse((m['updated_at'] as String?) ?? ''),
-      );
+  factory ChildAssessmentSnapshot.fromMap(
+    Map<String, Object?> m,
+  ) => ChildAssessmentSnapshot(
+    id: m['id'] as String,
+    personId: m['person_id'] as String,
+    assessedAt: DateTime.parse(m['assessed_at'] as String),
+    visitType: (m['visit_type'] as String?) ?? 'initial',
+    ageDaysCompleted: (m['age_days_completed'] as num?)?.toInt(),
+    ableToDrinkOrBreastfeed: m['able_to_drink_or_breastfeed'] == null
+        ? null
+        : (m['able_to_drink_or_breastfeed'] as num) == 1,
+    vomitsEverything: m['vomits_everything'] == null
+        ? null
+        : (m['vomits_everything'] as num) == 1,
+    hasConvulsionsThisVisit: m['has_convulsions_this_visit'] == null
+        ? null
+        : (m['has_convulsions_this_visit'] as num) == 1,
+    isLethargicOrUnconscious: m['is_lethargic_or_unconscious'] == null
+        ? null
+        : (m['is_lethargic_or_unconscious'] as num) == 1,
+    coughPresent: (m['cough_present'] as num?) == 1,
+    coughDurationDays: (m['cough_duration_days'] as num?)?.toInt(),
+    respiratoryRatePerMin: (m['respiratory_rate_per_min'] as num?)?.toInt(),
+    chestIndrawing: (m['chest_indrawing'] as num?) == 1,
+    stridorCalm: (m['stridor_calm'] as num?) == 1,
+    nasalFlaring: (m['nasal_flaring'] as num?) == 1,
+    oxygenSaturationPerCent: (m['oxygen_saturation_per_cent'] as num?)?.toInt(),
+    diarrhoeaPresent: (m['diarrhoea_present'] as num?) == 1,
+    diarrhoeaDurationDays: (m['diarrhoea_duration_days'] as num?)?.toInt(),
+    bloodInStool: (m['blood_in_stool'] as num?) == 1,
+    restlessOrIrritable: m['restless_or_irritable'] == null
+        ? null
+        : (m['restless_or_irritable'] as num) == 1,
+    sunkenEyes: m['sunken_eyes'] == null
+        ? null
+        : (m['sunken_eyes'] as num) == 1,
+    drinksEagerly: m['drinks_eagerly'] == null
+        ? null
+        : (m['drinks_eagerly'] as num) == 1,
+    skinPinchResult: m['skin_pinch_result'] as String?,
+    feverReported: (m['fever_reported'] as num?) == 1,
+    feverDurationDays: (m['fever_duration_days'] as num?)?.toInt(),
+    temperatureCelsius: (m['temperature_celsius'] as num?)?.toDouble(),
+    stiffNeck: (m['stiff_neck'] as num?) == 1,
+    runnyNose: (m['runny_nose'] as num?) == 1,
+    measlesRashPresent: (m['measles_rash_present'] as num?) == 1,
+    measlesCough: (m['measles_cough'] as num?) == 1,
+    measlesCoryza: (m['measles_coryza'] as num?) == 1,
+    measlesConjunctivitis: (m['measles_conjunctivitis'] as num?) == 1,
+    mouthUlcers: (m['mouth_ulcers'] as num?) == 1,
+    eyeDischarge: (m['eye_discharge'] as num?) == 1,
+    cornealClouding: (m['corneal_clouding'] as num?) == 1,
+    measlesWithinPast3Months: (m['measles_within_past_3_months'] as num?) == 1,
+    malariaRdtDone: (m['malaria_rdt_done'] as num?) == 1,
+    malariaRdtResult: m['malaria_rdt_result'] as String?,
+    tourniquetTestDone: (m['tourniquet_test_done'] as num?) == 1,
+    tourniquetTestPositive: m['tourniquet_test_positive'] == null
+        ? null
+        : (m['tourniquet_test_positive'] as num) == 1,
+    skinPetechiae: (m['skin_petechiae'] as num?) == 1,
+    capillaryRefillSeconds: (m['capillary_refill_seconds'] as num?)?.toDouble(),
+    earProblemPresent: (m['ear_problem_present'] as num?) == 1,
+    earPainDurationDays: (m['ear_pain_duration_days'] as num?)?.toInt(),
+    earPusDraining: (m['ear_pus_draining'] as num?) == 1,
+    earPusDurationDays: (m['ear_pus_duration_days'] as num?)?.toInt(),
+    tenderSwellingBehindEar: (m['tender_swelling_behind_ear'] as num?) == 1,
+    weightForHeightOrLengthZscore:
+        (m['weight_for_height_or_length_zscore'] as num?)?.toDouble(),
+    hivExposedOrInfectedStatus: m['hiv_exposed_or_infected_status'] as String?,
+    ableToFinishRutf: m['able_to_finish_rutf'] == null
+        ? null
+        : (m['able_to_finish_rutf'] as num) == 1,
+    breastfedToday: m['breastfed_today'] == null
+        ? null
+        : (m['breastfed_today'] as num) == 1,
+    nightFeedsPer24h: (m['night_feeds_per_24h'] as num?)?.toInt(),
+    complementaryFoodsGivenToday: m['complementary_foods_given_today'] == null
+        ? null
+        : (m['complementary_foods_given_today'] as num) == 1,
+    minimumDietaryDiversity: m['minimum_dietary_diversity'] == null
+        ? null
+        : (m['minimum_dietary_diversity'] as num) == 1,
+    minimumMealFrequency: m['minimum_meal_frequency'] == null
+        ? null
+        : (m['minimum_meal_frequency'] as num) == 1,
+    minimumAcceptableDiet: m['minimum_acceptable_diet'] == null
+        ? null
+        : (m['minimum_acceptable_diet'] as num) == 1,
+    immunizationsDueToday: (m['immunizations_due_today'] as String?)?.split(',')
+      ?..removeWhere((s) => s.isEmpty),
+    immunizationsGivenToday: (m['immunizations_given_today'] as String?)?.split(
+      ',',
+    )?..removeWhere((s) => s.isEmpty),
+    assessedByUserId: m['assessed_by_user_id'] as String?,
+    recordedByUserId: m['recorded_by_user_id'] as String?,
+    updatedAt: DateTime.tryParse((m['updated_at'] as String?) ?? ''),
+  );
 }

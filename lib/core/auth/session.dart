@@ -18,6 +18,13 @@
 /// CHO locked out of a maternal emergency by a counter they cannot clear is a
 /// worse outcome than a guessed PIN.
 ///
+/// **Being remembered is not the same as being unattended.** [IdleWatchdog] in
+/// `idle_lock.dart` decides when the remembered session has outlived its
+/// assumption — the app away from the foreground for two minutes, or untouched
+/// for five — and [lockForInactivity] drops the session pointer so the next
+/// sight of the record costs her PIN again. The clinical interruption that the
+/// paragraph above protects is still free; an unattended handset is not.
+///
 /// **Fallback storage.** FlutterSecureStorage can fail on some platforms (web,
 /// desktop, devices with broken keystore). When it does, we fall back to shared
 /// preferences so the session still survives restarts. The user sees a warning
@@ -344,10 +351,57 @@ class SessionController {
     await ServerAuthClient.signOut().catchError((_) {
       /* ignore */
     });
-    await _delete(_kUserIdKey);
+    await _clearSessionPointers();
     _failedAttempts = 0;
     _lockedUntil = null;
     return SessionSignedOut(lastPhone: await _readLastPhone());
+  }
+
+  /// Locks an unattended session. Deliberately **not** a sign-out, in the code
+  /// and in the trail: a worker whose phone locked while she was delivering a
+  /// baby is not a worker who left the compound, and a supervisor reading the
+  /// log afterwards needs the difference to exist somewhere.
+  ///
+  /// Drops every pointer that could resume the session, revokes the server token
+  /// if there is a network to revoke it on, and leaves the remembered phone number
+  /// so the keypad opens prefilled — the cost of this control should be five
+  /// digits, not a hunt for her own number.
+  Future<SessionState> lockForInactivity(
+    AppUser? current, {
+    required String message,
+  }) async {
+    if (current != null) {
+      await AuditDao.record(
+        action: 'session locked after inactivity',
+        outcome: 'allowed',
+        actorId: current.id,
+        actorRole: current.role.name,
+      );
+    }
+    await ServerAuthClient.signOut().catchError((_) {
+      /* offline — a lock that needs a network is not a lock */
+    });
+    await _clearSessionPointers();
+    _failedAttempts = 0;
+    _lockedUntil = null;
+    return SessionSignedOut(
+      lastPhone: await _readLastPhone(),
+      message: message,
+    );
+  }
+
+  /// Removes every pointer that would let [restore] resume this session.
+  ///
+  /// The fallback copy is the part that matters. Secure storage fails on some
+  /// devices, and [restore] then reads the shared-preferences pointer — so
+  /// clearing only the secure copy left a signed-out (and now, locked) handset
+  /// able to resurrect the session on the next launch, which quietly defeats the
+  /// entire control on exactly the devices where storage is already weakest.
+  /// The remembered phone number stays: it prefills the keypad and grants nothing
+  /// on its own.
+  Future<void> _clearSessionPointers() async {
+    await _delete(_kUserIdKey);
+    await _deleteFallback(_kFallbackUserIdKey);
   }
 
   /// Resets the PIN for a registered phone number, then returns a signed-out

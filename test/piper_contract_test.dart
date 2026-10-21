@@ -65,6 +65,19 @@ void main() {
       expect(ha.encode('a ɓ'), [1, 0, 12, 0, 3, 0, 34, 0, 2]);
       expect(() => ha.encode('😀'), throwsFormatException);
     });
+    test('a trained Dagbani text pack pads between every symbol', () {
+      // Shape of the config `piper1-gpl` writes for a --data.phoneme_type text
+      // voice: characters are the symbols, '_' is the inter-unit blank.
+      const dag = '''
+{"audio":{"sample_rate":22050},"num_speakers":1,
+ "phoneme_id_map":{"_":[0],"^":[1],"\$":[2],"a":[3],"ɣ":[4],"ŋ":[5]," ":[6]},
+ "inference":{"noise_scale":0.667,"length_scale":1.0,"noise_w":0.8}}
+''';
+      final phonemizer = PiperPhonemizer.fromConfig(dag, 'Dagbani');
+      expect(phonemizer.encode('aɣ ŋ'), [1, 0, 3, 0, 4, 0, 6, 0, 5, 0, 2]);
+      // A letter the corpus never spoke must not vanish from a clinical line.
+      expect(() => phonemizer.encode('kpɔli'), throwsFormatException);
+    });
   });
 
   group('Piper audio contract', () {

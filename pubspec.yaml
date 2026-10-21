@@ -68,6 +68,8 @@ dependencies:
   # Neural language packs are installed separately; recordings stay bundled.
   onnxruntime: ^1.4.1
   dart_sentencepiece_tokenizer: 1.4.0
+  record: ^7.1.2
+  sqflite_sqlcipher: ^3.4.1
 
   # On-device neural TTS using Piper VITS ONNX models.
   # Runs via the existing onnxruntime bindings (zero extra native deps).
@@ -90,6 +92,7 @@ flutter:
     - assets/images/
     - assets/fonts/
     - assets/models/
+    - assets/asr/
     # Flutter does not recurse into asset directories. These four are the
     # offline voice packs; NativePackStore loads them by directory path, so
     # dropping a line here ships an app that silently has no neural translation

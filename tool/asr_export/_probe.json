@@ -1,0 +1,168 @@
+{
+ "mel_shape": [
+  257,
+  80
+ ],
+ "win_shape": [
+  400
+ ],
+ "mel_dtype": "float64",
+ "stride": 2,
+ "padding_value": 1,
+ "model_input_names": [
+  "input_features",
+  "attention_mask"
+ ],
+ "num_mel_bins": 80,
+ "feature_size": 80,
+ "transformers": "5.16.1",
+ "fbank": {
+  "frame_length": 400,
+  "hop_length": 160,
+  "fft_length": 512,
+  "power": 2.0,
+  "center": false,
+  "preemphasis": 0.97,
+  "log_mel": "log",
+  "mel_floor": 1.192092955078125e-07,
+  "remove_dc_offset": true
+ },
+ "norm_lines": [
+  "do_normalize_per_mel_bins: bool | None = True,",
+  "do_normalize_per_mel_bins (`bool`, *optional*, defaults to `True`):",
+  "if do_normalize_per_mel_bins:",
+  "# torch defaults to ddof=1, and numpy defaults to ddof=0",
+  "(x - np.expand_dims(x.mean(0), 0)) / np.sqrt(np.expand_dims(x.var(0, ddof=1), 0) + 1e-7)"
+ ],
+ "init_lines": [
+  "num_frequency_bins=257,",
+  "min_frequency=20,",
+  "max_frequency=sampling_rate // 2,",
+  "mel_scale=\"kaldi\",",
+  "self.window = window_function(400, \"povey\", periodic=False)"
+ ],
+ "measured_frame_length": 400,
+ "measured_hop": 160,
+ "rows_check": {
+  "16000": 98,
+  "19200": 118,
+  "19280": 119,
+  "19440": 120,
+  "19600": 121
+ },
+ "even_19200": {
+  "mel_rows": 118,
+  "feat_shape": [
+   1,
+   59,
+   160
+  ],
+  "mask_shape": [
+   1,
+   59
+  ],
+  "mask_head": [
+   1,
+   1,
+   1,
+   1
+  ],
+  "mask_sum": 59,
+  "dtype": "float32",
+  "last_frame": [
+   -0.009,
+   0.006,
+   0.006,
+   0.0121
+  ],
+  "last_is_pad": false
+ },
+ "odd_19280": {
+  "mel_rows": 119,
+  "feat_shape": [
+   1,
+   59,
+   160
+  ],
+  "mask_shape": [
+   1,
+   59
+  ],
+  "mask_head": [
+   1,
+   1,
+   1,
+   1
+  ],
+  "mask_sum": 59,
+  "dtype": "float32",
+  "last_frame": [
+   -0.009,
+   0.009,
+   0.006,
+   0.0151
+  ],
+  "last_is_pad": false
+ },
+ "odd_19440": {
+  "mel_rows": 120,
+  "feat_shape": [
+   1,
+   60,
+   160
+  ],
+  "mask_shape": [
+   1,
+   60
+  ],
+  "mask_head": [
+   1,
+   1,
+   1,
+   1
+  ],
+  "mask_sum": 60,
+  "dtype": "float32",
+  "last_frame": [
+   -0.006,
+   0.003,
+   -0.003,
+   0.006
+  ],
+  "last_is_pad": false
+ },
+ "tiny_400": {
+  "mel_rows": 1,
+  "feat_shape": [
+   1,
+   0,
+   160
+  ],
+  "mask_shape": [
+   1,
+   0
+  ],
+  "mask_head": [],
+  "mask_sum": 0,
+  "dtype": "float32",
+  "last_frame": null,
+  "last_is_pad": null
+ },
+ "short_500": {
+  "mel_rows": 1,
+  "feat_shape": [
+   1,
+   0,
+   160
+  ],
+  "mask_shape": [
+   1,
+   0
+  ],
+  "mask_head": [],
+  "mask_sum": 0,
+  "dtype": "float32",
+  "last_frame": null,
+  "last_is_pad": null
+ }
+}

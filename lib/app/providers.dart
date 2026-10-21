@@ -16,6 +16,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/auth/idle_lock.dart';
 import '../core/auth/session.dart';
 import '../core/audio/caregiver_playback.dart' show OfflineSpeechLanguage;
 import '../core/audio/speakable_service.dart';
@@ -23,6 +24,7 @@ import '../core/ml/neural_translation_service.dart';
 import '../core/ml/piper_tts_service.dart';
 import '../core/ml/voice_pack_install.dart';
 import '../data/local/app_database.dart';
+import '../data/local/database_secret.dart';
 import '../data/local/outbox_dao.dart';
 import '../data/local/preferences_store.dart';
 import '../data/local/sync_state_dao.dart';
@@ -32,6 +34,10 @@ import '../data/repositories/insight_repository.dart';
 import '../data/sync/sync_service.dart';
 import '../data/sync/pull_service.dart';
 import '../data/sync/http_transport.dart';
+import '../core/audio/pack_speech_listener.dart';
+import '../core/audio/recording_gate.dart';
+import '../core/audio/speech_input_service.dart';
+import '../core/ml/asr_service.dart';
 import '../domain/engines/barrier_engine.dart';
 import '../domain/engines/trajectory_engine.dart';
 import '../domain/engines/vulnerability_engine.dart';
@@ -137,6 +143,7 @@ final _languageWarmupQueueProvider = Provider<_LanguageWarmupQueue>((ref) {
   final queue = _LanguageWarmupQueue(
     services.neural,
     services.piper,
+    AsrService.instance,
     ref.watch(fhwWarmupRuntimeReadyProvider),
   );
   ref.onDispose(queue.cancel);
@@ -144,9 +151,10 @@ final _languageWarmupQueueProvider = Provider<_LanguageWarmupQueue>((ref) {
 });
 
 class _LanguageWarmupQueue {
-  _LanguageWarmupQueue(this.neural, this.piper, this.runtimeReady);
+  _LanguageWarmupQueue(this.neural, this.piper, this.asr, this.runtimeReady);
   final NeuralTranslationService neural;
   final PiperTtsService piper;
+  final AsrService asr;
   final Future<bool> Function() runtimeReady;
   Future<void> _tail = Future.value();
   int _generation = 0;
@@ -181,6 +189,18 @@ class _LanguageWarmupQueue {
       } catch (_) {
         // Missing or unavailable models must not escape this background task.
       }
+      if (generation != _generation) return;
+      if (language != 'Hausa') {
+        // Listening is offered for Twi and Dagbani only. Hausa is deliberately
+        // out of scope, so no pack is fetched and no mic affordance appears.
+        // Bundled assets: an absent pack throws here and stays absent, which is
+        // exactly what makes VoiceAsk render nothing instead of apologising.
+        try {
+          await asr.ensureLoaded(language!);
+        } catch (_) {
+          // A missing or unreadable speech pack must not break the shell.
+        }
+      }
     });
   }
 }
@@ -196,6 +216,17 @@ class _LanguageWarmupQueue {
 final narrationEnabledProvider = NotifierProvider<NarrationNotifier, bool>(
   NarrationNotifier.new,
 );
+
+/// Listening for the app. One gate, one listener, one operating point per
+/// device: the thresholds are a policy, not a parameter each screen picks.
+final speechInputProvider = Provider<SpeechInputService>((ref) {
+  final gate = RecordingGate();
+  ref.onDispose(gate.dispose);
+  return SpeechInputService(
+    gate: gate,
+    listener: PackSpeechListener(AsrService.instance),
+  );
+});
 
 final speakableServiceProvider = Provider<SpeakableService>((ref) {
   final service = SpeakableService();
@@ -440,6 +471,17 @@ final connectivityProvider = StreamProvider<bool>((ref) async* {
 
 // ----------------------------------------------------------------------- Session
 
+/// How the register on this device is actually stored, as reported by the code
+/// that opened it — not by a build flag a screen could get wrong.
+///
+/// Exposed as a provider rather than baked into any one screen so the settings
+/// surface, the supervision desk and any future compliance export all read the
+/// same derived fact. A deployment claim that is assembled from the truth on this
+/// particular handset is worth more than one copied from a slide.
+final atRestPostureProvider = FutureProvider<AtRestPosture>(
+  (ref) => AppDatabase.instance.posture,
+);
+
 final sessionControllerProvider = Provider<SessionController>(
   (_) => SessionController(),
 );
@@ -511,6 +553,23 @@ class SessionNotifier extends Notifier<SessionState> {
     state = await _controller.signOut(
       current is SessionActive ? current.user : null,
     );
+  }
+
+  /// Locks an unattended session.
+  ///
+  /// Refuses silently when nothing is active, which is what makes the whole
+  /// control safe to call from more than one place: a resume and a stray tick
+  /// landing on the same moment produce one audit row and one return to the
+  /// keypad, not two. The message comes from the role's own policy, so the
+  /// number a worker reads is the number actually enforced.
+  Future<bool> lockIfIdle(LockReason reason) async {
+    final current = state;
+    if (current is! SessionActive) return false;
+    state = await _controller.lockForInactivity(
+      current.user,
+      message: IdleLockPolicy.forRole(current.user.role).messageFor(reason),
+    );
+    return true;
   }
 
   Future<bool> resetPin({required String phone, required String newPin}) async {

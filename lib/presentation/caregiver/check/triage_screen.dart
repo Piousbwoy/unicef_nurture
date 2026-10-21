@@ -9,7 +9,9 @@ import '../../../app/providers.dart';
 import '../../../core/audio/caregiver_playback.dart';
 import '../../../core/i18n/speech_bank.dart';
 import '../../../domain/services/offline_narration.dart';
+import '../../../core/audio/speech_answers.dart';
 import '../../shared/speech_language_sheet.dart';
+import '../../shared/voice_ask.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/lumina.dart';
 import '../../../core/theme/motion.dart';
@@ -757,6 +759,7 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
                 const SizedBox(height: 16),
               ],
               _AnswerDeck(
+                voiceLanguage: _voiceLanguage,
                 answered: answered,
                 continueLabel: index == questions.length - 1
                     ? 'Continue — almost done'
@@ -1141,7 +1144,10 @@ class _TriageScreenState extends ConsumerState<CaregiverTriageScreen> {
           const SizedBox(height: 16),
         ],
         if (check.report != null) ...[
-          if (urgent) _GettingThereCard(report: check.report!),
+          if (urgent) _GettingThereCard(
+            report: check.report!,
+            language: _voiceLanguage,
+          ),
           if (urgent) const SizedBox(height: 16),
           _TellSomeoneCard(message: nurseMsg),
           const SizedBox(height: 16),
@@ -2354,10 +2360,15 @@ class _AnswerDeck extends StatefulWidget {
     required this.continueLabel,
     required this.onAnswer,
     required this.onContinue,
+    required this.voiceLanguage,
   });
 
   final CaregiverAnswer? answered;
   final String continueLabel;
+
+  /// Listening is offered only where the answer is already one of three words.
+  /// The recogniser proposes and the caregiver records: see `VoiceAsk`.
+  final String voiceLanguage;
   final ValueChanged<CaregiverAnswer> onAnswer;
   final VoidCallback onContinue;
 
@@ -2448,6 +2459,7 @@ class _AnswerDeckState extends State<_AnswerDeck>
             ],
           ),
         ),
+        _voiceAsk(),
         const SizedBox(height: 20),
         if (answered != null)
           PremiumCheckButton(
@@ -2505,6 +2517,28 @@ class _AnswerDeckState extends State<_AnswerDeck>
             ),
           ),
       ],
+    );
+  }
+
+  /// One listening row for the whole check: `Ee`, `Ayi`, `Mi bɛ mi` in Dagbani,
+  /// `Ɛyɛ`/`Aane`, `Nni`, `Minnim` in Twi. Nothing appears for a language with
+  /// no signed speech pack, and nothing is ever written without the tap.
+  Widget _voiceAsk() {
+    final set = SpeechAnswerSet.forLanguage(widget.voiceLanguage);
+    if (set == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: VoiceAsk(
+        language: widget.voiceLanguage,
+        set: set,
+        onConfirmed: (heard) => widget.onAnswer(
+          switch (heard) {
+            'yes' => CaregiverAnswer.yes,
+            'no' => CaregiverAnswer.no,
+            _ => CaregiverAnswer.unsure,
+          },
+        ),
+      ),
     );
   }
 }
@@ -3540,9 +3574,12 @@ class _StepMeter extends StatelessWidget {
 /// facility as a plan she can execute — the bag, the ride, the person — not
 /// a paragraph of advice. Night travel changes the first move.
 class _GettingThereCard extends ConsumerWidget {
-  const _GettingThereCard({required this.report});
+  const _GettingThereCard({required this.report, required this.language});
 
   final HomeCheck report;
+
+  /// Spoken language offered to the caregiver on this check.
+  final String language;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -3601,7 +3638,7 @@ class _GettingThereCard extends ConsumerWidget {
               label: label,
             ),
           const SizedBox(height: 12),
-          _RideField(report: report),
+          _RideField(report: report, language: language),
         ],
       ),
     );
@@ -3611,9 +3648,13 @@ class _GettingThereCard extends ConsumerWidget {
 /// "Who will take you?" — naming the person turns a scary abstract
 /// instruction into a social plan. Saved as a note on the check.
 class _RideField extends ConsumerStatefulWidget {
-  const _RideField({required this.report});
+  const _RideField({required this.report, required this.language});
 
   final HomeCheck report;
+
+  /// Dictation language for the note. A wrong word here is retyped, so this
+  /// surface writes straight through, unlike the clinical answer row.
+  final String language;
 
   @override
   ConsumerState<_RideField> createState() => _RideFieldState();
@@ -3665,6 +3706,13 @@ class _RideFieldState extends ConsumerState<_RideField> {
               );
             },
           ),
+        ),
+        const SizedBox(width: 8),
+        VoiceDictate(
+          language: widget.language,
+          onText: (heard) => _controller.text = _controller.text.trim().isEmpty
+              ? heard
+              : '${_controller.text.trim()} $heard',
         ),
       ],
     );

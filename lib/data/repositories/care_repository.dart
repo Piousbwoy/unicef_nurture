@@ -85,6 +85,21 @@ class AccessDenied implements Exception {
   String toString() => 'AccessDenied($action, ${permission?.name}): $message';
 }
 
+/// Thrown when an erasure request cannot be honoured as stated.
+///
+/// A separate type rather than a reuse of [AccessDenied] because the honest answer
+/// here is usually "not yet, and here is what must happen first" rather than "you
+/// are not allowed". A family's destroyed record is irreversible; a message that
+/// reads like a permission slip invites someone to route around it.
+class ErasureRefused implements Exception {
+  const ErasureRefused(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'ErasureRefused: $message';
+}
+
 class CareRepository {
   CareRepository({DateTime Function()? clock}) : _clock = clock ?? DateTime.now;
   final DateTime Function() _clock;
@@ -430,10 +445,7 @@ class CareRepository {
     required String householdId,
   }) async {
     await _requirePersonScope(user, subjectPersonId, 'view an access trail');
-    return AccessLedgerDao.disclosureFor([
-      subjectPersonId,
-      householdId,
-    ]);
+    return AccessLedgerDao.disclosureFor([subjectPersonId, householdId]);
   }
 
   /// Recomputes the trail's hash chain. The operation a supervisor runs to check
@@ -453,8 +465,61 @@ class CareRepository {
     AppUser user, {
     int limit = 50,
   }) async {
-    await _require(user, Permission.viewCommunityInsights, 'review flagged access');
+    await _require(
+      user,
+      Permission.viewCommunityInsights,
+      'review flagged access',
+    );
     return AccessLedgerDao.flaggedReviews(limit: limit);
+  }
+
+  /// The supervision desk's working list: findings with the worker's name, the
+  /// family's name and the device it happened on, each carrying whether anyone has
+  /// already written a decision about it.
+  Future<List<AccessFinding>> accessFindings(
+    AppUser user, {
+    int limit = 50,
+  }) async {
+    await _require(
+      user,
+      Permission.viewCommunityInsights,
+      'review flagged access',
+    );
+    return AccessLedgerDao.findings(limit: limit);
+  }
+
+  /// Closes a finding the only way an append-only ledger permits: by adding a
+  /// second row. The flagged access is not touched — its hash is the evidence, and
+  /// editing it would destroy the very thing being investigated.
+  ///
+  /// The review is filed against the *family's* subject id on purpose, so it shows
+  /// up in their own disclosure as supervision. A review the supervised party can
+  /// never see is not oversight, it is housekeeping.
+  Future<void> reviewAccess(
+    AppUser user, {
+    required String entryId,
+    required String subjectPersonId,
+    required String outcome,
+  }) async {
+    await _require(
+      user,
+      Permission.viewCommunityInsights,
+      'record an access review',
+    );
+    final db = await AppDatabase.instance.database;
+    await AccessLedgerDao.append(
+      db,
+      actor: user,
+      deviceId: await _currentDeviceId(),
+      action: AccessLedgerDao.reviewAction,
+      entityTable: Tables.accessLedger,
+      entityId: entryId,
+      subjectPersonId: subjectPersonId,
+      purpose: AccessPurpose.accountReview,
+      basis: AccessBasis.officialAuthority,
+      at: _clock(),
+      note: outcome.trim(),
+    );
   }
 
   /// Opens a record the worker has no relationship to, *with a stated reason*.
@@ -511,7 +576,11 @@ class CareRepository {
     AppUser user,
     String subjectPersonId,
   ) async {
-    await _requirePersonScope(user, subjectPersonId, 'view data-rights requests');
+    await _requirePersonScope(
+      user,
+      subjectPersonId,
+      'view data-rights requests',
+    );
     return DataRightsDao.forSubject(subjectPersonId);
   }
 
@@ -540,6 +609,248 @@ class CareRepository {
       requestId,
       status: status,
       resolution: resolution,
+      at: _clock(),
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // Sensitive-record protection class
+  // --------------------------------------------------------------------------
+
+  /// Marks a record as held to the narrower rule.
+  ///
+  /// Gated on a clinical permission rather than on the supervisory one, and
+  /// deliberately so: protection has to be available to the nurse in front of the
+  /// patient at the moment she learns something worth protecting, not only to an
+  /// office that reviews the register later. Scoping is still enforced — you cannot
+  /// mark a record you may not open.
+  ///
+  /// There is no consent row here and the code does not pretend otherwise. This is
+  /// a professional duty marking made by the worker, which the Act supports on
+  /// substantial public-interest grounds; the family's route to *withdrawing* it is
+  /// to tell the district team, whose unmark is the only one that overrides a
+  /// colleague's — see [clearRecordSensitivity].
+  Future<void> markRecordSensitive(
+    AppUser user, {
+    required String personId,
+    required SensitivityCategory category,
+  }) async {
+    await _require(
+      user,
+      Permission.recordClinicalVitals,
+      'protect this record',
+      entityTable: Tables.persons,
+      entityId: personId,
+    );
+    final person = await _requirePersonFor(user, personId);
+    await PersonDao.upsert(person.withSensitivity(category.name));
+    await AuditDao.record(
+      action: 'mark_record_sensitive',
+      outcome: 'allowed',
+      actorId: user.id,
+      actorRole: user.role.name,
+      entityTable: Tables.persons,
+      entityId: personId,
+      detail: category.label,
+    );
+  }
+
+  /// Lifts the narrower rule from a record.
+  ///
+  /// Only the worker who registered the household, or a supervisory account. A
+  /// colleague who disliked being asked for a reason must not be able to remove
+  /// the protection by trying to remove it — that would turn the control into an
+  /// inconvenience with an off switch in every pocket in the district.
+  Future<void> clearRecordSensitivity(
+    AppUser user, {
+    required String personId,
+  }) async {
+    await _require(
+      user,
+      Permission.recordClinicalVitals,
+      'remove protection from this record',
+      entityTable: Tables.persons,
+      entityId: personId,
+    );
+    final person = await _requirePersonFor(user, personId);
+    final household = await HouseholdDao.byId(person.householdId);
+    final responsible = user.id == household?.createdBy;
+    if (!responsible && !user.can(Permission.viewCommunityInsights)) {
+      throw AccessDenied(
+        'remove protection from this record',
+        Permission.viewCommunityInsights,
+        detail:
+            'Only the worker who registered this family, or the district team, can '
+            'lift a protection marking. If this record should not have been marked, '
+            'ask the district supervisor to review it.',
+      );
+    }
+    await PersonDao.upsert(person.withSensitivity(null));
+    await AuditDao.record(
+      action: 'clear_record_sensitivity',
+      outcome: 'allowed',
+      actorId: user.id,
+      actorRole: user.role.name,
+      entityTable: Tables.persons,
+      entityId: personId,
+      detail: responsible
+          ? 'lifted by the responsible worker'
+          : 'lifted by a supervisor',
+    );
+  }
+
+  /// The person, after the scope guard has passed.
+  ///
+  /// The guard resolves a household from a person id and therefore cannot report a
+  /// missing record; without this check a typo would be recorded in the audit trail
+  /// as a successful protection change on a person who does not exist.
+  Future<Person> _requirePersonFor(AppUser user, String personId) async {
+    await _requirePersonScope(
+      user,
+      personId,
+      'change protection on this record',
+    );
+    final person = await PersonDao.byId(personId);
+    if (person == null) {
+      throw StateError(
+        'That record is not on this device, so its protection cannot be changed.',
+      );
+    }
+    return person;
+  }
+
+  // --------------------------------------------------------------------------
+  // Access patterns
+  // --------------------------------------------------------------------------
+
+  /// How far back the pattern detectors look, and what counts as a pattern.
+  ///
+  /// Four is a low number on purpose. A district of thirty workers where one
+  /// detector fires twice a month is being read; one where it fires twice a day is
+  /// noise, and noise in a review queue is how review queues get ignored.
+  static const patternWindow = Duration(hours: 24);
+  static const patternActorThreshold = 4;
+  static const patternSubjectThreshold = 4;
+
+  Future<List<AccessPattern>> accessPatterns(AppUser user) async {
+    await _require(
+      user,
+      Permission.viewCommunityInsights,
+      'review access patterns',
+    );
+    return AccessLedgerDao.patterns(
+      since: _clock().subtract(patternWindow),
+      actorThreshold: patternActorThreshold,
+      subjectThreshold: patternSubjectThreshold,
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // Erasure
+  // --------------------------------------------------------------------------
+
+  /// Honours a family's erasure request by removing every direct identifier from
+  /// the register, and letting the district see it happen.
+  ///
+  /// ### Why this is not a `DELETE`
+  ///
+  /// The clinical rows stay. They are the reason the child's immunisation history
+  /// can still be verified against the district copy, they are what the aggregate
+  /// counts the district reports are built from, and — this is the part that has to
+  /// be said out loud — this build does not get to decide Ghana's statutory health
+  /// record retention periods. Deleting a child's history because a request arrived
+  /// would be an irreversible, unauditable decision made by software about a legal
+  /// question it does not own.
+  ///
+  /// So what is erased is what identifies a person to anyone reading the row: the
+  /// name, the phone number and the NHIS number. What remains is de-identified
+  /// clinical fact plus the full access trail, which is itself protected data and
+  /// must outlive the row it describes — otherwise erasing a record would erase the
+  /// evidence of who read it.
+  ///
+  /// The family should be told plainly that clinical history is kept without names,
+  /// and that asking for that too is a decision for the district's data protection
+  /// supervisor, not for the app.
+  Future<void> eraseIdentifiers(
+    AppUser user, {
+    required String requestId,
+  }) async {
+    await _require(
+      user,
+      Permission.viewCommunityInsights,
+      'erase a family’s identifiers',
+    );
+
+    final request = await DataRightsDao.byId(requestId);
+    if (request == null) {
+      throw const ErasureRefused('That request is no longer on this device.');
+    }
+    if (request.status != RequestStatus.open) {
+      throw const ErasureRefused(
+        'This request has already been answered. A second erasure would be '
+        'applied to a record that may already have been rebuilt.',
+      );
+    }
+    if (request.right != DataRight.erasure) {
+      throw const ErasureRefused(
+        'This request is not an erasure request, so it cannot be answered by '
+        'destroying anyone’s identifiers.',
+      );
+    }
+
+    final person = await PersonDao.byId(request.subjectPersonId);
+    if (person == null) {
+      throw const ErasureRefused(
+        'The record this request points at is not on this device. Nothing was '
+        'changed.',
+      );
+    }
+    // Already erased and the request still open means something went wrong between
+    // the two, not that there is nothing to do: re-run so the ledger and the
+    // request end up telling the truth together.
+    if (!person.isErased) {
+      await PersonDao.upsert(person.withoutIdentifiers());
+    }
+
+    var householdErased = false;
+    final others = (await PersonDao.inHousehold(
+      person.householdId,
+    )).where((m) => m.isActive && !m.isErased).toList();
+    if (others.isEmpty) {
+      final household = await HouseholdDao.byId(person.householdId);
+      if (household != null && household.name != Household.erasedName) {
+        await HouseholdDao.upsert(household.withoutIdentifiers());
+        householdErased = true;
+      }
+    }
+
+    final db = await AppDatabase.instance.database;
+    await AccessLedgerDao.append(
+      db,
+      actor: user,
+      deviceId: await _currentDeviceId(),
+      action: 'erase_identifiers',
+      entityTable: Tables.persons,
+      entityId: person.id,
+      subjectPersonId: person.id,
+      purpose: AccessPurpose.accountReview,
+      basis: AccessBasis.officialAuthority,
+      at: _clock(),
+      note:
+          'At the family’s request, the name, phone number and health insurance '
+          'number were erased${householdErased ? ', with the household’s '
+                    'identifying details' : ''}. Clinical history is retained without '
+          'identifiers.',
+    );
+
+    await DataRightsDao.resolve(
+      requestId,
+      status: RequestStatus.fulfilled,
+      resolution:
+          'Identifiers erased on this device and queued to the district. Clinical '
+          'history kept without names — statutory retention is a decision for the '
+          'district data protection supervisor, and the family should be told they '
+          'may ask for that too.',
       at: _clock(),
     );
   }
@@ -690,10 +1001,7 @@ class CareRepository {
   /// to consult. Reading is not writing — a family still cannot enter a
   /// measurement — but a tape reading a health worker already took on this
   /// phone is evidence the check would otherwise ignore.
-  Future<GrowthMeasurement?> latestGrowth(
-    AppUser user,
-    String personId,
-  ) async {
+  Future<GrowthMeasurement?> latestGrowth(AppUser user, String personId) async {
     await _requirePersonScope(user, personId, 'view the last measurement');
     return GrowthDao.latest(personId);
   }
@@ -969,7 +1277,11 @@ class CareRepository {
       'confirm a referral outcome',
     );
     if (!outcome.isFacilityConfirmable) {
-      throw ArgumentError.value(outcome, 'outcome', 'not a facility-confirmable state');
+      throw ArgumentError.value(
+        outcome,
+        'outcome',
+        'not a facility-confirmable state',
+      );
     }
     final referral = await ReferralDao.byCode(referenceCode);
     if (referral == null) return null;
@@ -1083,9 +1395,7 @@ class CareRepository {
     );
     final ids = referrals.map((r) => r.id);
     final ledger = await FollowUpDao.forReferrals(ids);
-    final people = await PersonDao.byIdMany(
-      referrals.map((r) => r.personId),
-    );
+    final people = await PersonDao.byIdMany(referrals.map((r) => r.personId));
     // A chase already on the calendar is the only thing that stops the desk
     // offering the same visit twice.
     final chases = await ScheduleDao.openChasesFor(ids);
@@ -1103,10 +1413,7 @@ class CareRepository {
   /// reads with. A worker deciding to go and look should not need to hold the
   /// clinical-assessment permission to make the app put the household in front
   /// of them tomorrow.
-  Future<void> planChaseVisit(
-    AppUser user,
-    ScheduledContact contact,
-  ) async {
+  Future<void> planChaseVisit(AppUser user, ScheduledContact contact) async {
     await _require(
       user,
       Permission.planVisitRoute,
@@ -1289,10 +1596,7 @@ class CareRepository {
     await _requireCaregiverScope(user, scope);
     final request = await CareRequestDao.forCheck(homeCheckId);
     if (request == null) return null;
-    return (
-      request: request,
-      sent: await CareRequestDao.isSent(request.id),
-    );
+    return (request: request, sent: await CareRequestDao.isSent(request.id));
   }
 
   /// The home checks a family has run, newest first. Both roles may read
