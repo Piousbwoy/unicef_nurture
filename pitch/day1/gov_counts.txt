@@ -1,0 +1,24 @@
+SecurityControl constructors: 28
+  ControlMaturity.live                   15
+  ControlMaturity.liveWithBoundary       8
+  ControlMaturity.notOurs                4
+enum ControlMaturity block:
+enum ControlMaturity {
+  live('In place'),
+  liveWithBoundary('In place, with a stated limit'),
+  planned('Not built yet'),
+  notOurs('Not this software’s to implement');
+
+  const ControlMaturity(this.label);
+  final String label;
+}
+
+/// Who owns the residual risk a control does not cover.
+enum ControlOwnership {
+  /// The app team, in this repository.
+  appTeam,
+
+  /// The CHPS compound or district that deploys it: rosters, training, retention
+  /// periods, breach notification to the Secretari
+security control ids: 39
+identity, sessions, household, person, maternal, newborn, child, encounter, referral, barrier, consent, machinery, at-rest-encryption, conversion-of-existing-data, secure-delete, transport-security, credential-separation, inactivity-lock, screen-capture, access-enforcement, sensitive-record-class, break-glass, tamper-evident-trail, chain-anchoring, read-audit-at-the-district, pattern-monitoring, right-to-erase, consent-as-history, rights-with-a-deadline, sync-whitelist, minimisation-at-the-edge, no-telemetry, posture-said-out-loud, research-export-minimisation, cascade-safe-parent-writes, retention-periods, controller-registration, breach-notification, impact-assessment

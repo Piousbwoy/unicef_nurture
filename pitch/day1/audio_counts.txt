@@ -1,0 +1,3 @@
+dagbani_mms            wav=41   mp3=0   
+hausa_mms              wav=41   mp3=0   
+twi_mms                wav=41   mp3=0   

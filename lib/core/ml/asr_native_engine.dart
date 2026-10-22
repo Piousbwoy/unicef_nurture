@@ -6,12 +6,13 @@ import 'dart:typed_data';
 import 'package:onnxruntime/onnxruntime.dart';
 
 import 'asr_contract.dart';
+import 'asr_encoder.dart';
 import 'model_artifact.dart';
 
 /// Runs one ASR pack on its own isolate. Mirrors [PiperNativeEngine]: all
 /// native pointers stay inside one isolate and no pointer crosses a port, so a
 /// cancelled listen can never free a tensor the encoder is still reading.
-class AsrNativeEngine {
+class AsrNativeEngine implements AsrEncoder {
   AsrNativeEngine._();
   final _responses = ReceivePort();
   final _ready = Completer<SendPort>();

@@ -40,6 +40,7 @@ import '../../domain/enums.dart';
 import '../../domain/services/follow_up_policy.dart';
 import '../shared/ui.dart';
 import '../visit/sbar_card.dart';
+import 'barrier_evidence_card.dart';
 import 'clinic_widgets.dart';
 import 'community_support_screen.dart';
 import 'follow_up/follow_up_providers.dart';
@@ -134,6 +135,9 @@ class _DeskBody extends ConsumerWidget {
           _AwaitingSection(board: board),
           if (desk.needsAction.isNotEmpty) _NeedsActionSection(board: board),
           if (desk.settled.isNotEmpty) _ClosedSection(board: board),
+          // The reason behind the open cases, counted, with the owner of the
+          // fix named. Below the chase, above nothing: it never blocks it.
+          const BarrierEvidenceCard(),
         ],
         const SizedBox(height: Gap.md),
         const _HonestyFootnote(),

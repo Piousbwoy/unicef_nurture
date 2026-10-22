@@ -1,0 +1,16 @@
+1. Intro & Mission      134 words | @150wpm  53s | @170wpm  47s | file claims 45s
+2. Role Selection       127 words | @150wpm  50s | @170wpm  44s | file claims 45s
+3. Sign-Up & PIN        125 words | @150wpm  50s | @170wpm  44s | file claims 45s
+4. Roll Call Flow       111 words | @150wpm  44s | @170wpm  39s | file claims 45s
+5. Assess Patients      120 words | @150wpm  48s | @170wpm  42s | file claims 55s
+6. Refer & Override     115 words | @150wpm  46s | @170wpm  40s | file claims 50s
+7. AI Architecture      172 words | @150wpm  68s | @170wpm  60s | file claims 55s
+8. Database & Sync      165 words | @150wpm  66s | @170wpm  58s | file claims 45s
+
+TOTAL words: 1069
+TOTAL @150 wpm: 427s = 7.1 min
+TOTAL @170 wpm: 377s = 6.3 min
+Sum of per-scene claims: 385s = 6.4 min
+
+NOTE: excludes slide transitions, device handling, live tapping through flows,
+and any answer to a question. The slot is ~6 minutes TOTAL including changeover.

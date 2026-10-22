@@ -5,6 +5,7 @@
 **Venue:** HOPin Academy, Tamale. Mixed panel: GHS/UNICEF health professionals, AI/ML engineers, software engineers, government officials.
 **Deliverable from you:** 7 slides, 16:9, built exactly to the copy and states below.
 **Working wireframe already exists:** `pitch/day1/slides.md` (Slidev, running at localhost:3030). Treat it as the layout wireframe and this document as the source of truth for copy, concept and states. Where they disagree, this document wins.
+**Companion document:** `pitch/day1/AI_PROVENANCE_QA.md` — what the models were trained on, their licences, and the exact sentences you may say about accuracy. The copy below already reflects it.
 
 ---
 
@@ -204,7 +205,7 @@ Confession: "We have not validated these models for a Ghanaian facility, and we 
 
 Headline: **It has to work where the work is**
 
-Chips: **Dagbani** — "a bundled on-handset voice and a bank of 43 recorded sentences — verified playing on a physical device" · **Hausa** — "same engine, on the device, with no network round trip" · **Twi** — "on-device synthesis, plus written guidance in all three"
+Chips: **Dagbani** — "41 on-device clips generated with Meta MMS — machine voice, wording still a draft awaiting a native-speaker sign-off" · **Hausa** — "same engine, on the device, with no network round trip" · **Twi** — "on-device synthesis, plus written guidance in all three"
 
 Safety panel: "And a rule we will not trade for a demo: when a mother asks for Dagbani, the app **refuses to read English aloud** and let her believe it was her language. Guidance understood in the wrong tongue is a safety problem, not a fallback."
 
@@ -212,7 +213,7 @@ Panel A tag `NO MAST REQUIRED`: "Records, assessments and referrals are written 
 Panel B tag `LEGIBLE IN REAL HANDS`: "Tested at 320 pixels and 200% text. Colour never carries meaning alone. Reduced motion honoured. Guidance, never a diagnosis."
 
 **Speaker (60s, including 8s of silence):**
-> "We are in Tamale, so let us do this in the language of Tamale." *(pick up the phone, tap speak on a Dagbani guidance card, put the phone down or hold it toward the panel — say nothing for eight seconds)* "That is a bundled Dagbani voice and forty-three recorded sentences, on the handset, with no network. And the rule behind it: if a mother asks for Dagbani, this app will not read English aloud and let her believe it was her language. Everything else follows the same discipline — written offline, queued, and legible on a 320-pixel phone at 200% text."
+> "We are in Tamale, so let us do this in the language of Tamale." *(pick up the phone, tap speak on a Dagbani guidance card, put the phone down or hold it toward the panel — say nothing for eight seconds)* "That is a machine voice running on the handset with no network — and the wording behind it is a draft our first ask fixes: a native speaker to sign it off. And the rule behind it: if a mother asks for Dagbani, this app will not read English aloud and let her believe it was her language. Everything else follows the same discipline — written offline, queued, and legible on a 320-pixel phone at 200% text."
 
 ---
 
@@ -253,7 +254,7 @@ Ask: "One CHPS zone, six months, and a language officer — so the Dagbani guida
 
 ## 5. Do-not-say list (the honesty contract)
 
-No accuracy, sensitivity or AUC figures. No "AI diagnoses" — it is guidance and decision support. No claim of GHS, UNICEF or MEST endorsement beyond the event itself. No "100% secure" or "unhackable". No patient names or real photographs of identifiable people. No promise of a live sync to a server on stage — the demo is offline by design, and saying otherwise invites a failure we do not need.
+No accuracy, sensitivity or AUC figures. No "AI diagnoses" — it is guidance and decision support. No claim of GHS, UNICEF or MEST endorsement beyond the event itself. No "100% secure" or "unhackable". No patient names or real photographs of identifiable people. No promise of a live sync to a server on stage — the demo is offline by design, and saying otherwise invites a failure we do not need. And specifically on language: never "recorded Dagbani" and never "verified Dagbani" — the bank is machine-generated over draft wording, and the repo's own provenance file says so.
 
 ## 6. What the designer should hand back
 

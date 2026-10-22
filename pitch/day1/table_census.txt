@@ -1,0 +1,9 @@
+DISTRICT files scanned: 9
+DISTRICT distinct tables: 24
+access_ledger, assessments, barrier_reports, birth_records, care_requests, child_assessment_snapshots, consent_events, data_rights_requests, follow_up_contacts, growth_measurements, households, if, ledger_anchors, maternal_records, persons, referrals, refresh_tokens, scheduled_contacts, server_read_log, sync_log, user_verifiers, users, visit_participants, visits
+
+LOCAL Tables-class names: 27
+access_ledger, assessments, audit_log, barrier_reports, birth_records, care_requests, caregiver_activity, caregiver_drafts, caregiver_settings, child_assessment_snapshots, consent_events, data_rights_requests, follow_up_contacts, growth_measurements, home_checks, households, maternal_records, milestone_checks, persons, referrals, scheduled_contacts, sync_outbox, sync_state, user_verifiers, users, visit_participants, visits
+
+LOCAL CREATE TABLE count: 26  distinct: 26
+accessLedger, assessments, auditLog, barrierReports, birthRecords, careRequests, caregiverActivity, caregiverDrafts, caregiverSettings, childAssessmentSnapshots, consentEvents, dataRightsRequests, followUpContacts, growthMeasurements, homeChecks, households, maternalRecords, milestoneChecks, outbox, persons, referrals, scheduledContacts, syncState, users, visitParticipants, visits

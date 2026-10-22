@@ -10,7 +10,9 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
+import '../../../data/local/visit_dao.dart';
 import '../../../data/repositories/care_repository.dart';
+import '../../../domain/engines/barrier_evidence.dart';
 import '../../../domain/entities/core.dart';
 import '../../../domain/services/follow_up_policy.dart';
 
@@ -45,6 +47,26 @@ class FollowUpBoard {
 
   DateTime? chaseDue(FollowUpCase item) => chaseDueAt[item.referral.id];
 }
+
+/// What the families said about why care did not happen, grouped into
+/// patterns. The desk read that turns nine "did not attend" rows into one
+/// escalation with a count and an owner attached.
+///
+/// Errors collapse to an empty list instead of an error state on purpose: the
+/// card that reads this is a supplement to the chase, and a supplement that
+/// cannot load must not make the desk unrenderable.
+final barrierPatternsProvider = FutureProvider<List<BarrierPattern>>((
+  ref,
+) async {
+  try {
+    await ref.watch(bootstrapProvider.future);
+    return BarrierEvidence.summarise(
+      await BarrierDao.withinDays(BarrierEvidence.windowDays),
+    );
+  } catch (_) {
+    return const [];
+  }
+});
 
 /// The follow-up desk for the signed-in worker.
 ///
@@ -95,4 +117,5 @@ void refreshFollowUpDesk(WidgetRef ref) {
   ref.invalidate(openReferralsProvider);
   ref.invalidate(dayPlanProvider);
   ref.invalidate(referralCompletionProvider);
+  ref.invalidate(barrierPatternsProvider);
 }

@@ -1,6 +1,11 @@
 # Miscellaneous
 *.class
 *.log
+
+# Recovered chat archive (chats/transcript.md alone is ~3 MB). Generated locally by
+# pitch/day1/export_chats.py; it is conversation history, not project source, and it
+# contains quoted internal discussion that must not be pushed.
+chats/
 *.pyc
 *.swp
 .DS_Store

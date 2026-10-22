@@ -1,0 +1,144 @@
+"""Recover the readable conversation from Qoder's local transcript store.
+
+Read-only against the transcripts: it reads the JSONL files and writes readable
+Markdown into the repo under chats/. Nothing in the source store is modified,
+moved or deleted.
+
+Three outputs:
+  chats/prompts.md     every message you sent, in order - the spine of the work
+  chats/transcript.md  the full readable conversation, tool noise collapsed
+  chats/README.md      what these files are and how to regenerate them
+
+Tool calls and tool results are collapsed to one-line markers. They are the bulk
+of the bytes and almost none of the meaning; the assistant prose around them
+survives intact.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+
+SRC = Path(r"C:\Users\Alhaji_stunner\.qoder\cache\projects\unicef-f0a26800\conversation-history")
+OUT = Path(r"C:\Users\Alhaji_stunner\Videos\unicef\chats")
+
+SESSIONS = [
+    ("session 1", SRC / "task-ccb" / "task-ccb.jsonl"),
+    ("session 2", SRC / "b9957943" / "b9957943.jsonl"),
+]
+
+
+def blocks_of(rec: dict) -> list[dict]:
+    content = rec.get("message", {}).get("content") if isinstance(rec.get("message"), dict) else None
+    if content is None:
+        content = rec.get("content")
+    if isinstance(content, str):
+        return [{"type": "text", "text": content}]
+    if isinstance(content, list):
+        return [b if isinstance(b, dict) else {"type": "text", "text": str(b)} for b in content]
+    return []
+
+
+def render(rec: dict) -> tuple[str, str]:
+    """Return (kind, markdown) for one record. kind is user/assistant/skip."""
+    role = str(rec.get("role") or rec.get("type") or "")
+    msg = rec.get("message")
+    if isinstance(msg, dict):
+        role = str(msg.get("role") or role)
+    parts: list[str] = []
+    for b in blocks_of(rec):
+        t = b.get("type")
+        if t == "text":
+            txt = str(b.get("text") or "").strip()
+            if txt:
+                parts.append(txt)
+        elif t in ("tool_use", "tool_use_block"):
+            name = b.get("name") or "tool"
+            parts.append(f"> `[called {name}]`")
+        elif t in ("tool_result",):
+            parts.append("> `[tool result omitted]`")
+        elif t == "thinking":
+            # Reasoning is not part of the visible conversation.
+            continue
+    body = "\n\n".join(parts).strip()
+    if not body:
+        return ("skip", "")
+    return (role or "unknown", body)
+
+
+def only_query(body: str) -> str | None:
+    """Strip injected context from a user record.
+
+    A user-role record in this store is not always something you typed: system
+    reminders, recalled memories and tool payloads arrive the same way. When a
+    <user_query> fence is present, that fence is what you actually said. When it
+    is absent, the record is injected context and is skipped from the index.
+    """
+    parts = re.findall(r"<user_query>(.*?)</user_query>", body, flags=re.S)
+    if not parts:
+        return None
+    text = " ".join(p.strip() for p in parts if p.strip())
+    return re.sub(r"\s+", " ", text).strip() or None
+
+
+def main() -> None:
+    OUT.mkdir(parents=True, exist_ok=True)
+    prompts: list[str] = ["# Every prompt you sent\n", "_Recovered from Qoder's local transcript store. Order is file order._\n"]
+    transcript: list[str] = ["# CareBridge AI - recovered conversation transcript\n"]
+    counts = {"user": 0, "assistant": 0, "skip": 0}
+
+    for label, path in SESSIONS:
+        if not path.exists():
+            prompts.append(f"\n## {label}: `{path.name}` NOT FOUND\n")
+            transcript.append(f"\n---\n\n# {label}: `{path.name}` NOT FOUND\n")
+            continue
+        transcript.append(f"\n---\n\n# {label} — `{path.name}`\n")
+        prompts.append(f"\n---\n\n## {label} — `{path.name}`\n")
+        n = 0
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            n += 1
+            role, body = render(rec)
+            counts[role] = counts.get(role, 0) + 1
+            if role == "user":
+                said = only_query(body)
+                if said is None:
+                    continue
+                prompts.append(f"{n}. {said}\n")
+                transcript.append(f"\n---\n\n### 🧑 you · record {n}\n\n{body}\n")
+            elif role == "assistant":
+                transcript.append(f"\n**assistant · record {n}**\n\n{body}\n")
+        prompts.append(f"\n_({n} records in this session)_\n")
+
+    (OUT / "prompts.md").write_text("".join(prompts), encoding="utf-8")
+    (OUT / "transcript.md").write_text("".join(transcript), encoding="utf-8")
+    (OUT / "README.md").write_text(
+        "# Recovered chat archive\n\n"
+        "Generated by `python pitch/day1/export_chats.py` from\n"
+        "`%USERPROFILE%\\.qoder\\cache\\projects\\unicef-f0a26800\\conversation-history\\*\\*.jsonl`.\n\n"
+        "- `prompts.md` — every message you sent, in order.\n"
+        "- `transcript.md` — the full conversation, with tool calls collapsed to markers.\n\n"
+        "This is a snapshot, not a live mirror. Qoder's own chat list in the sidebar is app\n"
+        "state and is not rebuilt from these files; if a session disappeared from the UI,\n"
+        "its content is still here.\n\n"
+        "Tool results are omitted on purpose: they are the bulk of the bytes and almost\n"
+        "none of the meaning. Anything a decision rested on was written back into the\n"
+        "assistant prose and into the repository itself.\n",
+        encoding="utf-8",
+    )
+    tp = (OUT / "transcript.md").stat().st_size / 1024
+    pp = (OUT / "prompts.md").stat().st_size / 1024
+    print(f"records by role: {counts}")
+    print(f"wrote {OUT / 'transcript.md'} ({tp:.0f} KB)")
+    print(f"wrote {OUT / 'prompts.md'} ({pp:.0f} KB)")
+
+
+if __name__ == "__main__":
+    main()

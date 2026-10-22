@@ -1,0 +1,63 @@
+{
+ "provenance": {
+  "mbarara_neonatal_sepsis_cases.csv": {
+   "sha256": "a8f31d980c35ad28",
+   "source_url": "https://raw.githubusercontent.com/Helenaden/Neonatal-Sepsis-Prediction/main/Dennis_Neonatal_Sepsis_D.csv",
+   "license": "Public GitHub mirror of anonymised Mbarara RRH neonatal sepsis EMR (Dennis et al.); no PHI in mirror.",
+   "accessed": "2026-08-01"
+  },
+  "mbarara_neonatal_sepsis_controls.csv": {
+   "sha256": "4a1930926c796bc1",
+   "source_url": "https://raw.githubusercontent.com/Helenaden/Neonatal-Sepsis-Prediction/main/Dennis_Neonatal_Sepsis_N.csv",
+   "license": "Public GitHub mirror of anonymised Mbarara RRH neonatal sepsis EMR (Dennis et al.); no PHI in mirror.",
+   "accessed": "2026-08-01"
+  }
+ },
+ "ghana_calibration": {
+  "priors_used": [
+   "[neonatal sepsis (PSBI): target prior 0.02 = deterministic fallback baseline, Northern Region NB home visits]"
+  ],
+  "note": "Probability scale re-anchored to the 2% Ghana prior used by the deterministic fallback (see calibration.prior_adjustment)."
+ },
+ "version_ladder": {
+  "this": "v2.0-real-data",
+  "next": "v3.0-kintampo-cohort",
+  "v3_prospective": "v3.0-prospective-pilot"
+ },
+ "clinical_note": "Trained on REAL clinical data (Mbarara Regional Referral Hospital (Uganda), neonatal admissions; n=964, 756 cases). Features absent from the source cohort (13 zero-filled) are learned as constants by the model; the deterministic WHO/GHS rules in the app cover those red lines at runtime (the selector ORs AI risk with clinical danger signs). Calibration: logit-correct Platt scaling fitted on 5-fold out-of-fold predictions; 95% CI from per-bin residual std. Training features are the SAME [0,1]-normalized representation the app feeds at inference (v1.0 had a raw-scale train/serve skew - fixed). Cohort: Mbarara Regional Referral Hospital (Uganda), neonatal admissions; population transfer to the Northern Ghana CHPS context is unvalidated. Decision-support, not diagnosis.",
+ "drift_baseline": {
+  "z_threshold": 3.5,
+  "min_z_threshold": 2.5,
+  "features": [
+   {
+    "feature": "age_days",
+    "mean": 0.0296,
+    "std": 0.0118,
+    "p_lo": 0.0,
+    "p_hi": 0.0508
+   },
+   {
+    "feature": "temperature_celsius",
+    "mean": 0.6548,
+    "std": 0.1766,
+    "p_lo": 0.0286,
+    "p_hi": 1.0
+   },
+   {
+    "feature": "respiratory_rate_per_min",
+    "mean": 0.4019,
+    "std": 0.1562,
+    "p_lo": 0.0,
+    "p_hi": 0.91
+   },
+   {
+    "feature": "heart_rate_per_min",
+    "mean": 0.5754,
+    "std": 0.148,
+    "p_lo": 0.2125,
+    "p_hi": 0.9688
+   },
+   {
+    "feature": "oxygen_saturation_per_cent",
+    "mean": 0.0,
+ 

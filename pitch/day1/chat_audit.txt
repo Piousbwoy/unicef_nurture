@@ -1,0 +1,23 @@
+transcript files found: 2
+
+========================================================================
+conversation-history\b9957943\b9957943.jsonl
+  size 3149 KB   records 4856   unparseable 0
+  roles  {'assistant': 4378, 'user': 478}
+  kinds  {'assistant': 4378, 'user': 478}
+  first/last  no timestamp field found in any record
+  file mtime  2026-10-21 03:06
+
+========================================================================
+conversation-history\task-ccb\task-ccb.jsonl
+  size 56 KB   records 108   unparseable 0
+  roles  {'assistant': 97, 'user': 11}
+  kinds  {'assistant': 97, 'user': 11}
+  first/last  no timestamp field found in any record
+  file mtime  2026-09-25 18:01
+
+========================================================================
+other entries directly under the project cache root
+========================================================================
+  dir   agent-tools
+  dir   conversation-history

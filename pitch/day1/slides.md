@@ -174,7 +174,7 @@ layout: none
   <div class="eyebrow">Thematic areas 1 and 4 — reach and voice</div>
   <h2 class="st">It has to work where the work is</h2>
   <div class="lang-row">
-    <div class="chip"><div class="lang">Dagbani</div><div class="cap">a bundled on-handset voice and a bank of 43 recorded sentences — verified playing on a physical device</div></div>
+    <div class="chip"><div class="lang">Dagbani</div><div class="cap">41 on-device clips generated with Meta MMS — machine voice, wording still a draft awaiting a native-speaker sign-off</div></div>
     <div class="chip"><div class="lang">Hausa</div><div class="cap">same engine, on the device, with no network round trip</div></div>
     <div class="chip"><div class="lang">Twi</div><div class="cap">on-device synthesis, plus written guidance in all three</div></div>
   </div>
@@ -193,9 +193,13 @@ layout: none
 
 <!--
 4:10 — 5:10. LIVE AUDIO HERE. Open the caregiver app on the phone, tap speak on a Dagbani guidance
-card, and say nothing for eight seconds.
-It works — you have run it on the handset, so do not hedge. If the speaker dies in the room, say
-"recorded Dagbani, on the phone, no network" and move on without apologising.
+card, and say nothing for eight seconds. Put the phone toward the panel — say nothing about
+quality while you do it.
+Then: "That is a machine voice on the handset with no network, and the wording behind it is a
+draft our first ask fixes: a native speaker to sign it off."
+The bank does play — you have heard it on the handset, so play it without hedging. But call it
+what the repo calls it: machine-generated clips over draft wording. If the speaker dies in the
+room, say "on-device Dagbani clips, no network" and move on without apologising.
 -->
 
 ---

@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'asr_contract.dart';
 import 'asr_decoder.dart';
 import 'asr_features.dart';
-import 'asr_native_engine.dart';
+import 'asr_encoder.dart';
 import 'model_artifact.dart';
 import 'native_pack_store.dart';
 
@@ -166,18 +166,22 @@ class AsrService {
     // window the model was trained on, so the frontend cannot drift from it.
     final config = await manifest.text(path, 'frontend.json', bundle: bundle);
     final data = await bundle.load('$path/model.onnx');
-    final native = await AsrNativeEngine.load(
+    final loaded = await createAsrEncoder(
       model: data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
       artifact: manifest.file('model.onnx'),
       config: config,
     );
-    final spec = native.spec;
+    // No encoder on this platform: the pack stays unloaded, `isReady` stays
+    // false, and every voice affordance renders nothing.
+    if (loaded == null) return;
+    final native = loaded.encoder;
+    final spec = loaded.spec;
     // The recipe travels with the pack: a mel pack carries the matrix and window
     // it was trained on, so the frontend cannot drift from it, and a waveform
     // pack carries neither because its spectrogram is inside the model.
     final geometry = spec.fbank;
     _models[language] = _Pack(
-      native: native.engine,
+      native: native,
       engine: AsrEngine(
         spec: spec,
         frontend: AsrFrontend.fromPack(
@@ -190,7 +194,7 @@ class AsrService {
               : await manifest.text(path, 'window.json', bundle: bundle),
         ),
         decoder: CtcDecoder(spec),
-        encode: native.engine.encode,
+        encode: native.encode,
       ),
     );
   });
@@ -212,5 +216,5 @@ class AsrService {
 class _Pack {
   _Pack({required this.engine, required this.native});
   final AsrEngine engine;
-  final AsrNativeEngine native;
+  final AsrEncoder native;
 }
