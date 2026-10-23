@@ -781,7 +781,7 @@ abstract final class PncEngine {
       findings: findings,
       actions: actions,
       confidence: _confidence(i, missing),
-      confidenceScore: protocolConfidenceScore(
+      evidenceSufficiency: evidenceSufficiencyScore(
         measuredKeyInputs: [
           i.systolic != null && i.diastolic != null,
           i.temperatureCelsius != null,
@@ -789,7 +789,7 @@ abstract final class PncEngine {
           i.muacCm != null,
         ].where((m) => m).length,
         keyInputCount: 4,
-        observedDangerSign:
+        observedDirectSign:
             i.heavyBleeding || i.convulsions || i.thoughtsOfSelfHarm,
       ),
       protocolSource: _protocol,

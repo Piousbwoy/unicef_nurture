@@ -57,7 +57,13 @@ class SbarCard extends StatelessWidget {
       if (result.nutritionStatus != null) result.nutritionStatus!.label,
       if (result.missingData.isNotEmpty)
         'Not measured: ${result.missingData.join(', ')}',
-      'Protocol confidence ${result.effectiveConfidenceScore}/100',
+      // Named for what it counts. A receiving facility reading "75/100" must
+      // know it is the share of key measurements taken, not a probability that
+      // the classification is right — those are different claims and only one
+      // of them is computed here.
+      result.evidenceSufficiency == null
+          ? 'Key measurements recorded: not captured'
+          : 'Key measurements recorded: ${result.evidenceSufficiency} of 100',
     ];
     final sorted = [...result.findings]
       ..sort((x, y) => y.severity.severity.compareTo(x.severity.severity));

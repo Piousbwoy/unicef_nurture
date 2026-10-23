@@ -10,22 +10,30 @@
 // build what is off-screen, so on a short screen "not found" cannot be
 // distinguished from "not built". Everything here is an assertion about what is
 // in the tree, which needs the whole tree to exist.
+import 'dart:io';
+import 'dart:ui' as ui;
+
+import 'package:carebridge_ai/core/theme/app_theme.dart';
 import 'package:carebridge_ai/app/providers.dart';
 import 'package:carebridge_ai/core/ml/offline_inference_service.dart';
 import 'package:carebridge_ai/domain/entities/core.dart';
 import 'package:carebridge_ai/domain/entities/visit.dart';
 import 'package:carebridge_ai/domain/enums.dart';
-import 'package:carebridge_ai/presentation/assessment/assessment_feature_adapter.dart';
 import 'package:carebridge_ai/presentation/assessment/result_screen.dart';
+import 'package:carebridge_ai/presentation/assessment/decision_workspace.dart';
+import 'package:carebridge_ai/presentation/shared/recommendation_kit.dart';
 import 'package:carebridge_ai/presentation/assessment/station/vitals_strip.dart';
 import 'package:carebridge_ai/presentation/assessment/types.dart';
 import 'package:carebridge_ai/presentation/assessment/widgets/cockpit_gauge.dart';
 import 'package:carebridge_ai/presentation/shared/premium_cards/ai_insight_card.dart';
-import 'package:carebridge_ai/presentation/shared/recommendation_kit.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+const _captureScreens = bool.fromEnvironment('RESULT_UI_SNAPSHOTS');
 
 const _household = Household(
   id: 'h1',
@@ -65,6 +73,7 @@ AssessmentDraft _draft({
   List<String> dangerSigns = const [],
   List<ClinicalFinding> findings = const [],
   List<RecommendedAction> actions = const [],
+  String classification = _classification,
 }) => AssessmentDraft(
   inputs: {
     'age_in_days': 2,
@@ -76,7 +85,7 @@ AssessmentDraft _draft({
   result: AssessmentResult(
     clientType: ClientType.newborn,
     triage: TriageLevel.routine,
-    classification: _classification,
+    classification: classification,
     findings: findings,
     actions: actions,
     dangerSignsPresent: dangerSigns,
@@ -109,9 +118,7 @@ OfflineRiskPrediction _prediction({bool blocked = false}) =>
       patientOutputAllowed: !blocked,
       runtimeVerified: !blocked,
       outputScope: blocked ? null : 'clinician_experimental',
-      artifactSha256: blocked
-          ? null
-          : OfflineInferenceService.neonatalArtifact,
+      artifactSha256: blocked ? null : OfflineInferenceService.neonatalArtifact,
       inputPolicyVersion: blocked
           ? null
           : OfflineInferenceService.neonatalPolicy,
@@ -150,8 +157,9 @@ Future<void> _pump(
   WidgetTester tester,
   AssessmentDraft draft, {
   OfflineInferenceService? service,
+  Size size = const Size(1080, 6000),
 }) async {
-  tester.view.physicalSize = const Size(1080, 6000);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -160,22 +168,43 @@ Future<void> _pump(
     ProviderScope(
       overrides: [bootstrapProvider.overrideWith((ref) async {})],
       child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: _captureScreens ? AppTheme.light : null,
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(
             context,
           ).copyWith(textScaler: TextScaler.linear(1), disableAnimations: true),
           child: child!,
         ),
-        home: AssessmentResultScreen(
-          input: _context(),
-          draft: draft,
-          visitId: 'v1',
-          inferenceService: service,
+        home: RepaintBoundary(
+          key: const ValueKey('result-ui-capture'),
+          child: AssessmentResultScreen(
+            input: _context(),
+            draft: draft,
+            visitId: 'v1',
+            inferenceService: service,
+          ),
         ),
       ),
     ),
   );
   await tester.pumpAndSettle();
+}
+
+// Optional local rendering evidence; no patient data or golden baselines.
+Future<void> _capture(WidgetTester tester, String name) async {
+  if (!_captureScreens) return;
+  final boundary = tester.renderObject<RenderRepaintBoundary>(
+    find.byKey(const ValueKey('result-ui-capture')),
+  );
+  await tester.runAsync(() async {
+    final image = await boundary.toImage();
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    await File(
+      '.dart_tool/result-ui-$name.png',
+    ).writeAsBytes(bytes!.buffer.asUint8List());
+    image.dispose();
+  });
 }
 
 /// `RecSection` paints its title in upper case.
@@ -188,6 +217,43 @@ Finder _inHero(Pattern pattern) => find.descendant(
 
 void main() {
   GoogleFonts.config.allowRuntimeFetching = false;
+  setUpAll(() async {
+    if (!_captureScreens) return;
+    // flutter_test ships no bundled fonts, so a capture would otherwise show
+    // Ahem boxes. Load exactly the families the app declares.
+    Future<void> load(String family, List<String> files) async {
+      final loader = FontLoader(family);
+      for (final file in files) {
+        loader.addFont(rootBundle.load(file));
+      }
+      await loader.load();
+    }
+
+    await load('Roboto', ['assets/fonts/Inter-Regular.ttf']);
+    await load('Manrope', [
+      'assets/fonts/Manrope-Regular.ttf',
+      'assets/fonts/Manrope-Medium.ttf',
+      'assets/fonts/Manrope-SemiBold.ttf',
+      'assets/fonts/Manrope-Bold.ttf',
+    ]);
+    await load('Sora', [
+      'assets/fonts/Sora-Bold.ttf',
+      'assets/fonts/Sora-ExtraBold.ttf',
+    ]);
+    final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+    final icons = flutterRoot == null
+        ? null
+        : File(
+            '$flutterRoot/bin/cache/artifacts/material_fonts/'
+            'MaterialIcons-Regular.otf',
+          );
+    if (icons != null && icons.existsSync()) {
+      final bytes = await icons.readAsBytes();
+      await (FontLoader(
+        'MaterialIcons',
+      )..addFont(Future.value(ByteData.view(bytes.buffer)))).load();
+    }
+  });
 
   testWidgets('the experimental score never calls itself confidence', (
     tester,
@@ -195,35 +261,44 @@ void main() {
     await _pump(tester, _draft(), service: _StubService(_prediction()));
     await tester.pumpAndSettle();
 
-    // The honest label survives. The words that would borrow clinical authority
-    // are absent from the hero — deliberately scoped to the hero, because
-    // "full data confidence" elsewhere on the page honestly means how complete
-    // the recorded observations are, not a model statistic.
+    // A research index is never presented as patient-level certainty.
     expect(find.text('Experimental model score'), findsOneWidget);
+    expect(find.byType(CockpitGauge), findsNothing);
+    expect(find.text('Full data confidence'), findsNothing);
     expect(_inHero(RegExp('confidence', caseSensitive: false)), findsNothing);
     expect(_inHero(RegExp(r'95\s*%')), findsNothing);
     expect(_inHero(RegExp('error bar', caseSensitive: false)), findsNothing);
   });
 
   testWidgets('a blocked model draws no ring', (tester) async {
-    await _pump(tester, _draft(), service: _StubService(_prediction(blocked: true)));
+    await _pump(
+      tester,
+      _draft(),
+      service: _StubService(_prediction(blocked: true)),
+    );
     await tester.pumpAndSettle();
 
     expect(find.byType(CockpitGauge), findsNothing);
     expect(find.text('Experimental model score'), findsNothing);
   });
 
-  testWidgets('danger signs need no tap and no scroll', (tester) async {
+  testWidgets('danger signs are visible on the first phone screen', (
+    tester,
+  ) async {
     await _pump(
       tester,
       _draft(
         signs: const ['convulsions'],
         dangerSigns: const ['Convulsions'],
+        classification: 'POSSIBLE SERIOUS BACTERIAL INFECTION',
       ),
+      size: const Size(390, 844),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('DANGER SIGNS PRESENT'), findsOneWidget);
+    expect(find.text('DANGER SIGNS PRESENT').hitTestable(), findsOneWidget);
+    await _capture(tester, 'urgent');
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('pre-referral stabilisation still outranks the model hero', (
@@ -247,7 +322,7 @@ void main() {
     );
   });
 
-  testWidgets('the evidence behind the verdict is shown, not folded away', (
+  testWidgets('decisive evidence is visible and full detail opens on demand', (
     tester,
   ) async {
     await _pump(
@@ -257,24 +332,30 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Open by default. This app's claim is an explainable protocol decision, so
-    // the vitals as taken and the finding cards — each with its measured value,
-    // its cut-off and its protocol citation — have to be on screen without a
-    // tap. A verdict whose reasoning is collapsed behind a control presents as
-    // an unsupported assertion, which is what reads as a toy to a clinician
-    // auditing the logic. The fold sits below the decision and the actions, so
-    // showing it costs the worker nothing they must act on.
-    expect(find.byType(VitalsStrip), findsOneWidget);
-    expect(_section('What we found'), findsOneWidget);
-    expect(find.text('Full clinical detail'), findsOneWidget);
-
-    // The control stays, so a worker who wants the lean page can fold the
-    // working material away.
-    await tester.tap(find.text('Full clinical detail'));
-    await tester.pumpAndSettle();
-
+    // Measurements and their cutoff remain visible without opening the dossier.
+    expect(find.textContaining('62/min'), findsOneWidget);
+    expect(find.textContaining('≥ 50/min'), findsOneWidget);
     expect(find.byType(VitalsStrip), findsNothing);
     expect(_section('What we found'), findsNothing);
+    expect(find.text('Handoff brief'), findsNothing);
+    expect(find.text('Full clinical detail'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byType(ActionWorklist)).dy,
+      lessThan(tester.getTopLeft(find.byType(AiInsightCard)).dy),
+    );
+    expect(
+      tester.getTopLeft(find.byType(ClinicalDecisionHeader)).dy,
+      lessThan(tester.getTopLeft(find.byType(ActionWorklist)).dy),
+    );
+
+    await tester.tap(find.text('Full clinical detail'));
+    await tester.pumpAndSettle();
+    expect(find.byType(VitalsStrip), findsOneWidget);
+    expect(_section('What we found'), findsOneWidget);
+
+    await tester.tap(find.text('Full clinical detail'));
+    await tester.pumpAndSettle();
+    expect(find.byType(VitalsStrip), findsNothing);
   });
 
   testWidgets('the decision is stated once, not four times', (tester) async {
@@ -312,6 +393,109 @@ void main() {
     expect(find.textContaining('antibiotic dose'), findsOneWidget);
   });
 
+  testWidgets(
+    'routine actions are reachable without opening evidence on a phone',
+    (tester) async {
+      await _pump(
+        tester,
+        _draft(
+          actions: const [
+            RecommendedAction(
+              instruction: 'Review feeding with the caregiver',
+              urgency: ReferralUrgency.scheduled,
+            ),
+          ],
+        ),
+        size: const Size(390, 844),
+        service: _StubService(_prediction(blocked: true)),
+      );
+      expect(find.byType(ClinicalDecisionHeader).hitTestable(), findsOneWidget);
+      expect(find.text('PRIORITIZED ACTIONS').hitTestable(), findsOneWidget);
+      await _capture(tester, 'routine');
+      await tester.scrollUntilVisible(
+        find.text('Review feeding with the caregiver'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.ensureVisible(
+        find.text('Review feeding with the caregiver'),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Review feeding with the caregiver').hitTestable(),
+        findsOneWidget,
+      );
+      expect(find.byType(VitalsStrip), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('night mode keeps coverage and clinical decisions readable', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _draft(),
+      size: const Size(390, 844),
+      service: _StubService(_prediction(blocked: true)),
+    );
+    await tester.tap(find.byTooltip('Night mode'));
+    await tester.pumpAndSettle();
+    expect(find.text('100%'), findsOneWidget);
+    expect(find.text(_classification).hitTestable(), findsOneWidget);
+    await _capture(tester, 'night');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('experimental evidence remains reachable below care on a phone', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _draft(),
+      size: const Size(390, 844),
+      service: _StubService(_prediction()),
+    );
+    await tester.scrollUntilVisible(
+      find.byType(AiInsightCard),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(find.byType(AiInsightCard));
+    await tester.pumpAndSettle();
+    expect(find.text('Experimental model score').hitTestable(), findsOneWidget);
+    await _capture(tester, 'evidence');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('each action shows the finding it answers, once', (tester) async {
+    await _pump(
+      tester,
+      _draft(
+        findings: const [_fastBreathing],
+        actions: const [
+          RecommendedAction(
+            instruction: 'Treat fast breathing now',
+            urgency: ReferralUrgency.immediate,
+          ),
+          RecommendedAction(
+            instruction: 'Book the next weighing',
+            urgency: ReferralUrgency.scheduled,
+          ),
+        ],
+      ),
+      service: _StubService(_prediction(blocked: true)),
+    );
+    await tester.pumpAndSettle();
+
+    // The traceable action names its finding; the untraceable one stays silent
+    // rather than borrowing a plausible reason.
+    expect(find.textContaining('Because: Fast breathing'), findsWidgets);
+    expect(find.textContaining('Because: Book'), findsNothing);
+    // The measurement is stated once — in the brief — not twice.
+    expect(find.textContaining('62/min'), findsOneWidget);
+  });
+
   testWidgets('one doorway to the report, not three', (tester) async {
     await _pump(
       tester,
@@ -321,9 +505,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.textContaining(
-        RegExp('full clinical report', caseSensitive: false),
-      ),
+      find.textContaining(RegExp('full clinical report', caseSensitive: false)),
       findsOneWidget,
     );
   });

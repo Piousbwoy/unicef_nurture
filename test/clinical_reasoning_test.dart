@@ -29,7 +29,7 @@ CarePlan _plan({
   List<String> missingData = const [],
   List<String> dangerSigns = const [],
   List<ClinicalInteraction> interactions = const [],
-  int confidenceScore = 80,
+  int evidenceSufficiency = 80,
 }) {
   return CarePlan(
     overallTriage: triage,
@@ -38,7 +38,7 @@ CarePlan _plan({
     actions: const [],
     interactions: interactions,
     confidence: RecommendationConfidence.moderate,
-    confidenceScore: confidenceScore,
+    evidenceSufficiency: evidenceSufficiency,
     missingData: missingData,
     dangerSigns: dangerSigns,
     referralCapabilitiesNeeded: const {},
@@ -220,16 +220,40 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('AI Assessment'), findsOneWidget);
+      expect(find.text('Experimental AI evidence'), findsOneWidget);
       expect(find.text('Experimental model score'), findsOneWidget);
+      expect(find.textContaining('not a clinical probability'), findsOneWidget);
+      final details = find.text('Why this score');
+      await tester.ensureVisible(details);
+      await tester.tap(details);
+      await tester.pumpAndSettle();
       expect(find.textContaining('No change'), findsOneWidget);
       expect(find.textContaining('95%'), findsNothing);
-      expect(find.textContaining('5/20 observed'), findsOneWidget);
+      expect(
+        find.textContaining('5 observed · Fixed-input record unavailable'),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     },
   );
 
   group('determinism (auditability)', () {
+    test('two patients with identical findings are worded identically', () {
+      // Wording used to be seeded with the patient reference, which made
+      // near-identical records read differently — variety that looked like
+      // intelligence. The record alone now decides the words.
+      const bag = OfflineFeatureBag(
+        ageDays: 2,
+        temperatureCelsius: 38.4,
+        respiratoryRatePerMin: 62,
+      );
+      final a = _reason(bag, patientRef: 'person-a');
+      final b = _reason(bag, patientRef: 'person-b');
+
+      expect(a.narrative, b.narrative);
+      expect(a.briefLine, b.briefLine);
+      expect(b.narrative, isNot(contains('person-')));
+    });
     test('the same record produces the identical index and narrative', () {
       final bag = const OfflineFeatureBag(
         ageDays: 14 * 30,
@@ -346,23 +370,18 @@ void main() {
   });
 
   group('honest uncertainty', () {
-    test('missing data widens the 95% band and lowers confidence', () {
-      final complete = _reason(
-        const OfflineFeatureBag(
-          ageDays: 14 * 30,
-          ageMonths: 14,
-          respiratoryRatePerMin: 52,
-        ),
-      );
+    test('missing data is named, never dressed up as a statistic', () {
+      // This test used to assert that gaps widened a "95% band" and lowered a
+      // confidence percentage. Both figures were chosen constants rather than
+      // measurements, so they have been removed rather than reworded. What
+      // remains is the claim the code can actually support: the gaps are
+      // carried into the record and read out in words.
       final gappy = _reason(
         const OfflineFeatureBag(ageDays: 14 * 30, ageMonths: 14),
         plan: _plan(missingData: ['MUAC not taken', 'Temperature not taken']),
       );
-      final completeWidth = complete.ci95.hi - complete.ci95.lo;
-      final gappyWidth = gappy.ci95.hi - gappy.ci95.lo;
-      expect(gappyWidth, greaterThan(completeWidth));
-      expect(gappy.confidencePct, lessThan(complete.confidencePct));
       expect(gappy.narrative, contains('missing'));
+      expect(gappy.whatWouldChangeThis, isNotEmpty);
     });
 
     test('what-would-change names the actual missing measurement', () {

@@ -164,37 +164,35 @@ void main() {
     });
   });
 
-  group('protocolConfidenceScore', () {
-    test('is the share of decisive measurements actually taken', () {
-      expect(protocolConfidenceScore(measuredKeyInputs: 3, keyInputCount: 4), 75);
-      expect(protocolConfidenceScore(measuredKeyInputs: 0, keyInputCount: 4), 0);
-      expect(protocolConfidenceScore(measuredKeyInputs: 4, keyInputCount: 4), 100);
+  group('legacy evidence-sufficiency reads', () {
+    test('an old confidence_score key still reads into the renamed field', () {
+      // Rows already written on handsets keep their figure; only the label was
+      // wrong, because it claimed confidence for what counts measurements.
+      final row = <String, Object?>{
+        'client_type': 'childUnderFive',
+        'triage': 'routine',
+        'classification': 'WELL CHILD',
+        'findings': const [],
+        'actions': const [],
+        'confidence': 'high',
+        'confidence_score': 75,
+      };
+      expect(AssessmentResult.fromJson(row).evidenceSufficiency, 75);
     });
 
-    test('an observed danger sign needs no instrument and pins at 95', () {
-      expect(
-        protocolConfidenceScore(
-          measuredKeyInputs: 0,
-          keyInputCount: 4,
-          observedDangerSign: true,
-        ),
-        95,
-      );
-    });
-
-    test('legacy bucket estimates stay monotonic with the bucket', () {
-      expect(
-        legacyConfidenceEstimate(RecommendationConfidence.protocolCertain),
-        greaterThan(legacyConfidenceEstimate(RecommendationConfidence.high)),
-      );
-      expect(
-        legacyConfidenceEstimate(RecommendationConfidence.high),
-        greaterThan(legacyConfidenceEstimate(RecommendationConfidence.moderate)),
-      );
-      expect(
-        legacyConfidenceEstimate(RecommendationConfidence.moderate),
-        greaterThan(legacyConfidenceEstimate(RecommendationConfidence.low)),
-      );
+    test('a row carrying neither key reports no figure at all', () {
+      // The old code mapped the bucket word to 95/82/65/45. Those numbers were
+      // not computed from the record, so a row without one now shows a gap
+      // rather than a figure nobody produced.
+      final row = <String, Object?>{
+        'client_type': 'childUnderFive',
+        'triage': 'routine',
+        'classification': 'WELL CHILD',
+        'findings': const [],
+        'actions': const [],
+        'confidence': 'high',
+      };
+      expect(AssessmentResult.fromJson(row).evidenceSufficiency, isNull);
     });
   });
 }

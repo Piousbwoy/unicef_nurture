@@ -371,7 +371,12 @@ class AccessRecord {
 /// the version column is used. Every sentence here must be true of the code,
 /// because this string is the one a judge can hold you to.
 abstract final class CareNotice {
-  static const currentVersion = '2026-10-v2';
+  static const currentVersion = '2026-10-v3';
+
+  /// How often the background timer will push at the latest. Same rule as
+  /// [serviceDeadline]: the number in the words a family agrees to and the
+  /// interval [SyncService] actually runs on are one number, not two.
+  static const syncInterval = Duration(minutes: 15);
 
   /// Truthful sentences, each one enforceable enough to be tested.
   static const points = <(String, String)>[
@@ -381,10 +386,13 @@ abstract final class CareNotice {
           'network and no airtime.',
     ),
     (
-      'Sent to the district only to continue your care',
-      'When there is signal, the record is copied to the district team’s server '
-          'so a nurse at another centre can continue your care. Nothing is sent '
-          'because a timer said so.',
+      'Sent to the district on its own, when there is signal',
+      'When this phone finds a network, the record is copied to the district '
+          'team’s server so a nurse at another centre can continue your care. '
+          'That happens by itself — within seconds of the signal returning, and '
+          'at least every 15 minutes while there is a network. No button needs '
+          'pressing, and nothing is held back waiting for one. The day-to-day '
+          'checks and notes a family keeps for itself never leave this phone.',
     ),
     (
       'Opened only by people with a reason',

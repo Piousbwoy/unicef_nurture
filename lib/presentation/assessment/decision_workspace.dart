@@ -4,7 +4,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/glass.dart';
 import '../../core/theme/motion.dart';
 import '../../domain/enums.dart';
-import '../shared/ui.dart';
+import 'types.dart';
 
 /// Presentation decisions are independent of clinical triage and referral state.
 class AnalysisViewModel {
@@ -35,6 +35,7 @@ class AnalysisViewModel {
   bool get mayShowOutput => prediction.mayDisplayExperimentalOutput;
 }
 
+/// A single clinical decision. Color belongs to urgency, never a model score.
 class ClinicalDecisionHeader extends StatelessWidget {
   const ClinicalDecisionHeader({
     super.key,
@@ -44,285 +45,257 @@ class ClinicalDecisionHeader extends StatelessWidget {
     required this.rationale,
     this.audio,
     this.overrideNote,
+    this.evidence,
+    this.completeness,
     this.flat = false,
   });
   final String classification, rationale;
   final TriageLevel level;
   final int missingCount;
-  final Widget? audio, overrideNote;
-
-  /// No frame of its own: the caller supplies the surface (the glass hero
-  /// on the verdict page) and the triage colour stays on the icon and text.
+  final Widget? audio, overrideNote, evidence;
+  final ObservationCompleteness? completeness;
   final bool flat;
-
-  Gradient get _gradient => triagePlate(level).plate;
-
-  /// The ink this plate is written in. Resolved once and passed down, so every
-  /// line on the hero — chip, eyebrow, classification, rationale, ring — is the
-  /// same ink and the amber band can be read at all.
-  Color get _plateInk => triagePlate(level).ink;
-
-  String get _confidenceLabel => switch (missingCount) {
-    0 => 'Full data confidence',
-    1 => '1 observation needs review',
-    _ => '$missingCount observations need review',
-  };
-
-  double get _confidenceFraction => missingCount == 0
-      ? 1.0
-      : missingCount <= 2
-      ? 0.66
-      : 0.33;
 
   @override
   Widget build(BuildContext context) {
-    if (flat) {
-      return _flatContent(context);
-    }
-    return Container(
-      decoration: BoxDecoration(
-        gradient: _gradient,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: _shadowColor,
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -20,
-            top: -20,
-            child: Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.06),
-              ),
-            ),
-          ),
-          Positioned(
-            left: -30,
-            bottom: -30,
-            child: Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.04),
-              ),
-            ),
-          ),
-          _flatContent(context),
-        ],
-      ),
-    );
-  }
-
-  Color get _shadowColor => triageColours(
-    level,
-  ).fg.withValues(alpha: level == TriageLevel.watch ? 0.20 : 0.25);
-
-  Widget _flatContent(BuildContext context) {
     final p = ClinicalPaletteScope.of(context);
-    final tc = triageColours(level);
-    // Trained foreground hue never shifts; only the light pastel wash is
-    // swapped for a hue-tinted dark wash when the surface is night.
-    final chipFg = flat ? tc.fg : _plateInk;
-    final chipBg = flat
-        ? (p.isDark ? tc.fg.withValues(alpha: 0.16) : tc.bg)
-        : _plateInk.withValues(alpha: 0.16);
-    return Padding(
-      padding: const EdgeInsets.all(24),
+    final urgent = level == TriageLevel.urgent;
+    final watch = level == TriageLevel.watch || level == TriageLevel.priority;
+    final tone = urgent
+        ? p.triageRed
+        : watch
+        ? p.triageAmber
+        : p.triageGreen;
+    final wash = urgent
+        ? p.triageRedBg
+        : watch
+        ? p.triageAmberBg
+        : p.triageGreenBg;
+    final content = Padding(
+      padding: const EdgeInsets.all(Gap.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              // Flexible so a long level label can wrap instead of pushing
-              // the row past narrow viewports at large text scales.
-              Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: chipBg,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        level == TriageLevel.urgent
-                            ? Icons.warning_amber_rounded
-                            : Icons.fact_check_outlined,
-                        color: chipFg,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          level.label,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: chipFg,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                            height: 1.2,
-                          ),
-                        ),
-                      ),
-                    ],
+              Expanded(
+                child: Text(
+                  'PROTOCOL DECISION',
+                  style: TextStyle(
+                    fontSize: 12,
+                    letterSpacing: 1.1,
+                    fontWeight: FontWeight.w700,
+                    color: p.inkMuted,
                   ),
                 ),
               ),
-              if (audio != null) ...[
-                const Spacer(),
-                if (flat)
-                  audio!
-                else
-                  _TintedAudio(audio: audio!, ink: _plateInk),
-              ],
+              ?audio,
             ],
           ),
-          const SizedBox(height: 20),
-          Text(
-            'PROTOCOL DECISION',
-            style: TextStyle(
-              letterSpacing: 1.2,
-              fontWeight: FontWeight.w700,
-              fontSize: 11,
-              color: flat ? p.inkMuted : _plateInk.withValues(alpha: 0.75),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            classification,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              height: 1.25,
-              color: flat ? p.ink : _plateInk,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            rationale,
-            style: TextStyle(
-              fontSize: 14.5,
-              height: 1.5,
-              color: flat ? p.inkMuted : _plateInk.withValues(alpha: 0.88),
-            ),
-          ),
-          const SizedBox(height: 20),
+          const SizedBox(height: Gap.sm),
           Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: flat
-                  ? p.surfaceTint.withValues(alpha: p.isDark ? 0.5 : 0.3)
-                  : _plateInk.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(14),
+              color: wash,
+              borderRadius: BorderRadius.circular(Gap.radiusXs),
             ),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox(
-                  width: 36,
-                  height: 36,
-                  child: CustomPaint(
-                    painter: _ConfidenceRing(
-                      fraction: _confidenceFraction,
-                      ringColor: flat ? tc.fg : _plateInk,
-                      trackColor: flat
-                          ? p.line
-                          : _plateInk.withValues(alpha: 0.22),
-                    ),
-                  ),
+                Icon(
+                  urgent
+                      ? Icons.warning_amber_rounded
+                      : Icons.fact_check_outlined,
+                  color: tone,
+                  size: 20,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
+                const SizedBox(width: Gap.sm),
+                Flexible(
                   child: Text(
-                    _confidenceLabel,
+                    level.label,
                     style: TextStyle(
-                      fontSize: 13,
+                      color: p.ink,
+                      fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: flat ? p.ink : _plateInk,
+                      height: 1.3,
                     ),
                   ),
                 ),
               ],
             ),
           ),
+          const SizedBox(height: Gap.md),
+          Semantics(
+            header: true,
+            child: Text(
+              classification,
+              style: TextStyle(
+                fontFamily: 'Sora',
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+                height: 1.3,
+                color: p.ink,
+              ),
+            ),
+          ),
+          const SizedBox(height: Gap.sm),
+          if (evidence != null)
+            evidence!
+          else
+            Text(
+              rationale,
+              style: TextStyle(fontSize: 15, height: 1.5, color: p.inkMuted),
+            ),
+          if (completeness != null) ...[
+            const SizedBox(height: Gap.md),
+            ObservationCompletenessView(summary: completeness!),
+          ] else if (missingCount > 0) ...[
+            const SizedBox(height: Gap.sm),
+            Text(
+              '$missingCount observations need review',
+              style: TextStyle(color: p.inkMuted),
+            ),
+          ],
           if (overrideNote != null) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: Gap.md),
             overrideNote!,
           ],
         ],
       ),
     );
-  }
-}
-
-class _TintedAudio extends StatelessWidget {
-  const _TintedAudio({required this.audio, required this.ink});
-  final Widget audio;
-  final Color ink;
-  @override
-  Widget build(BuildContext context) => Theme(
-    data: Theme.of(context).copyWith(iconTheme: IconThemeData(color: ink)),
-    child: audio,
-  );
-}
-
-class _ConfidenceRing extends CustomPainter {
-  _ConfidenceRing({
-    required this.fraction,
-    required this.ringColor,
-    required this.trackColor,
-  });
-  final double fraction;
-  final Color ringColor;
-  final Color trackColor;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 3;
-    final trackPaint = Paint()
-      ..color = trackColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round;
-    canvas.drawCircle(center, radius, trackPaint);
-
-    final ringPaint = Paint()
-      ..color = ringColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round;
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      -3.14159 / 2,
-      2 * 3.14159 * fraction,
-      false,
-      ringPaint,
+    if (flat) return content;
+    return Container(
+      decoration: BoxDecoration(
+        color: p.surfaceSolid,
+        borderRadius: BorderRadius.circular(Gap.radius),
+        border: Border.all(color: p.line),
+        boxShadow: const [AppShadows.card],
+      ),
+      child: Material(type: MaterialType.transparency, child: content),
     );
   }
+}
+
+/// A transparent denominator and named gaps, with no diagnostic interpretation.
+class ObservationCompletenessView extends StatelessWidget {
+  const ObservationCompletenessView({super.key, required this.summary});
+  final ObservationCompleteness summary;
 
   @override
-  bool shouldRepaint(_ConfidenceRing old) => old.fraction != fraction;
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    final missing = summary.labelsFor(ObservationState.missing);
+    final review = summary.labelsFor(ObservationState.needsReview);
+    return Material(
+      color: p.primaryLight,
+      borderRadius: BorderRadius.circular(Gap.radiusSm),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Observation completeness',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: p.ink,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: Gap.sm),
+                Text(
+                  summary.percent == null ? '—' : '${summary.percent}%',
+                  style: TextStyle(
+                    fontFamily: 'Sora',
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                    color: p.ink,
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              summary.unavailableReason ??
+                  '${summary.recorded} of ${summary.total} core measurements '
+                      'recorded · not diagnostic confidence',
+              style: TextStyle(fontSize: 12, height: 1.5, color: p.inkMuted),
+            ),
+            if (missing.isNotEmpty)
+              Text(
+                'Not recorded: ${missing.join(', ')}',
+                style: TextStyle(fontSize: 13, height: 1.5, color: p.ink),
+              ),
+            if (review.isNotEmpty)
+              Text(
+                'Review: ${review.join(', ')}',
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.5,
+                  color: p.ink,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Every core measurement and the state it earned, for the clinical dossier.
+class ObservationCoverageLedger extends StatelessWidget {
+  const ObservationCoverageLedger({super.key, required this.summary});
+  final ObservationCompleteness summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final entry in summary.checks.entries)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Gap.sm),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  entry.value == ObservationState.recorded
+                      ? Icons.check_circle_outline
+                      : Icons.info_outline,
+                  size: 18,
+                  color: p.inkMuted,
+                ),
+                const SizedBox(width: Gap.sm),
+                Expanded(
+                  child: Text(
+                    '${entry.key} — ${switch (entry.value) {
+                      ObservationState.recorded => 'recorded, within plausibility limits',
+                      ObservationState.missing => 'not recorded',
+                      ObservationState.needsReview => 'needs review, excluded from the score',
+                    }}',
+                    style: TextStyle(fontSize: 13, height: 1.5, color: p.ink),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        Text(
+          'Presence and basic plausibility only — not measurement accuracy. '
+          'Symptoms, history and other protocol gaps are not in this count.',
+          style: TextStyle(fontSize: 12, height: 1.5, color: p.inkMuted),
+        ),
+      ],
+    );
+  }
 }
 
 /// Nurse-only evidence. Never included in caregiver care plans.
-///
-/// Modernised: skeleton loaders during async fetch, a modern expandable card
-/// instead of ExpansionTile, and a visual risk gauge for the 0-1 output.
 class ResearchAnalysisPanel extends StatelessWidget {
   const ResearchAnalysisPanel({
     super.key,

@@ -36,6 +36,13 @@ import '../../data/repositories/care_repository.dart';
 import '../../domain/engines/growth_zscore_engine.dart';
 import '../../domain/engines/immunisation_engine.dart';
 import '../../domain/engines/measurement_safety_engine.dart';
+import '../../domain/engines/action_prioritizer.dart';
+import '../../domain/engines/care_slots.dart';
+import '../../domain/engines/child_input_from_record.dart';
+import '../../domain/engines/clinical_brief_engine.dart';
+import '../../domain/engines/clinical_evidence_graph.dart';
+import '../../domain/engines/clinical_impression_resolver.dart';
+import '../../domain/engines/protocol_counterfactual.dart';
 import '../../domain/engines/nurturing_care_engine.dart';
 import '../../domain/engines/nutrition_engine.dart';
 import '../../domain/engines/nutrition/therapeutic_supplements.dart';
@@ -117,17 +124,8 @@ class _AssessmentResultScreenState
   /// result screen is a decision, not a data dump — the drivers lead.
   bool _showAllFindings = false;
 
-  /// Whether the clinical-detail fold is open.
-  ///
-  /// Open by default. The fold sits *below* the verdict, the pre-referral doses
-  /// and the worklist, so showing it costs the worker nothing they must act on —
-  /// and hiding it cost the product its credibility. This app's whole claim is an
-  /// explainable protocol decision; a verdict whose measured values, cut-offs and
-  /// WHO/IMCI citations are collapsed behind a tap presents as an unsupported
-  /// assertion, which is exactly what reads as a toy to a clinician auditing the
-  /// reasoning. The control stays, so a worker who wants the lean page can fold
-  /// it away and have that choice persist for the session.
-  bool _showDetail = true;
+  /// The decisive findings stay visible; extended evidence opens on demand.
+  bool _showDetail = false;
 
   /// Whether the clinical override panel is unfolded.
   bool _showOverride = false;
@@ -574,11 +572,74 @@ class _AssessmentResultScreenState
       extraActions: extraActions,
       stabilizationContext: _buildStabilizationContext(),
       stabilizationRisks: const StabilizationAiRisks(),
+      // The cohort sentence is built from *this* record now, instead of one
+      // fixed paragraph per cohort. Whatever was not captured is declared as a
+      // gap in the text rather than smoothed over — which is also what makes the
+      // word "tailored" defensible when a nurse reads it.
+      slots: CareSlots(
+        subjectName: input.person.fullName,
+        ageInDays: input.person.ageInDays,
+        ageInMonths: input.person.ageInMonths,
+        weightKg:
+            draft.growth?.weightKg ??
+            (draft.inputs['weight_kg'] as num?)?.toDouble(),
+        followUpInDays: result.followUpInDays,
+      ),
+      // Only ever a tie-breaker, and only between steps the guideline already
+      // weighs the same. See `ActionPrioritizer`.
+      walkingMinutesToFacility: input.walkingMinutes,
     );
   }
 
   StabilizationContext _buildStabilizationContext() =>
       AssessmentFeatureAdapter(input, draft).stabilization;
+
+  /// The only line in the app that speaks about how *firm* a call is — and it is
+  /// arithmetic, not opinion. The stored measurements are rebuilt into a
+  /// `ChildInput`, the sick-child engine is run again on them, and the result is
+  /// shown only when it reproduces the verdict on this screen. Anything else and
+  /// this returns null, so the card falls silent instead of guessing.
+  ///
+  /// What it can say: a value sitting within 10% of its own cut-off, and the
+  /// nearest number at which the real engine would have said something different.
+  String? _protocolStabilityNote(CarePlan plan) {
+    final cohort = plan.patientCohort;
+    if (cohort == null || !ChildInputReconstruction.supports(cohort)) {
+      return null;
+    }
+
+    final child = ChildInputReconstruction.forCounterfactual(
+      inputs: draft.inputs,
+      storedClassification: _classificationOf(plan),
+      ageInMonths: input.person.ageInMonths,
+    );
+    if (child == null) return null;
+
+    final margins = ProtocolThresholds.decisiveForChild(child);
+
+    final close = margins.where((m) => m.abnormal && m.borderline).toList();
+    if (close.isNotEmpty) {
+      final m = close.first;
+      final flip = ProtocolCounterfactual.nearestFlipForChild(
+        input: child,
+        measurement: m.measurement,
+      );
+      if (flip != null && flip.verdictChanges) {
+        return '${m.statement}. ${flip.sentence}';
+      }
+      return '${m.statement} — worth counting once more before the label is what '
+          'the family acts on.';
+    }
+
+    final gaps = margins.where((m) => !m.measured).toList();
+    if (gaps.isNotEmpty) {
+      return 'Not counted: ${gaps.map((g) => g.label.toLowerCase()).join(', ')} '
+          '— the protocol cannot clear what it never measured.';
+    }
+
+    return 'Every counted value sits clear of its cut-off, so none of them is '
+        'close enough for a re-count to change this plan.';
+  }
 
   /// Runs the plausibility screen over everything this visit recorded, reading
   /// the growth measurement first and falling back to the raw inputs, so both
@@ -895,6 +956,10 @@ class _AssessmentResultScreenState
     final immunisation = _immunisationPlan();
     final nurturingCare = _nurturingCareAssessment(immunisation, nutrition);
     final roadToHealth = _roadToHealth;
+    final coverage = AssessmentFeatureAdapter(
+      input,
+      draft,
+    ).observationCompleteness;
     final motion = !MediaQuery.disableAnimationsOf(context);
     final p = _night ? ClinicalPalette.night : ClinicalPalette.day;
 
@@ -921,12 +986,24 @@ class _AssessmentResultScreenState
     // the deck and the brief's driver list carry everything except them. When
     // they were the whole verdict, the brief says so instead of going blank.
     final deckFindings = _verdictFindings(plan);
-    final briefDrivers = plan.topDrivers
-        .where((f) => f.protocolSource != ImmunisationEngine.protocolSource)
-        .toList(growable: false);
-    final epiGaps = plan.findings
-        .where((f) => f.protocolSource == ImmunisationEngine.protocolSource)
-        .length;
+    // One graph, one brief: everything the card says is derived from evidence
+    // the engines already produced, so no sentence can drift from the record.
+    // The resolver only *ranks* classifications the engines already wrote — the
+    // precedence order lives in the guideline, and nothing here can soften or
+    // harden the verdict the synthesizer reached.
+    final brief = ClinicalBriefEngine.build(
+      ClinicalEvidenceGraph.fromPlan(
+        plan,
+        classification: _classificationOf(plan),
+        needsReferral: _refer,
+      ),
+      subject: input.person.fullName.split(' ').first,
+      followUpInDays: plan.followUpInDays,
+      impression: ClinicalImpressionResolver.resolve(
+        classifications: plan.classifications,
+        findings: deckFindings,
+      ),
+    );
 
     return ClinicalPaletteScope(
       palette: p,
@@ -1008,635 +1085,636 @@ class _AssessmentResultScreenState
           // dossier. The decision and its working sheet are one page — you should
           // never have to open a document to find out what to do.
           // Fade + a breath of scale + a short slide; zero when motion is off.
-          body: AmbientBackdrop(
-            child: AnimatedSwitcher(
-              duration: motion ? AppMotion.duration : Duration.zero,
-              switchInCurve: AppMotion.curve,
-              switchOutCurve: Curves.easeIn,
-              transitionBuilder: (child, animation) => FadeTransition(
-                opacity: animation,
-                child: ScaleTransition(
-                  scale: Tween<double>(begin: 0.98, end: 1).animate(animation),
-                  child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0.04, 0),
-                      end: Offset.zero,
-                    ).animate(animation),
-                    child: child,
+          body: SafeArea(
+            top: false,
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 860),
+                child: AnimatedSwitcher(
+                  duration: motion ? AppMotion.duration : Duration.zero,
+                  switchInCurve: AppMotion.curve,
+                  switchOutCurve: Curves.easeIn,
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: ScaleTransition(
+                      scale: Tween<double>(
+                        begin: 0.98,
+                        end: 1,
+                      ).animate(animation),
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0.04, 0),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: child,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              child: _view == 0
-                  ? KeyedSubtree(
-                      key: const ValueKey('verdict'),
-                      child: ListView(
-                        padding: const EdgeInsets.all(Gap.lg),
-                        children: [
-                          // -------------------------------- PRE-REFERRAL (SAFETY)
-                          // Life-saving pre-transport interventions outrank the
-                          // verdict: they render first, because in the
-                          // second-delay window the CHO must not scroll to find
-                          // them.
-                          if (plan.preReferralProtocols.isNotEmpty) ...[
-                            _Entrance(child: PreReferralRecSection(plan: plan)),
-                            const SizedBox(height: Gap.lg),
-                          ],
-
-                          // -------------------------------------- Danger signs
-                          // A danger sign is the clearest sentence this
-                          // assessment can speak: it leads the page, in red,
-                          // so the urgency is impossible to scroll past.
-                          if (result.dangerSignsPresent.isNotEmpty) ...[
-                            _Entrance(
-                              child: _DangerSignsBanner(
-                                signs: result.dangerSignsPresent,
-                              ),
-                            ),
-                            const SizedBox(height: Gap.lg),
-                          ],
-
-                          // --------------------------------------- The verdict
-                          // The whole assessment as one premium moment: the
-                          // severity-coloured hero, IMCI level chip, the
-                          // classification, one-line rationale and the
-                          // data-confidence ring. Colour is the first sentence;
-                          // the words only confirm it.
-                          if (plan.overallTriage == TriageLevel.urgent) ...[
-                            Semantics(
-                              liveRegion: true,
-                              child: Text(
-                                'Urgent clinical protocol guidance applies regardless of the experimental score.',
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.error,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: Gap.md),
-                          ],
-                          AiInsightCard(
-                            reasoning: _reasoning,
-                            pending: _modelPending,
-                            unavailableReason: _modelUnavailableReason,
-                          ),
-                          const SizedBox(height: Gap.lg),
-                          const Text(
-                            'Clinical Protocol Check',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: Gap.md),
-                          _Entrance(
-                            index: 1,
-                            child: ClinicalDecisionHeader(
-                              classification: _classificationOf(plan),
-                              level: effective,
-                              missingCount: plan.missingData.length,
-                              rationale: _heroRationale(plan),
-                              audio: AudioButton(
-                                text: _narration(
-                                  NarrationAudience.healthWorker,
-                                ),
-                                language:
-                                    ref
-                                        .watch(currentUserProvider)
-                                        ?.preferredLanguage ??
-                                    input.user.preferredLanguage,
-                                id: 'result_verdict',
-                                compact: true,
-                              ),
-                              overrideNote: _override == null
-                                  ? null
-                                  : _OverrideNote(
-                                      engine: plan.overallTriage,
-                                      chosen: effective,
-                                    ),
-                            ),
-                          ),
-
-                          // ------------------------- The decision, handoff-ready
-                          // One structured card a receiving clinician can act on
-                          // without scrolling: what drove it, the honest AI
-                          // line, and what was not measured. It never restates
-                          // the verdict — that is said exactly once, above.
-                          _Entrance(
-                            index: 2,
-                            child: Padding(
-                              padding: const EdgeInsets.only(top: Gap.md),
-                              child: _DecisionBriefCard(
-                                level: effective,
-                                plan: plan,
-                                drivers: briefDrivers,
-                                driversFolded:
-                                    epiGaps > 0 && briefDrivers.isEmpty,
-                                aiLine: _reasoning.briefLine,
-                                trajectory: _trajectory,
-                                needsReferral: _refer,
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: Gap.md),
-
-                          if (_reasoning.experimentalAssessment == null)
-                            ResearchAnalysisPanel(
-                              predictions: _mlPredictions,
-                              statuses: _modelStatuses,
-                              onEdit: () => Navigator.of(context).pop(),
-                            ),
-
-                          // -------------------------------------- Clinical detail
-                          // Everything the decision was read from — the station's
-                          // numbers, the finding cards, the Road-to-Health chart
-                          // and the growth slope — folded behind one control so
-                          // the decision is the page, not the dossier. Nothing a
-                          // clinician *acts* on is in here; only what proves it.
-                          _Entrance(
-                            index: 3,
-                            child: _ClinicalDetailFold(
-                              expanded: _showDetail,
-                              onToggle: () =>
-                                  setState(() => _showDetail = !_showDetail),
-                              children: [
-                                // The band tone each number earned, and the change
-                                // since last visit. Breathing rate leads only when
-                                // a respiratory finding carried it — a number that
-                                // decided nothing doesn't headline here.
-                                VitalsStrip(
-                                  input: input,
-                                  inputs: draft.inputs,
-                                  omitKeys: _breathingDroveDecision(plan)
-                                      ? const {}
-                                      : const {'respiratory_rate'},
+                  child: _view == 0
+                      ? KeyedSubtree(
+                          key: const ValueKey('verdict'),
+                          child: ListView(
+                            padding: const EdgeInsets.all(Gap.md),
+                            children: [
+                              // -------------------------------------- Danger signs
+                              // A danger sign is the clearest sentence this
+                              // assessment can speak: it leads the page, in red,
+                              // so the urgency is impossible to scroll past.
+                              if (result.dangerSignsPresent.isNotEmpty) ...[
+                                _Entrance(
+                                  child: _DangerSignsBanner(
+                                    signs: result.dangerSignsPresent,
+                                  ),
                                 ),
                                 const SizedBox(height: Gap.lg),
-
-                                // The findings as severity-coloured cards: each one
-                                // wears the IMCI colour of its severity, its
-                                // measured number and its cut-off — the verdict is
-                                // shown, not asserted. The section is skipped when
-                                // nothing is left for it to own: an all-clear card
-                                // under a non-routine verdict would contradict the
-                                // section that took its findings.
-                                if (deckFindings.isNotEmpty ||
-                                    plan.findings.isEmpty) ...[
-                                  RecSection(
-                                    title: 'What we found',
-                                    icon: Icons.assignment_turned_in_outlined,
-                                    subtitle:
-                                        'Each card wears the colour of its severity — red '
-                                        'refers, amber watches, green continues routine care.',
-                                    child: _FindingsDeck(
-                                      findings: _displayFindings(deckFindings),
-                                      totalCount: deckFindings.length,
-                                    ),
-                                  ),
-                                ],
-
-                                // The Road-to-Health chart: the object the mother
-                                // already trusts and the supervisor already
-                                // audits, computed from the weighings on this
-                                // phone rather than left on paper.
-                                if (roadToHealth != null) ...[
-                                  const SizedBox(height: Gap.lg),
-                                  RoadToHealthCard(reading: roadToHealth),
-                                ],
-
-                                // The slope, not just today: the direction of
-                                // travel a paper card cannot show.
-                                if (_trajectory != null) ...[
-                                  const SizedBox(height: Gap.lg),
-                                  _TrajectoryCard(result: _trajectory!),
-                                ],
                               ],
-                            ),
-                          ),
-                          const SizedBox(height: Gap.lg),
 
-                          // ================================== The working sheet
-                          // What to do now, whether this case travels, and when to
-                          // see them again — on the same page as the verdict that
-                          // produced it. There used to be a button between the two.
-
-                          // ------------------------------------- Do this now
-                          // Numbered, tickable, urgency-tagged, and speakable in
-                          // the worker's language: the actions this visit turns on.
-                          if (worklist.isNotEmpty) ...[
-                            _Entrance(
-                              index: 4,
-                              child: RecSection(
-                                title: 'Prioritized actions',
-                                icon: Icons.checklist_rounded,
-                                trailing: AudioButton(
-                                  text: OfflineNarrator.actions(
-                                    worklist,
-                                    audience: NarrationAudience.healthWorker,
+                              // One decision, with measured evidence and honest input coverage.
+                              _Entrance(
+                                index: 1,
+                                child: ClinicalDecisionHeader(
+                                  classification: _classificationOf(plan),
+                                  level: effective,
+                                  missingCount: plan.missingData.length,
+                                  rationale: _heroRationale(plan),
+                                  evidence: _DecisionBriefCard(
+                                    brief: brief,
+                                    level: effective,
+                                    classification: _classificationOf(plan),
+                                    stabilityNote: _protocolStabilityNote(plan),
                                   ),
-                                  language:
-                                      ref
-                                          .watch(currentUserProvider)
-                                          ?.preferredLanguage ??
-                                      input.user.preferredLanguage,
-                                  id: 'result_actions',
-                                  compact: true,
-                                ),
-                                child: ActionWorklist(
-                                  actions: worklist,
-                                  completed: _completedActions,
-                                  onCompletedChanged: (values) => setState(() {
-                                    _completedActions
-                                      ..clear()
-                                      ..addAll(values);
-                                  }),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: Gap.lg),
-                          ],
-
-                          // -------------------------------------------- Disposition
-                          // Does this case travel, and when is it seen again — the
-                          // two answers that close a visit, held in one card
-                          // rather than two competing sections.
-                          _Entrance(
-                            index: 5,
-                            child: _ReferralSection(
-                              refer: _refer,
-                              onRefer: (v) => setState(() {
-                                _refer = v;
-                              }),
-                              facilities: _adequateFacilities(),
-                              facility: _facility,
-                              onFacility: (f) => setState(() => _facility = f),
-                              urgency: _urgency,
-                              onUrgency: (u) => setState(() => _urgency = u),
-                              capabilities: result.referralCapabilitiesNeeded,
-                              followDays: _followDays,
-                              onFollow: (d) =>
-                                  setState(() => _followDays = d ?? 7),
-                            ),
-                          ),
-
-                          // ---------------- Caregiver counselling, one section
-                          // Both of these carry detail the worklist no longer
-                          // repeats, so they sit here as one-line headers: the
-                          // nurse opens them when the case calls for it, and the
-                          // page stays a sheet rather than a dossier.
-                          if (nurturingCare.isNotEmpty &&
-                              (result.clientType == ClientType.newborn ||
-                                  result.clientType ==
-                                      ClientType.childUnderFive ||
-                                  result.clientType ==
-                                      ClientType.pregnantWoman ||
-                                  result.clientType ==
-                                      ClientType.postpartumWoman)) ...[
-                            const SizedBox(height: Gap.md),
-                            NurturingCareRecSection(
-                              assessment: nurturingCare,
-                              collapsible: true,
-                            ),
-                          ],
-
-                          // -------------------------------------------------- Immunisation
-                          if (immunisation != null) ...[
-                            const SizedBox(height: Gap.md),
-                            ImmunisationRecSection(
-                              plan: immunisation,
-                              collapsible: true,
-                            ),
-                          ],
-
-                          // ------------------------------------------------ Clinical override
-                          // Demoted to one quiet line: the verdict owns the screen.
-                          // Only when the worker disagrees does the override form
-                          // unfold — saved with their name, reviewable by a supervisor.
-                          if (input.user.can(
-                            Permission.overrideAiRecommendation,
-                          )) ...[
-                            const SizedBox(height: Gap.md),
-                            if (!_showOverride)
-                              Center(
-                                child: TextButton(
-                                  onPressed: () =>
-                                      setState(() => _showOverride = true),
-                                  child: const Text(
-                                    'Disagree with this plan? Record a clinical override',
-                                  ),
-                                ),
-                              )
-                            else
-                              _OverrideSection(
-                                engineTriage: plan.overallTriage,
-                                overrideLevel: _override,
-                                reasonController: _overrideReason,
-                                onOverride: (level) {
-                                  setState(() {
-                                    _override = level;
-                                    if (level == TriageLevel.urgent) {
-                                      _refer = true;
-                                      _urgency = ReferralUrgency.immediate;
-                                    }
-                                  });
-                                },
-                              ),
-                          ],
-
-                          if (_error != null) ...[
-                            const SizedBox(height: Gap.md),
-                            Container(
-                              padding: const EdgeInsets.all(Gap.md),
-                              decoration: BoxDecoration(
-                                color: p.triageRedBg,
-                                borderRadius: BorderRadius.circular(
-                                  Gap.radiusSm,
-                                ),
-                              ),
-                              child: Text(
-                                _error!,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: p.triageRed,
-                                  fontWeight: FontWeight.w600,
-                                  height: 1.4,
-                                ),
-                              ),
-                            ),
-                          ],
-
-                          const SizedBox(height: Gap.lg),
-
-                          // ------------------------- The food plan, one tap away
-                          // Nutrition is the half of the decision the family lives
-                          // on, so it gets its own doorway on the verdict page —
-                          // pictured foods leading, impossible to miss.
-                          if (nutrition != null) ...[
-                            _Entrance(
-                              index: 6,
-                              child: _NutritionCta(
-                                onOpen: () => setState(() => _view = 1),
-                              ),
-                            ),
-                            const SizedBox(height: Gap.md),
-                          ],
-
-                          // ---------------------- What to say before they leave
-                          // The verdict translated into the sentence the family
-                          // carries home — plain words, speakable aloud, with
-                          // the return date attached.
-                          _Entrance(
-                            index: 7,
-                            child: _FamilyBrief(
-                              message: _familyBriefLine(plan),
-                              followUpInDays: plan.followUpInDays,
-                              audio: AudioButton(
-                                text: _narration(NarrationAudience.caregiver),
-                                language:
-                                    ref
-                                        .watch(currentUserProvider)
-                                        ?.preferredLanguage ??
-                                    input.user.preferredLanguage,
-                                id: 'result_family_brief',
-                                compact: true,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: Gap.md),
-
-                          // ----------------------------- The report, one tap away
-                          _Entrance(
-                            index: 8,
-                            child: _ReportTeaser(
-                              findingsCount: plan.findings.length,
-                              actionsCount: plan.actions.length,
-                              needsReferral: _refer,
-                              onOpen: () => setState(() => _view = 2),
-                            ),
-                          ),
-                          const SizedBox(height: Gap.xxl),
-                        ],
-                      ),
-                    )
-                  : _view == 1
-                  ? KeyedSubtree(
-                      key: const ValueKey('nutrition'),
-                      child: ListView(
-                        padding: const EdgeInsets.all(Gap.lg),
-                        children: [
-                          // Who this basket was chosen for, before the food:
-                          // the cohort callout leads the page exactly as it
-                          // leads the care plan.
-                          if (plan.patientCohort != null &&
-                              plan.cohortNote != null) ...[
-                            CohortCallout(
-                              cohort: plan.patientCohort!,
-                              note: plan.cohortNote!,
-                            ),
-                            const SizedBox(height: Gap.lg),
-                          ],
-                          if (nutrition != null)
-                            NutritionRecSection(
-                              plan: nutrition,
-                              cost: _cost,
-                              onCost: (tier) {
-                                setState(() => _cost = tier);
-                              },
-                            )
-                          else
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(Gap.md),
-                              decoration: BoxDecoration(
-                                color: p.surface,
-                                borderRadius: BorderRadius.circular(
-                                  Gap.radiusSm,
-                                ),
-                                border: Border.all(color: p.line),
-                              ),
-                              child: Text(
-                                'No tailored food plan for this visit — the model '
-                                'withholds food counselling when it is not safe '
-                                'or not applicable.',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: p.inkMuted,
-                                  height: 1.45,
-                                ),
-                              ),
-                            ),
-                          const SizedBox(height: Gap.lg),
-                          // The evidence stays one tap away here too.
-                          Center(
-                            child: TextButton.icon(
-                              onPressed: () => setState(() => _view = 2),
-                              icon: const Icon(
-                                Icons.description_outlined,
-                                size: 17,
-                              ),
-                              label: const Text('Open full clinical report'),
-                            ),
-                          ),
-                          const SizedBox(height: Gap.xxl),
-                        ],
-                      ),
-                    )
-                  : KeyedSubtree(
-                      key: const ValueKey('report'),
-                      child: ListView(
-                        padding: const EdgeInsets.all(Gap.lg),
-                        children: [
-                          // ------------------------------------------ Handoff summary
-                          // The report stands alone: a receiving clinician reads
-                          // this card in five seconds — verdict, drivers, the
-                          // honest AI line, and what to do — before the evidence
-                          // unfolds below. Deliberately self-contained: a handoff
-                          // document must not ask its reader to open other pages.
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: Gap.lg),
-                            child: _HandoffSummary(
-                              level: effective,
-                              classification: _classificationOf(plan),
-                              plan: plan,
-                              // Protocol findings only: the AI's number already
-                              // speaks exactly once in the AI-check line below,
-                              // and the full findings list follows in this same
-                              // report. One fact, one place — even in the handoff.
-                              drivers: plan.topDrivers
-                                  .where((f) => !f.aiGenerated)
-                                  .toList(growable: false),
-                              aiLine: _reasoning.briefLine,
-                              needsReferral: _refer,
-                            ),
-                          ),
-
-                          // ------------------------------------------- Why this verdict
-                          // The explainability anchor, stripped to what changes behaviour:
-                          // the one-line rationale, any safety net that fired, the findings
-                          // that drove the verdict (drivers first, the rest one tap away),
-                          // and — in the open — what was not measured.
-                          RecSection(
-                            title: 'Why this result',
-                            icon: Icons.psychology_outlined,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  plan.triageRationale,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w800,
-                                    height: 1.4,
-                                  ),
-                                ),
-                                if (plan.guardrailEscalated) ...[
-                                  const SizedBox(height: Gap.md),
-                                  const SafetyNetNote(
-                                    text:
-                                        'Safety net: a danger sign was detected, so this '
-                                        'plan was raised to urgent automatically.',
-                                  ),
-                                ],
-                                if (plan.referralGuaranteed) ...[
-                                  const SizedBox(height: Gap.md),
-                                  const SafetyNetNote(
-                                    text:
-                                        'Safety net: an urgent verdict always carries a '
-                                        'referral — one was added because none was listed.',
-                                  ),
-                                ],
-                                if (plan.interactions.isNotEmpty) ...[
-                                  const SizedBox(height: Gap.md),
-                                  for (final i in plan.interactions)
-                                    FindingTile(
-                                      label: i.label,
-                                      detail: i.detail,
-                                      severity: i.severity,
-                                      source: i.protocolSource,
+                                  completeness: coverage,
+                                  audio: AudioButton(
+                                    text: _narration(
+                                      NarrationAudience.healthWorker,
                                     ),
-                                ],
-                                if (plan.findings.isNotEmpty) ...[
-                                  const SizedBox(height: Gap.md),
-                                  for (final f in _displayFindings(
-                                    plan.findings,
-                                  ))
-                                    FindingTile(
-                                      label: f.label,
-                                      detail: f.detail,
-                                      severity: f.severity,
-                                      source: f.protocolSource,
-                                      measured: f.measuredValue,
-                                      threshold: f.threshold,
-                                    ),
-                                  if (plan.findings.length > 3)
-                                    TextButton(
-                                      onPressed: () => setState(
-                                        () => _showAllFindings =
-                                            !_showAllFindings,
-                                      ),
-                                      style: TextButton.styleFrom(
-                                        minimumSize: const Size(
-                                          0,
-                                          Gap.tapTarget,
+                                    language:
+                                        ref
+                                            .watch(currentUserProvider)
+                                            ?.preferredLanguage ??
+                                        input.user.preferredLanguage,
+                                    id: 'result_verdict',
+                                    compact: true,
+                                  ),
+                                  overrideNote: _override == null
+                                      ? null
+                                      : _OverrideNote(
+                                          engine: plan.overallTriage,
+                                          chosen: effective,
                                         ),
+                                ),
+                              ),
+
+                              const SizedBox(height: Gap.md),
+                              // Stabilization is never collapsed or delayed by model execution.
+                              if (plan.preReferralProtocols.isNotEmpty) ...[
+                                PreReferralRecSection(plan: plan),
+                                const SizedBox(height: Gap.md),
+                              ],
+                              for (final interaction in plan.interactions)
+                                FindingTile(
+                                  label: interaction.label,
+                                  detail: interaction.detail,
+                                  severity: interaction.severity,
+                                  source: interaction.protocolSource,
+                                ),
+
+                              // ================================== The working sheet
+                              // What to do now, whether this case travels, and when to
+                              // see them again — on the same page as the verdict that
+                              // produced it. There used to be a button between the two.
+
+                              // ------------------------------------- Do this now
+                              // Numbered, tickable, urgency-tagged, and speakable in
+                              // the worker's language: the actions this visit turns on.
+                              if (worklist.isNotEmpty) ...[
+                                _Entrance(
+                                  index: 4,
+                                  child: RecSection(
+                                    title: 'Prioritized actions',
+                                    // The ordering rule, published where the
+                                    // ordered list is: urgency, then kind, then
+                                    // what this household can reach. Naming the
+                                    // threshold lets a nurse disagree with the
+                                    // rule rather than with the output.
+                                    subtitle: ActionPrioritizer.explain(
+                                      walkingMinutesToFacility:
+                                          input.walkingMinutes,
+                                    ),
+                                    icon: Icons.checklist_rounded,
+                                    trailing: AudioButton(
+                                      text: OfflineNarrator.actions(
+                                        worklist,
+                                        audience:
+                                            NarrationAudience.healthWorker,
                                       ),
-                                      child: Text(
-                                        _showAllFindings
-                                            ? 'Show only the drivers'
-                                            : 'Show all ${plan.findings.length} findings',
+                                      language:
+                                          ref
+                                              .watch(currentUserProvider)
+                                              ?.preferredLanguage ??
+                                          input.user.preferredLanguage,
+                                      id: 'result_actions',
+                                      compact: true,
+                                    ),
+                                    child: ActionWorklist(
+                                      actions: worklist,
+                                      // Only reasons the brief could trace to a
+                                      // finding are shown; the rest would be filler.
+                                      reasons: {
+                                        for (final r in brief.recommendations)
+                                          if (r.isTraceable)
+                                            r.instruction: r.why,
+                                      },
+                                      completed: _completedActions,
+                                      onCompletedChanged: (values) =>
+                                          setState(() {
+                                            _completedActions
+                                              ..clear()
+                                              ..addAll(values);
+                                          }),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: Gap.lg),
+                              ],
+
+                              // -------------------------------------------- Disposition
+                              // Does this case travel, and when is it seen again — the
+                              // two answers that close a visit, held in one card
+                              // rather than two competing sections.
+                              _Entrance(
+                                index: 5,
+                                child: _ReferralSection(
+                                  refer: _refer,
+                                  onRefer: (v) => setState(() {
+                                    _refer = v;
+                                  }),
+                                  facilities: _adequateFacilities(),
+                                  facility: _facility,
+                                  onFacility: (f) =>
+                                      setState(() => _facility = f),
+                                  urgency: _urgency,
+                                  onUrgency: (u) =>
+                                      setState(() => _urgency = u),
+                                  capabilities:
+                                      result.referralCapabilitiesNeeded,
+                                  followDays: _followDays,
+                                  onFollow: (d) =>
+                                      setState(() => _followDays = d ?? 7),
+                                ),
+                              ),
+
+                              const SizedBox(height: Gap.md),
+                              // Extended evidence follows the actions and disposition controls.
+                              _ClinicalDetailFold(
+                                expanded: _showDetail,
+                                onToggle: () =>
+                                    setState(() => _showDetail = !_showDetail),
+                                children: [
+                                  VitalsStrip(
+                                    input: input,
+                                    inputs: draft.inputs,
+                                    omitKeys: _breathingDroveDecision(plan)
+                                        ? const {}
+                                        : const {'respiratory_rate'},
+                                  ),
+                                  const SizedBox(height: Gap.md),
+                                  if (coverage.checks.isNotEmpty)
+                                    RecSection(
+                                      title: 'Measurement coverage',
+                                      icon: Icons.fact_check_outlined,
+                                      subtitle:
+                                          'Which core measurements this '
+                                          'percentage counted, and which it '
+                                          'did not.',
+                                      child: ObservationCoverageLedger(
+                                        summary: coverage,
                                       ),
                                     ),
+                                  const SizedBox(height: Gap.md),
+                                  if (deckFindings.isNotEmpty ||
+                                      plan.findings.isEmpty)
+                                    RecSection(
+                                      title: 'What we found',
+                                      icon: Icons.assignment_turned_in_outlined,
+                                      subtitle:
+                                          'Recorded findings, measurements and protocol cutoffs.',
+                                      child: _FindingsDeck(
+                                        findings: _displayFindings(
+                                          deckFindings,
+                                        ),
+                                        totalCount: deckFindings.length,
+                                      ),
+                                    ),
+                                  if (roadToHealth != null) ...[
+                                    const SizedBox(height: Gap.md),
+                                    RoadToHealthCard(reading: roadToHealth),
+                                  ],
+                                  if (_trajectory != null) ...[
+                                    const SizedBox(height: Gap.md),
+                                    _TrajectoryCard(result: _trajectory!),
+                                  ],
                                 ],
-                                if (plan.missingData.isNotEmpty) ...[
-                                  const SizedBox(height: Gap.sm),
-                                  Text(
-                                    'Not measured: ${plan.missingData.join(', ')}. '
-                                    'These are input-completeness gaps. The protocol '
-                                    'still acts on observed danger signs.',
+                              ),
+                              const SizedBox(height: Gap.md),
+                              if (plan.overallTriage == TriageLevel.urgent) ...[
+                                Text(
+                                  'Urgent clinical protocol guidance applies regardless of the experimental score.',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: p.ink,
+                                    height: 1.5,
+                                  ),
+                                ),
+                                const SizedBox(height: Gap.sm),
+                              ],
+                              AiInsightCard(
+                                reasoning: _reasoning,
+                                pending: _modelPending,
+                                unavailableReason: _modelUnavailableReason,
+                              ),
+
+                              // ---------------- Caregiver counselling, one section
+                              // Both of these carry detail the worklist no longer
+                              // repeats, so they sit here as one-line headers: the
+                              // nurse opens them when the case calls for it, and the
+                              // page stays a sheet rather than a dossier.
+                              if (nurturingCare.isNotEmpty &&
+                                  (result.clientType == ClientType.newborn ||
+                                      result.clientType ==
+                                          ClientType.childUnderFive ||
+                                      result.clientType ==
+                                          ClientType.pregnantWoman ||
+                                      result.clientType ==
+                                          ClientType.postpartumWoman)) ...[
+                                const SizedBox(height: Gap.md),
+                                NurturingCareRecSection(
+                                  assessment: nurturingCare,
+                                  collapsible: true,
+                                ),
+                              ],
+
+                              // -------------------------------------------------- Immunisation
+                              if (immunisation != null) ...[
+                                const SizedBox(height: Gap.md),
+                                ImmunisationRecSection(
+                                  plan: immunisation,
+                                  collapsible: true,
+                                ),
+                              ],
+
+                              // ------------------------------------------------ Clinical override
+                              // Demoted to one quiet line: the verdict owns the screen.
+                              // Only when the worker disagrees does the override form
+                              // unfold — saved with their name, reviewable by a supervisor.
+                              if (input.user.can(
+                                Permission.overrideAiRecommendation,
+                              )) ...[
+                                const SizedBox(height: Gap.md),
+                                if (!_showOverride)
+                                  Center(
+                                    child: TextButton(
+                                      onPressed: () =>
+                                          setState(() => _showOverride = true),
+                                      child: const Text(
+                                        'Disagree with this plan? Record a clinical override',
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  _OverrideSection(
+                                    engineTriage: plan.overallTriage,
+                                    overrideLevel: _override,
+                                    reasonController: _overrideReason,
+                                    onOverride: (level) {
+                                      setState(() {
+                                        _override = level;
+                                        if (level == TriageLevel.urgent) {
+                                          _refer = true;
+                                          _urgency = ReferralUrgency.immediate;
+                                        }
+                                      });
+                                    },
+                                  ),
+                              ],
+
+                              if (_error != null) ...[
+                                const SizedBox(height: Gap.md),
+                                Container(
+                                  padding: const EdgeInsets.all(Gap.md),
+                                  decoration: BoxDecoration(
+                                    color: p.triageRedBg,
+                                    borderRadius: BorderRadius.circular(
+                                      Gap.radiusSm,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    _error!,
                                     style: TextStyle(
-                                      fontSize: 12,
-                                      color: p.inkMuted,
+                                      fontSize: 13,
+                                      color: p.triageRed,
+                                      fontWeight: FontWeight.w600,
                                       height: 1.4,
                                     ),
                                   ),
-                                ],
+                                ),
                               ],
-                            ),
-                          ),
-                          const RecHairline(),
 
-                          if (_reasoning.experimentalAssessment != null)
-                            AiInsightCard(reasoning: _reasoning)
-                          else
-                            ResearchAnalysisPanel(
-                              predictions: _mlPredictions,
-                              statuses: _modelStatuses,
-                              showEvidence: true,
-                              onEdit: () => Navigator.of(context).pop(),
-                            ),
+                              const SizedBox(height: Gap.lg),
 
-                          // --------------------------- The flywheel, one tap wide
-                          // The CHO's word on the verdict, captured in one slim
-                          // strip at the end of the evidence — never a modal, never
-                          // a chore. On-device, de-identified, out of the way.
-                          const SizedBox(height: Gap.lg),
-                          _VerdictFeedbackStrip(
-                            clientType: _exportClientStream(result.clientType),
-                            engineTriage: plan.overallTriage.name,
-                            finalTriage: effective.name,
+                              // ------------------------- The food plan, one tap away
+                              // Nutrition is the half of the decision the family lives
+                              // on, so it gets its own doorway on the verdict page —
+                              // pictured foods leading, impossible to miss.
+                              if (nutrition != null) ...[
+                                _Entrance(
+                                  index: 6,
+                                  child: _NutritionCta(
+                                    onOpen: () => setState(() => _view = 1),
+                                  ),
+                                ),
+                                const SizedBox(height: Gap.md),
+                              ],
+
+                              // ---------------------- What to say before they leave
+                              // The verdict translated into the sentence the family
+                              // carries home — plain words, speakable aloud, with
+                              // the return date attached.
+                              _Entrance(
+                                index: 7,
+                                child: _FamilyBrief(
+                                  message: _familyBriefLine(plan),
+                                  followUpInDays: plan.followUpInDays,
+                                  audio: AudioButton(
+                                    text: _narration(
+                                      NarrationAudience.caregiver,
+                                    ),
+                                    language:
+                                        ref
+                                            .watch(currentUserProvider)
+                                            ?.preferredLanguage ??
+                                        input.user.preferredLanguage,
+                                    id: 'result_family_brief',
+                                    compact: true,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: Gap.md),
+
+                              // ----------------------------- The report, one tap away
+                              _Entrance(
+                                index: 8,
+                                child: _ReportTeaser(
+                                  findingsCount: plan.findings.length,
+                                  actionsCount: plan.actions.length,
+                                  needsReferral: _refer,
+                                  onOpen: () => setState(() => _view = 2),
+                                ),
+                              ),
+                              const SizedBox(height: Gap.xxl),
+                            ],
                           ),
-                          const SizedBox(height: Gap.xxl),
-                        ],
-                      ),
-                    ),
+                        )
+                      : _view == 1
+                      ? KeyedSubtree(
+                          key: const ValueKey('nutrition'),
+                          child: ListView(
+                            padding: const EdgeInsets.all(Gap.lg),
+                            children: [
+                              // Who this basket was chosen for, before the food:
+                              // the cohort callout leads the page exactly as it
+                              // leads the care plan.
+                              if (plan.patientCohort != null &&
+                                  plan.cohortNote != null) ...[
+                                CohortCallout(
+                                  cohort: plan.patientCohort!,
+                                  note: plan.cohortNote!,
+                                ),
+                                const SizedBox(height: Gap.lg),
+                              ],
+                              if (nutrition != null)
+                                NutritionRecSection(
+                                  plan: nutrition,
+                                  cost: _cost,
+                                  onCost: (tier) {
+                                    setState(() => _cost = tier);
+                                  },
+                                )
+                              else
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(Gap.md),
+                                  decoration: BoxDecoration(
+                                    color: p.surface,
+                                    borderRadius: BorderRadius.circular(
+                                      Gap.radiusSm,
+                                    ),
+                                    border: Border.all(color: p.line),
+                                  ),
+                                  child: Text(
+                                    'No tailored food plan for this visit — the model '
+                                    'withholds food counselling when it is not safe '
+                                    'or not applicable.',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: p.inkMuted,
+                                      height: 1.45,
+                                    ),
+                                  ),
+                                ),
+                              const SizedBox(height: Gap.lg),
+                              // The evidence stays one tap away here too.
+                              Center(
+                                child: TextButton.icon(
+                                  onPressed: () => setState(() => _view = 2),
+                                  icon: const Icon(
+                                    Icons.description_outlined,
+                                    size: 17,
+                                  ),
+                                  label: const Text(
+                                    'Open full clinical report',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: Gap.xxl),
+                            ],
+                          ),
+                        )
+                      : KeyedSubtree(
+                          key: const ValueKey('report'),
+                          child: ListView(
+                            padding: const EdgeInsets.all(Gap.lg),
+                            children: [
+                              // ------------------------------------------ Handoff summary
+                              // The report stands alone: a receiving clinician reads
+                              // this card in five seconds — verdict, drivers, the
+                              // honest AI line, and what to do — before the evidence
+                              // unfolds below. Deliberately self-contained: a handoff
+                              // document must not ask its reader to open other pages.
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: Gap.lg),
+                                child: _HandoffSummary(
+                                  level: effective,
+                                  classification: _classificationOf(plan),
+                                  plan: plan,
+                                  // Protocol findings only: the AI's number already
+                                  // speaks exactly once in the AI-check line below,
+                                  // and the full findings list follows in this same
+                                  // report. One fact, one place — even in the handoff.
+                                  drivers: plan.topDrivers
+                                      .where((f) => !f.aiGenerated)
+                                      .toList(growable: false),
+                                  aiLine: _reasoning.briefLine,
+                                  needsReferral: _refer,
+                                ),
+                              ),
+
+                              // ------------------------------------------- Why this verdict
+                              // The explainability anchor, stripped to what changes behaviour:
+                              // the one-line rationale, any safety net that fired, the findings
+                              // that drove the verdict (drivers first, the rest one tap away),
+                              // and — in the open — what was not measured.
+                              RecSection(
+                                title: 'Why this result',
+                                icon: Icons.psychology_outlined,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      plan.triageRationale,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w800,
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                    if (plan.guardrailEscalated) ...[
+                                      const SizedBox(height: Gap.md),
+                                      const SafetyNetNote(
+                                        text:
+                                            'Safety net: a danger sign was detected, so this '
+                                            'plan was raised to urgent automatically.',
+                                      ),
+                                    ],
+                                    if (plan.referralGuaranteed) ...[
+                                      const SizedBox(height: Gap.md),
+                                      const SafetyNetNote(
+                                        text:
+                                            'Safety net: an urgent verdict always carries a '
+                                            'referral — one was added because none was listed.',
+                                      ),
+                                    ],
+                                    if (plan.interactions.isNotEmpty) ...[
+                                      const SizedBox(height: Gap.md),
+                                      for (final i in plan.interactions)
+                                        FindingTile(
+                                          label: i.label,
+                                          detail: i.detail,
+                                          severity: i.severity,
+                                          source: i.protocolSource,
+                                        ),
+                                    ],
+                                    if (plan.findings.isNotEmpty) ...[
+                                      const SizedBox(height: Gap.md),
+                                      for (final f in _displayFindings(
+                                        plan.findings,
+                                      ))
+                                        FindingTile(
+                                          label: f.label,
+                                          detail: f.detail,
+                                          severity: f.severity,
+                                          source: f.protocolSource,
+                                          measured: f.measuredValue,
+                                          threshold: f.threshold,
+                                        ),
+                                      if (plan.findings.length > 3)
+                                        TextButton(
+                                          onPressed: () => setState(
+                                            () => _showAllFindings =
+                                                !_showAllFindings,
+                                          ),
+                                          style: TextButton.styleFrom(
+                                            minimumSize: const Size(
+                                              0,
+                                              Gap.tapTarget,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            _showAllFindings
+                                                ? 'Show only the drivers'
+                                                : 'Show all ${plan.findings.length} findings',
+                                          ),
+                                        ),
+                                    ],
+                                    if (plan.missingData.isNotEmpty) ...[
+                                      const SizedBox(height: Gap.sm),
+                                      Text(
+                                        'Not measured: ${plan.missingData.join(', ')}. '
+                                        'These are input-completeness gaps. The protocol '
+                                        'still acts on observed danger signs.',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: p.inkMuted,
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              const RecHairline(),
+
+                              if (_reasoning.experimentalAssessment != null)
+                                AiInsightCard(reasoning: _reasoning)
+                              else
+                                ResearchAnalysisPanel(
+                                  predictions: _mlPredictions,
+                                  statuses: _modelStatuses,
+                                  showEvidence: true,
+                                  onEdit: () => Navigator.of(context).pop(),
+                                ),
+
+                              // --------------------------- The flywheel, one tap wide
+                              // The CHO's word on the verdict, captured in one slim
+                              // strip at the end of the evidence — never a modal, never
+                              // a chore. On-device, de-identified, out of the way.
+                              const SizedBox(height: Gap.lg),
+                              _VerdictFeedbackStrip(
+                                clientType: _exportClientStream(
+                                  result.clientType,
+                                ),
+                                engineTriage: plan.overallTriage.name,
+                                finalTriage: effective.name,
+                              ),
+                              const SizedBox(height: Gap.xxl),
+                            ],
+                          ),
+                        ),
+                ),
+              ),
             ),
           ),
-          // Floating glass action bar: the one thing the page must never lose.
-          bottomNavigationBar: GlassActionBar(
-            child: FilledButton.icon(
-              onPressed: _saving ? null : _save,
-              icon: const Icon(Icons.save_outlined),
-              label: Text(_saving ? 'Saving…' : 'Save assessment'),
+          // Saving remains available independently of research execution.
+          bottomNavigationBar: ColoredBox(
+            color: p.surfaceSolid,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.all(Gap.md),
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(Gap.tapTarget),
+                    backgroundColor: p.primary,
+                    foregroundColor: _night ? p.canvas : Colors.white,
+                  ),
+                  onPressed: _saving ? null : _save,
+                  icon: Icon(
+                    _saving ? Icons.hourglass_top : Icons.save_outlined,
+                  ),
+                  label: Text(_saving ? 'Saving…' : 'Save assessment'),
+                ),
+              ),
             ),
           ),
         ),
@@ -1647,252 +1725,205 @@ class _AssessmentResultScreenState
 
 // -------------------------------------------------------------- Verdict hero
 
-/// The verdict as one premium moment: the deep royal hero (the brand's
-/// authority voice), the IMCI level chip (the safety colours, untouched),
-/// the classification in large type, the data-confidence ring, and the
-/// honesty meta line. This is the card the nurse remembers — and the one
-/// card that carries the entire decision.
-/// The handoff card — the piece a receiving doctor reads and can defend.
-///
-/// The verdict page states each fact exactly once: the hero speaks the
-/// verdict, this card *defends* it (the drivers with their measured
-/// numbers, the honest AI line), then states what happens next and what
-/// was not measured. Nothing here repeats the hero; the measured values
-/// here are the only place the driver numbers appear outside the deck.
+/// The brief: what was found, what it means, and what happens next.
 class _DecisionBriefCard extends StatelessWidget {
   const _DecisionBriefCard({
+    required this.brief,
     required this.level,
-    required this.plan,
-    required this.drivers,
-    required this.driversFolded,
-    required this.aiLine,
-    required this.trajectory,
-    required this.needsReferral,
+    required this.classification,
+    this.stabilityNote,
   });
+  final ClinicalBrief brief;
 
+  /// The classification the verdict header above this card already prints. The
+  /// plate must not say the same words twice on one screen, so it checks against
+  /// this rather than trusting the headline alone.
+  final String? classification;
+
+  /// Drives the accent bar. The hue comes from the same plate helper every other
+  /// verdict surface uses, so a red verdict is red here and nowhere else is a
+  /// different red invented for the card.
   final TriageLevel level;
-  final CarePlan plan;
-  final List<ClinicalFinding> drivers;
 
-  /// True when every driver has its own itemised section further down this
-  /// page, so the brief has nothing left to name and stays out of the way.
-  final bool driversFolded;
-  final String? aiLine;
-  final TrajectoryResult? trajectory;
-  final bool needsReferral;
-
-  /// The band this brief is filed under, as a plate and its ink. One hue
-  /// source: the trained IMCI colour, deepened toward a shadow corner, written
-  /// in the only ink that stays legible on it.
-  Gradient get _headerGradient => triagePlate(level).plate;
-  Color get _plateInk => triagePlate(level).ink;
+  /// Computed by re-running the protocol engine on this child's own numbers.
+  /// Null whenever the record cannot be rebuilt to reproduce the stored verdict
+  /// — the card then says nothing rather than speculating.
+  final String? stabilityNote;
 
   @override
   Widget build(BuildContext context) {
-    final shown = drivers.take(2).toList(growable: false);
     final p = ClinicalPaletteScope.of(context);
-    return GlassSurface(
-      blur: false,
-      padding: EdgeInsets.zero,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(GlassTier.card.radius),
-        child: Column(
+    final impression = brief.impression;
+    return _VerdictPlate(
+      level: level,
+      child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // The condition above the urgency word, in the guideline's own naming
+        // order. Omitted when nothing was classified, because the headline
+        // already reads "clinically well" — and omitted when the headline has
+        // just said it, because a name printed twice reads as the card arguing
+        // with itself. Seen in a rendered screenshot, not in a spec.
+        if (impression != null &&
+            impression.tier != ImpressionTier.well &&
+            !_sameWords(impression.conditionName, brief.headline) &&
+            !_sameWords(impression.conditionName, classification ?? '')) ...[
+          Semantics(
+            header: true,
+            child: Text(
+              impression.conditionName,
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                height: 1.3,
+                color: p.ink,
+              ),
+            ),
+          ),
+          const SizedBox(height: Gap.xs),
+        ],
+        Semantics(
+          header: true,
+          child: Text(
+            brief.headline,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              height: 1.4,
+              color: p.ink,
+            ),
+          ),
+        ),
+        const SizedBox(height: Gap.xs),
+        Text(
+          brief.insight,
+          style: TextStyle(fontSize: 15, height: 1.5, color: p.ink),
+        ),
+        // The measurement that produced the condition, with the cut-off it
+        // crossed — its own labelled row, in tabular figures, so the number and
+        // the line can be read without reassembling a sentence.
+        if (impression != null && impression.evidence.isNotEmpty) ...[
+          const SizedBox(height: Gap.sm),
+          const _BriefEyebrow(
+            text: 'Measurement',
+            icon: Icons.straighten_outlined,
+          ),
+          const SizedBox(height: 2),
+          for (final e in impression.evidence.take(3))
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                e.statement,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.45,
+                  color: p.ink,
+                  fontFeatures: _tabularFigures,
+                ),
+              ),
+            ),
+        ],
+        if (impression != null && impression.alsoPresent.isNotEmpty) ...[
+          const SizedBox(height: Gap.sm),
+          const _BriefEyebrow(text: 'Also classified', icon: Icons.category_outlined),
+          const SizedBox(height: 2),
+          Text(
+            impression.alsoPresent
+                .map(ClinicalImpressionResolver.displayNameFor)
+                .join(', '),
+            style: TextStyle(fontSize: 12.5, height: 1.45, color: p.inkMuted),
+          ),
+        ],
+        if (impression != null && impression.unresolved.isNotEmpty) ...[
+          const SizedBox(height: Gap.sm),
+          const _BriefEyebrow(
+            text: 'Still outstanding',
+            icon: Icons.pending_outlined,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            impression.unresolved
+                .map(ClinicalImpressionResolver.displayNameFor)
+                .join(', '),
+            style: TextStyle(fontSize: 12.5, height: 1.45, color: p.inkMuted),
+          ),
+        ],
+        // The stability line last: it is a statement about the arithmetic, not
+        // part of the verdict, and it must never read as a second opinion.
+        if (stabilityNote != null) ...[
+          const SizedBox(height: Gap.sm),
+          const _BriefEyebrow(
+            text: 'Would a re-count change it',
+            icon: Icons.speed_outlined,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            stabilityNote!,
+            style: TextStyle(
+              fontSize: 12.5,
+              height: 1.45,
+              color: p.inkMuted,
+              fontFeatures: _tabularFigures,
+            ),
+          ),
+        ],
+      ],
+      ),
+    );
+  }
+}
+
+/// Numbers that line up. A rate, a weight and a cut-off are read as figures, and
+/// proportional digits make '51' and '62' shift about the line.
+const List<FontFeature> _tabularFigures = [FontFeature.tabularFigures()];
+
+/// True when two strings say the same thing in different dress — case,
+/// punctuation and spacing aside. Used to stop the plate restating a condition
+/// the verdict header has already named.
+bool _sameWords(String a, String b) {
+  String norm(String s) => s
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9 ]'), '')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  return norm(a).isNotEmpty && norm(a) == norm(b);
+}
+
+/// One surface, one accent: the decision brief sits in a single plate whose bar
+/// carries the triage hue, so the card's severity is legible from the corner of
+/// the eye while the words stay the authoritative signal.
+///
+/// Deliberately not a shadow stack or a coloured background: on a phone in
+/// afternoon sun a 3 px rule and one hairline survive, a gradient does not.
+class _VerdictPlate extends StatelessWidget {
+  const _VerdictPlate({required this.level, required this.child});
+
+  final TriageLevel level;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return Container(
+      key: const ValueKey('verdict-plate'),
+      decoration: BoxDecoration(
+        color: p.surface,
+        borderRadius: BorderRadius.circular(Gap.radius),
+        border: Border.all(color: p.line, width: Gap.hairline),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(
-              decoration: BoxDecoration(gradient: _headerGradient),
-              padding: const EdgeInsets.symmetric(
-                horizontal: Gap.md,
-                vertical: 14,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // The lit hairline across the crown of the plate. One pixel,
-                  // and it is the difference between a coloured rectangle and a
-                  // stamped label that happens to be fixed to this page.
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 10),
-                    child: SizedBox(
-                      height: 1,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                            colors: [Color(0x40FFFFFF), Color(0x08FFFFFF)],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          level.label.split(' — ').first.toUpperCase(),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: 'Sora',
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.3,
-                            height: 1.1,
-                            color: _plateInk,
-                          ),
-                        ),
-                      ),
-                      if (needsReferral) ...[
-                        const SizedBox(width: Gap.sm),
-                        Container(
-                          padding: const EdgeInsets.all(5),
-                          decoration: BoxDecoration(
-                            color: _plateInk.withValues(alpha: 0.16),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.forward_rounded,
-                            size: 14,
-                            color: _plateInk,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Handoff brief',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.4,
-                      color: _plateInk.withValues(alpha: 0.8),
-                    ),
-                  ),
-                ],
-              ),
+            SizedBox(
+              width: 3,
+              child: DecoratedBox(decoration: BoxDecoration(gradient: triagePlate(level).plate)),
             ),
-            // The fold. A divider on this page has to mark a real division, and
-            // the division this document actually has is the one a paper chart
-            // has too: the verdict, decided and stamped, above the crease — the
-            // reasoning that defends it, below. So the brass rule is perforated
-            // rather than solid, the way the booklet is torn along a line of
-            // punches when the slip goes with the child. Brass is chrome: it
-            // frames the decision and never signals it, so it stays put across
-            // day and night.
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: Gap.md,
-                vertical: 3,
-              ),
-              child: _TearRule(ink: p.brass, inkDeep: p.brassDeep),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(Gap.md),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    needsReferral
-                        ? 'A referral is issued — this brief travels with the child.'
-                        : 'Care continues here, under the plan this verdict opens.',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: p.inkMuted,
-                      fontWeight: FontWeight.w600,
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: Gap.md),
-                  Divider(height: 1, thickness: 1, color: p.line),
-                  const SizedBox(height: Gap.md),
-                  if (shown.isNotEmpty || !driversFolded) ...[
-                    _BriefEyebrow(
-                      text: 'What drove it',
-                      icon: Icons.flag_outlined,
-                    ),
-                    const SizedBox(height: Gap.xs),
-                    if (shown.isEmpty)
-                      const _BriefLine(
-                        'No single number led this verdict — the protocol rules '
-                        'carried it.',
-                      )
-                    else
-                      for (final f in shown)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                width: 6,
-                                height: 6,
-                                margin: const EdgeInsets.only(top: 6),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: triageColours(f.severity).fg,
-                                ),
-                              ),
-                              const SizedBox(width: Gap.sm),
-                              Expanded(
-                                child: Text(
-                                  f.measuredValue == null
-                                      ? f.detail
-                                      : '${f.label} — ${f.measuredValue}'
-                                            '${f.threshold == null ? '' : ' (cut-off ${f.threshold})'}',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    height: 1.4,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                  ],
-                  if (aiLine != null) ...[
-                    const SizedBox(height: Gap.md),
-                    _BriefEyebrow(
-                      text: 'The AI check',
-                      icon: Icons.memory_rounded,
-                    ),
-                    const SizedBox(height: Gap.xs),
-                    _BriefLine(aiLine!),
-                  ],
-                  const SizedBox(height: Gap.md),
-                  // No 'Act now' line and no re-check date here: the worklist,
-                  // the referral form and the follow-up chips are the same
-                  // scroll away below, and a restatement of a control the
-                  // nurse is about to use is just noise above it.
-                  if (trajectory != null) ...[
-                    const SizedBox(height: Gap.md),
-                    _BriefEyebrow(
-                      text: 'Direction of travel',
-                      icon: Icons.trending_up_rounded,
-                    ),
-                    const SizedBox(height: Gap.xs),
-                    _BriefLine(
-                      'The growth trend is ${trajectory!.trend.label.toLowerCase()} '
-                      '— charted with the full clinical detail.',
-                    ),
-                  ],
-                  if (plan.missingData.isNotEmpty) ...[
-                    const SizedBox(height: Gap.md),
-                    _BriefEyebrow(
-                      text: 'What we did not measure',
-                      icon: Icons.help_outline_rounded,
-                    ),
-                    const SizedBox(height: Gap.xs),
-                    _BriefLine(
-                      'Not measured: ${plan.missingData.join(', ')}. This lowers '
-                      'input completeness; danger-sign care remains active.',
-                    ),
-                  ],
-                ],
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                child: child,
               ),
             ),
           ],
@@ -1900,64 +1931,6 @@ class _DecisionBriefCard extends StatelessWidget {
       ),
     );
   }
-}
-
-/// The fold of the handoff brief — a line of punches, not a solid rule.
-///
-/// Drawn, not animated: one static pass of short strokes at a fixed rhythm, so
-/// it costs a few hundred nanoseconds on a low-end handset and renders
-/// identically at rest under reduced motion and in every widget test. It is
-/// laid in brass because brass is this page's chrome; the clinical hue stays
-/// on the plate above it and nowhere else.
-class _TearRule extends StatelessWidget {
-  const _TearRule({required this.ink, required this.inkDeep});
-
-  final Color ink;
-  final Color inkDeep;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 2,
-    child: CustomPaint(
-      painter: _TearPainter(ink: ink, inkDeep: inkDeep),
-    ),
-  );
-}
-
-class _TearPainter extends CustomPainter {
-  const _TearPainter({required this.ink, required this.inkDeep});
-
-  final Color ink;
-  final Color inkDeep;
-
-  /// A punch and the space to the next one — the spacing a tear line is
-  /// perforated at, wide enough to read as a fold at 320px and 200% text.
-  static const double _punch = 5;
-  static const double _gap = 5;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final mid = size.height / 2;
-    final paint = Paint()
-      ..strokeWidth = size.height
-      ..strokeCap = StrokeCap.butt
-      // The line fades in from the left and runs out at the right, so the fold
-      // reads as a crease in a sheet rather than a dashed border on a box.
-      ..shader = LinearGradient(
-        begin: Alignment.centerLeft,
-        end: Alignment.centerRight,
-        colors: [ink.withValues(alpha: 0.30), ink, inkDeep],
-        stops: const [0.0, 0.55, 1.0],
-      ).createShader(Offset.zero & size);
-    for (var x = 0.0; x < size.width; x += _punch + _gap) {
-      final end = (x + _punch) > size.width ? size.width : x + _punch;
-      canvas.drawLine(Offset(x, mid), Offset(end, mid), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_TearPainter old) =>
-      old.ink != ink || old.inkDeep != inkDeep;
 }
 
 /// A labelled eyebrow for one row of the decision brief.
@@ -2333,71 +2306,14 @@ class _VerdictFeedbackStripState extends State<_VerdictFeedbackStrip> {
   }
 }
 
-class _Entrance extends StatefulWidget {
+class _Entrance extends StatelessWidget {
   const _Entrance({required this.child, this.index = 0});
-
   final Widget child;
   final int index;
 
+  // Clinical information is immediately readable; no staggered entrance delays.
   @override
-  State<_Entrance> createState() => _EntranceState();
-}
-
-class _EntranceState extends State<_Entrance>
-    with SingleTickerProviderStateMixin {
-  static const _beat = Duration(milliseconds: 90);
-
-  late final AnimationController _controller;
-  bool _started = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: AppMotion.duration,
-      vsync: this,
-    );
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_started) return;
-    _started = true;
-    final delay = _beat * widget.index;
-    if (delay == Duration.zero || MediaQuery.disableAnimationsOf(context)) {
-      _controller.value = 1;
-    } else {
-      Future<void>.delayed(delay, () {
-        if (mounted) _controller.forward();
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _controller,
-    builder: (context, child) {
-      final t = CurvedAnimation(
-        parent: _controller,
-        curve: AppMotion.curve,
-      ).value;
-      return Opacity(
-        opacity: t,
-        child: Transform.translate(
-          offset: Offset(0, 12 * (1 - t)),
-          child: child,
-        ),
-      );
-    },
-    child: widget.child,
-  );
+  Widget build(BuildContext context) => child;
 }
 
 // ------------------------------------------------------- Clinical detail fold
@@ -2917,97 +2833,57 @@ class _DangerSignsBanner extends StatelessWidget {
   final List<String> signs;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(Gap.lg),
-    decoration: BoxDecoration(
-      gradient: const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFF8F1D1D), AppColors.triageRed],
-      ),
-      borderRadius: BorderRadius.circular(Gap.radius + 6),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x59D32F2F),
-          blurRadius: 30,
-          offset: Offset(0, 14),
+  Widget build(BuildContext context) {
+    final p = ClinicalPaletteScope.of(context);
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(Gap.md),
+        decoration: BoxDecoration(
+          color: p.triageRedBg,
+          borderRadius: BorderRadius.circular(Gap.radiusSm),
+          border: Border.all(color: p.triageRed),
         ),
-      ],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.16),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.warning_amber_rounded,
-                size: 20,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(width: Gap.sm),
-            const Expanded(
-              child: Text(
-                'DANGER SIGNS PRESENT',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.1,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: Gap.md),
-        Wrap(
-          spacing: Gap.xs,
-          runSpacing: Gap.xs,
-          children: [
-            for (final sign in signs)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  sign,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    height: 1.4,
+            Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, size: 22, color: p.triageRed),
+                const SizedBox(width: Gap.sm),
+                Expanded(
+                  child: Text(
+                    'DANGER SIGNS PRESENT',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: p.ink,
+                    ),
                   ),
                 ),
+              ],
+            ),
+            const SizedBox(height: Gap.sm),
+            Text(
+              signs.join(' · '),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                height: 1.4,
+                color: p.ink,
               ),
+            ),
+            const SizedBox(height: Gap.xs),
+            Text(
+              'Act before the family leaves. Follow the urgent care steps below.',
+              style: TextStyle(fontSize: 14, height: 1.45, color: p.ink),
+            ),
           ],
         ),
-        const SizedBox(height: Gap.md),
-        Text(
-          'Any one of these signs makes this visit urgent — act before '
-          'the family leaves.',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: Colors.white.withValues(alpha: 0.85),
-            height: 1.4,
-          ),
-        ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
 /// The verdict translated into the sentence the family carries home —

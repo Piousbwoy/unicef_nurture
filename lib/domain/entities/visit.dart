@@ -251,6 +251,7 @@ class ClinicalFinding {
     this.weight = 0,
     this.isDangerSign = false,
     this.aiGenerated = false,
+    this.raisesTriage = true,
   });
 
   /// Short name, e.g. "Severe acute malnutrition".
@@ -286,6 +287,15 @@ class ClinicalFinding {
   /// lists everything.
   final bool aiGenerated;
 
+  /// Whether this finding is allowed to set the urgency of the visit.
+  ///
+  /// Clinical findings raise triage; preventive work does not. An overdue
+  /// vaccine is a care gap a nurse must close, not evidence that a well child
+  /// is unwell — letting it raise triage produced "priority" verdicts beside
+  /// a "well child" classification. Its own severity still colours the deck,
+  /// and its action still reaches the worklist; only the verdict is spared.
+  final bool raisesTriage;
+
   Map<String, Object?> toJson() => {
     'label': label,
     'detail': detail,
@@ -296,6 +306,7 @@ class ClinicalFinding {
     'weight': weight,
     'is_danger_sign': isDangerSign,
     'ai_generated': aiGenerated,
+    'raises_triage': raisesTriage,
   };
 
   factory ClinicalFinding.fromJson(Map<String, Object?> j) => ClinicalFinding(
@@ -310,6 +321,7 @@ class ClinicalFinding {
     weight: (j['weight'] as num?)?.toDouble() ?? 0,
     isDangerSign: j['is_danger_sign'] == true,
     aiGenerated: j['ai_generated'] == true,
+    raisesTriage: j['raises_triage'] != false,
   );
 }
 
@@ -397,34 +409,37 @@ class RecommendedAction {
       );
 }
 
-/// A single 0–100 confidence score shared by every protocol engine.
+/// How much evidence this verdict actually stands on, 0–100.
 ///
-/// The number is the share of *decisive* measurements that were actually
-/// taken (blood pressure + Hb + MUAC + gestation for ANC; temperature,
-/// respiratory rate, MUAC, weight for a child). An observed danger sign
-/// needs no instrument, so it pins the score at 95 rather than punishing
-/// the CHO for acting on what they saw. The bucket ([RecommendationConfidence])
-/// still carries the wording; this carries the number a CHO can quote in
-/// the register or defend at the facility gate.
-int protocolConfidenceScore({
+/// Deliberately not called confidence. It is the share of the *decisive*
+/// measurements that were taken (blood pressure + Hb + MUAC + gestation for
+/// ANC; temperature, respiratory rate, MUAC, weight for a child), with one
+/// exception worth stating out loud: a danger sign seen with the eye is itself
+/// the strongest evidence there is, so it pins the figure at 95 rather than
+/// punishing a worker for acting on what they observed.
+///
+/// Returns null when the protocol required no decisive inputs. An absent
+/// denominator is a reporting gap, not a zero: showing 0 would claim the visit
+/// was unsupported when in fact nothing was missing.
+///
+/// How close the verdict sits to its threshold is a different question and is
+/// reported separately — 100% of inputs recorded next to a respiratory rate of
+/// 51 against a cut-off of 50 is a *borderline* call, not a certain one.
+int? evidenceSufficiencyScore({
   required int measuredKeyInputs,
   required int keyInputCount,
-  bool observedDangerSign = false,
+  bool observedDirectSign = false,
 }) {
-  if (observedDangerSign) return 95;
-  if (keyInputCount <= 0) return 50;
+  if (observedDirectSign) return 95;
+  if (keyInputCount <= 0) return null;
   return (measuredKeyInputs / keyInputCount * 100).round().clamp(0, 100);
 }
 
-/// Estimate for records written before the numeric score existed. Old rows
-/// only carry the bucket, so the closest honest number for that bucket is
-/// used instead of inventing precision.
-int legacyConfidenceEstimate(RecommendationConfidence c) => switch (c) {
-  RecommendationConfidence.protocolCertain => 95,
-  RecommendationConfidence.high => 82,
-  RecommendationConfidence.moderate => 65,
-  RecommendationConfidence.low => 45,
-};
+/// Reads the evidence figure, honouring rows already on handsets that stored it
+/// under its old name. The label changed; the arithmetic never did.
+int? _readEvidenceSufficiency(Map<String, Object?> j) =>
+    (j['evidence_sufficiency'] as num?)?.toInt() ??
+    (j['confidence_score'] as num?)?.toInt();
 
 /// The complete, explainable output of one protocol engine run.
 class AssessmentResult {
@@ -435,7 +450,7 @@ class AssessmentResult {
     required this.findings,
     required this.actions,
     required this.confidence,
-    this.confidenceScore,
+    this.evidenceSufficiency,
     this.protocolSource,
     this.nutritionStatus,
     this.nutritionPathway,
@@ -457,10 +472,11 @@ class AssessmentResult {
   final List<RecommendedAction> actions;
   final RecommendationConfidence confidence;
 
-  /// 0–100 score from the engine's measured-inputs arithmetic. Null only on
-  /// records written before the score existed; [effectiveConfidenceScore]
-  /// covers that with a bucket estimate.
-  final int? confidenceScore;
+  /// How much evidence the verdict stands on — see [evidenceSufficiencyScore].
+  /// Null on records written before the figure existed; nothing invents a
+  /// number for them, because a made-up figure on a clinical screen cannot be
+  /// defended when someone asks where it came from.
+  final int? evidenceSufficiency;
   final String? protocolSource;
 
   final NutritionStatus? nutritionStatus;
@@ -483,11 +499,6 @@ class AssessmentResult {
 
   bool get needsReferral => triage.requiresReferral;
 
-  /// The score to display: the engine's number when there is one, otherwise
-  /// the honest estimate for the bucket.
-  int get effectiveConfidenceScore =>
-      confidenceScore ?? legacyConfidenceEstimate(confidence);
-
   List<ClinicalFinding> get urgentFindings =>
       findings.where((f) => f.severity == TriageLevel.urgent).toList();
 
@@ -498,7 +509,7 @@ class AssessmentResult {
     'findings': findings.map((f) => f.toJson()).toList(),
     'actions': actions.map((a) => a.toJson()).toList(),
     'confidence': confidence.name,
-    'confidence_score': confidenceScore,
+    'evidence_sufficiency': evidenceSufficiency,
     'protocol_source': protocolSource,
     'nutrition_status': nutritionStatus?.name,
     'nutrition_pathway': nutritionPathway?.name,
@@ -530,7 +541,7 @@ class AssessmentResult {
       (c) => c.name == j['confidence'],
       orElse: () => RecommendationConfidence.moderate,
     ),
-    confidenceScore: (j['confidence_score'] as num?)?.toInt(),
+    evidenceSufficiency: _readEvidenceSufficiency(j),
     protocolSource: j['protocol_source'] as String?,
     nutritionStatus: enumByNameOrNull(
       NutritionStatus.values,

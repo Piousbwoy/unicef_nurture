@@ -83,6 +83,52 @@ void main() {
       expect(plan.referralGuaranteed, isFalse);
     });
 
+    test('an overdue vaccine never turns a well child into a priority case', () {
+      final plan = RecommendationEngine.synthesize(
+        results: [_result()],
+        extraFindings: const [
+          ClinicalFinding(
+            label: 'Measles-rubella overdue',
+            detail: 'Twenty weeks late.',
+            severity: TriageLevel.priority,
+            protocolSource: 'Ghana EPI schedule',
+            raisesTriage: false,
+          ),
+        ],
+        extraActions: const [
+          RecommendedAction(
+            instruction: 'Give today: measles-rubella',
+            urgency: ReferralUrgency.sameDay,
+          ),
+        ],
+      );
+
+      expect(plan.overallTriage, TriageLevel.routine);
+      expect(plan.needsReferral, isFalse);
+      // The gap is still reported and the dose still reaches the worklist.
+      expect(plan.findings.single.severity, TriageLevel.priority);
+      expect(
+        plan.actions.map((a) => a.instruction),
+        contains('Give today: measles-rubella'),
+      );
+    });
+
+    test('the same finding still raises triage when it is clinical', () {
+      final plan = RecommendationEngine.synthesize(
+        results: [_result()],
+        extraFindings: const [
+          ClinicalFinding(
+            label: 'Measles-rubella overdue',
+            detail: 'Twenty weeks late.',
+            severity: TriageLevel.priority,
+            protocolSource: 'Ghana EPI schedule',
+          ),
+        ],
+      );
+
+      expect(plan.overallTriage, TriageLevel.priority);
+    });
+
     test('overall triage is the worst across every engine and finding', () {
       final plan = RecommendationEngine.synthesize(
         results: [
@@ -215,8 +261,25 @@ void main() {
         // sorts BEFORE immediateReferral (phase 1).
         expect(plan.actions[0].instruction, 'Give pre-referral antibiotic');
         expect(plan.actions[1].instruction, 'Refer now');
-        // Less urgent bands follow; counselling is last.
-        expect(plan.actions.last.instruction, 'Counsel on feeding');
+        // Less urgent bands follow, and counselling sits at the end. The cohort
+        // teach-back is *also* scheduled counselling, so the old `.last` check was
+        // really a coin toss between two tied actions — the ordering now breaks
+        // ties by the order the engines produced them, which is what these two
+        // assertions pin down.
+        expect(plan.actions[2].urgency, ReferralUrgency.withinTwoDays);
+        expect(plan.actions[3].instruction, 'Counsel on feeding');
+        expect(plan.actions.last.isCounselling, isTrue);
+        expect(plan.actions.last.instruction, isNot('Counsel on feeding'));
+        expect(
+          plan.actions.map((a) => a.urgency).toList(),
+          orderedEquals(const [
+            ReferralUrgency.immediate,
+            ReferralUrgency.immediate,
+            ReferralUrgency.withinTwoDays,
+            ReferralUrgency.scheduled,
+            ReferralUrgency.scheduled,
+          ]),
+        );
       },
     );
   });
@@ -469,6 +532,20 @@ void main() {
       expect(plan.topDrivers.first.label, 'Severe pneumonia');
       expect(plan.triageRationale, contains('Severe pneumonia'));
       expect(plan.summary, isNotEmpty);
+    });
+
+    test('the summary states what the verdict rests on, not a bare confidence label', () {
+      // "Confidence: High confidence." is the one sentence on the urgent screen
+      // that reads like a computed probability and is not one. It is a four-value
+      // self-declared label, so the summary now says what the verdict is based
+      // on — the enum's own explanation — and drops the word that invents a
+      // number nobody computed.
+      final plan = RecommendationEngine.synthesize(
+        results: [_result(triage: TriageLevel.urgent)],
+      );
+      expect(plan.summary, isNot(contains('Confidence:')));
+      expect(plan.summary, isNot(contains('High confidence')));
+      expect(plan.summary, contains('Basis:'));
     });
 
     test('the caregiver message comes from the most urgent result', () {

@@ -16,17 +16,19 @@
 /// registrations. This is the difference between a sync queue and a sync queue
 /// that saves someone.
 ///
-/// **A stub transport.** There is no district server to talk to yet, and
-/// pretending otherwise would be dishonest. [SyncTransport] is the seam: swap in
-/// an HTTP or DHIMS2 implementation and nothing else in the app changes. The
-/// bundled [LoopbackTransport] lets the whole pipeline be demonstrated and tested
-/// end to end without inventing a backend.
+/// **The transport is chosen at the composition root.** [resolveSyncTransport]
+/// returns [HttpSyncTransport] when a district server address is configured on
+/// the device, [LoopbackTransport] in a demonstration build, and
+/// [NotConfiguredTransport] in a real build with no address set — which reports
+/// "nothing has been configured" instead of pretending rows went somewhere.
+/// [SyncTransport] is the seam, so none of that reaches this file.
 library;
 
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 
+import '../../domain/compliance.dart';
 import '../local/outbox_dao.dart';
 
 /// The result of trying to send one entry.
@@ -80,8 +82,8 @@ class LoopbackTransport implements SyncTransport {
 /// record synced — silently dropping it from the pending queue so it never
 /// re-sends when a server is finally configured, while the UI claims the
 /// district has it. [SyncService] short-circuits on this transport and leaves
-/// records pending. Reachable only for demonstration under `DEMO_MODE`, where
-/// [LoopbackTransport] is chosen deliberately instead.
+/// records pending. Reachable only when `DEMO_MODE` is off and no sync URL is
+/// set; a demonstration build chooses [LoopbackTransport] deliberately instead.
 class NotConfiguredTransport implements SyncTransport {
   const NotConfiguredTransport();
 
@@ -115,7 +117,7 @@ class SyncRunReport {
 class SyncService {
   SyncService({
     SyncTransport? transport,
-    this.interval = const Duration(minutes: 15),
+    this.interval = CareNotice.syncInterval,
     this.batchSize = 25,
   }) : transport = transport ?? const LoopbackTransport();
 

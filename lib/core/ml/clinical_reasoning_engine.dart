@@ -1,6 +1,7 @@
 /// Deterministic, rule-based summaries with a separate experimental assessment.
-/// The heuristic acuity index and its legacy range are not neural inference,
-/// disease probabilities, or statistically validated confidence intervals.
+/// The acuity index is a heuristic ordering device: it is not neural inference
+/// and not a disease probability, and it carries no interval — nothing here is
+/// computed statistically, so nothing here is allowed to be named like one.
 /// Eligible neural results are supplied by the integrity-checked offline runtime.
 /// Neither presentation path changes protocol triage, treatment, or referral.
 library;
@@ -81,8 +82,6 @@ class ClinicalReasoning {
   const ClinicalReasoning({
     required this.acuityIndex,
     required this.bandLabel,
-    required this.ci95,
-    required this.confidencePct,
     required this.contributions,
     required this.narrative,
     required this.briefLine,
@@ -98,12 +97,6 @@ class ClinicalReasoning {
 
   /// Degree word for the index, e.g. "Elevated".
   final String bandLabel;
-
-  /// Legacy heuristic range; not a statistical confidence interval.
-  final ({double lo, double hi}) ci95;
-
-  /// Legacy input-completeness heuristic, not statistical model confidence.
-  final int confidencePct;
 
   /// Largest signed contributions, most positive first.
   final List<ReasoningContribution> contributions;
@@ -421,46 +414,36 @@ abstract final class ClinicalReasoningEngine {
     // ------------------------------------------- 4. Squash to 0–100
     final index = (100 / (1 + math.exp(-(raw - 38) / 16))).clamp(0.0, 100.0);
 
-    // ------------------------------------------- 5. Uncertainty model
+    // -------------------------------------- 5. Missing inputs, reported only
+    // This block used to manufacture a range around the index and blend it
+    // with a completeness figure into a number called confidence. The range
+    // width was a chosen constant and the blend weights were chosen too, so
+    // neither was a measurement of anything — and a figure nobody computed
+    // cannot be defended when a clinician asks where it came from. What is
+    // honestly reportable is which inputs are absent: that is counted here and
+    // named in the narrative.
     final unmeasured = _unmeasuredKeys(input);
     final missingCount = plan.missingData.length + unmeasured.length;
-    var ciHalf = 4.0 + 2.2 * missingCount + 4.0 * input.implausibleCount;
-    if (index > 80 || index < 15) ciHalf += 2;
-    ciHalf = ciHalf.clamp(4.0, 16.0);
-    final ci = (
-      lo: (index - ciHalf).clamp(0.0, 100.0),
-      hi: (index + ciHalf).clamp(0.0, 100.0),
-    );
-
-    final protocolScore = plan.effectiveConfidenceScore;
-    final modelConfidence =
-        (88.0 -
-                6.0 * math.min(missingCount, 6) -
-                12.0 * (input.implausibleCount > 0 ? 1 : 0))
-            .clamp(25.0, 96.0);
-    final confidence = ((0.45 * modelConfidence + 0.55 * protocolScore)
-        .round()
-        .clamp(25, 96));
 
     // ------------------------------------------- 6. Band + explanations
     contributions.sort((a, b) => b.points.compareTo(a.points));
     final band = _bandFor(index);
-    final seed = _stableSeed(input.patientRef, bag, raw);
+    // Wording is chosen from the record alone. It used to be seeded with the
+    // patient reference, so two children with near-identical findings read
+    // differently — variety that looked like intelligence and was not. The
+    // same findings now always produce the same sentences.
+    final seed = _stableSeed(bag, raw);
     final rng = _SeededRandom(seed);
     final narrative = _narrative(
       input: input,
       index: index,
       band: band,
-      ci: ci,
-      confidence: confidence,
       contributions: contributions,
       unmeasured: unmeasured,
       rng: rng,
     );
     final brief = _briefLine(
       index: index,
-      ci: ci,
-      confidence: confidence,
       contributions: contributions,
       missingCount: missingCount,
     );
@@ -469,8 +452,6 @@ abstract final class ClinicalReasoningEngine {
     return ClinicalReasoning(
       acuityIndex: index,
       bandLabel: band,
-      ci95: ci,
-      confidencePct: confidence,
       contributions: contributions.take(5).toList(growable: false),
       narrative: narrative,
       briefLine: brief,
@@ -551,8 +532,6 @@ abstract final class ClinicalReasoningEngine {
     required ClinicalReasoningInput input,
     required double index,
     required String band,
-    required ({double lo, double hi}) ci,
-    required int confidence,
     required List<ReasoningContribution> contributions,
     required List<String> unmeasured,
     required _SeededRandom rng,
@@ -656,8 +635,6 @@ abstract final class ClinicalReasoningEngine {
 
   static String _briefLine({
     required double index,
-    required ({double lo, double hi}) ci,
-    required int confidence,
     required List<ReasoningContribution> contributions,
     required int missingCount,
   }) {
@@ -746,11 +723,12 @@ abstract final class ClinicalReasoningEngine {
 
   // ------------------------------------------------------- stable seeding
 
-  /// FNV-1a over the patient reference plus a quantised snapshot of the
-  /// decisive features. Quantisation (whole degrees, whole beats) keeps the
-  /// seed stable across re-renders of the same record while still differing
-  /// between genuinely different patients.
-  static int _stableSeed(String patientRef, OfflineFeatureBag bag, double raw) {
+  /// FNV-1a over a quantised snapshot of the decisive features.
+  ///
+  /// The patient reference is deliberately excluded: it produced per-patient
+  /// wording variation that read as fabricated intelligence. Quantisation
+  /// (whole degrees, whole beats) keeps the seed stable across re-renders.
+  static int _stableSeed(OfflineFeatureBag bag, double raw) {
     var h = 0x811c9dc5;
     void mix(String s) {
       for (final code in s.codeUnits) {
@@ -759,7 +737,6 @@ abstract final class ClinicalReasoningEngine {
       }
     }
 
-    mix(patientRef);
     mix('raw:${raw.toStringAsFixed(1)}');
     mix('t:${bag.temperatureCelsius?.toStringAsFixed(1)}');
     mix('rr:${bag.respiratoryRatePerMin}');

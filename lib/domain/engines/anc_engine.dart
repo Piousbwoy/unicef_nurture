@@ -899,7 +899,7 @@ abstract final class AncEngine {
       findings: findings,
       actions: actions,
       confidence: _confidence(i, missing),
-      confidenceScore: protocolConfidenceScore(
+      evidenceSufficiency: evidenceSufficiencyScore(
         measuredKeyInputs: [
           i.systolic != null && i.diastolic != null,
           i.haemoglobin != null,
@@ -907,7 +907,7 @@ abstract final class AncEngine {
           i.gestationalWeeks > 0,
         ].where((m) => m).length,
         keyInputCount: 4,
-        observedDangerSign:
+        observedDirectSign:
             i.convulsions || i.vaginalBleeding || i.hasSevereHypertension,
       ),
       protocolSource: _protocol,

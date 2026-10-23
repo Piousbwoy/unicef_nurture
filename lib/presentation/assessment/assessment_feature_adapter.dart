@@ -1,5 +1,6 @@
 import '../../core/ml/offline_inference_service.dart';
 import '../../domain/engines/protocols/stabilization_protocol_selector.dart';
+import '../../domain/engines/measurement_safety_engine.dart';
 import '../../domain/enums.dart';
 import 'types.dart';
 
@@ -192,6 +193,110 @@ class AssessmentFeatureAdapter {
       multipleBirth: birth == null
           ? null
           : birth.plurality != BirthPlurality.singleton,
+    );
+  }
+
+  /// Coverage of the primary protocol's core measurements, not all questions.
+  /// Uses the encounter inputs, never fixed model slots or legacy confidence.
+  /// Implausible values stay in the record but do not earn coverage credit.
+  ObservationCompleteness get observationCompleteness {
+    ObservationState check(
+      MeasurementKind kind,
+      Object? value, {
+      bool whole = false,
+    }) {
+      if (value == null) return ObservationState.missing;
+      if (value is! num ||
+          !value.isFinite ||
+          (whole && value != value.roundToDouble()) ||
+          MeasurementSafetyEngine.check(kind, value.toDouble()) != null) {
+        return ObservationState.needsReview;
+      }
+      return ObservationState.recorded;
+    }
+
+    final temperature = check(
+      MeasurementKind.temperatureC,
+      inputs['temperature_celsius'],
+    );
+    final breathing = check(
+      MeasurementKind.respiratoryRate,
+      inputs['respiratory_rate'],
+      whole: true,
+    );
+    final mm = inputs['muac_mm'];
+    final muac = check(
+      MeasurementKind.muacCm,
+      inputs['muac_cm'] ?? (mm is num ? mm / 10 : mm),
+    );
+    final haemoglobin = check(
+      MeasurementKind.haemoglobin,
+      inputs['haemoglobin'],
+    );
+    final systolic = check(
+      MeasurementKind.systolicBp,
+      inputs['systolic'],
+      whole: true,
+    );
+    final diastolic = check(
+      MeasurementKind.diastolicBp,
+      inputs['diastolic'],
+      whole: true,
+    );
+    final bp = [systolic, diastolic].contains(ObservationState.needsReview)
+        ? ObservationState.needsReview
+        : [systolic, diastolic].contains(ObservationState.missing)
+        ? ObservationState.missing
+        : MeasurementSafetyEngine.checkBloodPressure(
+                systolic: number('systolic'),
+                diastolic: number('diastolic'),
+              ) !=
+              null
+        ? ObservationState.needsReview
+        : ObservationState.recorded;
+
+    if (draft.result.clientType == ClientType.childUnderFive &&
+        (ageMonths == null || ageMonths! < 0)) {
+      return ObservationCompleteness(
+        {},
+        unavailableReason:
+            'Record age to determine the applicable core measurements.',
+      );
+    }
+    final checks = switch (draft.result.clientType) {
+      ClientType.newborn => {
+        'Temperature': temperature,
+        'Breathing rate': breathing,
+      },
+      ClientType.childUnderFive => {
+        'Temperature': temperature,
+        'Breathing rate': breathing,
+        'Weight': check(MeasurementKind.weightKg, inputs['weight_kg']),
+        if (ageMonths! >= 6) 'MUAC': muac,
+      },
+      ClientType.pregnantWoman => {
+        'Blood pressure': bp,
+        'Hemoglobin': haemoglobin,
+        'MUAC': muac,
+        'Gestational age': check(
+          MeasurementKind.gestationalWeeks,
+          inputs['gestational_weeks'],
+          whole: true,
+        ),
+      },
+      ClientType.postpartumWoman => {
+        'Blood pressure': bp,
+        'Temperature': temperature,
+        'Hemoglobin': haemoglobin,
+        'MUAC': muac,
+      },
+      ClientType.womanOfReproductiveAge => <String, ObservationState>{},
+    };
+    return ObservationCompleteness(
+      checks,
+      unavailableReason: checks.isEmpty
+          ? 'No core-measurement score is defined for this assessment.'
+          : null,
     );
   }
 

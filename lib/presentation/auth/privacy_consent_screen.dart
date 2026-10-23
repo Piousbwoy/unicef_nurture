@@ -61,11 +61,14 @@ class _PrivacyConsentScreenState extends State<PrivacyConsentScreen> {
             const SizedBox(height: Gap.lg),
             _Point(
               icon: Icons.cloud_sync_outlined,
-              title: 'Only synced to continue your care',
+              title: 'Sent on its own, to continue your care',
               body:
                   'Information leaves this device for the district team\u2019s '
                   'server, so a health worker elsewhere can continue your care. '
-                  'It is not sent because a timer decided to.',
+                  'It goes by itself \u2014 as soon as this phone finds a signal, and '
+                  'at least every ${CareNotice.syncInterval.inMinutes} minutes. '
+                  'You are not asked to press a button, and nothing waits for '
+                  'one.',
             ),
             const SizedBox(height: Gap.lg),
             _Point(

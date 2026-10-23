@@ -36,6 +36,28 @@ class AssessmentContext {
   int? get walkingMinutes => household.walkingMinutesToFacility;
 }
 
+/// Presentation-only coverage of a named set of core measurements.
+/// This never estimates diagnostic certainty or changes the clinical plan.
+enum ObservationState { recorded, missing, needsReview }
+
+class ObservationCompleteness {
+  ObservationCompleteness(
+    Map<String, ObservationState> checks, {
+    this.unavailableReason,
+  }) : checks = Map.unmodifiable(checks);
+
+  final Map<String, ObservationState> checks;
+  final String? unavailableReason;
+  int get total => checks.length;
+  int get recorded =>
+      checks.values.where((s) => s == ObservationState.recorded).length;
+  int? get percent => total == 0 ? null : (100 * recorded / total).round();
+  List<String> labelsFor(ObservationState state) => [
+    for (final entry in checks.entries)
+      if (entry.value == state) entry.key,
+  ];
+}
+
 /// What a protocol form hands back when the engine has run: the raw answers,
 /// the verdict, and any growth measurement worth keeping in the child's
 /// series so the trajectory engine can see the slope, not just the points.

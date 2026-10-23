@@ -32,6 +32,7 @@ import '../../core/theme/app_theme.dart';
 import '../../data/local/preferences_store.dart';
 import '../../data/local/user_dao.dart';
 import '../../data/reference/northern_ghana.dart';
+import '../../domain/compliance.dart';
 import '../../domain/entities/core.dart';
 import '../../domain/enums.dart';
 import '../shared/app_image.dart';
@@ -1134,6 +1135,13 @@ class _CommunityStep extends StatelessWidget {
     final communities = district == null
         ? const <String>[]
         : NorthernGhana.communitiesOf(region, district!);
+    // Ranked, never filtered: a CHPS zone may legitimately cross an assembly
+    // boundary, so the far ones stay reachable and simply sit lower down.
+    final zones = NorthernGhana.zonesRankedFor(
+      regionName: region,
+      districtName: district,
+      community: community,
+    );
     return SectionCard(
       title: 'Community & CHPS zone',
       subtitle:
@@ -1164,11 +1172,13 @@ class _CommunityStep extends StatelessWidget {
             onChanged: onCommunityChanged,
           ),
           const SizedBox(height: Gap.lg),
-          const FieldLabel(
+          FieldLabel(
             'CHPS zone',
-            why:
-                'Chosen from every community in the northern regions — '
-                'zones follow care routes, not district lines.',
+            why: community == null
+                ? 'Chosen from every community in the northern regions — '
+                      'zones follow care routes, not district lines.'
+                : 'Every community in the five northern regions, with the ones '
+                      'near $community listed first.',
           ),
           DropdownButtonFormField<String>(
             value: zone,
@@ -1178,7 +1188,7 @@ class _CommunityStep extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
             items: [
-              for (final z in NorthernGhana.allCommunities)
+              for (final z in zones)
                 DropdownMenuItem(
                   value: z,
                   child: Text(z, overflow: TextOverflow.ellipsis),
@@ -1350,10 +1360,13 @@ class _PrivacyStep extends StatelessWidget {
           const SizedBox(height: Gap.lg),
           _PrivacyPoint(
             icon: Icons.cloud_sync_outlined,
-            title: 'Only synced when you choose',
+            title: 'Sent automatically when there is a signal',
             body:
-                'Information leaves this device only when you tap Sync and a '
-                'network is available.',
+                'You never have to press anything. When this phone finds a '
+                'network, the records your health worker needs are sent — '
+                'within seconds of the signal returning, and at least every '
+                '${CareNotice.syncInterval.inMinutes} minutes. The checks and '
+                'notes you keep for yourself never leave this phone.',
           ),
           const SizedBox(height: Gap.lg),
           _PrivacyPoint(

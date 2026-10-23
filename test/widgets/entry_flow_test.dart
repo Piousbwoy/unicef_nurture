@@ -227,6 +227,16 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Data & privacy'), findsOneWidget);
+      // Consent is only valid if it describes what the software actually does.
+      // SyncService.start() runs on a 15-minute timer and immediately whenever
+      // connectivity returns, so any promise that data leaves only when the
+      // family taps a button would be a false statement in the one screen where
+      // Act 843 consent is taken.
+      expect(
+        find.textContaining('Sent automatically when there is a signal'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('only when you tap Sync'), findsNothing);
       expect(find.text('Agree & Create Account'), findsOneWidget);
       await tester.tap(find.text('Agree & Create Account'));
       await tester.pump();

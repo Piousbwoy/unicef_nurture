@@ -523,12 +523,18 @@ class ActionWorklist extends StatefulWidget {
     this.audience = RecAudience.healthWorker,
     this.completed,
     this.onCompletedChanged,
+    this.reasons = const {},
   });
 
   final List<RecommendedAction> actions;
   final RecAudience audience;
   final Set<String>? completed;
   final ValueChanged<Set<String>>? onCompletedChanged;
+
+  /// Why the action is on the list, keyed by instruction, from the clinical
+  /// brief. Only traceable reasons arrive here, so an absent entry means the
+  /// action stands on protocol alone and nothing is invented for it.
+  final Map<String, String> reasons;
 
   static String identity(RecommendedAction action) =>
       jsonEncode(action.toJson());
@@ -660,6 +666,7 @@ class _ActionWorklistState extends State<ActionWorklist> {
               audience: widget.audience,
               accent: band.colour,
               done: _done.contains(ActionWorklist.identity(action)),
+              reason: widget.reasons[action.instruction],
               onToggle: () => _toggle(action),
             ),
           const SizedBox(height: Gap.sm),
@@ -752,11 +759,16 @@ class _WorklistTile extends StatelessWidget {
     required this.audience,
     required this.accent,
     this.done = false,
+    this.reason,
     this.onToggle,
   });
 
   final RecommendedAction action;
   final RecAudience audience;
+
+  /// The finding this action answers, from the brief. Null when the action
+  /// stands on protocol alone — the row then says nothing extra.
+  final String? reason;
 
   /// The band colour — painted as the card's left accent bar and on the
   /// status chip, so the eye sorts the list before reading a word.
@@ -817,6 +829,11 @@ class _WorklistTile extends StatelessWidget {
                   AnimatedDefaultTextStyle(
                     duration: d,
                     style: TextStyle(
+                      // AnimatedDefaultTextStyle replaces the ambient default
+                      // rather than merging it, so the instruction needs the
+                      // app's body face named explicitly or it falls back to
+                      // the platform font and the sheet loses its typography.
+                      fontFamily: 'Manrope',
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       height: 1.4,
@@ -831,6 +848,18 @@ class _WorklistTile extends StatelessWidget {
                       policy: SpeechContentPolicy.clinical,
                     ),
                   ),
+                  if (reason != null && audience == RecAudience.healthWorker)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        'Because: $reason',
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: done ? p.inkFaint : p.inkMuted,
+                        ),
+                      ),
+                    ),
                   if (audience == RecAudience.healthWorker &&
                       (action.rationale != null ||
                           action.protocolSource != null))
@@ -2270,26 +2299,28 @@ class PreReferralRecSection extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: Gap.sm,
-                  vertical: 2,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(Gap.radiusSm),
-                ),
-                child: const Text(
-                  'DO NOW — BEFORE TRANSPORT',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.triageRed,
-                    letterSpacing: 0.6,
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Gap.sm,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(Gap.radiusSm),
+                  ),
+                  child: const Text(
+                    'DO NOW — BEFORE TRANSPORT',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.triageRed,
+                      letterSpacing: 0.6,
+                    ),
                   ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: Gap.sm),
               const Icon(
                 Icons.medical_services_outlined,
                 color: Colors.white,

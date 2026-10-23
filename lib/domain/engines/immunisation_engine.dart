@@ -521,6 +521,8 @@ abstract final class ImmunisationEngine {
           measuredValue: '${item.weeksOverdue} weeks late',
           threshold: 'due at ${_weeksLabel(item.dose.dueAtWeeks)}',
           weight: item.weeksOverdue >= 12 ? 4 : 2,
+          // A missed dose is a care gap, never a triage escalation.
+          raisesTriage: false,
         ),
       );
     }
@@ -535,6 +537,7 @@ abstract final class ImmunisationEngine {
           severity: TriageLevel.watch,
           protocolSource: ImmunisationEngine.protocolSource,
           weight: 1,
+          raisesTriage: false,
         ),
       );
     }

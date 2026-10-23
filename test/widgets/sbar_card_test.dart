@@ -108,7 +108,13 @@ void main() {
     );
     // Background: what was not measured stays on the note, honestly.
     expect(find.textContaining('Not measured: Weight'), findsOneWidget);
-    expect(find.textContaining('Protocol confidence'), findsOneWidget);
+    // A handover note is read by whoever receives the child. This record has no
+    // evidence figure, so the note says so out loud rather than carrying a
+    // invented number across the gate with the patient.
+    expect(
+      find.textContaining('Key measurements recorded: not captured'),
+      findsOneWidget,
+    );
     // Assessment: the findings travel with their reasoning.
     expect(find.textContaining('Fast breathing'), findsOneWidget);
     // Recommendation: prereferral treatment before the referral itself, then

@@ -579,13 +579,19 @@ enum RecommendationConfidence {
     'Protocol-based',
     'Derived directly from a measured value against a published cut-off.',
   ),
-  high('High confidence', 'Multiple consistent indicators.'),
+
+  /// Labels that name the evidence, not a probability. "High confidence" reads as
+  /// a number nobody computed, and this value is a four-level label each engine
+  /// declares for itself — taken as the weakest input in the plan. The chip on the
+  /// verdict card and the read-aloud summary both draw on these words, so they
+  /// have to survive being heard by a nurse.
+  high('Multiple consistent signs', 'Multiple consistent indicators.'),
   moderate(
-    'Moderate confidence',
+    'Some values reported, not measured',
     'Some indicators are missing or were reported rather than measured.',
   ),
   low(
-    'Low confidence — follow protocol',
+    'Key measurements missing — follow protocol',
     'Key measurements are missing. Use clinical judgement and confirm with a '
         'test or a tape before acting.',
   );

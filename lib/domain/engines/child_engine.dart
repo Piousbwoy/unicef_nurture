@@ -166,6 +166,134 @@ class ChildInput {
   final bool? householdHasValidNhis;
   final int? walkingMinutesToFacility;
 
+  /// A copy with one or more values changed, used to re-run the assessment for
+  /// counterfactuals and for the guideline-conformance harness.
+  ///
+  /// Exhaustive on purpose: a partial copier would silently drop whatever it
+  /// omitted, and a dropped field reads as "false" or "not measured" — which is
+  /// exactly how a counterfactual starts lying. Nullables take the new value
+  /// only when one is given; a probe cannot blank a recorded measurement, and
+  /// it should not need to.
+  ChildInput copyWith({
+    int? ageInMonths,
+    int? respiratoryRate,
+    double? temperatureCelsius,
+    double? weightKg,
+    double? heightCm,
+    double? muacCm,
+    bool? hasBilateralOedema,
+    bool? unableToDrinkOrBreastfeed,
+    bool? vomitsEverything,
+    bool? convulsions,
+    bool? lethargicOrUnconscious,
+    bool? convulsingNow,
+    bool? cough,
+    int? coughDurationDays,
+    bool? difficultBreathing,
+    bool? chestIndrawing,
+    bool? stridor,
+    bool? wheeze,
+    int? oxygenSaturation,
+    bool? diarrhoea,
+    int? diarrhoeaDurationDays,
+    bool? bloodInStool,
+    bool? sunkenEyes,
+    bool? skinPinchVerySlow,
+    bool? skinPinchSlow,
+    bool? restlessOrIrritable,
+    bool? drinksEagerly,
+    bool? feverReported,
+    int? feverDurationDays,
+    bool? malariaRdtDone,
+    bool? malariaRdtPositive,
+    bool? stiffNeck,
+    bool? runnyNose,
+    bool? measlesRash,
+    bool? mouthUlcers,
+    bool? pusDrainingFromEye,
+    bool? corneaClouding,
+    bool? earPain,
+    bool? earDischarge,
+    int? earDischargeDurationDays,
+    bool? tenderSwellingBehindEar,
+    bool? severePalmarPallor,
+    bool? somePalmarPallor,
+    double? haemoglobin,
+    bool? stillBreastfeeding,
+    int? mealsPerDay,
+    int? foodGroupsEatenYesterday,
+    bool? feedingChangedDuringIllness,
+    bool? appetiteTestPassed,
+    bool? immunisationsUpToDate,
+    List<String>? overdueVaccines,
+    bool? vitaminALastSixMonths,
+    bool? dewormedLastSixMonths,
+    bool? householdHasValidNhis,
+    int? walkingMinutesToFacility,
+  }) => ChildInput(
+    ageInMonths: ageInMonths ?? this.ageInMonths,
+    respiratoryRate: respiratoryRate ?? this.respiratoryRate,
+    temperatureCelsius: temperatureCelsius ?? this.temperatureCelsius,
+    weightKg: weightKg ?? this.weightKg,
+    heightCm: heightCm ?? this.heightCm,
+    muacCm: muacCm ?? this.muacCm,
+    hasBilateralOedema: hasBilateralOedema ?? this.hasBilateralOedema,
+    unableToDrinkOrBreastfeed:
+        unableToDrinkOrBreastfeed ?? this.unableToDrinkOrBreastfeed,
+    vomitsEverything: vomitsEverything ?? this.vomitsEverything,
+    convulsions: convulsions ?? this.convulsions,
+    lethargicOrUnconscious: lethargicOrUnconscious ?? this.lethargicOrUnconscious,
+    convulsingNow: convulsingNow ?? this.convulsingNow,
+    cough: cough ?? this.cough,
+    coughDurationDays: coughDurationDays ?? this.coughDurationDays,
+    difficultBreathing: difficultBreathing ?? this.difficultBreathing,
+    chestIndrawing: chestIndrawing ?? this.chestIndrawing,
+    stridor: stridor ?? this.stridor,
+    wheeze: wheeze ?? this.wheeze,
+    oxygenSaturation: oxygenSaturation ?? this.oxygenSaturation,
+    diarrhoea: diarrhoea ?? this.diarrhoea,
+    diarrhoeaDurationDays: diarrhoeaDurationDays ?? this.diarrhoeaDurationDays,
+    bloodInStool: bloodInStool ?? this.bloodInStool,
+    sunkenEyes: sunkenEyes ?? this.sunkenEyes,
+    skinPinchVerySlow: skinPinchVerySlow ?? this.skinPinchVerySlow,
+    skinPinchSlow: skinPinchSlow ?? this.skinPinchSlow,
+    restlessOrIrritable: restlessOrIrritable ?? this.restlessOrIrritable,
+    drinksEagerly: drinksEagerly ?? this.drinksEagerly,
+    feverReported: feverReported ?? this.feverReported,
+    feverDurationDays: feverDurationDays ?? this.feverDurationDays,
+    malariaRdtDone: malariaRdtDone ?? this.malariaRdtDone,
+    malariaRdtPositive: malariaRdtPositive ?? this.malariaRdtPositive,
+    stiffNeck: stiffNeck ?? this.stiffNeck,
+    runnyNose: runnyNose ?? this.runnyNose,
+    measlesRash: measlesRash ?? this.measlesRash,
+    mouthUlcers: mouthUlcers ?? this.mouthUlcers,
+    pusDrainingFromEye: pusDrainingFromEye ?? this.pusDrainingFromEye,
+    corneaClouding: corneaClouding ?? this.corneaClouding,
+    earPain: earPain ?? this.earPain,
+    earDischarge: earDischarge ?? this.earDischarge,
+    earDischargeDurationDays:
+        earDischargeDurationDays ?? this.earDischargeDurationDays,
+    tenderSwellingBehindEar:
+        tenderSwellingBehindEar ?? this.tenderSwellingBehindEar,
+    severePalmarPallor: severePalmarPallor ?? this.severePalmarPallor,
+    somePalmarPallor: somePalmarPallor ?? this.somePalmarPallor,
+    haemoglobin: haemoglobin ?? this.haemoglobin,
+    stillBreastfeeding: stillBreastfeeding ?? this.stillBreastfeeding,
+    mealsPerDay: mealsPerDay ?? this.mealsPerDay,
+    foodGroupsEatenYesterday:
+        foodGroupsEatenYesterday ?? this.foodGroupsEatenYesterday,
+    feedingChangedDuringIllness:
+        feedingChangedDuringIllness ?? this.feedingChangedDuringIllness,
+    appetiteTestPassed: appetiteTestPassed ?? this.appetiteTestPassed,
+    immunisationsUpToDate: immunisationsUpToDate ?? this.immunisationsUpToDate,
+    overdueVaccines: overdueVaccines ?? this.overdueVaccines,
+    vitaminALastSixMonths: vitaminALastSixMonths ?? this.vitaminALastSixMonths,
+    dewormedLastSixMonths: dewormedLastSixMonths ?? this.dewormedLastSixMonths,
+    householdHasValidNhis: householdHasValidNhis ?? this.householdHasValidNhis,
+    walkingMinutesToFacility:
+        walkingMinutesToFacility ?? this.walkingMinutesToFacility,
+  );
+
   /// IMCI fast-breathing threshold is age-banded. Getting this wrong either
   /// floods the referral system or misses pneumonia, so it is computed, never
   /// typed by hand.
@@ -487,6 +615,25 @@ abstract final class ChildEngine {
           'Bloody diarrhoea needs ciprofloxacin, not ORS alone.',
           TriageLevel.priority,
           weight: 5,
+        );
+        // The finding has named ciprofloxacin since this block was written, but
+        // no action ever carried it — so the worklist quietly contradicted the
+        // guideline it had just cited. A rule stated in prose and absent from
+        // the list is a rule that does not get given.
+        actions.add(
+          RecommendedAction(
+            instruction:
+                'Begin oral ciprofloxacin for dysentery today and review in 3 '
+                'days. Take the dose from the facility register against the '
+                'child\'s recorded weight — no strength table is cited in this '
+                'build, so no amount is calculated here.',
+            urgency: ReferralUrgency.sameDay,
+            rationale:
+                'WHO IMCI treats dysentery (blood in stool) with ciprofloxacin '
+                'for 3 days; ORS and zinc alone do not cover it.',
+            protocolSource: 'WHO IMCI — dysentery',
+            isTreatment: true,
+          ),
         );
       }
     }
@@ -1033,7 +1180,7 @@ abstract final class ChildEngine {
       findings: findings,
       actions: actions,
       confidence: _confidence(i, missing),
-      confidenceScore: protocolConfidenceScore(
+      evidenceSufficiency: evidenceSufficiencyScore(
         measuredKeyInputs: [
           i.temperatureCelsius != null,
           i.respiratoryRate != null,
@@ -1041,7 +1188,7 @@ abstract final class ChildEngine {
           i.weightKg != null,
         ].where((m) => m).length,
         keyInputCount: 4,
-        observedDangerSign: i.hasAnyGeneralDangerSign || i.hasBilateralOedema,
+        observedDirectSign: i.hasAnyGeneralDangerSign || i.hasBilateralOedema,
       ),
       protocolSource: _protocol,
       nutritionStatus: nutrition,

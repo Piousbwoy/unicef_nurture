@@ -41,6 +41,8 @@ import 'dart:convert';
 
 import '../enums.dart';
 import '../entities/visit.dart';
+import 'action_prioritizer.dart';
+import 'care_slots.dart';
 import 'protocols/stabilization_protocols.dart';
 import 'protocols/stabilization_protocol_selector.dart';
 
@@ -102,7 +104,7 @@ class CarePlan {
     required this.actions,
     required this.interactions,
     required this.confidence,
-    this.confidenceScore,
+    this.evidenceSufficiency,
     required this.missingData,
     required this.dangerSigns,
     required this.referralCapabilitiesNeeded,
@@ -138,14 +140,12 @@ class CarePlan {
   /// The least confident input wins — honest, never over-assured.
   final RecommendationConfidence confidence;
 
-  /// 0–100 numeric companion to [confidence]. The weakest engine's score
-  /// governs, matching the bucket logic; null only on legacy records, for
-  /// which [effectiveConfidenceScore] falls back to a bucket estimate.
-  final int? confidenceScore;
-
-  /// The score to display on the verdict.
-  int get effectiveConfidenceScore =>
-      confidenceScore ?? legacyConfidenceEstimate(confidence);
+  /// How much evidence the plan stands on — the weakest engine's figure
+  /// governs, because one under-measured stream drags the whole plan down.
+  /// Null when no engine produced one; nothing here invents a number to fill
+  /// the gap, and a screen that showed one would be showing arithmetic nobody
+  /// performed.
+  final int? evidenceSufficiency;
 
   /// Union of everything that was not measured, across every engine.
   final List<String> missingData;
@@ -223,7 +223,7 @@ class CarePlan {
     'actions': actions.map((a) => a.toJson()).toList(),
     'interactions': interactions.map((i) => i.toJson()).toList(),
     'confidence': confidence.name,
-    'confidence_score': confidenceScore,
+    'evidence_sufficiency': evidenceSufficiency,
     'missing_data': missingData,
     'danger_signs': dangerSigns,
     'referral_capabilities_needed': referralCapabilitiesNeeded.toList(),
@@ -267,7 +267,9 @@ class CarePlan {
       (c) => c.name == j['confidence'],
       orElse: () => RecommendationConfidence.moderate,
     ),
-    confidenceScore: (j['confidence_score'] as num?)?.toInt(),
+    evidenceSufficiency:
+        (j['evidence_sufficiency'] as num?)?.toInt() ??
+        (j['confidence_score'] as num?)?.toInt(),
     missingData: ((j['missing_data'] as List?) ?? [])
         .map((e) => e as String)
         .toList(),
@@ -375,6 +377,17 @@ abstract final class RecommendationEngine {
     List<RecommendedAction> extraActions = const [],
     StabilizationContext? stabilizationContext,
     StabilizationAiRisks? stabilizationRisks,
+
+    /// This patient's slot values for the cohort sentence (name, age, weight,
+    /// review interval). Absent slots are declared in the text as gaps; they are
+    /// never papered over with generic prose, and they never remove the
+    /// counselling step.
+    CareSlots? slots,
+
+    /// How long this household walks to the facility, when it is known. Used only
+    /// to break ties between actions of equal urgency and equal kind — see
+    /// [ActionPrioritizer], which explains why this is a rule and not a score.
+    int? walkingMinutesToFacility,
   }) {
     // ------------------------------------------------------------------ 0. Pre-referral protocol selection
     // Runs first so a life-saving protocol can escalate the plan and inject
@@ -414,9 +427,13 @@ abstract final class RecommendationEngine {
     ]);
 
     // ------------------------------------------------------- 2. Base triage
+    // Only findings permitted to raise urgency are considered. A missed
+    // vaccine keeps its own severity for display and its action for the
+    // worklist, but it cannot turn a well child into a priority case.
     var triage = _worstTriage([
       for (final r in results) r.triage,
-      for (final f in allFindings) f.severity,
+      for (final f in allFindings)
+        if (f.raisesTriage) f.severity,
     ]);
 
     // An activated pre-referral protocol is by definition urgent. It is a
@@ -474,27 +491,38 @@ abstract final class RecommendationEngine {
     }
 
     // -------------------------------------------- 5½. Cohort adaptation
-    // The same findings are spoken differently to a 3-day-old, a
-    // 3-year-old and a pregnant woman. Name the cohort, attach its
-    // tailored note, and fold in the cohort's own counselling action —
-    // the watchpoints that group is known to deteriorate on.
+    // The same findings are spoken differently to a 3-day-old, a 3-year-old and
+    // a pregnant woman. The sentence is now *assembled* from this patient's
+    // record — age, weight and review interval where they were captured, and an
+    // explicit "not recorded" where they were not.
+    //
+    // What was here before was one fixed paragraph per cohort and one fixed
+    // counselling action, both `static const`, both opening as though they had
+    // been written for this child. The guideline content in them (which signs
+    // send a family back) is genuinely cohort-wide and now lives in a cited data
+    // table in `care_slots.dart`; the patient content is what was missing.
     final patientCohort = _primaryCohort(results);
-    final cohortNote = patientCohort == null
+    final guidance = patientCohort == null
         ? null
-        : _cohortNote(patientCohort);
-    for (final action in _cohortActions(patientCohort)) {
-      if (!_hasAction(allActions, action)) {
-        allActions.add(action);
-      }
+        : CohortCareGuidanceBuilder.build(
+            cohort: patientCohort,
+            slots: slots ?? CareSlots.unknown,
+          );
+    final cohortNote = guidance?.note;
+    if (guidance != null && !_hasAction(allActions, guidance.counselling)) {
+      allActions.add(guidance.counselling);
     }
 
     // ------------------------------------------------- 6. Order everything
     final findings = _orderFindings(allFindings);
-    final actions = _orderActions(allActions);
+    final actions = _orderActions(
+      allActions,
+      walkingMinutesToFacility: walkingMinutesToFacility,
+    );
 
     // ------------------------------------------ 7. Consolidate uncertainty
     final confidence = _leastConfident(results);
-    final confidenceScore = _leastConfidentScore(results);
+    final evidenceSufficiency = _weakestEvidenceSufficiency(results);
     final missingData = _union([for (final r in results) r.missingData]);
     final dangerSigns = _union([
       for (final r in results) r.dangerSignsPresent,
@@ -529,7 +557,7 @@ abstract final class RecommendationEngine {
       actions: actions,
       interactions: interactions,
       confidence: confidence,
-      confidenceScore: confidenceScore,
+      evidenceSufficiency: evidenceSufficiency,
       missingData: missingData,
       dangerSigns: dangerSigns,
       referralCapabilitiesNeeded: capabilities,
@@ -631,101 +659,12 @@ abstract final class RecommendationEngine {
     return primary.clientType;
   }
 
-  /// One tailored sentence per cohort: the protocol the assessment ran
-  /// under plus the deterioration pattern the CHO must hold in mind.
-  /// These are the differences a paper protocol flattens away.
-  static String _cohortNote(ClientType cohort) => switch (cohort) {
-    ClientType.newborn =>
-      'Tailored for a young infant (0–2 months), assessed under the WHO '
-          'sick-young-infant protocol. Newborns deteriorate in hours, not '
-          'days — feeding difficulty, fast breathing, fever or coldness to '
-          'touch means return today, not tomorrow.',
-    ClientType.childUnderFive =>
-      'Tailored for a child 2–59 months, assessed under the WHO IMCI '
-          'sick-child protocol. Return immediately if the child stops '
-          'drinking, vomits everything, convulses or becomes unusually '
-          'sleepy.',
-    ClientType.pregnantWoman =>
-      'Tailored for pregnancy (ANC). Severe headache, blurred vision, '
-          'vaginal bleeding, reduced fetal movements or swelling of the '
-          'face and hands mean come today — day or night.',
-    ClientType.postpartumWoman =>
-      'Tailored for the first 42 days after delivery (PNC). Heavy bleeding, '
-          'fever, foul-smelling discharge, or a baby who feeds poorly mean '
-          'come today.',
-    ClientType.womanOfReproductiveAge =>
-      'Tailored for general women’s care. Any new bleeding, pain or fever '
-          'after this visit means return to the clinic.',
-  };
-
-  /// The cohort's own counselling action — the watchpoints that group is
-  /// known to deteriorate on, phrased for the caregiver to repeat back.
-  /// Counselling only: never a treatment, never a referral, so it can
-  /// never outrank what the engines found.
-  static List<RecommendedAction> _cohortActions(ClientType? cohort) {
-    if (cohort == null) return const [];
-    return switch (cohort) {
-      ClientType.newborn => const [
-        RecommendedAction(
-          instruction:
-              'Watch the young infant closely for the next 48 hours — any '
-              'feeding difficulty, fast breathing, fever, coldness to touch '
-              'or reduced movement means return the same day.',
-          urgency: ReferralUrgency.scheduled,
-          rationale:
-              'Young infants compensate poorly and deteriorate fast; the '
-              'WHO young-infant protocol mandates early re-check and '
-              'caregiver watchpoints.',
-          protocolSource: 'WHO IMCI — sick young infant',
-          isCounselling: true,
-        ),
-      ],
-      ClientType.childUnderFive => const [
-        RecommendedAction(
-          instruction:
-              'Before the family leaves, have the caregiver repeat the '
-              'return-immediately signs back to you: not able to drink, '
-              'vomiting everything, convulsions, unusual sleepiness.',
-          urgency: ReferralUrgency.scheduled,
-          rationale:
-              'IMCI counselling step: a caregiver who can name the danger '
-              'signs brings the child back hours earlier.',
-          protocolSource: 'WHO IMCI — sick child counselling',
-          isCounselling: true,
-        ),
-      ],
-      ClientType.pregnantWoman => const [
-        RecommendedAction(
-          instruction:
-              'Agree a same-day return plan for: severe headache, blurred '
-              'vision, vaginal bleeding, reduced fetal movements, or '
-              'swelling of the face and hands.',
-          urgency: ReferralUrgency.scheduled,
-          rationale:
-              'Birth-preparedness and complication-readiness is a core WHO '
-              'ANC component — every contact ends with the danger signs '
-              'named.',
-          protocolSource: 'WHO ANC recommendations',
-          isCounselling: true,
-        ),
-      ],
-      ClientType.postpartumWoman => const [
-        RecommendedAction(
-          instruction:
-              'Counsel on the late postpartum danger signs: heavy bleeding, '
-              'fever, foul-smelling discharge, and a baby who feeds poorly '
-              'or feels too hot or too cold.',
-          urgency: ReferralUrgency.scheduled,
-          rationale:
-              'Most maternal and neonatal deaths in the first week happen '
-              'after discharge; PNC counselling is the safety net.',
-          protocolSource: 'WHO PNC recommendations',
-          isCounselling: true,
-        ),
-      ],
-      ClientType.womanOfReproductiveAge => const [],
-    };
-  }
+  // The cohort note and its counselling action used to be the two `static const`
+  // blocks deleted here: one fixed paragraph per cohort, one fixed teach-back,
+  // each opening with the word "Tailored" while naming nobody. They are replaced
+  // by `CohortCareGuidanceBuilder.build`, which assembles the sentence from
+  // `CareSlots` and draws the sign list from a cited table — see
+  // `care_slots.dart` for why the split is drawn where it is.
 
   // --------------------------------------------------------- Interactions
 
@@ -896,15 +835,36 @@ abstract final class RecommendationEngine {
       });
 
   static List<RecommendedAction> _orderActions(
-    List<RecommendedAction> actions,
-  ) => actions.toList()
-    ..sort((a, b) {
-      final byUrgency = _urgencyRank[a.urgency]!.compareTo(
-        _urgencyRank[b.urgency]!,
+    List<RecommendedAction> actions, {
+    int? walkingMinutesToFacility,
+  }) {
+    // Indexed before sorting so ties can be broken by the order the engines
+    // produced them. `List.sort` is not stable, so without this two actions of
+    // equal urgency and equal category can swap between builds — which makes the
+    // worklist order, its screenshots, and a CHO's muscle memory a coin toss.
+    final decorated = [
+      for (var i = 0; i < actions.length; i++) (i, actions[i]),
+    ]..sort((a, b) {
+      final byUrgency = _urgencyRank[a.$2.urgency]!.compareTo(
+        _urgencyRank[b.$2.urgency]!,
       );
       if (byUrgency != 0) return byUrgency;
-      return _actionCategoryRank(a).compareTo(_actionCategoryRank(b));
+      final byCategory = _actionCategoryRank(a.$2).compareTo(
+        _actionCategoryRank(b.$2),
+      );
+      if (byCategory != 0) return byCategory;
+      // Third key: this household's walk, and only between steps the guideline
+      // already considers equally weighty.
+      final byReach = ActionPrioritizer.tieBreak(
+        a.$2,
+        b.$2,
+        walkingMinutesToFacility: walkingMinutesToFacility,
+      );
+      if (byReach != 0) return byReach;
+      return a.$1.compareTo(b.$1);
     });
+    return [for (final entry in decorated) entry.$2];
+  }
 
   // ------------------------------------------------------ Consolidation
 
@@ -924,13 +884,16 @@ abstract final class RecommendationEngine {
         .reduce((a, b) => _confidenceRank[a]! >= _confidenceRank[b]! ? a : b);
   }
 
-  /// The weakest link governs the number too, so the displayed score can
-  /// never look more assured than the bucket it sits next to.
-  static int? _leastConfidentScore(List<AssessmentResult> results) {
-    if (results.isEmpty) return null;
-    return results
-        .map((r) => r.effectiveConfidenceScore)
-        .reduce((a, b) => a < b ? a : b);
+  /// The weakest evidence in any input stream governs. Nulls are skipped, not
+  /// treated as zero — an engine that measured everything relevant and one that
+  /// reported nothing must not average out into a middle number.
+  static int? _weakestEvidenceSufficiency(List<AssessmentResult> results) {
+    final scores = results
+        .map((r) => r.evidenceSufficiency)
+        .whereType<int>()
+        .toList();
+    if (scores.isEmpty) return null;
+    return scores.reduce((a, b) => a < b ? a : b);
   }
 
   static List<String> _union(List<List<String>> lists) {
@@ -1006,7 +969,12 @@ abstract final class RecommendationEngine {
         ' Conditions interact: ${interactions.map((i) => i.label).join('; ')}.',
       );
     }
-    buffer.write(' Confidence: ${confidence.label}.');
+    // Not "Confidence: High confidence." That phrasing reads as a computed
+    // probability, and it is not one — it is a four-value label each engine
+    // declares for itself, taken as the weakest of the set. Naming the basis says
+    // the same thing without pretending to a number nobody measured. This string
+    // is read aloud to a caregiver, so it has to be true in plain words.
+    buffer.write(' Basis: ${confidence.meaning}');
     if (missingData.isNotEmpty) {
       buffer.write(' Not measured: ${missingData.join(', ')}.');
     }

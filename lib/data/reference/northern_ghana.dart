@@ -97,6 +97,38 @@ abstract final class NorthernGhana {
     return List.unmodifiable(list);
   }
 
+  /// The same list as [allCommunities], but ordered by where the worker just
+  /// said they are — the picker for CHPS zones.
+  ///
+  /// A zone follows a care route, not a district line, so this list cannot be
+  /// *filtered* the way the community picker can: the right zone may genuinely
+  /// sit across an assembly boundary, and hiding it would make the field wrong
+  /// rather than merely longer. So the near ones are ranked to the top instead
+  /// of the far ones being removed — the worker's own community first, then the
+  /// rest of its district alphabetically, then every other settlement
+  /// alphabetically. Nothing is unreachable; the ordering is the hint.
+  static List<String> zonesRankedFor({
+    String? regionName,
+    String? districtName,
+    String? community,
+  }) {
+    final ranked = <String>[];
+    final seen = <String>{};
+    void add(Iterable<String> names) {
+      for (final name in names) {
+        if (seen.add(name)) ranked.add(name);
+      }
+    }
+
+    if (community != null) add([community]);
+    final district = regionName == null || districtName == null
+        ? null
+        : districtByName(regionName, districtName);
+    if (district != null) add([...district.communities]..sort());
+    add(allCommunities);
+    return ranked;
+  }
+
   /// The languages CareBridge speaks, in picker order: the three
   /// on-device bank voices plus the universal English fallback.
   static const guidanceLanguages = <String>[

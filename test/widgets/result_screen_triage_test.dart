@@ -149,7 +149,7 @@ Future<void> _pump(
           child: child!,
         ),
         home: AssessmentResultScreen(
-          input: _context(age: age),
+          input: _context(age: age, type: draft.result.clientType),
           draft: draft,
           visitId: 'v1',
           inferenceService: service,
@@ -301,7 +301,7 @@ void main() {
   );
 
   testWidgets(
-    'experimental card leads clinical findings without changing urgent care',
+    'clinical decision and actions lead experimental evidence without changing urgent care',
     (tester) async {
       final service = _DelayedService();
       await _pump(tester, _draft(signs: ['convulsions']), service: service);
@@ -317,14 +317,204 @@ void main() {
         findsWidgets,
       );
       expect(
-        tester.getTopLeft(find.byType(AiInsightCard)).dy,
-        lessThan(tester.getTopLeft(find.byType(ClinicalDecisionHeader)).dy),
+        tester.getTopLeft(find.byType(ClinicalDecisionHeader)).dy,
+        lessThan(tester.getTopLeft(find.byType(AiInsightCard)).dy),
       );
-      expect(find.text('Clinical Protocol Check'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byType(ActionWorklist)).dy,
+        lessThan(tester.getTopLeft(find.byType(AiInsightCard)).dy),
+      );
       expect(find.byType(ResearchAnalysisPanel), findsNothing);
       expect(find.text('Pre-referral stabilisation'), findsOneWidget);
     },
   );
+
+  for (final sample
+      in <
+        ({
+          String name,
+          ClientType type,
+          Map<String, Object?> inputs,
+          String percent,
+          String ratio,
+        })
+      >[
+        (
+          name: 'empty newborn record cannot imply complete observations',
+          type: ClientType.newborn,
+          inputs: {},
+          percent: '0%',
+          ratio: '0 of 2 core measurements recorded',
+        ),
+        (
+          name:
+              'one of two observations is half complete even with a danger sign',
+          type: ClientType.newborn,
+          inputs: {
+            'respiratory_rate': 48,
+            'danger_signs': ['convulsions'],
+          },
+          percent: '50%',
+          ratio: '1 of 2 core measurements recorded',
+        ),
+        (
+          name: 'implausible reading is excluded and named for review',
+          type: ClientType.newborn,
+          inputs: {'temperature_celsius': 98.6, 'respiratory_rate': 48},
+          percent: '50%',
+          ratio: '1 of 2 core measurements recorded',
+        ),
+        (
+          name: 'complete newborn observations do not imply clinical certainty',
+          type: ClientType.newborn,
+          inputs: {'temperature_celsius': 37, 'respiratory_rate': 48},
+          percent: '100%',
+          ratio: '2 of 2 core measurements recorded',
+        ),
+        (
+          name:
+              'child below six months excludes inapplicable MUAC from denominator',
+          type: ClientType.childUnderFive,
+          inputs: {
+            'age_in_months': 4,
+            'temperature_celsius': 37,
+            'respiratory_rate': 40,
+            'weight_kg': 5,
+          },
+          percent: '100%',
+          ratio: '3 of 3 core measurements recorded',
+        ),
+        (
+          name: 'older child includes missing MUAC in denominator',
+          type: ClientType.childUnderFive,
+          inputs: {
+            'age_in_months': 12,
+            'temperature_celsius': 37,
+            'respiratory_rate': 40,
+            'weight_kg': 9,
+          },
+          percent: '75%',
+          ratio: '3 of 4 core measurements recorded',
+        ),
+        (
+          name: 'maternal blood pressure needs both values in correct order',
+          type: ClientType.pregnantWoman,
+          inputs: {
+            'systolic': 90,
+            'diastolic': 120,
+            'gestational_weeks': 30,
+            'muac_cm': 25,
+          },
+          percent: '50%',
+          ratio: '2 of 4 core measurements recorded',
+        ),
+        (
+          name: 'postpartum measurements use their own core set',
+          type: ClientType.postpartumWoman,
+          inputs: {
+            'systolic': 120,
+            'diastolic': 80,
+            'temperature_celsius': 37,
+            'haemoglobin': 12,
+            'muac_cm': 25,
+          },
+          percent: '100%',
+          ratio: '4 of 4 core measurements recorded',
+        ),
+      ]) {
+    testWidgets(sample.name, (tester) async {
+      await _pump(
+        tester,
+        _draft(type: sample.type, inputs: sample.inputs),
+        service: _DelayedService(),
+      );
+      expect(find.text('Observation completeness'), findsOneWidget);
+      expect(find.text(sample.percent), findsOneWidget);
+      expect(find.textContaining(sample.ratio), findsOneWidget);
+      expect(find.textContaining('not diagnostic confidence'), findsOneWidget);
+      expect(find.text('Full data confidence'), findsNothing);
+      if (sample.inputs['temperature_celsius'] == 98.6) {
+        expect(find.textContaining('Review: Temperature'), findsOneWidget);
+      }
+      if (sample.inputs['systolic'] == 90) {
+        expect(find.textContaining('Review: Blood pressure'), findsOneWidget);
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  test(
+    'core measurement coverage rejects malformed and non-finite readings',
+    () {
+      for (final value in <Object>[double.nan, double.infinity, '37']) {
+        final summary = AssessmentFeatureAdapter(
+          _context(),
+          _draft(
+            inputs: {'temperature_celsius': value, 'respiratory_rate': 48},
+          ),
+        ).observationCompleteness;
+        expect(summary.percent, 50);
+        expect(summary.labelsFor(ObservationState.needsReview), [
+          'Temperature',
+        ]);
+      }
+    },
+  );
+
+  test(
+    'unknown child age and undefined adult coverage never invent a denominator',
+    () {
+      final child = AssessmentFeatureAdapter(
+        _context(),
+        _draft(
+          type: ClientType.childUnderFive,
+          inputs: {'age_in_months': null, 'temperature_celsius': 37},
+        ),
+      ).observationCompleteness;
+      expect(child.percent, isNull);
+      expect(child.unavailableReason, contains('age'));
+      final adult = AssessmentFeatureAdapter(
+        _context(),
+        _draft(type: ClientType.womanOfReproductiveAge),
+      ).observationCompleteness;
+      expect(adult.percent, isNull);
+      expect(adult.total, 0);
+    },
+  );
+
+  test(
+    'MUAC millimeters are converted without manufacturing other measurements',
+    () {
+      final summary = AssessmentFeatureAdapter(
+        _context(),
+        _draft(
+          type: ClientType.childUnderFive,
+          inputs: {'age_in_months': 12, 'muac_mm': 125},
+        ),
+      ).observationCompleteness;
+      expect(summary.percent, 25);
+      expect(summary.labelsFor(ObservationState.recorded), ['MUAC']);
+      expect(summary.total, 4);
+    },
+  );
+
+  testWidgets('urgent stabilization remains readable at 320px and 200% text', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _draft(signs: ['convulsions'], dangerSigns: ['Convulsions']),
+      size: const Size(320, 1000),
+      textScale: 2,
+    );
+    expect(find.text('DANGER SIGNS PRESENT').hitTestable(), findsOneWidget);
+    final heading = find.text('Pre-referral stabilisation');
+    await tester.scrollUntilVisible(heading, 300, scrollable: _page);
+    await tester.ensureVisible(heading);
+    await tester.pumpAndSettle();
+    expect(heading.hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('pending save is explicit and late inference cannot rewrite it', (
     tester,
@@ -699,8 +889,13 @@ void main() {
       final service = _DelayedService();
       await _pump(tester, _draft(), service: service);
       expect(find.text('PROTOCOL DECISION'), findsOneWidget);
-      // Loading state now shows a skeleton loader instead of text
-      expect(find.byType(ResearchAnalysisPanel), findsOneWidget);
+      // The pending state is now spoken by the single AI card on the page. The
+      // research panel used to render here as the loading placeholder, which put
+      // a second, differently-shaped AI card on the verdict screen and left the
+      // worker to work out which of the two applied to her patient. It lives on
+      // the clinical report page; the verdict page says the model is still
+      // running in the card the worker is already reading.
+      expect(find.textContaining('Model analysis pending'), findsOneWidget);
       await _toSheet(tester);
       await tester.tap(find.byType(Checkbox).first);
       await tester.pump();
@@ -750,7 +945,8 @@ void main() {
       'neonatal_sepsis': _prediction(experimental: true),
     });
     await tester.pumpAndSettle();
-    expect(find.text('High model score'), findsOneWidget);
+    expect(find.text('98.7 / 100'), findsOneWidget);
+    expect(find.text('Experimental model score'), findsOneWidget);
     expect(find.text('Pre-referral stabilisation'), findsNothing);
     await tester.tap(find.text('Save assessment'));
     await tester.pumpAndSettle();
@@ -958,7 +1154,9 @@ void main() {
 
     // The two sentences that name the leading findings both fold to a count:
     // the verdict line and the family's takeaway. Neither recites a dose.
-    expect(find.textContaining('immunisation gaps'), findsNWidgets(2));
+    // The verdict line now folds to a count in the clinical brief; the family
+    // sentence keeps its own wording. Neither recites a dose.
+    expect(find.textContaining('immunisation gaps'), findsOneWidget);
     expect(find.textContaining('because of: BCG'), findsNothing);
     expect(find.textContaining('Driven by BCG'), findsNothing);
 
@@ -984,9 +1182,7 @@ void main() {
   testWidgets('a folded sentence keeps the clinical driver beside the count', (
     tester,
   ) async {
-    // Something genuinely wrong as well as the schedule: the fold replaces the
-    // dose list inside a sentence it did not write, so the neighbouring driver
-    // and each sentence's own separator have to survive.
+    // A clinical driver must remain visible beside the condensed vaccine gaps.
     await _pump(
       tester,
       _epiDraft(
@@ -1003,8 +1199,19 @@ void main() {
       age: 270,
     );
 
+    final header = find.byType(ClinicalDecisionHeader);
     expect(
-      find.textContaining('because of: Some swelling of the feet; 16 '),
+      find.descendant(
+        of: header,
+        matching: find.textContaining('Some swelling of the feet'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: header,
+        matching: find.textContaining('16 doses are overdue'),
+      ),
       findsOneWidget,
     );
     expect(
@@ -1035,7 +1242,7 @@ void main() {
     tester,
   ) async {
     await _pump(tester, _draft());
-    expect(find.text('No abnormal findings — routine care.'), findsOneWidget);
+    expect(find.textContaining('Nothing found needs referral'), findsOneWidget);
     expect(find.textContaining('immunisation gap'), findsNothing);
   });
 

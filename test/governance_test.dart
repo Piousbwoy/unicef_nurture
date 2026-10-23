@@ -13,6 +13,7 @@ library;
 
 import 'dart:io';
 
+import 'package:carebridge_ai/data/sync/sync_service.dart';
 import 'package:carebridge_ai/domain/compliance.dart';
 import 'package:carebridge_ai/domain/enums.dart';
 import 'package:carebridge_ai/domain/governance.dart';
@@ -324,6 +325,58 @@ void main() {
       final a = GovernanceRegister.activityById('dataRights')!;
       expect(a.retention, contains('answer'));
       expect(CareNotice.serviceDeadlineLabel, '30 days');
+    });
+  });
+
+  group('the notice is true of the running system', () {
+    test('the notice describes sync the way sync actually runs', () {
+      // Consent under Act 843 is only valid against words that are true of the
+      // code. SyncService.start() arms a periodic timer and pushes the moment
+      // connectivity returns, and nothing in the app asks a family to press a
+      // button — so a notice promising otherwise would be a false statement
+      // made in the one screen where permission is taken.
+      final sync = CareNotice.points.firstWhere((p) => p.$1.startsWith('Sent'));
+      expect(sync.$2, contains('by itself'));
+      expect(
+        sync.$2,
+        contains('${CareNotice.syncInterval.inMinutes} minutes'),
+        reason: 'The notice must name the interval the timer runs on.',
+      );
+      expect(
+        SyncService().interval,
+        CareNotice.syncInterval,
+        reason: 'One interval, in the code and in the words.',
+      );
+      for (final p in CareNotice.points) {
+        expect(
+          p.$2,
+          isNot(contains('only when you')),
+          reason: '${p.$1} puts sending back on the family.',
+        );
+      }
+    });
+
+    test('the checks a family keeps for itself are provably device-only', () {
+      final byTable = {for (final d in GovernanceRegister.data) d.table: d};
+      for (final table in [
+        'home_checks',
+        'caregiver_drafts',
+        'caregiver_activity',
+        'caregiver_settings',
+      ]) {
+        expect(
+          byTable[table]?.scope,
+          StorageScope.deviceOnly,
+          reason:
+              'The consent notice tells a family this never leaves the phone. '
+              'If it starts travelling, the notice has to change with it.',
+        );
+        expect(
+          whitelisted(),
+          isNot(contains(table)),
+          reason: '$table is promised as private but is pushable.',
+        );
+      }
     });
   });
 

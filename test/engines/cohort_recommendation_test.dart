@@ -3,12 +3,15 @@
 ///
 /// A 3-day-old, a 3-year-old and a pregnant mother with identical-looking
 /// findings are not managed alike — the synthesizer must name the cohort,
-/// carry its tailored note through persistence, and fold in the cohort's
-/// own watchpoint counselling. And the nutrition basket must change shape
-/// with the results: wasting buys energy, anaemia buys iron, never a
-/// fixed list.
+/// carry the note assembled from *this* patient's record through persistence,
+/// and fold in the cohort's watchpoint counselling. "Tailored" is a claim, not a
+/// fact: what makes it true is the child's age, weight and review interval
+/// appearing in the sentence, and an honest gap when they were never captured.
+/// And the nutrition basket must change shape with the results: wasting buys
+/// energy, anaemia buys iron, never a fixed list.
 library;
 
+import 'package:carebridge_ai/domain/engines/care_slots.dart';
 import 'package:carebridge_ai/domain/engines/nutrition_engine.dart';
 import 'package:carebridge_ai/domain/engines/recommendation_engine.dart';
 import 'package:carebridge_ai/domain/entities/visit.dart';
@@ -34,12 +37,51 @@ void main() {
         results: [result(ClientType.newborn)],
       );
       expect(plan.patientCohort, ClientType.newborn);
-      expect(plan.cohortNote, contains('young infant'));
+      // The sentence is assembled, so the cohort is named by the protocol it was
+      // assessed under and the watchpoints come from the cited sign table.
+      expect(plan.cohortNote, contains('sick-young-infant protocol'));
+      expect(plan.cohortNote, contains('feeding poorly'));
+      expect(plan.cohortNote, contains('cold to touch'));
       expect(
-        plan.actions.any(
-          (a) => a.instruction.contains('Watch the young infant'),
-        ),
+        plan.actions.any((a) => a.isCounselling && a.instruction.contains('repeat')),
         isTrue,
+      );
+    });
+
+    test('a record that carries the child\'s details puts them in the sentence', () {
+      // This is the whole point of the change: the sentence differs per patient,
+      // because it is built from this patient's record.
+      final plan = RecommendationEngine.synthesize(
+        results: [result(ClientType.childUnderFive)],
+        slots: const CareSlots(
+          subjectName: 'Amina',
+          ageInMonths: 14,
+          weightKg: 9.4,
+          followUpInDays: 3,
+        ),
+      );
+      expect(plan.cohortNote, contains('Amina'));
+      expect(plan.cohortNote, contains('14 months'));
+      expect(plan.cohortNote, contains('9.4 kg'));
+      expect(
+        plan.actions.any((a) => a.instruction.contains('Amina')),
+        isTrue,
+        reason: 'the teach-back must be about this child, not a child in general',
+      );
+    });
+
+    test('an empty record declares its gaps and still keeps the counselling step', () {
+      // Safety invariant: missing slots make the sentence rougher, never shorter.
+      final plan = RecommendationEngine.synthesize(
+        results: [result(ClientType.newborn)],
+      );
+      expect(plan.cohortNote, contains('name not recorded'));
+      expect(plan.cohortNote, contains('weight not recorded'));
+      expect(plan.cohortNote, isNot(contains('null')));
+      expect(
+        plan.actions.where((a) => a.isCounselling),
+        isNotEmpty,
+        reason: 'a nameless newborn must not lose the return-immediately step',
       );
     });
 
